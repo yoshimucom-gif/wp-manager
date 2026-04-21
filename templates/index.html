@@ -1,0 +1,1160 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WP Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0f1117;
+  --surface: #161b22;
+  --surface2: #1c2128;
+  --border: #21262d;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-dim: rgba(59,130,246,0.15);
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --success: #3fb950;
+  --error: #f85149;
+  --warning: #d29922;
+  --font: 'IBM Plex Mono', monospace;
+}
+html, body { height: 100%; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* Layout */
+.layout { display: flex; flex: 1; overflow: hidden; }
+.sidebar {
+  width: 200px;
+  min-width: 200px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+.main { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+
+/* Header */
+.header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 16px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.header-logo { font-size: 14px; font-weight: 600; color: var(--accent); letter-spacing: 2px; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.header-right .muted { color: var(--muted); font-size: 11px; }
+.logout-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.logout-btn:hover { border-color: var(--error); color: var(--error); }
+
+/* Sidebar nav */
+.sidebar-logo {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+.nav { padding: 8px 0; flex: 1; }
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  color: var(--muted);
+  transition: all 0.15s;
+  font-size: 12px;
+  border-left: 2px solid transparent;
+}
+.nav-item:hover { color: var(--text); background: var(--accent-dim); }
+.nav-item.active { color: var(--accent); border-left-color: var(--accent); background: var(--accent-dim); }
+.nav-icon { font-size: 14px; width: 18px; text-align: center; }
+.sidebar-footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+/* Content */
+.content { padding: 24px; flex: 1; }
+.page { display: none; }
+.page.active { display: block; }
+
+/* Page header */
+.page-header { margin-bottom: 20px; }
+.page-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.page-title::before { content: '> '; color: var(--accent); }
+.page-subtitle { color: var(--muted); font-size: 11px; margin-top: 4px; margin-left: 18px; }
+
+/* Toolbar */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+/* Buttons */
+.btn {
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 6px 14px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+.btn-danger { background: rgba(248,81,73,0.1); color: var(--error); border: 1px solid rgba(248,81,73,0.3); }
+.btn-danger:hover { background: rgba(248,81,73,0.2); }
+.btn-success { background: rgba(63,185,80,0.1); color: var(--success); border: 1px solid rgba(63,185,80,0.3); }
+.btn-success:hover { background: rgba(63,185,80,0.2); }
+.btn-sm { font-size: 11px; padding: 4px 10px; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Input / Select */
+input, select, textarea {
+  font-family: var(--font);
+  font-size: 13px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 7px 10px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+select option { background: var(--surface2); }
+textarea { resize: vertical; }
+
+/* Table */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+thead tr { border-bottom: 1px solid var(--border); }
+th {
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tr:hover td { background: var(--surface2); }
+tr.selected td { background: var(--accent-dim); }
+
+/* Status badge */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.badge-pending { background: rgba(139,148,158,0.15); color: var(--muted); border: 1px solid rgba(139,148,158,0.2); }
+.badge-generating { background: rgba(59,130,246,0.15); color: var(--accent); border: 1px solid rgba(59,130,246,0.3); }
+.badge-generated { background: rgba(63,185,80,0.15); color: var(--success); border: 1px solid rgba(63,185,80,0.3); }
+.badge-published { background: rgba(210,153,34,0.15); color: var(--warning); border: 1px solid rgba(210,153,34,0.3); }
+.badge-error { background: rgba(248,81,73,0.15); color: var(--error); border: 1px solid rgba(248,81,73,0.3); }
+
+/* Toast */
+#toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 18px;
+  font-size: 13px;
+  z-index: 9999;
+  display: none;
+  max-width: 360px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+#toast.success { border-color: var(--success); color: var(--success); }
+#toast.error { border-color: var(--error); color: var(--error); }
+#toast.info { border-color: var(--accent); color: var(--accent); }
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+  width: 640px;
+  max-width: 95vw;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+.modal-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 20px;
+  color: var(--accent);
+}
+.modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+
+/* Form */
+.form-group { margin-bottom: 16px; }
+.form-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; display: block; }
+.form-control { width: 100%; }
+
+/* Stream output */
+.stream-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 12px;
+  font-size: 12px;
+  height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+/* Stat cards */
+.stats { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 18px;
+  min-width: 120px;
+}
+.stat-value { font-size: 22px; font-weight: 600; color: var(--text); }
+.stat-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* Checkbox */
+.check-all, .check-row { cursor: pointer; width: 16px; height: 16px; accent-color: var(--accent); }
+
+/* Empty state */
+.empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.empty-icon { font-size: 32px; margin-bottom: 12px; }
+
+/* Progress bar */
+.progress-bar {
+  height: 2px;
+  background: var(--border);
+  border-radius: 1px;
+  overflow: hidden;
+  margin: 8px 0;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s;
+}
+
+/* Quality cards */
+.quality-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.quality-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px;
+  position: relative;
+}
+.quality-card:hover { border-color: var(--accent); }
+.quality-name { font-weight: 600; font-size: 13px; margin-bottom: 8px; }
+.quality-prompt { font-size: 11px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.quality-actions { display: flex; gap: 6px; margin-top: 12px; }
+.quality-default { font-size: 10px; color: var(--accent); margin-left: 8px; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-logo">WP_MANAGER</div>
+  <div class="header-right">
+    <span class="muted" id="header-status">● ONLINE</span>
+    <button class="logout-btn" onclick="window.location.href='/logout'">LOGOUT</button>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-logo">// NAVIGATION</div>
+    <nav class="nav">
+      <div class="nav-item active" onclick="showPage('articles')" id="nav-articles">
+        <span class="nav-icon">📄</span> 記事一覧
+      </div>
+      <div class="nav-item" onclick="showPage('generate')" id="nav-generate">
+        <span class="nav-icon">⚡</span> 記事生成
+      </div>
+      <div class="nav-item" onclick="showPage('batch')" id="nav-batch">
+        <span class="nav-icon">🔁</span> バッチ生成
+      </div>
+      <div class="nav-item" onclick="showPage('quality')" id="nav-quality">
+        <span class="nav-icon">✦</span> 品質定義
+      </div>
+      <div class="nav-item" onclick="showPage('settings')" id="nav-settings">
+        <span class="nav-icon">⚙</span> 設定
+      </div>
+    </nav>
+    <div class="sidebar-footer">v1.0.0 · Powered by Claude</div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="content">
+
+      <!-- Articles Page -->
+      <div class="page active" id="page-articles">
+        <div class="page-header">
+          <div class="page-title">記事一覧</div>
+          <div class="page-subtitle">インポートした記事の管理・生成・投稿</div>
+        </div>
+
+        <div class="stats" id="stats-bar">
+          <div class="stat-card">
+            <div class="stat-value" id="stat-total">0</div>
+            <div class="stat-label">TOTAL</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="stat-pending">0</div>
+            <div class="stat-label">PENDING</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="stat-generated">0</div>
+            <div class="stat-label">GENERATED</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="stat-published">0</div>
+            <div class="stat-label">PUBLISHED</div>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <label class="btn btn-secondary" style="cursor:pointer">
+            <span>📥 Excelインポート</span>
+            <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importExcel(this)">
+          </label>
+          <button class="btn btn-primary" onclick="generateSelected()">⚡ 選択を生成</button>
+          <button class="btn btn-success" onclick="publishSelected()">🚀 選択をWP投稿</button>
+          <button class="btn btn-danger" onclick="deleteSelected()">🗑 選択を削除</button>
+          <div style="flex:1"></div>
+          <select id="quality-filter" style="font-size:12px;" onchange="loadArticles()">
+            <option value="">-- 品質定義 --</option>
+          </select>
+          <input type="text" id="search-input" placeholder="検索..." style="width:160px;font-size:12px;" oninput="filterArticles()">
+          <button class="btn btn-secondary btn-sm" onclick="loadArticles()">↻ 更新</button>
+        </div>
+
+        <div class="table-wrap">
+          <table id="articles-table">
+            <thead>
+              <tr>
+                <th><input type="checkbox" class="check-all" id="check-all" onchange="toggleAll(this)"></th>
+                <th>#</th>
+                <th>タイトル</th>
+                <th>キーワード</th>
+                <th>ステータス</th>
+                <th>生成日時</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="articles-body"></tbody>
+          </table>
+        </div>
+
+        <div id="articles-empty" class="empty" style="display:none">
+          <div class="empty-icon">📭</div>
+          <div>記事がありません。Excelファイルをインポートしてください。</div>
+        </div>
+      </div>
+
+      <!-- Generate Page -->
+      <div class="page" id="page-generate">
+        <div class="page-header">
+          <div class="page-title">記事生成</div>
+          <div class="page-subtitle">Claude APIで個別記事を生成</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+          <div>
+            <div class="form-group">
+              <label class="form-label">記事選択</label>
+              <select id="gen-article-select" class="form-control" onchange="onArticleSelect()">
+                <option value="">-- 記事を選択 --</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">タイトル</label>
+              <input type="text" id="gen-title" class="form-control" placeholder="記事タイトル">
+            </div>
+            <div class="form-group">
+              <label class="form-label">キーワード</label>
+              <input type="text" id="gen-keywords" class="form-control" placeholder="キーワード（カンマ区切り）">
+            </div>
+            <div class="form-group">
+              <label class="form-label">品質定義</label>
+              <select id="gen-quality" class="form-control">
+                <option value="">-- 品質定義を選択 --</option>
+              </select>
+            </div>
+            <div class="toolbar" style="margin-bottom:0">
+              <button class="btn btn-primary" id="gen-btn" onclick="startGenerate()">⚡ 生成開始</button>
+              <button class="btn btn-success" id="gen-publish-btn" onclick="publishGenerated()" disabled>🚀 WP投稿</button>
+            </div>
+          </div>
+          <div>
+            <label class="form-label">生成プレビュー</label>
+            <div class="stream-box" id="gen-output">// ここに生成された記事が表示されます...</div>
+            <div class="progress-bar" id="gen-progress" style="display:none">
+              <div class="progress-fill" id="gen-progress-fill" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Batch Page -->
+      <div class="page" id="page-batch">
+        <div class="page-header">
+          <div class="page-title">バッチ生成</div>
+          <div class="page-subtitle">複数記事を一括生成・投稿</div>
+        </div>
+        <div style="display:grid;grid-template-columns:300px 1fr;gap:20px">
+          <div>
+            <div class="form-group">
+              <label class="form-label">品質定義</label>
+              <select id="batch-quality" class="form-control">
+                <option value="">-- 品質定義を選択 --</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">投稿ステータス</label>
+              <select id="batch-post-status" class="form-control">
+                <option value="draft">下書き</option>
+                <option value="publish">公開</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">対象フィルター</label>
+              <select id="batch-filter" class="form-control" onchange="loadBatchArticles()">
+                <option value="pending">未生成のみ</option>
+                <option value="all">全記事</option>
+                <option value="generated">生成済のみ</option>
+              </select>
+            </div>
+            <div class="toolbar" style="flex-direction:column;align-items:stretch;gap:8px;margin-bottom:0">
+              <button class="btn btn-primary" onclick="startBatchGenerate()">⚡ バッチ生成開始</button>
+              <button class="btn btn-success" onclick="startBatchPublish()">🚀 バッチWP投稿</button>
+              <button class="btn btn-secondary btn-sm" onclick="loadBatchArticles()">↻ 状態更新</button>
+            </div>
+            <div id="batch-msg" style="margin-top:12px;font-size:12px;color:var(--muted)"></div>
+          </div>
+          <div>
+            <label class="form-label">対象記事 (<span id="batch-count">0</span>件)</label>
+            <div style="background:var(--bg);border:1px solid var(--border);border-radius:4px;max-height:400px;overflow-y:auto;">
+              <table style="width:100%">
+                <thead>
+                  <tr>
+                    <th><input type="checkbox" class="check-all" id="batch-check-all" onchange="toggleBatchAll(this)"></th>
+                    <th>タイトル</th>
+                    <th>ステータス</th>
+                  </tr>
+                </thead>
+                <tbody id="batch-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quality Page -->
+      <div class="page" id="page-quality">
+        <div class="page-header">
+          <div class="page-title">品質定義</div>
+          <div class="page-subtitle">記事生成時の品質プロンプトを管理</div>
+        </div>
+        <div class="toolbar">
+          <button class="btn btn-primary" onclick="openQualityModal()">+ 新規追加</button>
+        </div>
+        <div class="quality-grid" id="quality-grid"></div>
+      </div>
+
+      <!-- Settings Page -->
+      <div class="page" id="page-settings">
+        <div class="page-header">
+          <div class="page-title">設定</div>
+          <div class="page-subtitle">WordPress接続・Claude API設定</div>
+        </div>
+        <div style="max-width:520px">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:20px;margin-bottom:16px;">
+            <div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:16px;">// WordPress 設定</div>
+            <div class="form-group">
+              <label class="form-label">WordPress URL</label>
+              <input type="url" id="s-wp-url" class="form-control" placeholder="https://example.com">
+            </div>
+            <div class="form-group">
+              <label class="form-label">ユーザー名</label>
+              <input type="text" id="s-wp-user" class="form-control" placeholder="admin">
+            </div>
+            <div class="form-group">
+              <label class="form-label">アプリケーションパスワード</label>
+              <input type="password" id="s-wp-password" class="form-control" placeholder="xxxx xxxx xxxx xxxx xxxx xxxx">
+            </div>
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:20px;margin-bottom:16px;">
+            <div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:16px;">// Claude API 設定</div>
+            <div class="form-group">
+              <label class="form-label">APIキー</label>
+              <input type="password" id="s-claude-key" class="form-control" placeholder="sk-ant-...">
+            </div>
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:20px;margin-bottom:16px;">
+            <div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:16px;">// デフォルト設定</div>
+            <div class="form-group">
+              <label class="form-label">デフォルト品質定義</label>
+              <select id="s-default-quality" class="form-control"></select>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="saveSettings()">💾 設定を保存</button>
+          <div id="settings-msg" style="margin-top:10px;font-size:12px;color:var(--muted)"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- Quality Modal -->
+<div class="modal-overlay" id="quality-modal">
+  <div class="modal">
+    <div class="modal-title" id="quality-modal-title">// 品質定義を追加</div>
+    <input type="hidden" id="quality-edit-id">
+    <div class="form-group">
+      <label class="form-label">定義名</label>
+      <input type="text" id="quality-name" class="form-control" placeholder="例: SEO特化">
+    </div>
+    <div class="form-group">
+      <label class="form-label">プロンプト</label>
+      <textarea id="quality-prompt" class="form-control" rows="8" placeholder="記事生成時の品質要件を記述してください..."></textarea>
+    </div>
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted)">
+        <input type="checkbox" id="quality-is-default" style="accent-color:var(--accent)">
+        デフォルトに設定
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeQualityModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveQuality()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Article Detail Modal -->
+<div class="modal-overlay" id="article-modal">
+  <div class="modal" style="width:800px">
+    <div class="modal-title">// 記事詳細</div>
+    <input type="hidden" id="modal-article-id">
+    <div class="form-group">
+      <label class="form-label">タイトル</label>
+      <input type="text" id="modal-title" class="form-control">
+    </div>
+    <div class="form-group">
+      <label class="form-label">キーワード</label>
+      <input type="text" id="modal-keywords" class="form-control">
+    </div>
+    <div class="form-group">
+      <label class="form-label">コンテンツ (HTML)</label>
+      <textarea id="modal-content" class="form-control" rows="16"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeArticleModal()">閉じる</button>
+      <button class="btn btn-primary" onclick="saveArticleModal()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---- State ----
+let allArticles = [];
+let qualityList = [];
+let currentGenArticleId = null;
+
+// ---- Navigation ----
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.getElementById('nav-' + name).classList.add('active');
+  if (name === 'articles') loadArticles();
+  if (name === 'generate') { loadQualitySelects(); populateGenSelect(); }
+  if (name === 'batch') { loadQualitySelects(); loadBatchArticles(); }
+  if (name === 'quality') loadQuality();
+  if (name === 'settings') loadSettings();
+}
+
+// ---- Toast ----
+let toastTimer;
+function toast(msg, type = 'info') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = type;
+  el.style.display = 'block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.style.display = 'none', 4000);
+}
+
+// ---- Articles ----
+async function loadArticles() {
+  const res = await fetch('/api/articles');
+  allArticles = await res.json();
+  updateStats();
+  renderArticles(allArticles);
+  populateGenSelect();
+  loadBatchArticles();
+}
+
+function updateStats() {
+  document.getElementById('stat-total').textContent = allArticles.length;
+  document.getElementById('stat-pending').textContent = allArticles.filter(a => a.status === 'pending').length;
+  document.getElementById('stat-generated').textContent = allArticles.filter(a => a.status === 'generated').length;
+  document.getElementById('stat-published').textContent = allArticles.filter(a => a.status === 'published').length;
+}
+
+function filterArticles() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  const filtered = allArticles.filter(a =>
+    a.title.toLowerCase().includes(q) || a.keywords.toLowerCase().includes(q)
+  );
+  renderArticles(filtered);
+}
+
+function renderArticles(articles) {
+  const tbody = document.getElementById('articles-body');
+  const empty = document.getElementById('articles-empty');
+  if (!articles.length) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  tbody.innerHTML = articles.map((a, i) => `
+    <tr id="row-${a.id}">
+      <td><input type="checkbox" class="check-row" value="${a.id}"></td>
+      <td style="color:var(--muted);font-size:11px">${i + 1}</td>
+      <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.title)}">${esc(a.title)}</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)" title="${esc(a.keywords)}">${esc(a.keywords)}</td>
+      <td>${statusBadge(a.status)}</td>
+      <td style="color:var(--muted);font-size:11px;white-space:nowrap">${a.generated_at ? fmtDate(a.generated_at) : '—'}</td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-secondary btn-sm" onclick="openArticleModal('${a.id}')">✏</button>
+          <button class="btn btn-primary btn-sm" onclick="quickGenerate('${a.id}')">⚡</button>
+          ${a.content ? `<button class="btn btn-success btn-sm" onclick="quickPublish('${a.id}')">🚀</button>` : ''}
+          ${a.wp_url ? `<a href="${esc(a.wp_url)}" target="_blank" class="btn btn-secondary btn-sm">↗</a>` : ''}
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function statusBadge(status) {
+  const map = {
+    pending: ['⊙', '未生成'],
+    generating: ['◌', '生成中'],
+    generated: ['✓', '生成済'],
+    published: ['★', '投稿済'],
+    error: ['✗', 'エラー'],
+  };
+  const [icon, label] = map[status] || ['?', status];
+  return `<span class="badge badge-${status}">${icon} ${label}</span>`;
+}
+
+function esc(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function fmtDate(iso) {
+  const d = new Date(iso);
+  return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+function toggleAll(cb) {
+  document.querySelectorAll('#articles-body .check-row').forEach(c => c.checked = cb.checked);
+}
+
+function getSelectedIds() {
+  return [...document.querySelectorAll('#articles-body .check-row:checked')].map(c => c.value);
+}
+
+async function importExcel(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch('/api/import', {method:'POST', body:fd});
+  const data = await res.json();
+  if (data.success) {
+    toast(`${data.imported}件インポートしました`, 'success');
+    loadArticles();
+  } else {
+    toast(data.error || 'インポート失敗', 'error');
+  }
+  input.value = '';
+}
+
+async function deleteSelected() {
+  const ids = getSelectedIds();
+  if (!ids.length) { toast('記事を選択してください', 'error'); return; }
+  if (!confirm(`${ids.length}件を削除しますか?`)) return;
+  await fetch('/api/articles/bulk-delete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids})});
+  toast(`${ids.length}件削除しました`, 'success');
+  loadArticles();
+}
+
+function generateSelected() {
+  const ids = getSelectedIds();
+  if (!ids.length) { toast('記事を選択してください', 'error'); return; }
+  showPage('batch');
+  setTimeout(() => {
+    ids.forEach(id => {
+      const cb = document.querySelector(`#batch-body input[value="${id}"]`);
+      if (cb) cb.checked = true;
+    });
+  }, 300);
+}
+
+function publishSelected() {
+  const ids = getSelectedIds();
+  if (!ids.length) { toast('記事を選択してください', 'error'); return; }
+  showPage('batch');
+  document.getElementById('batch-filter').value = 'generated';
+  loadBatchArticles();
+  setTimeout(() => {
+    ids.forEach(id => {
+      const cb = document.querySelector(`#batch-body input[value="${id}"]`);
+      if (cb) cb.checked = true;
+    });
+  }, 300);
+}
+
+async function quickGenerate(id) {
+  const article = allArticles.find(a => a.id === id);
+  if (!article) return;
+  showPage('generate');
+  setTimeout(() => {
+    document.getElementById('gen-article-select').value = id;
+    onArticleSelect();
+    startGenerate();
+  }, 100);
+}
+
+async function quickPublish(id) {
+  if (!confirm('WordPress下書きとして投稿しますか?')) return;
+  const res = await fetch(`/api/publish/${id}`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({post_status: 'draft'})
+  });
+  const data = await res.json();
+  if (data.success) {
+    toast('投稿しました: ' + data.wp_url, 'success');
+    loadArticles();
+  } else {
+    toast(data.error || '投稿失敗', 'error');
+  }
+}
+
+// ---- Article Modal ----
+async function openArticleModal(id) {
+  const res = await fetch(`/api/articles/${id}`);
+  const article = await res.json();
+  document.getElementById('modal-article-id').value = id;
+  document.getElementById('modal-title').value = article.title;
+  document.getElementById('modal-keywords').value = article.keywords;
+  document.getElementById('modal-content').value = article.content || '';
+  document.getElementById('article-modal').classList.add('open');
+}
+
+function closeArticleModal() {
+  document.getElementById('article-modal').classList.remove('open');
+}
+
+async function saveArticleModal() {
+  const id = document.getElementById('modal-article-id').value;
+  await fetch(`/api/articles/${id}`, {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      title: document.getElementById('modal-title').value,
+      keywords: document.getElementById('modal-keywords').value,
+      content: document.getElementById('modal-content').value,
+    })
+  });
+  toast('保存しました', 'success');
+  closeArticleModal();
+  loadArticles();
+}
+
+// ---- Generate ----
+function populateGenSelect() {
+  const sel = document.getElementById('gen-article-select');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">-- 記事を選択 --</option>' +
+    allArticles.map(a => `<option value="${a.id}">${esc(a.title)}</option>`).join('');
+  sel.value = cur;
+}
+
+function onArticleSelect() {
+  const id = document.getElementById('gen-article-select').value;
+  const article = allArticles.find(a => a.id === id);
+  if (article) {
+    document.getElementById('gen-title').value = article.title;
+    document.getElementById('gen-keywords').value = article.keywords;
+    currentGenArticleId = id;
+  }
+}
+
+async function startGenerate() {
+  const articleId = document.getElementById('gen-article-select').value;
+  const qualityId = document.getElementById('gen-quality').value;
+  if (!articleId) { toast('記事を選択してください', 'error'); return; }
+
+  const output = document.getElementById('gen-output');
+  const btn = document.getElementById('gen-btn');
+  const publishBtn = document.getElementById('gen-publish-btn');
+  output.textContent = '';
+  btn.disabled = true;
+  btn.textContent = '⌛ 生成中...';
+  publishBtn.disabled = true;
+
+  const progress = document.getElementById('gen-progress');
+  const fill = document.getElementById('gen-progress-fill');
+  progress.style.display = 'block';
+  fill.style.width = '10%';
+
+  const es = new EventSource(`/api/generate/${articleId}?` + new URLSearchParams({quality_id: qualityId}));
+
+  // SSE via POST workaround: use fetch with streaming
+  es.close();
+
+  try {
+    const res = await fetch(`/api/generate/${articleId}`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({quality_id: qualityId})
+    });
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let charCount = 0;
+
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, {stream: true});
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (!raw) continue;
+        const msg = JSON.parse(raw);
+        if (msg.text) {
+          output.textContent += msg.text;
+          output.scrollTop = output.scrollHeight;
+          charCount += msg.text.length;
+          fill.style.width = Math.min(90, 10 + charCount / 50) + '%';
+        }
+        if (msg.done) {
+          fill.style.width = '100%';
+          toast('記事生成完了！', 'success');
+          publishBtn.disabled = false;
+          currentGenArticleId = articleId;
+          loadArticles();
+        }
+        if (msg.error) {
+          toast('エラー: ' + msg.error, 'error');
+        }
+      }
+    }
+  } catch (e) {
+    toast('接続エラー: ' + e.message, 'error');
+  }
+
+  btn.disabled = false;
+  btn.textContent = '⚡ 生成開始';
+  setTimeout(() => progress.style.display = 'none', 1000);
+}
+
+async function publishGenerated() {
+  if (!currentGenArticleId) return;
+  const res = await fetch(`/api/publish/${currentGenArticleId}`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({post_status:'draft'})
+  });
+  const data = await res.json();
+  if (data.success) toast('投稿しました: ' + data.wp_url, 'success');
+  else toast(data.error || '投稿失敗', 'error');
+}
+
+// ---- Batch ----
+function loadBatchArticles() {
+  const filter = document.getElementById('batch-filter')?.value || 'pending';
+  let targets;
+  if (filter === 'pending') targets = allArticles.filter(a => a.status === 'pending' || a.status === 'error');
+  else if (filter === 'generated') targets = allArticles.filter(a => a.status === 'generated');
+  else targets = allArticles;
+
+  document.getElementById('batch-count').textContent = targets.length;
+  document.getElementById('batch-body').innerHTML = targets.map(a => `
+    <tr>
+      <td><input type="checkbox" class="check-row" value="${a.id}" checked></td>
+      <td style="font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.title)}</td>
+      <td>${statusBadge(a.status)}</td>
+    </tr>
+  `).join('');
+}
+
+function toggleBatchAll(cb) {
+  document.querySelectorAll('#batch-body .check-row').forEach(c => c.checked = cb.checked);
+}
+
+function getBatchSelectedIds() {
+  return [...document.querySelectorAll('#batch-body .check-row:checked')].map(c => c.value);
+}
+
+async function startBatchGenerate() {
+  const ids = getBatchSelectedIds();
+  if (!ids.length) { toast('記事を選択してください', 'error'); return; }
+  const qualityId = document.getElementById('batch-quality').value;
+  const res = await fetch('/api/batch-generate', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({article_ids: ids, quality_id: qualityId})
+  });
+  const data = await res.json();
+  if (data.success) {
+    toast(data.message, 'success');
+    document.getElementById('batch-msg').textContent = '生成中... 「↻ 状態更新」で確認してください';
+  } else {
+    toast(data.error || '失敗', 'error');
+  }
+}
+
+async function startBatchPublish() {
+  const ids = getBatchSelectedIds();
+  if (!ids.length) { toast('記事を選択してください', 'error'); return; }
+  const postStatus = document.getElementById('batch-post-status').value;
+  if (!confirm(`${ids.length}件をWordPressに投稿しますか?`)) return;
+  const res = await fetch('/api/batch-publish', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({article_ids: ids, post_status: postStatus})
+  });
+  const data = await res.json();
+  toast(`成功: ${data.success}件 / エラー: ${data.error}件`, data.error ? 'error' : 'success');
+  loadArticles();
+  loadBatchArticles();
+}
+
+// ---- Quality ----
+async function loadQuality() {
+  const res = await fetch('/api/quality');
+  qualityList = await res.json();
+  renderQuality();
+  loadQualitySelects();
+}
+
+function renderQuality() {
+  document.getElementById('quality-grid').innerHTML = qualityList.map(q => `
+    <div class="quality-card">
+      <div class="quality-name">
+        ${esc(q.name)}
+        ${q.is_default ? '<span class="quality-default">★ デフォルト</span>' : ''}
+      </div>
+      <div class="quality-prompt">${esc(q.prompt)}</div>
+      <div class="quality-actions">
+        <button class="btn btn-secondary btn-sm" onclick="editQuality('${q.id}')">✏ 編集</button>
+        <button class="btn btn-secondary btn-sm" onclick="setDefaultQuality('${q.id}')">★ デフォルト</button>
+        ${!q.is_default ? `<button class="btn btn-danger btn-sm" onclick="deleteQuality('${q.id}')">🗑</button>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function loadQualitySelects() {
+  const opts = '<option value="">-- 品質定義を選択 --</option>' +
+    qualityList.map(q => `<option value="${q.id}">${esc(q.name)}</option>`).join('');
+  ['quality-filter', 'gen-quality', 'batch-quality', 's-default-quality'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = opts;
+  });
+}
+
+function openQualityModal(id) {
+  document.getElementById('quality-edit-id').value = '';
+  document.getElementById('quality-name').value = '';
+  document.getElementById('quality-prompt').value = '';
+  document.getElementById('quality-is-default').checked = false;
+  document.getElementById('quality-modal-title').textContent = '// 品質定義を追加';
+  document.getElementById('quality-modal').classList.add('open');
+}
+
+function editQuality(id) {
+  const q = qualityList.find(q => q.id === id);
+  if (!q) return;
+  document.getElementById('quality-edit-id').value = id;
+  document.getElementById('quality-name').value = q.name;
+  document.getElementById('quality-prompt').value = q.prompt;
+  document.getElementById('quality-is-default').checked = q.is_default || false;
+  document.getElementById('quality-modal-title').textContent = '// 品質定義を編集';
+  document.getElementById('quality-modal').classList.add('open');
+}
+
+function closeQualityModal() {
+  document.getElementById('quality-modal').classList.remove('open');
+}
+
+async function saveQuality() {
+  const id = document.getElementById('quality-edit-id').value;
+  const body = {
+    name: document.getElementById('quality-name').value,
+    prompt: document.getElementById('quality-prompt').value,
+    is_default: document.getElementById('quality-is-default').checked,
+  };
+  if (id) {
+    await fetch(`/api/quality/${id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  } else {
+    await fetch('/api/quality', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  }
+  toast('保存しました', 'success');
+  closeQualityModal();
+  loadQuality();
+}
+
+async function setDefaultQuality(id) {
+  await fetch(`/api/quality/${id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({is_default:true})});
+  loadQuality();
+}
+
+async function deleteQuality(id) {
+  if (!confirm('削除しますか?')) return;
+  await fetch(`/api/quality/${id}`, {method:'DELETE'});
+  toast('削除しました', 'success');
+  loadQuality();
+}
+
+// ---- Settings ----
+async function loadSettings() {
+  const res = await fetch('/api/settings');
+  const s = await res.json();
+  document.getElementById('s-wp-url').value = s.wp_url || '';
+  document.getElementById('s-wp-user').value = s.wp_user || '';
+  document.getElementById('s-wp-password').value = s.wp_password || '';
+  document.getElementById('s-claude-key').value = s.claude_api_key || '';
+  await loadQuality();
+  if (s.default_quality_id) document.getElementById('s-default-quality').value = s.default_quality_id;
+}
+
+async function saveSettings() {
+  const data = {
+    wp_url: document.getElementById('s-wp-url').value,
+    wp_user: document.getElementById('s-wp-user').value,
+    wp_password: document.getElementById('s-wp-password').value,
+    claude_api_key: document.getElementById('s-claude-key').value,
+    default_quality_id: document.getElementById('s-default-quality').value,
+  };
+  const res = await fetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+  const result = await res.json();
+  if (result.success) {
+    toast('設定を保存しました', 'success');
+    document.getElementById('settings-msg').textContent = '✓ 保存完了';
+    setTimeout(() => document.getElementById('settings-msg').textContent = '', 3000);
+  }
+}
+
+// Close modals on overlay click
+document.getElementById('quality-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeQualityModal();
+});
+document.getElementById('article-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeArticleModal();
+});
+
+// ---- Init ----
+(async function init() {
+  await loadQuality();
+  await loadArticles();
+})();
+</script>
+</body>
+</html>

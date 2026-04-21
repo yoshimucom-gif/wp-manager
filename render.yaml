@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: wp-manager
+    env: python
+    region: singapore
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --workers 2 --timeout 120 --bind 0.0.0.0:$PORT
+    envVars:
+      - key: APP_PASSWORD
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATA_DIR
+        value: /data
+      - key: ANTHROPIC_API_KEY
+        sync: false
+    disk:
+      name: wp-manager-data
+      mountPath: /data
+      sizeGB: 1

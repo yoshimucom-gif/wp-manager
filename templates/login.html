@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WP Manager — Login</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f1117;
+    --surface: #161b22;
+    --border: #21262d;
+    --accent: #3b82f6;
+    --accent-hover: #2563eb;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --success: #3fb950;
+    --error: #f85149;
+    --font: 'IBM Plex Mono', monospace;
+  }
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .login-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 40px;
+    width: 360px;
+  }
+  .logo {
+    text-align: center;
+    margin-bottom: 32px;
+  }
+  .logo h1 {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 2px;
+  }
+  .logo p {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .prompt-line {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .prompt-line span { color: var(--accent); }
+  input[type="password"] {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color 0.15s;
+    margin-bottom: 16px;
+  }
+  input[type="password"]:focus { border-color: var(--accent); }
+  button {
+    width: 100%;
+    background: var(--accent);
+    border: none;
+    border-radius: 4px;
+    color: #fff;
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 10px;
+    cursor: pointer;
+    transition: background 0.15s;
+    letter-spacing: 1px;
+  }
+  button:hover { background: var(--accent-hover); }
+  .error-msg {
+    color: var(--error);
+    font-size: 12px;
+    margin-top: 10px;
+    text-align: center;
+    display: none;
+  }
+  .cursor {
+    display: inline-block;
+    width: 8px;
+    height: 14px;
+    background: var(--accent);
+    animation: blink 1s step-end infinite;
+    vertical-align: middle;
+    margin-left: 2px;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+</style>
+</head>
+<body>
+<div class="login-box">
+  <div class="logo">
+    <h1>WP_MANAGER</h1>
+    <p>WordPress Article Management System</p>
+  </div>
+  <div class="prompt-line"><span>$</span> authenticate --user admin</div>
+  <input type="password" id="password" placeholder="Enter password..." autofocus>
+  <button onclick="login()">LOGIN <span class="cursor"></span></button>
+  <div class="error-msg" id="error"></div>
+</div>
+<script>
+  document.getElementById('password').addEventListener('keydown', e => {
+    if (e.key === 'Enter') login();
+  });
+
+  async function login() {
+    const password = document.getElementById('password').value;
+    const errorEl = document.getElementById('error');
+    errorEl.style.display = 'none';
+
+    const res = await fetch('/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({password})
+    });
+    const data = await res.json();
+    if (data.success) {
+      window.location.href = '/';
+    } else {
+      errorEl.textContent = data.error || 'ログインに失敗しました';
+      errorEl.style.display = 'block';
+      document.getElementById('password').value = '';
+      document.getElementById('password').focus();
+    }
+  }
+</script>
+</body>
+</html>
