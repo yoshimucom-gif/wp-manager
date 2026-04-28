@@ -61,6 +61,7 @@ def load_settings():
         "amazon_access_key": "",
         "amazon_secret_key": "",
         "amazon_partner_tag": "",
+        "article_css": "",
     })
 
 def amazon_search(keywords, access_key, secret_key, partner_tag, item_count=3):
@@ -506,12 +507,16 @@ def publish_article(article_id):
 
     data = request.json or {}
     post_status = data.get('post_status', 'draft')
+    article_css = settings.get('article_css', '')
+    content = article['content']
+    if article_css:
+        content = f'<style>{article_css}</style>\n' + content
 
     try:
         response = requests.post(
             f"{wp_url}/wp-json/wp/v2/posts",
             auth=(wp_user, wp_password),
-            json={'title': article['title'], 'content': article['content'], 'status': post_status},
+            json={'title': article['title'], 'content': content, 'status': post_status},
             timeout=30
         )
         response.raise_for_status()
@@ -542,6 +547,7 @@ def batch_publish():
     articles = load_articles()
     targets = [a for a in articles if a['id'] in article_ids and a.get('content')]
 
+    article_css = settings.get('article_css', '')
     results = {'success': 0, 'error': 0, 'errors': []}
     for article in targets:
         wp_url, wp_user, wp_password = get_site_credentials(article, settings)
@@ -549,11 +555,14 @@ def batch_publish():
             results['error'] += 1
             results['errors'].append({'title': article['title'], 'error': 'サイト未設定'})
             continue
+        content = article['content']
+        if article_css:
+            content = f'<style>{article_css}</style>\n' + content
         try:
             response = requests.post(
                 f"{wp_url}/wp-json/wp/v2/posts",
                 auth=(wp_user, wp_password),
-                json={'title': article['title'], 'content': article['content'], 'status': post_status},
+                json={'title': article['title'], 'content': content, 'status': post_status},
                 timeout=30
             )
             response.raise_for_status()
@@ -724,6 +733,7 @@ def get_settings():
         'amazon_access_key': mask(settings.get('amazon_access_key', '')),
         'amazon_secret_key': '••••••••' if settings.get('amazon_secret_key') else '',
         'amazon_partner_tag': settings.get('amazon_partner_tag', ''),
+        'article_css': settings.get('article_css', ''),
     }
     return jsonify(safe)
 
@@ -742,6 +752,8 @@ def update_settings():
         settings['amazon_secret_key'] = data['amazon_secret_key']
     if 'amazon_partner_tag' in data:
         settings['amazon_partner_tag'] = data['amazon_partner_tag']
+    if 'article_css' in data:
+        settings['article_css'] = data['article_css']
     save_settings(settings)
     return jsonify({'success': True})
 

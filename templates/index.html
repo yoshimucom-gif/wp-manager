@@ -619,6 +619,15 @@ tr.selected td { background: var(--accent-dim); }
             <span id="amazon-test-msg" style="font-size:11px;margin-left:8px;color:var(--muted)"></span>
           </div>
           <div class="settings-section">
+            <div class="section-header">// 記事CSS定義（全サイト共通）</div>
+            <div class="form-group">
+              <label class="form-label">CSS（投稿時に記事の先頭に自動挿入されます）</label>
+              <textarea id="s-article-css" class="form-control" rows="12" placeholder="/* テーマに合わせてCSSを記述 */
+h2 { border-left: 4px solid #e47911; padding-left: 10px; }
+.amazon-btn { background: #ff9900; }"></textarea>
+            </div>
+          </div>
+          <div class="settings-section">
             <div class="section-header">// デフォルト設定</div>
             <div class="form-group">
               <label class="form-label">デフォルト品質定義</label>
@@ -1310,6 +1319,7 @@ async function loadSettings() {
   document.getElementById('s-amz-access-key').value = s.amazon_access_key || '';
   document.getElementById('s-amz-secret-key').value = s.amazon_secret_key || '';
   document.getElementById('s-amz-partner-tag').value = s.amazon_partner_tag || '';
+  document.getElementById('s-article-css').value = s.article_css || '';
   await loadQuality();
   if (s.default_quality_id) document.getElementById('s-default-quality').value = s.default_quality_id;
 }
@@ -1321,6 +1331,7 @@ async function saveSettings() {
     amazon_access_key: document.getElementById('s-amz-access-key').value,
     amazon_secret_key: document.getElementById('s-amz-secret-key').value,
     amazon_partner_tag: document.getElementById('s-amz-partner-tag').value,
+    article_css: document.getElementById('s-article-css').value,
   };
   const res = await fetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
   const result = await res.json();
