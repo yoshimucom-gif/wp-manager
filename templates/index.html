@@ -9,18 +9,18 @@
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --bg: #0f1117;
-  --surface: #161b22;
-  --surface2: #1c2128;
-  --border: #21262d;
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
-  --accent-dim: rgba(59,130,246,0.15);
-  --text: #e6edf3;
-  --muted: #8b949e;
-  --success: #3fb950;
-  --error: #f85149;
-  --warning: #d29922;
+  --bg: #ffffff;
+  --surface: #f6f8fa;
+  --surface2: #eaeef2;
+  --border: #d0d7de;
+  --accent: #0969da;
+  --accent-hover: #0550ae;
+  --accent-dim: rgba(9,105,218,0.08);
+  --text: #24292f;
+  --muted: #57606a;
+  --success: #1a7f37;
+  --error: #cf222e;
+  --warning: #9a6700;
   --font: 'IBM Plex Mono', monospace;
 }
 html, body { height: 100%; }
@@ -33,12 +33,10 @@ body {
   font-size: 13px;
 }
 
-/* Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-track { background: var(--surface); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-/* Layout */
 .layout { display: flex; flex: 1; overflow: hidden; }
 .sidebar {
   width: 200px;
@@ -50,7 +48,6 @@ body {
 }
 .main { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
 
-/* Header */
 .header {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -77,7 +74,6 @@ body {
 }
 .logout-btn:hover { border-color: var(--error); color: var(--error); }
 
-/* Sidebar nav */
 .sidebar-logo {
   padding: 16px;
   border-bottom: 1px solid var(--border);
@@ -107,12 +103,10 @@ body {
   color: var(--muted);
 }
 
-/* Content */
 .content { padding: 24px; flex: 1; }
 .page { display: none; }
 .page.active { display: block; }
 
-/* Page header */
 .page-header { margin-bottom: 20px; }
 .page-title {
   font-size: 16px;
@@ -125,7 +119,6 @@ body {
 .page-title::before { content: '> '; color: var(--accent); }
 .page-subtitle { color: var(--muted); font-size: 11px; margin-top: 4px; margin-left: 18px; }
 
-/* Toolbar */
 .toolbar {
   display: flex;
   align-items: center;
@@ -134,7 +127,6 @@ body {
   flex-wrap: wrap;
 }
 
-/* Buttons */
 .btn {
   font-family: var(--font);
   font-size: 12px;
@@ -150,16 +142,15 @@ body {
 }
 .btn-primary { background: var(--accent); color: #fff; }
 .btn-primary:hover { background: var(--accent-hover); }
-.btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
 .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
-.btn-danger { background: rgba(248,81,73,0.1); color: var(--error); border: 1px solid rgba(248,81,73,0.3); }
-.btn-danger:hover { background: rgba(248,81,73,0.2); }
-.btn-success { background: rgba(63,185,80,0.1); color: var(--success); border: 1px solid rgba(63,185,80,0.3); }
-.btn-success:hover { background: rgba(63,185,80,0.2); }
+.btn-danger { background: rgba(207,34,46,0.08); color: var(--error); border: 1px solid rgba(207,34,46,0.25); }
+.btn-danger:hover { background: rgba(207,34,46,0.15); }
+.btn-success { background: rgba(26,127,55,0.08); color: var(--success); border: 1px solid rgba(26,127,55,0.25); }
+.btn-success:hover { background: rgba(26,127,55,0.15); }
 .btn-sm { font-size: 11px; padding: 4px 10px; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* Input / Select */
 input, select, textarea {
   font-family: var(--font);
   font-size: 13px;
@@ -172,10 +163,9 @@ input, select, textarea {
   transition: border-color 0.15s;
 }
 input:focus, select:focus, textarea:focus { border-color: var(--accent); }
-select option { background: var(--surface2); }
+select option { background: var(--surface); }
 textarea { resize: vertical; }
 
-/* Table */
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
 thead tr { border-bottom: 1px solid var(--border); }
@@ -188,10 +178,9 @@ th {
   white-space: nowrap;
 }
 td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-tr:hover td { background: var(--surface2); }
+tr:hover td { background: var(--surface); }
 tr.selected td { background: var(--accent-dim); }
 
-/* Status badge */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -202,13 +191,12 @@ tr.selected td { background: var(--accent-dim); }
   font-weight: 500;
   white-space: nowrap;
 }
-.badge-pending { background: rgba(139,148,158,0.15); color: var(--muted); border: 1px solid rgba(139,148,158,0.2); }
-.badge-generating { background: rgba(59,130,246,0.15); color: var(--accent); border: 1px solid rgba(59,130,246,0.3); }
-.badge-generated { background: rgba(63,185,80,0.15); color: var(--success); border: 1px solid rgba(63,185,80,0.3); }
-.badge-published { background: rgba(210,153,34,0.15); color: var(--warning); border: 1px solid rgba(210,153,34,0.3); }
-.badge-error { background: rgba(248,81,73,0.15); color: var(--error); border: 1px solid rgba(248,81,73,0.3); }
+.badge-pending { background: rgba(87,96,106,0.1); color: var(--muted); border: 1px solid rgba(87,96,106,0.2); }
+.badge-generating { background: rgba(9,105,218,0.1); color: var(--accent); border: 1px solid rgba(9,105,218,0.2); }
+.badge-generated { background: rgba(26,127,55,0.1); color: var(--success); border: 1px solid rgba(26,127,55,0.2); }
+.badge-published { background: rgba(154,103,0,0.1); color: var(--warning); border: 1px solid rgba(154,103,0,0.2); }
+.badge-error { background: rgba(207,34,46,0.1); color: var(--error); border: 1px solid rgba(207,34,46,0.2); }
 
-/* Toast */
 #toast {
   position: fixed;
   bottom: 24px;
@@ -221,17 +209,16 @@ tr.selected td { background: var(--accent-dim); }
   z-index: 9999;
   display: none;
   max-width: 360px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
 }
 #toast.success { border-color: var(--success); color: var(--success); }
 #toast.error { border-color: var(--error); color: var(--error); }
 #toast.info { border-color: var(--accent); color: var(--accent); }
 
-/* Modal */
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.6);
+  background: rgba(0,0,0,0.35);
   z-index: 1000;
   display: none;
   align-items: center;
@@ -239,7 +226,7 @@ tr.selected td { background: var(--accent-dim); }
 }
 .modal-overlay.open { display: flex; }
 .modal {
-  background: var(--surface);
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 24px;
@@ -247,6 +234,7 @@ tr.selected td { background: var(--accent-dim); }
   max-width: 95vw;
   max-height: 85vh;
   overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
 }
 .modal-title {
   font-size: 14px;
@@ -256,14 +244,12 @@ tr.selected td { background: var(--accent-dim); }
 }
 .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
 
-/* Form */
 .form-group { margin-bottom: 16px; }
 .form-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; display: block; }
 .form-control { width: 100%; }
 
-/* Stream output */
 .stream-box {
-  background: var(--bg);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 12px;
@@ -276,7 +262,6 @@ tr.selected td { background: var(--accent-dim); }
   line-height: 1.6;
 }
 
-/* Stat cards */
 .stats { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
 .stat-card {
   background: var(--surface);
@@ -288,10 +273,8 @@ tr.selected td { background: var(--accent-dim); }
 .stat-value { font-size: 22px; font-weight: 600; color: var(--text); }
 .stat-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
-/* Checkbox */
 .check-all, .check-row { cursor: pointer; width: 16px; height: 16px; accent-color: var(--accent); }
 
-/* Empty state */
 .empty {
   text-align: center;
   padding: 60px 20px;
@@ -300,7 +283,6 @@ tr.selected td { background: var(--accent-dim); }
 }
 .empty-icon { font-size: 32px; margin-bottom: 12px; }
 
-/* Progress bar */
 .progress-bar {
   height: 2px;
   background: var(--border);
@@ -314,7 +296,6 @@ tr.selected td { background: var(--accent-dim); }
   transition: width 0.3s;
 }
 
-/* Quality cards */
 .quality-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .quality-card {
   background: var(--surface);
@@ -328,11 +309,39 @@ tr.selected td { background: var(--accent-dim); }
 .quality-prompt { font-size: 11px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .quality-actions { display: flex; gap: 6px; margin-top: 12px; }
 .quality-default { font-size: 10px; color: var(--accent); margin-left: 8px; }
+
+.sites-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.site-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px;
+}
+.site-card:hover { border-color: var(--accent); }
+.site-name { font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+.site-url { font-size: 11px; color: var(--muted); margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.site-user { font-size: 11px; color: var(--muted); }
+.site-actions { display: flex; gap: 6px; margin-top: 12px; }
+
+.section-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
 </style>
 </head>
 <body>
 
-<!-- Header -->
 <div class="header">
   <div class="header-logo">WP_MANAGER</div>
   <div class="header-right">
@@ -342,7 +351,6 @@ tr.selected td { background: var(--accent-dim); }
 </div>
 
 <div class="layout">
-  <!-- Sidebar -->
   <div class="sidebar">
     <div class="sidebar-logo">// NAVIGATION</div>
     <nav class="nav">
@@ -358,14 +366,16 @@ tr.selected td { background: var(--accent-dim); }
       <div class="nav-item" onclick="showPage('quality')" id="nav-quality">
         <span class="nav-icon">✦</span> 品質定義
       </div>
+      <div class="nav-item" onclick="showPage('sites')" id="nav-sites">
+        <span class="nav-icon">🌐</span> サイト管理
+      </div>
       <div class="nav-item" onclick="showPage('settings')" id="nav-settings">
         <span class="nav-icon">⚙</span> 設定
       </div>
     </nav>
-    <div class="sidebar-footer">v1.0.0 · Powered by Claude</div>
+    <div class="sidebar-footer">v1.1.0 · Powered by Claude</div>
   </div>
 
-  <!-- Main -->
   <div class="main">
     <div class="content">
 
@@ -396,7 +406,7 @@ tr.selected td { background: var(--accent-dim); }
         </div>
 
         <div class="toolbar">
-          <label class="btn btn-secondary" style="cursor:pointer">
+          <label class="btn btn-secondary" style="cursor:pointer" id="import-btn-label">
             <span>📥 Excelインポート</span>
             <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importExcel(this)">
           </label>
@@ -404,8 +414,11 @@ tr.selected td { background: var(--accent-dim); }
           <button class="btn btn-success" onclick="publishSelected()">🚀 選択をWP投稿</button>
           <button class="btn btn-danger" onclick="deleteSelected()">🗑 選択を削除</button>
           <div style="flex:1"></div>
-          <select id="quality-filter" style="font-size:12px;" onchange="loadArticles()">
-            <option value="">-- 品質定義 --</option>
+          <select id="site-filter" style="font-size:12px;" onchange="loadArticles()">
+            <option value="">全サイト</option>
+          </select>
+          <select id="quality-filter" style="font-size:12px;" onchange="filterArticles()">
+            <option value="">全品質</option>
           </select>
           <input type="text" id="search-input" placeholder="検索..." style="width:160px;font-size:12px;" oninput="filterArticles()">
           <button class="btn btn-secondary btn-sm" onclick="loadArticles()">↻ 更新</button>
@@ -419,6 +432,7 @@ tr.selected td { background: var(--accent-dim); }
                 <th>#</th>
                 <th>タイトル</th>
                 <th>キーワード</th>
+                <th>サイト</th>
                 <th>ステータス</th>
                 <th>生成日時</th>
                 <th>操作</th>
@@ -515,12 +529,13 @@ tr.selected td { background: var(--accent-dim); }
           </div>
           <div>
             <label class="form-label">対象記事 (<span id="batch-count">0</span>件)</label>
-            <div style="background:var(--bg);border:1px solid var(--border);border-radius:4px;max-height:400px;overflow-y:auto;">
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:4px;max-height:400px;overflow-y:auto;">
               <table style="width:100%">
                 <thead>
                   <tr>
                     <th><input type="checkbox" class="check-all" id="batch-check-all" onchange="toggleBatchAll(this)"></th>
                     <th>タイトル</th>
+                    <th>サイト</th>
                     <th>ステータス</th>
                   </tr>
                 </thead>
@@ -543,37 +558,39 @@ tr.selected td { background: var(--accent-dim); }
         <div class="quality-grid" id="quality-grid"></div>
       </div>
 
+      <!-- Sites Page -->
+      <div class="page" id="page-sites">
+        <div class="page-header">
+          <div class="page-title">サイト管理</div>
+          <div class="page-subtitle">WordPressサイトの接続情報を管理</div>
+        </div>
+        <div class="toolbar">
+          <button class="btn btn-primary" onclick="openSiteModal()">+ サイト追加</button>
+        </div>
+        <div class="sites-grid" id="sites-grid">
+          <div class="empty">
+            <div class="empty-icon">🌐</div>
+            <div>サイトがありません。「+ サイト追加」から登録してください。</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Settings Page -->
       <div class="page" id="page-settings">
         <div class="page-header">
           <div class="page-title">設定</div>
-          <div class="page-subtitle">WordPress接続・Claude API設定</div>
+          <div class="page-subtitle">Claude API・デフォルト設定</div>
         </div>
         <div style="max-width:520px">
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:20px;margin-bottom:16px;">
-            <div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:16px;">// WordPress 設定</div>
-            <div class="form-group">
-              <label class="form-label">WordPress URL</label>
-              <input type="url" id="s-wp-url" class="form-control" placeholder="https://example.com">
-            </div>
-            <div class="form-group">
-              <label class="form-label">ユーザー名</label>
-              <input type="text" id="s-wp-user" class="form-control" placeholder="admin">
-            </div>
-            <div class="form-group">
-              <label class="form-label">アプリケーションパスワード</label>
-              <input type="password" id="s-wp-password" class="form-control" placeholder="xxxx xxxx xxxx xxxx xxxx xxxx">
-            </div>
-          </div>
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:20px;margin-bottom:16px;">
-            <div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:16px;">// Claude API 設定</div>
+          <div class="settings-section">
+            <div class="section-header">// Claude API 設定</div>
             <div class="form-group">
               <label class="form-label">APIキー</label>
               <input type="password" id="s-claude-key" class="form-control" placeholder="sk-ant-...">
             </div>
           </div>
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:20px;margin-bottom:16px;">
-            <div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:16px;">// デフォルト設定</div>
+          <div class="settings-section">
+            <div class="section-header">// デフォルト設定</div>
             <div class="form-group">
               <label class="form-label">デフォルト品質定義</label>
               <select id="s-default-quality" class="form-control"></select>
@@ -588,7 +605,6 @@ tr.selected td { background: var(--accent-dim); }
   </div>
 </div>
 
-<!-- Toast -->
 <div id="toast"></div>
 
 <!-- Quality Modal -->
@@ -617,6 +633,34 @@ tr.selected td { background: var(--accent-dim); }
   </div>
 </div>
 
+<!-- Site Modal -->
+<div class="modal-overlay" id="site-modal">
+  <div class="modal" style="width:480px">
+    <div class="modal-title" id="site-modal-title">// サイトを追加</div>
+    <input type="hidden" id="site-edit-id">
+    <div class="form-group">
+      <label class="form-label">サイト名</label>
+      <input type="text" id="site-name" class="form-control" placeholder="例: メインブログ">
+    </div>
+    <div class="form-group">
+      <label class="form-label">WordPress URL</label>
+      <input type="url" id="site-wp-url" class="form-control" placeholder="https://example.com">
+    </div>
+    <div class="form-group">
+      <label class="form-label">ユーザー名</label>
+      <input type="text" id="site-wp-user" class="form-control" placeholder="admin">
+    </div>
+    <div class="form-group">
+      <label class="form-label">アプリケーションパスワード</label>
+      <input type="password" id="site-wp-password" class="form-control" placeholder="xxxx xxxx xxxx xxxx xxxx xxxx">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeSiteModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveSite()">保存</button>
+    </div>
+  </div>
+</div>
+
 <!-- Article Detail Modal -->
 <div class="modal-overlay" id="article-modal">
   <div class="modal" style="width:800px">
@@ -631,8 +675,14 @@ tr.selected td { background: var(--accent-dim); }
       <input type="text" id="modal-keywords" class="form-control">
     </div>
     <div class="form-group">
+      <label class="form-label">投稿先サイト</label>
+      <select id="modal-site-id" class="form-control">
+        <option value="">-- サイトを選択 --</option>
+      </select>
+    </div>
+    <div class="form-group">
       <label class="form-label">コンテンツ (HTML)</label>
-      <textarea id="modal-content" class="form-control" rows="16"></textarea>
+      <textarea id="modal-content" class="form-control" rows="14"></textarea>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeArticleModal()">閉じる</button>
@@ -642,9 +692,9 @@ tr.selected td { background: var(--accent-dim); }
 </div>
 
 <script>
-// ---- State ----
 let allArticles = [];
 let qualityList = [];
+let siteList = [];
 let currentGenArticleId = null;
 
 // ---- Navigation ----
@@ -657,6 +707,7 @@ function showPage(name) {
   if (name === 'generate') { loadQualitySelects(); populateGenSelect(); }
   if (name === 'batch') { loadQualitySelects(); loadBatchArticles(); }
   if (name === 'quality') loadQuality();
+  if (name === 'sites') loadSites();
   if (name === 'settings') loadSettings();
 }
 
@@ -671,12 +722,103 @@ function toast(msg, type = 'info') {
   toastTimer = setTimeout(() => el.style.display = 'none', 4000);
 }
 
+// ---- Sites ----
+async function loadSites() {
+  const res = await fetch('/api/sites');
+  siteList = await res.json();
+  renderSites();
+  updateSiteSelects();
+}
+
+function renderSites() {
+  const grid = document.getElementById('sites-grid');
+  if (!siteList.length) {
+    grid.innerHTML = '<div class="empty"><div class="empty-icon">🌐</div><div>サイトがありません。「+ サイト追加」から登録してください。</div></div>';
+    return;
+  }
+  grid.innerHTML = siteList.map(s => `
+    <div class="site-card">
+      <div class="site-name">${esc(s.name)}</div>
+      <div class="site-url" title="${esc(s.wp_url)}">${esc(s.wp_url)}</div>
+      <div class="site-user">👤 ${esc(s.wp_user)}</div>
+      <div class="site-actions">
+        <button class="btn btn-secondary btn-sm" onclick="editSite('${s.id}')">✏ 編集</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteSite('${s.id}')">🗑 削除</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function updateSiteSelects() {
+  const opts = '<option value="">全サイト</option>' +
+    siteList.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  const filterEl = document.getElementById('site-filter');
+  if (filterEl) { const v = filterEl.value; filterEl.innerHTML = opts; filterEl.value = v; }
+
+  const modalOpts = '<option value="">-- サイトを選択 --</option>' +
+    siteList.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  const modalEl = document.getElementById('modal-site-id');
+  if (modalEl) modalEl.innerHTML = modalOpts;
+}
+
+function openSiteModal() {
+  document.getElementById('site-edit-id').value = '';
+  document.getElementById('site-name').value = '';
+  document.getElementById('site-wp-url').value = '';
+  document.getElementById('site-wp-user').value = '';
+  document.getElementById('site-wp-password').value = '';
+  document.getElementById('site-modal-title').textContent = '// サイトを追加';
+  document.getElementById('site-modal').classList.add('open');
+}
+
+function editSite(id) {
+  const s = siteList.find(s => s.id === id);
+  if (!s) return;
+  document.getElementById('site-edit-id').value = id;
+  document.getElementById('site-name').value = s.name;
+  document.getElementById('site-wp-url').value = s.wp_url;
+  document.getElementById('site-wp-user').value = s.wp_user;
+  document.getElementById('site-wp-password').value = s.wp_password;
+  document.getElementById('site-modal-title').textContent = '// サイトを編集';
+  document.getElementById('site-modal').classList.add('open');
+}
+
+function closeSiteModal() {
+  document.getElementById('site-modal').classList.remove('open');
+}
+
+async function saveSite() {
+  const id = document.getElementById('site-edit-id').value;
+  const body = {
+    name: document.getElementById('site-name').value,
+    wp_url: document.getElementById('site-wp-url').value,
+    wp_user: document.getElementById('site-wp-user').value,
+    wp_password: document.getElementById('site-wp-password').value,
+  };
+  if (!body.name || !body.wp_url) { toast('サイト名とURLは必須です', 'error'); return; }
+  if (id) {
+    await fetch(`/api/sites/${id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  } else {
+    await fetch('/api/sites', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  }
+  toast('保存しました', 'success');
+  closeSiteModal();
+  await loadSites();
+}
+
+async function deleteSite(id) {
+  if (!confirm('このサイトを削除しますか?')) return;
+  await fetch(`/api/sites/${id}`, {method:'DELETE'});
+  toast('削除しました', 'success');
+  await loadSites();
+}
+
 // ---- Articles ----
 async function loadArticles() {
   const res = await fetch('/api/articles');
   allArticles = await res.json();
   updateStats();
-  renderArticles(allArticles);
+  filterArticles();
   populateGenSelect();
   loadBatchArticles();
 }
@@ -690,10 +832,19 @@ function updateStats() {
 
 function filterArticles() {
   const q = document.getElementById('search-input').value.toLowerCase();
-  const filtered = allArticles.filter(a =>
-    a.title.toLowerCase().includes(q) || a.keywords.toLowerCase().includes(q)
-  );
+  const siteId = document.getElementById('site-filter').value;
+  const qualityId = document.getElementById('quality-filter').value;
+  let filtered = allArticles;
+  if (siteId) filtered = filtered.filter(a => a.site_id === siteId);
+  if (qualityId) filtered = filtered.filter(a => a.quality_id === qualityId);
+  if (q) filtered = filtered.filter(a => a.title.toLowerCase().includes(q) || (a.keywords || '').toLowerCase().includes(q));
   renderArticles(filtered);
+}
+
+function getSiteName(site_id) {
+  if (!site_id) return '<span style="color:var(--muted);font-size:11px">—</span>';
+  const s = siteList.find(s => s.id === site_id);
+  return s ? `<span style="font-size:11px;color:var(--accent)">${esc(s.name)}</span>` : '<span style="color:var(--muted);font-size:11px">不明</span>';
 }
 
 function renderArticles(articles) {
@@ -709,8 +860,9 @@ function renderArticles(articles) {
     <tr id="row-${a.id}">
       <td><input type="checkbox" class="check-row" value="${a.id}"></td>
       <td style="color:var(--muted);font-size:11px">${i + 1}</td>
-      <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.title)}">${esc(a.title)}</td>
-      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)" title="${esc(a.keywords)}">${esc(a.keywords)}</td>
+      <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.title)}">${esc(a.title)}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)" title="${esc(a.keywords)}">${esc(a.keywords)}</td>
+      <td>${getSiteName(a.site_id)}</td>
       <td>${statusBadge(a.status)}</td>
       <td style="color:var(--muted);font-size:11px;white-space:nowrap">${a.generated_at ? fmtDate(a.generated_at) : '—'}</td>
       <td>
@@ -757,12 +909,14 @@ function getSelectedIds() {
 async function importExcel(input) {
   const file = input.files[0];
   if (!file) return;
+  const siteId = document.getElementById('site-filter').value;
   const fd = new FormData();
   fd.append('file', file);
+  if (siteId) fd.append('site_id', siteId);
   const res = await fetch('/api/import', {method:'POST', body:fd});
   const data = await res.json();
   if (data.success) {
-    toast(`${data.imported}件インポートしました`, 'success');
+    toast(`${data.imported}件インポートしました${siteId ? '' : '（サイト未設定）'}`, 'success');
     loadArticles();
   } else {
     toast(data.error || 'インポート失敗', 'error');
@@ -840,6 +994,8 @@ async function openArticleModal(id) {
   document.getElementById('modal-title').value = article.title;
   document.getElementById('modal-keywords').value = article.keywords;
   document.getElementById('modal-content').value = article.content || '';
+  updateSiteSelects();
+  document.getElementById('modal-site-id').value = article.site_id || '';
   document.getElementById('article-modal').classList.add('open');
 }
 
@@ -849,15 +1005,23 @@ function closeArticleModal() {
 
 async function saveArticleModal() {
   const id = document.getElementById('modal-article-id').value;
-  await fetch(`/api/articles/${id}`, {
-    method: 'PUT',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({
-      title: document.getElementById('modal-title').value,
-      keywords: document.getElementById('modal-keywords').value,
-      content: document.getElementById('modal-content').value,
+  const siteId = document.getElementById('modal-site-id').value;
+  await Promise.all([
+    fetch(`/api/articles/${id}`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        title: document.getElementById('modal-title').value,
+        keywords: document.getElementById('modal-keywords').value,
+        content: document.getElementById('modal-content').value,
+      })
+    }),
+    fetch(`/api/articles/${id}/site`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({site_id: siteId || null})
     })
-  });
+  ]);
   toast('保存しました', 'success');
   closeArticleModal();
   loadArticles();
@@ -900,11 +1064,6 @@ async function startGenerate() {
   progress.style.display = 'block';
   fill.style.width = '10%';
 
-  const es = new EventSource(`/api/generate/${articleId}?` + new URLSearchParams({quality_id: qualityId}));
-
-  // SSE via POST workaround: use fetch with streaming
-  es.close();
-
   try {
     const res = await fetch(`/api/generate/${articleId}`, {
       method: 'POST',
@@ -941,9 +1100,7 @@ async function startGenerate() {
           currentGenArticleId = articleId;
           loadArticles();
         }
-        if (msg.error) {
-          toast('エラー: ' + msg.error, 'error');
-        }
+        if (msg.error) toast('エラー: ' + msg.error, 'error');
       }
     }
   } catch (e) {
@@ -978,7 +1135,8 @@ function loadBatchArticles() {
   document.getElementById('batch-body').innerHTML = targets.map(a => `
     <tr>
       <td><input type="checkbox" class="check-row" value="${a.id}" checked></td>
-      <td style="font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.title)}</td>
+      <td style="font-size:12px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.title)}</td>
+      <td>${getSiteName(a.site_id)}</td>
       <td>${statusBadge(a.status)}</td>
     </tr>
   `).join('');
@@ -1060,7 +1218,7 @@ function loadQualitySelects() {
   });
 }
 
-function openQualityModal(id) {
+function openQualityModal() {
   document.getElementById('quality-edit-id').value = '';
   document.getElementById('quality-name').value = '';
   document.getElementById('quality-prompt').value = '';
@@ -1117,9 +1275,6 @@ async function deleteQuality(id) {
 async function loadSettings() {
   const res = await fetch('/api/settings');
   const s = await res.json();
-  document.getElementById('s-wp-url').value = s.wp_url || '';
-  document.getElementById('s-wp-user').value = s.wp_user || '';
-  document.getElementById('s-wp-password').value = s.wp_password || '';
   document.getElementById('s-claude-key').value = s.claude_api_key || '';
   await loadQuality();
   if (s.default_quality_id) document.getElementById('s-default-quality').value = s.default_quality_id;
@@ -1127,9 +1282,6 @@ async function loadSettings() {
 
 async function saveSettings() {
   const data = {
-    wp_url: document.getElementById('s-wp-url').value,
-    wp_user: document.getElementById('s-wp-user').value,
-    wp_password: document.getElementById('s-wp-password').value,
     claude_api_key: document.getElementById('s-claude-key').value,
     default_quality_id: document.getElementById('s-default-quality').value,
   };
@@ -1143,15 +1295,14 @@ async function saveSettings() {
 }
 
 // Close modals on overlay click
-document.getElementById('quality-modal').addEventListener('click', e => {
-  if (e.target === e.currentTarget) closeQualityModal();
-});
-document.getElementById('article-modal').addEventListener('click', e => {
-  if (e.target === e.currentTarget) closeArticleModal();
+['quality-modal','site-modal','article-modal'].forEach(id => {
+  document.getElementById(id).addEventListener('click', e => {
+    if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
+  });
 });
 
-// ---- Init ----
 (async function init() {
+  await loadSites();
   await loadQuality();
   await loadArticles();
 })();

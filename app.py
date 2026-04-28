@@ -53,12 +53,18 @@ def save_quality(quality):
 
 def load_settings():
     return load_json(SETTINGS_FILE, {
-        "wp_url": "",
-        "wp_user": "",
-        "wp_password": "",
+        "sites": [],
         "claude_api_key": "",
         "default_quality_id": "default"
     })
+
+def get_site_credentials(article, settings):
+    site_id = article.get('site_id')
+    if site_id:
+        for s in settings.get('sites', []):
+            if s['id'] == site_id:
+                return s['wp_url'].rstrip('/'), s['wp_user'], s['wp_password']
+    return '', '', ''
 
 def save_settings(settings):
     save_json(SETTINGS_FILE, settings)
@@ -160,6 +166,7 @@ def import_excel():
     articles = load_articles()
     imported = 0
 
+    site_id = request.form.get('site_id') or None
     for row in ws.iter_rows(min_row=2, values_only=True):
         if not row or not row[0]:
             continue
@@ -171,6 +178,7 @@ def import_excel():
             'content': '',
             'created_at': datetime.now().isoformat(),
             'quality_id': None,
+            'site_id': site_id,
             'wp_post_id': None,
             'wp_url': None,
         })
@@ -329,12 +337,10 @@ def publish_article(article_id):
         return jsonify({'error': '記事コンテンツがありません。先に生成してください。'}), 400
 
     settings = load_settings()
-    wp_url = settings.get('wp_url', '').rstrip('/')
-    wp_user = settings.get('wp_user', '')
-    wp_password = settings.get('wp_password', '')
+    wp_url, wp_user, wp_password = get_site_credentials(article, settings)
 
     if not all([wp_url, wp_user, wp_password]):
-        return jsonify({'error': 'WordPress設定が不完全です。設定画面で入力してください。'}), 400
+        return jsonify({'error': 'サイトが設定されていません。記事にサイトを紐付けてください。'}), 400
 
     data = request.json or {}
     post_status = data.get('post_status', 'draft')
@@ -371,18 +377,16 @@ def batch_publish():
     post_status = data.get('post_status', 'draft')
 
     settings = load_settings()
-    wp_url = settings.get('wp_url', '').rstrip('/')
-    wp_user = settings.get('wp_user', '')
-    wp_password = settings.get('wp_password', '')
-
-    if not all([wp_url, wp_user, wp_password]):
-        return jsonify({'error': 'WordPress設定が不完全です'}), 400
-
     articles = load_articles()
     targets = [a for a in articles if a['id'] in article_ids and a.get('content')]
 
     results = {'success': 0, 'error': 0, 'errors': []}
     for article in targets:
+        wp_url, wp_user, wp_password = get_site_credentials(article, settings)
+        if not all([wp_url, wp_user, wp_password]):
+            results['error'] += 1
+            results['errors'].append({'title': article['title'], 'error': 'サイト未設定'})
+            continue
         try:
             response = requests.post(
                 f"{wp_url}/wp-json/wp/v2/posts",
@@ -454,16 +458,86 @@ def delete_quality(quality_id):
     return jsonify({'success': True})
 
 
+# Sites
+@app.route('/api/sites', methods=['GET'])
+@login_required
+def get_sites():
+    settings = load_settings()
+    safe = []
+    for s in settings.get('sites', []):
+        sc = dict(s)
+        if sc.get('wp_password'):
+            sc['wp_password'] = '••••••••'
+        safe.append(sc)
+    return jsonify(safe)
+
+@app.route('/api/sites', methods=['POST'])
+@login_required
+def create_site():
+    data = request.json
+    settings = load_settings()
+    sites = settings.get('sites', [])
+    site = {
+        'id': str(uuid.uuid4()),
+        'name': data.get('name', ''),
+        'wp_url': data.get('wp_url', '').rstrip('/'),
+        'wp_user': data.get('wp_user', ''),
+        'wp_password': data.get('wp_password', ''),
+    }
+    sites.append(site)
+    settings['sites'] = sites
+    save_settings(settings)
+    sc = dict(site)
+    if sc.get('wp_password'):
+        sc['wp_password'] = '••••••••'
+    return jsonify(sc)
+
+@app.route('/api/sites/<site_id>', methods=['PUT'])
+@login_required
+def update_site(site_id):
+    data = request.json
+    settings = load_settings()
+    for s in settings.get('sites', []):
+        if s['id'] == site_id:
+            s['name'] = data.get('name', s['name'])
+            s['wp_url'] = data.get('wp_url', s['wp_url']).rstrip('/')
+            s['wp_user'] = data.get('wp_user', s['wp_user'])
+            if data.get('wp_password') and data['wp_password'] != '••••••••':
+                s['wp_password'] = data['wp_password']
+            break
+    save_settings(settings)
+    return jsonify({'success': True})
+
+@app.route('/api/sites/<site_id>', methods=['DELETE'])
+@login_required
+def delete_site(site_id):
+    settings = load_settings()
+    settings['sites'] = [s for s in settings.get('sites', []) if s['id'] != site_id]
+    save_settings(settings)
+    return jsonify({'success': True})
+
+@app.route('/api/articles/<article_id>/site', methods=['PUT'])
+@login_required
+def update_article_site(article_id):
+    data = request.json
+    articles = load_articles()
+    for a in articles:
+        if a['id'] == article_id:
+            a['site_id'] = data.get('site_id')
+            break
+    save_articles(articles)
+    return jsonify({'success': True})
+
+
 # Settings
 @app.route('/api/settings', methods=['GET'])
 @login_required
 def get_settings():
     settings = load_settings()
-    safe = dict(settings)
-    if safe.get('wp_password'):
-        safe['wp_password'] = '••••••••'
-    if safe.get('claude_api_key') and len(safe['claude_api_key']) > 8:
-        safe['claude_api_key'] = safe['claude_api_key'][:8] + '••••••••'
+    safe = {
+        'claude_api_key': (settings.get('claude_api_key', '')[:8] + '••••••••') if len(settings.get('claude_api_key', '')) > 8 else settings.get('claude_api_key', ''),
+        'default_quality_id': settings.get('default_quality_id', 'default'),
+    }
     return jsonify(safe)
 
 @app.route('/api/settings', methods=['POST'])
@@ -471,11 +545,8 @@ def get_settings():
 def update_settings():
     data = request.json
     settings = load_settings()
-    for key in ['wp_url', 'wp_user', 'default_quality_id']:
-        if key in data:
-            settings[key] = data[key]
-    if data.get('wp_password') and data['wp_password'] != '••••••••':
-        settings['wp_password'] = data['wp_password']
+    if 'default_quality_id' in data:
+        settings['default_quality_id'] = data['default_quality_id']
     if data.get('claude_api_key') and '••••••••' not in data['claude_api_key']:
         settings['claude_api_key'] = data['claude_api_key']
     save_settings(settings)
