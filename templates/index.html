@@ -687,6 +687,11 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
       <input type="text" id="quality-name" class="form-control" placeholder="例: SEO特化">
     </div>
     <div class="form-group">
+      <label class="form-label">参考URL（任意）</label>
+      <input type="url" id="quality-reference-url" class="form-control" placeholder="https://example.com/reference-article">
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">生成時にこのページの内容を参考記事として読み込みます</div>
+    </div>
+    <div class="form-group">
       <label class="form-label">プロンプト</label>
       <textarea id="quality-prompt" class="form-control" rows="8" placeholder="記事生成時の品質要件を記述してください..."></textarea>
     </div>
@@ -1444,6 +1449,7 @@ function renderQuality() {
         ${q.is_default ? '<span class="quality-default">★ デフォルト</span>' : ''}
       </div>
       <div class="quality-prompt">${esc(q.prompt)}</div>
+      ${q.reference_url ? `<div style="font-size:10px;margin-top:6px"><a href="${esc(q.reference_url)}" target="_blank" style="color:var(--accent)">🔗 参考URL</a></div>` : ''}
       <div class="quality-actions">
         <button class="btn btn-secondary btn-sm" onclick="editQuality('${q.id}')">✏ 編集</button>
         <button class="btn btn-secondary btn-sm" onclick="setDefaultQuality('${q.id}')">★ デフォルト</button>
@@ -1465,6 +1471,7 @@ function loadQualitySelects() {
 function openQualityModal() {
   document.getElementById('quality-edit-id').value = '';
   document.getElementById('quality-name').value = '';
+  document.getElementById('quality-reference-url').value = '';
   document.getElementById('quality-prompt').value = '';
   document.getElementById('quality-is-default').checked = false;
   document.getElementById('quality-modal-title').textContent = '// 品質定義を追加';
@@ -1476,6 +1483,7 @@ function editQuality(id) {
   if (!q) return;
   document.getElementById('quality-edit-id').value = id;
   document.getElementById('quality-name').value = q.name;
+  document.getElementById('quality-reference-url').value = q.reference_url || '';
   document.getElementById('quality-prompt').value = q.prompt;
   document.getElementById('quality-is-default').checked = q.is_default || false;
   document.getElementById('quality-modal-title').textContent = '// 品質定義を編集';
@@ -1490,6 +1498,7 @@ async function saveQuality() {
   const id = document.getElementById('quality-edit-id').value;
   const body = {
     name: document.getElementById('quality-name').value,
+    reference_url: document.getElementById('quality-reference-url').value,
     prompt: document.getElementById('quality-prompt').value,
     is_default: document.getElementById('quality-is-default').checked,
   };

@@ -5,6 +5,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 from functools import wraps
+from html.parser import HTMLParser
 
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, Response, stream_with_context
 import anthropic
@@ -69,6 +70,30 @@ def load_settings():
         "amazon_partner_tag": "",
         "article_css": "",
     })
+
+class _TextExtractor(HTMLParser):
+    SKIP = {'script', 'style', 'nav', 'header', 'footer', 'aside', 'noscript'}
+    def __init__(self):
+        super().__init__()
+        self._parts = []
+        self._depth = 0
+    def handle_starttag(self, tag, attrs):
+        if tag in self.SKIP: self._depth += 1
+    def handle_endtag(self, tag):
+        if tag in self.SKIP: self._depth = max(0, self._depth - 1)
+    def handle_data(self, data):
+        if self._depth == 0:
+            t = data.strip()
+            if t: self._parts.append(t)
+    def text(self): return '\n'.join(self._parts)
+
+def fetch_url_text(url, max_chars=4000):
+    resp = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+    resp.raise_for_status()
+    p = _TextExtractor()
+    p.feed(resp.text)
+    return p.text()[:max_chars]
+
 
 def amazon_search(keywords, access_key, secret_key, partner_tag, item_count=3):
     host = 'webservices.amazon.co.jp'
@@ -317,6 +342,12 @@ def generate_article(article_id):
         quality = next((q for q in quality_list if q.get('is_default')), quality_list[0] if quality_list else None)
 
     quality_prompt = quality['prompt'] if quality else ''
+    reference_text = ''
+    if quality and quality.get('reference_url'):
+        try:
+            reference_text = fetch_url_text(quality['reference_url'])
+        except Exception:
+            pass
     include_amazon = data.get('include_amazon', False)
     decoration_id = data.get('decoration_id')
     decoration = next((d for d in load_decorations() if d['id'] == decoration_id), None) if decoration_id else None
@@ -345,6 +376,9 @@ def generate_article(article_id):
 {quality_prompt}
 
 記事はHTML形式で書いてください。<article>タグは不要です。h2, h3, p, ul, li等のHTML要素を使用してください。"""
+
+            if reference_text:
+                prompt += f'\n\n以下の参考記事の内容・構成・論点を参考にして執筆してください（コピーは不可）：\n\n{reference_text}'
 
             if decoration and decoration.get('sample_html'):
                 prompt += f'\n\n以下のサンプル記事のHTML構造・装飾スタイルを踏襲して記事を作成してください。同じクラス名・ボックスデザイン・見出し構造・装飾パターンを使用してください：\n\n{decoration["sample_html"][:4000]}'
@@ -408,6 +442,12 @@ def batch_generate():
     if not quality:
         quality = next((q for q in quality_list if q.get('is_default')), quality_list[0] if quality_list else None)
     quality_prompt = quality['prompt'] if quality else ''
+    reference_text = ''
+    if quality and quality.get('reference_url'):
+        try:
+            reference_text = fetch_url_text(quality['reference_url'])
+        except Exception:
+            pass
     include_amazon = data.get('include_amazon', False)
     decoration_id = data.get('decoration_id')
     decoration = next((d for d in load_decorations() if d['id'] == decoration_id), None) if decoration_id else None
@@ -430,6 +470,9 @@ def batch_generate():
 {quality_prompt}
 
 記事はHTML形式で書いてください。<article>タグは不要です。h2, h3, p, ul, li等のHTML要素を使用してください。"""
+
+                if reference_text:
+                    prompt += f'\n\n以下の参考記事の内容・構成・論点を参考にして執筆してください（コピーは不可）：\n\n{reference_text}'
 
                 if decoration and decoration.get('sample_html'):
                     prompt += f'\n\n以下のサンプル記事のHTML構造・装飾スタイルを踏襲して記事を作成してください。同じクラス名・ボックスデザイン・見出し構造・装飾パターンを使用してください：\n\n{decoration["sample_html"][:4000]}'
@@ -655,6 +698,7 @@ def create_quality():
     q = {
         'id': str(uuid.uuid4()),
         'name': data.get('name', ''),
+        'reference_url': data.get('reference_url', ''),
         'prompt': data.get('prompt', ''),
         'is_default': False,
     }
@@ -670,6 +714,7 @@ def update_quality(quality_id):
     for q in quality_list:
         if q['id'] == quality_id:
             q['name'] = data.get('name', q['name'])
+            q['reference_url'] = data.get('reference_url', q.get('reference_url', ''))
             q['prompt'] = data.get('prompt', q['prompt'])
             if data.get('is_default'):
                 for other in quality_list:
