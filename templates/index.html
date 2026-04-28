@@ -476,6 +476,12 @@ tr.selected td { background: var(--accent-dim); }
                 <option value="">-- 品質定義を選択 --</option>
               </select>
             </div>
+            <div class="form-group">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted)">
+                <input type="checkbox" id="gen-include-amazon" style="accent-color:var(--accent)">
+                Amazon商品を自動挿入（価格・レビュー・画像・アフィリエイトリンク）
+              </label>
+            </div>
             <div class="toolbar" style="margin-bottom:0">
               <button class="btn btn-primary" id="gen-btn" onclick="startGenerate()">⚡ 生成開始</button>
               <button class="btn btn-success" id="gen-publish-btn" onclick="publishGenerated()" disabled>🚀 WP投稿</button>
@@ -519,6 +525,12 @@ tr.selected td { background: var(--accent-dim); }
                 <option value="all">全記事</option>
                 <option value="generated">生成済のみ</option>
               </select>
+            </div>
+            <div class="form-group">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted)">
+                <input type="checkbox" id="batch-include-amazon" style="accent-color:var(--accent)">
+                Amazon商品を自動挿入
+              </label>
             </div>
             <div class="toolbar" style="flex-direction:column;align-items:stretch;gap:8px;margin-bottom:0">
               <button class="btn btn-primary" onclick="startBatchGenerate()">⚡ バッチ生成開始</button>
@@ -579,7 +591,7 @@ tr.selected td { background: var(--accent-dim); }
       <div class="page" id="page-settings">
         <div class="page-header">
           <div class="page-title">設定</div>
-          <div class="page-subtitle">Claude API・デフォルト設定</div>
+          <div class="page-subtitle">Claude API・Amazon PA-API・デフォルト設定</div>
         </div>
         <div style="max-width:520px">
           <div class="settings-section">
@@ -588,6 +600,23 @@ tr.selected td { background: var(--accent-dim); }
               <label class="form-label">APIキー</label>
               <input type="password" id="s-claude-key" class="form-control" placeholder="sk-ant-...">
             </div>
+          </div>
+          <div class="settings-section">
+            <div class="section-header">// Amazon PA-API 設定（共通）</div>
+            <div class="form-group">
+              <label class="form-label">Access Key ID</label>
+              <input type="text" id="s-amz-access-key" class="form-control" placeholder="AKIAIOSFODNN7EXAMPLE">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Secret Access Key</label>
+              <input type="password" id="s-amz-secret-key" class="form-control" placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Partner Tag（アソシエイトID）</label>
+              <input type="text" id="s-amz-partner-tag" class="form-control" placeholder="yourname-22">
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="testAmazon()">🔍 接続テスト</button>
+            <span id="amazon-test-msg" style="font-size:11px;margin-left:8px;color:var(--muted)"></span>
           </div>
           <div class="settings-section">
             <div class="section-header">// デフォルト設定</div>
@@ -1065,10 +1094,11 @@ async function startGenerate() {
   fill.style.width = '10%';
 
   try {
+    const includeAmazon = document.getElementById('gen-include-amazon').checked;
     const res = await fetch(`/api/generate/${articleId}`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({quality_id: qualityId})
+      body: JSON.stringify({quality_id: qualityId, include_amazon: includeAmazon})
     });
 
     const reader = res.body.getReader();
@@ -1154,10 +1184,11 @@ async function startBatchGenerate() {
   const ids = getBatchSelectedIds();
   if (!ids.length) { toast('記事を選択してください', 'error'); return; }
   const qualityId = document.getElementById('batch-quality').value;
+  const includeAmazon = document.getElementById('batch-include-amazon').checked;
   const res = await fetch('/api/batch-generate', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({article_ids: ids, quality_id: qualityId})
+    body: JSON.stringify({article_ids: ids, quality_id: qualityId, include_amazon: includeAmazon})
   });
   const data = await res.json();
   if (data.success) {
@@ -1276,6 +1307,9 @@ async function loadSettings() {
   const res = await fetch('/api/settings');
   const s = await res.json();
   document.getElementById('s-claude-key').value = s.claude_api_key || '';
+  document.getElementById('s-amz-access-key').value = s.amazon_access_key || '';
+  document.getElementById('s-amz-secret-key').value = s.amazon_secret_key || '';
+  document.getElementById('s-amz-partner-tag').value = s.amazon_partner_tag || '';
   await loadQuality();
   if (s.default_quality_id) document.getElementById('s-default-quality').value = s.default_quality_id;
 }
@@ -1284,6 +1318,9 @@ async function saveSettings() {
   const data = {
     claude_api_key: document.getElementById('s-claude-key').value,
     default_quality_id: document.getElementById('s-default-quality').value,
+    amazon_access_key: document.getElementById('s-amz-access-key').value,
+    amazon_secret_key: document.getElementById('s-amz-secret-key').value,
+    amazon_partner_tag: document.getElementById('s-amz-partner-tag').value,
   };
   const res = await fetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
   const result = await res.json();
@@ -1291,6 +1328,25 @@ async function saveSettings() {
     toast('設定を保存しました', 'success');
     document.getElementById('settings-msg').textContent = '✓ 保存完了';
     setTimeout(() => document.getElementById('settings-msg').textContent = '', 3000);
+  }
+}
+
+async function testAmazon() {
+  const msgEl = document.getElementById('amazon-test-msg');
+  msgEl.textContent = '接続中...';
+  msgEl.style.color = 'var(--muted)';
+  const res = await fetch('/api/amazon/search', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({keywords: 'テスト', item_count: 1})
+  });
+  const data = await res.json();
+  if (res.ok && Array.isArray(data)) {
+    msgEl.textContent = `✓ 接続成功（${data.length}件取得）`;
+    msgEl.style.color = 'var(--success)';
+  } else {
+    msgEl.textContent = '✗ ' + (data.error || '接続失敗');
+    msgEl.style.color = 'var(--error)';
   }
 }
 

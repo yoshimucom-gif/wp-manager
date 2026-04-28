@@ -1,8 +1,10 @@
 import os
 import json
 import uuid
+import hmac
+import hashlib
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from functools import wraps
 
@@ -55,8 +57,135 @@ def load_settings():
     return load_json(SETTINGS_FILE, {
         "sites": [],
         "claude_api_key": "",
-        "default_quality_id": "default"
+        "default_quality_id": "default",
+        "amazon_access_key": "",
+        "amazon_secret_key": "",
+        "amazon_partner_tag": "",
     })
+
+def amazon_search(keywords, access_key, secret_key, partner_tag, item_count=3):
+    host = 'webservices.amazon.co.jp'
+    path = '/paapi5/searchitems'
+    target = 'com.amazon.paapi5.v1.ProductAdvertisingAPIv1.SearchItems'
+    region = 'us-east-1'
+    service = 'ProductAdvertisingAPI'
+    content_type = 'application/json; charset=utf-8'
+
+    payload = json.dumps({
+        'Keywords': keywords,
+        'Resources': [
+            'Images.Primary.Medium',
+            'ItemInfo.Title',
+            'Offers.Listings.Price',
+            'CustomerReviews.Count',
+            'CustomerReviews.StarRating',
+        ],
+        'SearchIndex': 'All',
+        'ItemCount': item_count,
+        'PartnerTag': partner_tag,
+        'PartnerType': 'Associates',
+        'Marketplace': 'www.amazon.co.jp',
+        'LanguagesOfPreference': ['ja_JP'],
+    })
+
+    t = datetime.now(timezone.utc)
+    amzdate = t.strftime('%Y%m%dT%H%M%SZ')
+    datestamp = t.strftime('%Y%m%d')
+
+    payload_hash = hashlib.sha256(payload.encode('utf-8')).hexdigest()
+    canonical_headers = (
+        f'content-encoding:amz-1.0\n'
+        f'content-type:{content_type}\n'
+        f'host:{host}\n'
+        f'x-amz-date:{amzdate}\n'
+        f'x-amz-target:{target}\n'
+    )
+    signed_headers = 'content-encoding;content-type;host;x-amz-date;x-amz-target'
+    canonical_request = '\n'.join(['POST', path, '', canonical_headers, signed_headers, payload_hash])
+
+    credential_scope = f'{datestamp}/{region}/{service}/aws4_request'
+    string_to_sign = '\n'.join([
+        'AWS4-HMAC-SHA256', amzdate, credential_scope,
+        hashlib.sha256(canonical_request.encode('utf-8')).hexdigest()
+    ])
+
+    def _sign(key, data):
+        k = key if isinstance(key, bytes) else key.encode('utf-8')
+        return hmac.new(k, data.encode('utf-8'), hashlib.sha256).digest()
+
+    k = _sign('AWS4' + secret_key, datestamp)
+    k = _sign(k, region)
+    k = _sign(k, service)
+    k = _sign(k, 'aws4_request')
+    signature = hmac.new(k, string_to_sign.encode('utf-8'), hashlib.sha256).hexdigest()
+
+    headers = {
+        'content-encoding': 'amz-1.0',
+        'content-type': content_type,
+        'host': host,
+        'x-amz-date': amzdate,
+        'x-amz-target': target,
+        'Authorization': (
+            f'AWS4-HMAC-SHA256 Credential={access_key}/{credential_scope}, '
+            f'SignedHeaders={signed_headers}, Signature={signature}'
+        ),
+    }
+
+    resp = requests.post(f'https://{host}{path}', headers=headers, data=payload, timeout=10)
+    resp.raise_for_status()
+    data = resp.json()
+
+    products = []
+    for item in data.get('SearchResult', {}).get('Items', []):
+        asin = item.get('ASIN', '')
+        title = item.get('ItemInfo', {}).get('Title', {}).get('DisplayValue', '')
+        image = item.get('Images', {}).get('Primary', {}).get('Medium', {}).get('URL', '')
+        price = ''
+        listings = item.get('Offers', {}).get('Listings', [])
+        if listings:
+            price = listings[0].get('Price', {}).get('DisplayAmount', '')
+        rating = item.get('CustomerReviews', {}).get('StarRating', {}).get('Value')
+        review_count = item.get('CustomerReviews', {}).get('Count')
+        products.append({
+            'asin': asin,
+            'title': title,
+            'image': image,
+            'price': price,
+            'rating': rating,
+            'review_count': review_count,
+            'url': f'https://www.amazon.co.jp/dp/{asin}?tag={partner_tag}',
+        })
+    return products
+
+
+def build_amazon_product_html(p):
+    stars = ''
+    if p.get('rating'):
+        n = round(float(p['rating']))
+        stars = '★' * n + '☆' * (5 - n)
+        if p.get('review_count'):
+            stars += f" ({p['review_count']}件)"
+    html = (
+        '<div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;margin:20px 0;'
+        'display:flex;gap:16px;align-items:flex-start;background:#fafafa">'
+    )
+    if p.get('image'):
+        html += f'<img src="{p["image"]}" alt="" style="width:120px;height:120px;object-fit:contain;flex-shrink:0">'
+    html += '<div style="flex:1">'
+    html += f'<p style="margin:0 0 8px;font-weight:bold">{p["title"]}</p>'
+    if p.get('price'):
+        html += f'<p style="margin:4px 0;color:#B12704;font-weight:bold">{p["price"]}</p>'
+    if stars:
+        html += f'<p style="margin:4px 0;color:#e47911">{stars}</p>'
+    html += (
+        f'<a href="{p["url"]}" target="_blank" rel="nofollow sponsored" '
+        f'style="display:inline-block;margin-top:8px;background:#ff9900;color:#000;'
+        f'padding:8px 16px;text-decoration:none;border-radius:4px;font-weight:bold">'
+        f'Amazonで見る →</a>'
+    )
+    html += '</div></div>'
+    return html
+
 
 def get_site_credentials(article, settings):
     site_id = article.get('site_id')
@@ -211,6 +340,18 @@ def generate_article(article_id):
         quality = next((q for q in quality_list if q.get('is_default')), quality_list[0] if quality_list else None)
 
     quality_prompt = quality['prompt'] if quality else ''
+    include_amazon = data.get('include_amazon', False)
+
+    amazon_products = []
+    if include_amazon and article.get('keywords'):
+        ak = settings.get('amazon_access_key', '')
+        sk = settings.get('amazon_secret_key', '')
+        pt = settings.get('amazon_partner_tag', '')
+        if all([ak, sk, pt]):
+            try:
+                amazon_products = amazon_search(article['keywords'], ak, sk, pt, item_count=3)
+            except Exception:
+                pass
 
     def generate():
         client = anthropic.Anthropic(api_key=api_key)
@@ -225,6 +366,11 @@ def generate_article(article_id):
 {quality_prompt}
 
 記事はHTML形式で書いてください。<article>タグは不要です。h2, h3, p, ul, li等のHTML要素を使用してください。"""
+
+            if amazon_products:
+                prompt += '\n\n以下のAmazon商品を記事の適切な箇所に自然に組み込んでください。各商品カードのHTMLをそのまま挿入してください：\n'
+                for p in amazon_products:
+                    prompt += f'\n【{p["title"]}】\n{build_amazon_product_html(p)}\n'
 
             with client.messages.stream(
                 model="claude-sonnet-4-6",
@@ -280,6 +426,12 @@ def batch_generate():
     if not quality:
         quality = next((q for q in quality_list if q.get('is_default')), quality_list[0] if quality_list else None)
     quality_prompt = quality['prompt'] if quality else ''
+    include_amazon = data.get('include_amazon', False)
+    amazon_credentials = (
+        settings.get('amazon_access_key', ''),
+        settings.get('amazon_secret_key', ''),
+        settings.get('amazon_partner_tag', ''),
+    ) if include_amazon else None
 
     def run_batch():
         client = anthropic.Anthropic(api_key=api_key)
@@ -294,6 +446,16 @@ def batch_generate():
 {quality_prompt}
 
 記事はHTML形式で書いてください。<article>タグは不要です。h2, h3, p, ul, li等のHTML要素を使用してください。"""
+
+                if amazon_credentials and all(amazon_credentials) and article.get('keywords'):
+                    try:
+                        products = amazon_search(article['keywords'], *amazon_credentials, item_count=3)
+                        if products:
+                            prompt += '\n\n以下のAmazon商品を記事の適切な箇所に自然に組み込んでください：\n'
+                            for p in products:
+                                prompt += f'\n【{p["title"]}】\n{build_amazon_product_html(p)}\n'
+                    except Exception:
+                        pass
 
                 message = client.messages.create(
                     model="claude-sonnet-4-6",
@@ -530,13 +692,38 @@ def update_article_site(article_id):
 
 
 # Settings
+@app.route('/api/amazon/search', methods=['POST'])
+@login_required
+def api_amazon_search():
+    data = request.json or {}
+    keywords = data.get('keywords', '')
+    if not keywords:
+        return jsonify({'error': 'キーワードが必要です'}), 400
+    settings = load_settings()
+    access_key = settings.get('amazon_access_key', '')
+    secret_key = settings.get('amazon_secret_key', '')
+    partner_tag = settings.get('amazon_partner_tag', '')
+    if not all([access_key, secret_key, partner_tag]):
+        return jsonify({'error': 'Amazon API設定が不完全です'}), 400
+    try:
+        products = amazon_search(keywords, access_key, secret_key, partner_tag, item_count=data.get('item_count', 3))
+        return jsonify(products)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/settings', methods=['GET'])
 @login_required
 def get_settings():
     settings = load_settings()
+    def mask(v):
+        return v[:4] + '••••••••' if len(v) > 4 else v
     safe = {
-        'claude_api_key': (settings.get('claude_api_key', '')[:8] + '••••••••') if len(settings.get('claude_api_key', '')) > 8 else settings.get('claude_api_key', ''),
+        'claude_api_key': mask(settings.get('claude_api_key', '')),
         'default_quality_id': settings.get('default_quality_id', 'default'),
+        'amazon_access_key': mask(settings.get('amazon_access_key', '')),
+        'amazon_secret_key': '••••••••' if settings.get('amazon_secret_key') else '',
+        'amazon_partner_tag': settings.get('amazon_partner_tag', ''),
     }
     return jsonify(safe)
 
@@ -549,6 +736,12 @@ def update_settings():
         settings['default_quality_id'] = data['default_quality_id']
     if data.get('claude_api_key') and '••••••••' not in data['claude_api_key']:
         settings['claude_api_key'] = data['claude_api_key']
+    if data.get('amazon_access_key') and '••••••••' not in data['amazon_access_key']:
+        settings['amazon_access_key'] = data['amazon_access_key']
+    if data.get('amazon_secret_key') and '••••••••' not in data['amazon_secret_key']:
+        settings['amazon_secret_key'] = data['amazon_secret_key']
+    if 'amazon_partner_tag' in data:
+        settings['amazon_partner_tag'] = data['amazon_partner_tag']
     save_settings(settings)
     return jsonify({'success': True})
 
