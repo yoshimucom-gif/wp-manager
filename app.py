@@ -1,10 +1,8 @@
 import os
 import json
 import uuid
-import hmac
-import hashlib
 import threading
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from functools import wraps
 
@@ -12,6 +10,7 @@ from flask import Flask, render_template, request, jsonify, session, redirect, u
 import anthropic
 import openpyxl
 import requests
+from requests_aws4auth import AWS4Auth
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -75,9 +74,6 @@ def amazon_search(keywords, access_key, secret_key, partner_tag, item_count=3):
     host = 'webservices.amazon.co.jp'
     path = '/paapi5/searchitems'
     target = 'com.amazon.paapi5.v1.ProductAdvertisingAPIv1.SearchItems'
-    region = 'us-east-1'
-    service = 'ProductAdvertisingAPI'
-    content_type = 'application/json; charset=utf-8'
 
     payload = json.dumps({
         'Keywords': keywords,
@@ -96,50 +92,18 @@ def amazon_search(keywords, access_key, secret_key, partner_tag, item_count=3):
         'LanguagesOfPreference': ['ja_JP'],
     })
 
-    t = datetime.now(timezone.utc)
-    amzdate = t.strftime('%Y%m%dT%H%M%SZ')
-    datestamp = t.strftime('%Y%m%d')
-
-    payload_hash = hashlib.sha256(payload.encode('utf-8')).hexdigest()
-    canonical_headers = (
-        f'content-encoding:amz-1.0\n'
-        f'content-type:{content_type}\n'
-        f'host:{host}\n'
-        f'x-amz-date:{amzdate}\n'
-        f'x-amz-target:{target}\n'
+    auth = AWS4Auth(access_key, secret_key, 'us-east-1', 'ProductAdvertisingAPI')
+    resp = requests.post(
+        f'https://{host}{path}',
+        auth=auth,
+        headers={
+            'content-encoding': 'amz-1.0',
+            'content-type': 'application/json; charset=utf-8',
+            'x-amz-target': target,
+        },
+        data=payload,
+        timeout=10
     )
-    signed_headers = 'content-encoding;content-type;host;x-amz-date;x-amz-target'
-    canonical_request = '\n'.join(['POST', path, '', canonical_headers, signed_headers, payload_hash])
-
-    credential_scope = f'{datestamp}/{region}/{service}/aws4_request'
-    string_to_sign = '\n'.join([
-        'AWS4-HMAC-SHA256', amzdate, credential_scope,
-        hashlib.sha256(canonical_request.encode('utf-8')).hexdigest()
-    ])
-
-    def _sign(key, data):
-        k = key if isinstance(key, bytes) else key.encode('utf-8')
-        return hmac.new(k, data.encode('utf-8'), hashlib.sha256).digest()
-
-    k = _sign('AWS4' + secret_key, datestamp)
-    k = _sign(k, region)
-    k = _sign(k, service)
-    k = _sign(k, 'aws4_request')
-    signature = hmac.new(k, string_to_sign.encode('utf-8'), hashlib.sha256).hexdigest()
-
-    headers = {
-        'content-encoding': 'amz-1.0',
-        'content-type': content_type,
-        'host': host,
-        'x-amz-date': amzdate,
-        'x-amz-target': target,
-        'Authorization': (
-            f'AWS4-HMAC-SHA256 Credential={access_key}/{credential_scope}, '
-            f'SignedHeaders={signed_headers}, Signature={signature}'
-        ),
-    }
-
-    resp = requests.post(f'https://{host}{path}', headers=headers, data=payload, timeout=10)
     if not resp.ok:
         try:
             err_body = resp.json()
