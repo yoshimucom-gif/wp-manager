@@ -815,6 +815,7 @@ function showPage(name) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
   document.getElementById('nav-' + name).classList.add('active');
+  localStorage.setItem('currentPage', name);
   if (name === 'articles') loadArticles();
   if (name === 'generate') { loadQualitySelects(); populateGenSelect(); }
   if (name === 'batch') { loadQualitySelects(); loadBatchArticles(); }
@@ -1575,7 +1576,8 @@ async function testAmazon() {
   await loadSites();
   await loadQuality();
   await loadDecorations();
-  await loadArticles();
+  const savedPage = localStorage.getItem('currentPage') || 'articles';
+  await showPage(savedPage);
 })();
 </script>
 </body>
