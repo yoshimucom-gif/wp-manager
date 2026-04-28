@@ -366,6 +366,9 @@ tr.selected td { background: var(--accent-dim); }
       <div class="nav-item" onclick="showPage('quality')" id="nav-quality">
         <span class="nav-icon">✦</span> 品質定義
       </div>
+      <div class="nav-item" onclick="showPage('decoration')" id="nav-decoration">
+        <span class="nav-icon">🎨</span> 装飾定義
+      </div>
       <div class="nav-item" onclick="showPage('sites')" id="nav-sites">
         <span class="nav-icon">🌐</span> サイト管理
       </div>
@@ -477,6 +480,12 @@ tr.selected td { background: var(--accent-dim); }
               </select>
             </div>
             <div class="form-group">
+              <label class="form-label">装飾定義</label>
+              <select id="gen-decoration" class="form-control">
+                <option value="">-- 装飾定義を選択（任意）--</option>
+              </select>
+            </div>
+            <div class="form-group">
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted)">
                 <input type="checkbox" id="gen-include-amazon" style="accent-color:var(--accent)">
                 Amazon商品を自動挿入（価格・レビュー・画像・アフィリエイトリンク）
@@ -509,6 +518,12 @@ tr.selected td { background: var(--accent-dim); }
               <label class="form-label">品質定義</label>
               <select id="batch-quality" class="form-control">
                 <option value="">-- 品質定義を選択 --</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">装飾定義</label>
+              <select id="batch-decoration" class="form-control">
+                <option value="">-- 装飾定義を選択（任意）--</option>
               </select>
             </div>
             <div class="form-group">
@@ -568,6 +583,23 @@ tr.selected td { background: var(--accent-dim); }
           <button class="btn btn-primary" onclick="openQualityModal()">+ 新規追加</button>
         </div>
         <div class="quality-grid" id="quality-grid"></div>
+      </div>
+
+      <!-- Decoration Page -->
+      <div class="page" id="page-decoration">
+        <div class="page-header">
+          <div class="page-title">装飾定義</div>
+          <div class="page-subtitle">サンプル記事から装飾スタイルを読み込んで定義</div>
+        </div>
+        <div class="toolbar">
+          <button class="btn btn-primary" onclick="openDecorationModal()">+ 新規追加</button>
+        </div>
+        <div class="quality-grid" id="decoration-grid">
+          <div class="empty">
+            <div class="empty-icon">🎨</div>
+            <div>装飾定義がありません。WordPressのサンプル記事から読み込んで追加してください。</div>
+          </div>
+        </div>
       </div>
 
       <!-- Sites Page -->
@@ -671,6 +703,47 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
   </div>
 </div>
 
+<!-- Decoration Modal -->
+<div class="modal-overlay" id="decoration-modal">
+  <div class="modal" style="width:720px">
+    <div class="modal-title" id="decoration-modal-title">// 装飾定義を追加</div>
+    <input type="hidden" id="decoration-edit-id">
+    <div class="form-group">
+      <label class="form-label">定義名</label>
+      <input type="text" id="decoration-name" class="form-control" placeholder="例: レビュー記事スタイル">
+    </div>
+    <div class="form-group">
+      <label class="form-label">説明（任意）</label>
+      <input type="text" id="decoration-description" class="form-control" placeholder="どんな装飾か簡単に説明">
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:16px;margin-bottom:16px;">
+      <div style="font-size:11px;color:var(--accent);font-weight:600;margin-bottom:12px;">// WordPressからサンプル記事を読み込む</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:flex-end">
+        <div>
+          <label class="form-label">サイト</label>
+          <select id="decoration-fetch-site" class="form-control">
+            <option value="">-- サイトを選択 --</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">投稿ID</label>
+          <input type="number" id="decoration-fetch-post-id" class="form-control" placeholder="123">
+        </div>
+        <button class="btn btn-secondary" onclick="fetchDecorationSample()" style="white-space:nowrap">📥 読み込む</button>
+      </div>
+      <div id="decoration-fetch-msg" style="font-size:11px;color:var(--muted);margin-top:8px"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">サンプルHTML（記事コンテンツ）</label>
+      <textarea id="decoration-sample-html" class="form-control" rows="12" placeholder="WordPressから読み込むか、直接HTMLを貼り付けてください..."></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeDecorationModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveDecoration()">保存</button>
+    </div>
+  </div>
+</div>
+
 <!-- Site Modal -->
 <div class="modal-overlay" id="site-modal">
   <div class="modal" style="width:480px">
@@ -733,6 +806,7 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
 let allArticles = [];
 let qualityList = [];
 let siteList = [];
+let decorationList = [];
 let currentGenArticleId = null;
 
 // ---- Navigation ----
@@ -745,6 +819,7 @@ function showPage(name) {
   if (name === 'generate') { loadQualitySelects(); populateGenSelect(); }
   if (name === 'batch') { loadQualitySelects(); loadBatchArticles(); }
   if (name === 'quality') loadQuality();
+  if (name === 'decoration') loadDecorations();
   if (name === 'sites') loadSites();
   if (name === 'settings') loadSettings();
 }
@@ -758,6 +833,132 @@ function toast(msg, type = 'info') {
   el.style.display = 'block';
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.style.display = 'none', 4000);
+}
+
+// ---- Decorations ----
+async function loadDecorations() {
+  const res = await fetch('/api/decorations');
+  decorationList = await res.json();
+  renderDecorations();
+  updateDecorationSelects();
+}
+
+function renderDecorations() {
+  const grid = document.getElementById('decoration-grid');
+  if (!decorationList.length) {
+    grid.innerHTML = '<div class="empty"><div class="empty-icon">🎨</div><div>装飾定義がありません。WordPressのサンプル記事から読み込んで追加してください。</div></div>';
+    return;
+  }
+  grid.innerHTML = decorationList.map(d => `
+    <div class="quality-card">
+      <div class="quality-name">🎨 ${esc(d.name)}</div>
+      ${d.description ? `<div class="quality-prompt">${esc(d.description)}</div>` : ''}
+      <div style="font-size:10px;color:var(--muted);margin-top:6px">
+        ${d.sample_html ? `HTMLサンプル: ${d.sample_html.length}文字` : '未設定'}
+        ${d.source_url ? ` · <a href="${esc(d.source_url)}" target="_blank" style="color:var(--accent)">ソース↗</a>` : ''}
+      </div>
+      <div class="quality-actions">
+        <button class="btn btn-secondary btn-sm" onclick="editDecoration('${d.id}')">✏ 編集</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteDecoration('${d.id}')">🗑</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function updateDecorationSelects() {
+  const opts = '<option value="">-- 装飾定義を選択（任意）--</option>' +
+    decorationList.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
+  ['gen-decoration', 'batch-decoration'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = opts;
+  });
+  const fetchSite = document.getElementById('decoration-fetch-site');
+  if (fetchSite) {
+    const siteOpts = '<option value="">-- サイトを選択 --</option>' +
+      siteList.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+    fetchSite.innerHTML = siteOpts;
+  }
+}
+
+function openDecorationModal() {
+  document.getElementById('decoration-edit-id').value = '';
+  document.getElementById('decoration-name').value = '';
+  document.getElementById('decoration-description').value = '';
+  document.getElementById('decoration-sample-html').value = '';
+  document.getElementById('decoration-fetch-msg').textContent = '';
+  document.getElementById('decoration-fetch-post-id').value = '';
+  document.getElementById('decoration-modal-title').textContent = '// 装飾定義を追加';
+  updateDecorationSelects();
+  document.getElementById('decoration-modal').classList.add('open');
+}
+
+function editDecoration(id) {
+  const d = decorationList.find(d => d.id === id);
+  if (!d) return;
+  document.getElementById('decoration-edit-id').value = id;
+  document.getElementById('decoration-name').value = d.name;
+  document.getElementById('decoration-description').value = d.description || '';
+  document.getElementById('decoration-sample-html').value = d.sample_html || '';
+  document.getElementById('decoration-fetch-msg').textContent = d.source_url ? `ソース: ${d.source_url}` : '';
+  document.getElementById('decoration-fetch-post-id').value = '';
+  document.getElementById('decoration-modal-title').textContent = '// 装飾定義を編集';
+  updateDecorationSelects();
+  document.getElementById('decoration-modal').classList.add('open');
+}
+
+function closeDecorationModal() {
+  document.getElementById('decoration-modal').classList.remove('open');
+}
+
+async function fetchDecorationSample() {
+  const siteId = document.getElementById('decoration-fetch-site').value;
+  const postId = document.getElementById('decoration-fetch-post-id').value;
+  const msgEl = document.getElementById('decoration-fetch-msg');
+  if (!siteId || !postId) { msgEl.textContent = 'サイトと投稿IDを入力してください'; msgEl.style.color = 'var(--error)'; return; }
+  msgEl.textContent = '読み込み中...'; msgEl.style.color = 'var(--muted)';
+  const res = await fetch('/api/decorations/fetch', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({site_id: siteId, post_id: parseInt(postId)})
+  });
+  const data = await res.json();
+  if (res.ok) {
+    document.getElementById('decoration-sample-html').value = data.content;
+    if (!document.getElementById('decoration-name').value && data.title) {
+      document.getElementById('decoration-name').value = data.title + ' スタイル';
+    }
+    msgEl.textContent = `✓ 読み込み完了（${data.content.length}文字）${data.link ? ' · ' + data.link : ''}`;
+    msgEl.style.color = 'var(--success)';
+  } else {
+    msgEl.textContent = '✗ ' + (data.error || '読み込み失敗');
+    msgEl.style.color = 'var(--error)';
+  }
+}
+
+async function saveDecoration() {
+  const id = document.getElementById('decoration-edit-id').value;
+  const body = {
+    name: document.getElementById('decoration-name').value,
+    description: document.getElementById('decoration-description').value,
+    sample_html: document.getElementById('decoration-sample-html').value,
+  };
+  if (!body.name) { toast('定義名は必須です', 'error'); return; }
+  if (!body.sample_html) { toast('サンプルHTMLを設定してください', 'error'); return; }
+  if (id) {
+    await fetch(`/api/decorations/${id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  } else {
+    await fetch('/api/decorations', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  }
+  toast('保存しました', 'success');
+  closeDecorationModal();
+  await loadDecorations();
+}
+
+async function deleteDecoration(id) {
+  if (!confirm('この装飾定義を削除しますか?')) return;
+  await fetch(`/api/decorations/${id}`, {method:'DELETE'});
+  toast('削除しました', 'success');
+  await loadDecorations();
 }
 
 // ---- Sites ----
@@ -1104,10 +1305,11 @@ async function startGenerate() {
 
   try {
     const includeAmazon = document.getElementById('gen-include-amazon').checked;
+    const decorationId = document.getElementById('gen-decoration').value;
     const res = await fetch(`/api/generate/${articleId}`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({quality_id: qualityId, include_amazon: includeAmazon})
+      body: JSON.stringify({quality_id: qualityId, include_amazon: includeAmazon, decoration_id: decorationId})
     });
 
     const reader = res.body.getReader();
@@ -1194,10 +1396,11 @@ async function startBatchGenerate() {
   if (!ids.length) { toast('記事を選択してください', 'error'); return; }
   const qualityId = document.getElementById('batch-quality').value;
   const includeAmazon = document.getElementById('batch-include-amazon').checked;
+  const decorationId = document.getElementById('batch-decoration').value;
   const res = await fetch('/api/batch-generate', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({article_ids: ids, quality_id: qualityId, include_amazon: includeAmazon})
+    body: JSON.stringify({article_ids: ids, quality_id: qualityId, include_amazon: includeAmazon, decoration_id: decorationId})
   });
   const data = await res.json();
   if (data.success) {
@@ -1362,7 +1565,7 @@ async function testAmazon() {
 }
 
 // Close modals on overlay click
-['quality-modal','site-modal','article-modal'].forEach(id => {
+['quality-modal','decoration-modal','site-modal','article-modal'].forEach(id => {
   document.getElementById(id).addEventListener('click', e => {
     if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
   });
@@ -1371,6 +1574,7 @@ async function testAmazon() {
 (async function init() {
   await loadSites();
   await loadQuality();
+  await loadDecorations();
   await loadArticles();
 })();
 </script>

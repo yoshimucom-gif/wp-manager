@@ -21,6 +21,7 @@ DATA_DIR.mkdir(exist_ok=True)
 
 ARTICLES_FILE = DATA_DIR / 'articles.json'
 QUALITY_FILE = DATA_DIR / 'quality.json'
+DECORATIONS_FILE = DATA_DIR / 'decorations.json'
 SETTINGS_FILE = DATA_DIR / 'settings.json'
 
 
@@ -52,6 +53,12 @@ def load_quality():
 
 def save_quality(quality):
     save_json(QUALITY_FILE, quality)
+
+def load_decorations():
+    return load_json(DECORATIONS_FILE, [])
+
+def save_decorations(decorations):
+    save_json(DECORATIONS_FILE, decorations)
 
 def load_settings():
     return load_json(SETTINGS_FILE, {
@@ -342,6 +349,8 @@ def generate_article(article_id):
 
     quality_prompt = quality['prompt'] if quality else ''
     include_amazon = data.get('include_amazon', False)
+    decoration_id = data.get('decoration_id')
+    decoration = next((d for d in load_decorations() if d['id'] == decoration_id), None) if decoration_id else None
 
     amazon_products = []
     if include_amazon and article.get('keywords'):
@@ -367,6 +376,9 @@ def generate_article(article_id):
 {quality_prompt}
 
 記事はHTML形式で書いてください。<article>タグは不要です。h2, h3, p, ul, li等のHTML要素を使用してください。"""
+
+            if decoration and decoration.get('sample_html'):
+                prompt += f'\n\n以下のサンプル記事のHTML構造・装飾スタイルを踏襲して記事を作成してください。同じクラス名・ボックスデザイン・見出し構造・装飾パターンを使用してください：\n\n{decoration["sample_html"][:4000]}'
 
             if amazon_products:
                 prompt += '\n\n以下のAmazon商品を記事の適切な箇所に自然に組み込んでください。各商品カードのHTMLをそのまま挿入してください：\n'
@@ -428,6 +440,8 @@ def batch_generate():
         quality = next((q for q in quality_list if q.get('is_default')), quality_list[0] if quality_list else None)
     quality_prompt = quality['prompt'] if quality else ''
     include_amazon = data.get('include_amazon', False)
+    decoration_id = data.get('decoration_id')
+    decoration = next((d for d in load_decorations() if d['id'] == decoration_id), None) if decoration_id else None
     amazon_credentials = (
         settings.get('amazon_access_key', ''),
         settings.get('amazon_secret_key', ''),
@@ -447,6 +461,9 @@ def batch_generate():
 {quality_prompt}
 
 記事はHTML形式で書いてください。<article>タグは不要です。h2, h3, p, ul, li等のHTML要素を使用してください。"""
+
+                if decoration and decoration.get('sample_html'):
+                    prompt += f'\n\n以下のサンプル記事のHTML構造・装飾スタイルを踏襲して記事を作成してください。同じクラス名・ボックスデザイン・見出し構造・装飾パターンを使用してください：\n\n{decoration["sample_html"][:4000]}'
 
                 if amazon_credentials and all(amazon_credentials) and article.get('keywords'):
                     try:
@@ -581,6 +598,78 @@ def batch_publish():
 
     save_articles(articles)
     return jsonify(results)
+
+
+# Decorations
+@app.route('/api/decorations', methods=['GET'])
+@login_required
+def get_decorations():
+    return jsonify(load_decorations())
+
+@app.route('/api/decorations', methods=['POST'])
+@login_required
+def create_decoration():
+    data = request.json
+    decorations = load_decorations()
+    d = {
+        'id': str(uuid.uuid4()),
+        'name': data.get('name', ''),
+        'description': data.get('description', ''),
+        'sample_html': data.get('sample_html', ''),
+        'source_url': data.get('source_url', ''),
+    }
+    decorations.append(d)
+    save_decorations(decorations)
+    return jsonify(d)
+
+@app.route('/api/decorations/<decoration_id>', methods=['PUT'])
+@login_required
+def update_decoration(decoration_id):
+    data = request.json
+    decorations = load_decorations()
+    for d in decorations:
+        if d['id'] == decoration_id:
+            d['name'] = data.get('name', d['name'])
+            d['description'] = data.get('description', d.get('description', ''))
+            d['sample_html'] = data.get('sample_html', d['sample_html'])
+            d['source_url'] = data.get('source_url', d.get('source_url', ''))
+            break
+    save_decorations(decorations)
+    return jsonify({'success': True})
+
+@app.route('/api/decorations/<decoration_id>', methods=['DELETE'])
+@login_required
+def delete_decoration(decoration_id):
+    decorations = [d for d in load_decorations() if d['id'] != decoration_id]
+    save_decorations(decorations)
+    return jsonify({'success': True})
+
+@app.route('/api/decorations/fetch', methods=['POST'])
+@login_required
+def fetch_decoration():
+    data = request.json or {}
+    site_id = data.get('site_id')
+    post_id = data.get('post_id')
+    if not site_id or not post_id:
+        return jsonify({'error': 'site_id と post_id は必須です'}), 400
+    settings = load_settings()
+    site = next((s for s in settings.get('sites', []) if s['id'] == site_id), None)
+    if not site:
+        return jsonify({'error': 'サイトが見つかりません'}), 404
+    try:
+        resp = requests.get(
+            f"{site['wp_url'].rstrip('/')}/wp-json/wp/v2/posts/{post_id}",
+            auth=(site['wp_user'], site['wp_password']),
+            timeout=10
+        )
+        resp.raise_for_status()
+        post = resp.json()
+        content = post.get('content', {}).get('rendered', '')
+        title = post.get('title', {}).get('rendered', '')
+        link = post.get('link', '')
+        return jsonify({'content': content, 'title': title, 'link': link})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 # Quality
