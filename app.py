@@ -140,7 +140,12 @@ def amazon_search(keywords, access_key, secret_key, partner_tag, item_count=3):
     }
 
     resp = requests.post(f'https://{host}{path}', headers=headers, data=payload, timeout=10)
-    resp.raise_for_status()
+    if not resp.ok:
+        try:
+            err_body = resp.json()
+        except Exception:
+            err_body = resp.text
+        raise Exception(f'HTTP {resp.status_code}: {err_body}')
     data = resp.json()
 
     products = []
