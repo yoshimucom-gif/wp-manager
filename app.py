@@ -5,7 +5,9 @@ import threading
 from datetime import datetime
 from pathlib import Path
 from functools import wraps
+from html import escape
 from html.parser import HTMLParser
+from urllib.parse import quote_plus
 
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, Response, stream_with_context
 import anthropic
@@ -68,6 +70,13 @@ def load_settings():
         "amazon_access_key": "",
         "amazon_secret_key": "",
         "amazon_partner_tag": "",
+        "rakuten_application_id": "",
+        "rakuten_affiliate_id": "",
+        "rakuten_asp_enabled": False,
+        "rakuten_asp_name": "",
+        "rakuten_asp_link_template": "",
+        "rakuten_asp_link_text": "楽天市場で詳細を見る",
+        "rakuten_asp_prompt": "",
         "article_css": "",
     })
 
@@ -160,33 +169,122 @@ def amazon_search(keywords, access_key, secret_key, partner_tag, item_count=3):
     return products
 
 
-def build_amazon_product_html(p):
-    stars = ''
-    if p.get('rating'):
-        n = round(float(p['rating']))
-        stars = '★' * n + '☆' * (5 - n)
-        if p.get('review_count'):
-            stars += f" ({p['review_count']}件)"
+def rakuten_search(keywords, application_id, affiliate_id='', item_count=3):
+    params = {
+        'applicationId': application_id,
+        'keyword': keywords,
+        'hits': item_count,
+        'format': 'json',
+        'imageFlag': 1,
+    }
+    if affiliate_id:
+        params['affiliateId'] = affiliate_id
+    resp = requests.get(
+        'https://app.rakuten.co.jp/services/api/IchibaItem/Search/20170706',
+        params=params,
+        timeout=10
+    )
+    if not resp.ok:
+        raise Exception(f'HTTP {resp.status_code}: {resp.text[:200]}')
+    data = resp.json()
+    products = []
+    for item in data.get('Items', []):
+        aff_url = item.get('affiliateUrl') or item.get('itemUrl', '')
+        medium_images = item.get('mediumImageUrls', [])
+        image = medium_images[0].get('imageUrl', '') if medium_images else ''
+        price = item.get('itemPrice')
+        products.append({
+            'title': item.get('itemName', ''),
+            'price': f'¥{price:,}' if price else '',
+            'image': image,
+            'url': aff_url,
+            'rating': item.get('reviewAverage'),
+            'review_count': item.get('reviewCount'),
+        })
+    return products
+
+
+def build_rinker_html(amazon_p=None, rakuten_p=None):
+    primary = amazon_p or rakuten_p
+    if not primary:
+        return ''
+    title = primary.get('title', '')
+    img = primary.get('image', '')
     html = (
-        '<div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;margin:20px 0;'
-        'display:flex;gap:16px;align-items:flex-start;background:#fafafa">'
+        '<div style="border:1px solid #e8e8e8;border-radius:8px;padding:16px 20px;margin:24px 0;'
+        'background:#fff;box-shadow:0 1px 4px rgba(0,0,0,0.06)">'
+        '<div style="display:flex;gap:16px;align-items:flex-start">'
     )
-    if p.get('image'):
-        html += f'<img src="{p["image"]}" alt="" style="width:120px;height:120px;object-fit:contain;flex-shrink:0">'
-    html += '<div style="flex:1">'
-    html += f'<p style="margin:0 0 8px;font-weight:bold">{p["title"]}</p>'
-    if p.get('price'):
-        html += f'<p style="margin:4px 0;color:#B12704;font-weight:bold">{p["price"]}</p>'
-    if stars:
-        html += f'<p style="margin:4px 0;color:#e47911">{stars}</p>'
-    html += (
-        f'<a href="{p["url"]}" target="_blank" rel="nofollow sponsored" '
-        f'style="display:inline-block;margin-top:8px;background:#ff9900;color:#000;'
-        f'padding:8px 16px;text-decoration:none;border-radius:4px;font-weight:bold">'
-        f'Amazonで見る →</a>'
-    )
-    html += '</div></div>'
+    if img:
+        html += (
+            f'<a href="{primary["url"]}" target="_blank" rel="nofollow sponsored" style="flex-shrink:0">'
+            f'<img src="{img}" alt="" style="width:110px;height:110px;object-fit:contain"></a>'
+        )
+    html += f'<div style="flex:1;min-width:0"><p style="margin:0 0 10px;font-weight:bold;font-size:14px;line-height:1.5">{title}</p>'
+    prices = []
+    if amazon_p and amazon_p.get('price'):
+        prices.append(f'Amazon: <strong style="color:#B12704">{amazon_p["price"]}</strong>')
+    if rakuten_p and rakuten_p.get('price'):
+        prices.append(f'楽天: <strong style="color:#bf0000">{rakuten_p["price"]}</strong>')
+    if prices:
+        html += f'<p style="margin:0 0 12px;font-size:12px;color:#666">{" &nbsp;|&nbsp; ".join(prices)}</p>'
+    html += '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    if amazon_p:
+        html += (
+            f'<a href="{amazon_p["url"]}" target="_blank" rel="nofollow sponsored" '
+            f'style="display:inline-block;background:#ff9900;color:#111;padding:8px 18px;'
+            f'text-decoration:none;border-radius:4px;font-weight:bold;font-size:13px;white-space:nowrap">'
+            f'Amazonで見る</a>'
+        )
+    if rakuten_p:
+        html += (
+            f'<a href="{rakuten_p["url"]}" target="_blank" rel="nofollow sponsored" '
+            f'style="display:inline-block;background:#bf0000;color:#fff;padding:8px 18px;'
+            f'text-decoration:none;border-radius:4px;font-weight:bold;font-size:13px;white-space:nowrap">'
+            f'楽天市場で見る</a>'
+        )
+    html += '</div></div></div></div>'
     return html
+
+
+def build_rakuten_asp_instruction(article, settings):
+    if not settings.get('rakuten_asp_enabled'):
+        return ''
+    template = settings.get('rakuten_asp_link_template', '').strip()
+    if not template:
+        return ''
+
+    title = article.get('title', '')
+    keywords = article.get('keywords', '')
+    primary_keyword = keywords.split(',')[0].strip() if keywords else title
+    replacements = {
+        '{title}': title,
+        '{keyword}': primary_keyword,
+        '{keywords}': keywords,
+        '{encoded_title}': quote_plus(title),
+        '{encoded_keyword}': quote_plus(primary_keyword),
+        '{encoded_keywords}': quote_plus(keywords),
+    }
+    link_url = template
+    for key, value in replacements.items():
+        link_url = link_url.replace(key, value)
+
+    link_text = settings.get('rakuten_asp_link_text') or '楽天市場で詳細を見る'
+    safe_link_url = escape(link_url, quote=True)
+    safe_link_text = escape(link_text, quote=True)
+    asp_name = settings.get('rakuten_asp_name') or '楽天アフィリエイトASP'
+    extra_prompt = settings.get('rakuten_asp_prompt', '').strip()
+    instruction = f"""
+
+楽天ASPリンク挿入:
+- ASP名: {asp_name}
+- 記事内の自然な購入導線として、以下のリンクを1〜3箇所に挿入してください。
+- リンクは文脈に合う場所だけに入れ、不自然な連続配置は避けてください。
+- HTMLは以下の形式を使ってください:
+  <a href="{safe_link_url}" target="_blank" rel="nofollow sponsored noopener">{safe_link_text}</a>"""
+    if extra_prompt:
+        instruction += f"\n- 追加ルール: {extra_prompt}"
+    return instruction
 
 
 def get_site_credentials(article, settings):
@@ -349,8 +447,10 @@ def generate_article(article_id):
         except Exception:
             pass
     include_amazon = data.get('include_amazon', False)
+    include_rakuten = data.get('include_rakuten', False)
     decoration_id = data.get('decoration_id')
     decoration = next((d for d in load_decorations() if d['id'] == decoration_id), None) if decoration_id else None
+    rakuten_asp_instruction = build_rakuten_asp_instruction(article, settings)
 
     amazon_products = []
     if include_amazon and article.get('keywords'):
@@ -362,6 +462,23 @@ def generate_article(article_id):
                 amazon_products = amazon_search(article['keywords'], ak, sk, pt, item_count=3)
             except Exception:
                 pass
+
+    rakuten_products = []
+    if include_rakuten and article.get('keywords'):
+        ra_id = settings.get('rakuten_application_id', '')
+        ra_aff = settings.get('rakuten_affiliate_id', '')
+        if ra_id:
+            try:
+                rakuten_products = rakuten_search(article['keywords'], ra_id, ra_aff, item_count=3)
+            except Exception:
+                pass
+
+    product_blocks = []
+    if amazon_products or rakuten_products:
+        for i in range(max(len(amazon_products), len(rakuten_products))):
+            a_p = amazon_products[i] if i < len(amazon_products) else None
+            r_p = rakuten_products[i] if i < len(rakuten_products) else None
+            product_blocks.append(build_rinker_html(a_p, r_p))
 
     def generate():
         client = anthropic.Anthropic(api_key=api_key)
@@ -383,10 +500,13 @@ def generate_article(article_id):
             if decoration and decoration.get('sample_html'):
                 prompt += f'\n\n以下のサンプル記事のHTML構造・装飾スタイルを踏襲して記事を作成してください。同じクラス名・ボックスデザイン・見出し構造・装飾パターンを使用してください：\n\n{decoration["sample_html"][:4000]}'
 
-            if amazon_products:
-                prompt += '\n\n以下のAmazon商品を記事の適切な箇所に自然に組み込んでください。各商品カードのHTMLをそのまま挿入してください：\n'
-                for p in amazon_products:
-                    prompt += f'\n【{p["title"]}】\n{build_amazon_product_html(p)}\n'
+            if rakuten_asp_instruction:
+                prompt += rakuten_asp_instruction
+
+            if product_blocks:
+                prompt += '\n\n以下の商品カード（HTML）を記事の適切な箇所に自然に組み込んでください。HTMLはそのまま使用してください：\n'
+                for block in product_blocks:
+                    prompt += f'\n{block}\n'
 
             with client.messages.stream(
                 model="claude-sonnet-4-6",
@@ -449,6 +569,7 @@ def batch_generate():
         except Exception:
             pass
     include_amazon = data.get('include_amazon', False)
+    include_rakuten = data.get('include_rakuten', False)
     decoration_id = data.get('decoration_id')
     decoration = next((d for d in load_decorations() if d['id'] == decoration_id), None) if decoration_id else None
     amazon_credentials = (
@@ -456,6 +577,10 @@ def batch_generate():
         settings.get('amazon_secret_key', ''),
         settings.get('amazon_partner_tag', ''),
     ) if include_amazon else None
+    rakuten_credentials = (
+        settings.get('rakuten_application_id', ''),
+        settings.get('rakuten_affiliate_id', ''),
+    ) if include_rakuten else None
 
     def run_batch():
         client = anthropic.Anthropic(api_key=api_key)
@@ -477,15 +602,31 @@ def batch_generate():
                 if decoration and decoration.get('sample_html'):
                     prompt += f'\n\n以下のサンプル記事のHTML構造・装飾スタイルを踏襲して記事を作成してください。同じクラス名・ボックスデザイン・見出し構造・装飾パターンを使用してください：\n\n{decoration["sample_html"][:4000]}'
 
+                rakuten_asp_instruction = build_rakuten_asp_instruction(article, settings)
+                if rakuten_asp_instruction:
+                    prompt += rakuten_asp_instruction
+
+                amazon_products = []
                 if amazon_credentials and all(amazon_credentials) and article.get('keywords'):
                     try:
-                        products = amazon_search(article['keywords'], *amazon_credentials, item_count=3)
-                        if products:
-                            prompt += '\n\n以下のAmazon商品を記事の適切な箇所に自然に組み込んでください：\n'
-                            for p in products:
-                                prompt += f'\n【{p["title"]}】\n{build_amazon_product_html(p)}\n'
+                        amazon_products = amazon_search(article['keywords'], *amazon_credentials, item_count=3)
                     except Exception:
                         pass
+                rakuten_products = []
+                if rakuten_credentials and rakuten_credentials[0] and article.get('keywords'):
+                    try:
+                        rakuten_products = rakuten_search(article['keywords'], *rakuten_credentials, item_count=3)
+                    except Exception:
+                        pass
+                if amazon_products or rakuten_products:
+                    product_blocks = []
+                    for i in range(max(len(amazon_products), len(rakuten_products))):
+                        a_p = amazon_products[i] if i < len(amazon_products) else None
+                        r_p = rakuten_products[i] if i < len(rakuten_products) else None
+                        product_blocks.append(build_rinker_html(a_p, r_p))
+                    prompt += '\n\n以下の商品カード（HTML）を記事の適切な箇所に自然に組み込んでください。HTMLはそのまま使用してください：\n'
+                    for block in product_blocks:
+                        prompt += f'\n{block}\n'
 
                 message = client.messages.create(
                     model="claude-sonnet-4-6",
@@ -824,6 +965,25 @@ def api_amazon_search():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/rakuten/search', methods=['POST'])
+@login_required
+def api_rakuten_search():
+    data = request.json or {}
+    keywords = data.get('keywords', '')
+    if not keywords:
+        return jsonify({'error': 'キーワードが必要です'}), 400
+    settings = load_settings()
+    app_id = settings.get('rakuten_application_id', '')
+    aff_id = settings.get('rakuten_affiliate_id', '')
+    if not app_id:
+        return jsonify({'error': '楽天APIのアプリケーションIDが設定されていません'}), 400
+    try:
+        products = rakuten_search(keywords, app_id, aff_id, item_count=data.get('item_count', 3))
+        return jsonify(products)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/settings', methods=['GET'])
 @login_required
 def get_settings():
@@ -836,6 +996,13 @@ def get_settings():
         'amazon_access_key': mask(settings.get('amazon_access_key', '')),
         'amazon_secret_key': '••••••••' if settings.get('amazon_secret_key') else '',
         'amazon_partner_tag': settings.get('amazon_partner_tag', ''),
+        'rakuten_application_id': mask(settings.get('rakuten_application_id', '')),
+        'rakuten_affiliate_id': settings.get('rakuten_affiliate_id', ''),
+        'rakuten_asp_enabled': settings.get('rakuten_asp_enabled', False),
+        'rakuten_asp_name': settings.get('rakuten_asp_name', ''),
+        'rakuten_asp_link_template': settings.get('rakuten_asp_link_template', ''),
+        'rakuten_asp_link_text': settings.get('rakuten_asp_link_text', '楽天市場で詳細を見る'),
+        'rakuten_asp_prompt': settings.get('rakuten_asp_prompt', ''),
         'article_css': settings.get('article_css', ''),
     }
     return jsonify(safe)
@@ -855,6 +1022,20 @@ def update_settings():
         settings['amazon_secret_key'] = data['amazon_secret_key']
     if 'amazon_partner_tag' in data:
         settings['amazon_partner_tag'] = data['amazon_partner_tag']
+    if data.get('rakuten_application_id') and '••••••••' not in data['rakuten_application_id']:
+        settings['rakuten_application_id'] = data['rakuten_application_id']
+    if 'rakuten_affiliate_id' in data:
+        settings['rakuten_affiliate_id'] = data['rakuten_affiliate_id']
+    if 'rakuten_asp_enabled' in data:
+        settings['rakuten_asp_enabled'] = bool(data['rakuten_asp_enabled'])
+    if 'rakuten_asp_name' in data:
+        settings['rakuten_asp_name'] = data['rakuten_asp_name']
+    if 'rakuten_asp_link_template' in data:
+        settings['rakuten_asp_link_template'] = data['rakuten_asp_link_template']
+    if 'rakuten_asp_link_text' in data:
+        settings['rakuten_asp_link_text'] = data['rakuten_asp_link_text']
+    if 'rakuten_asp_prompt' in data:
+        settings['rakuten_asp_prompt'] = data['rakuten_asp_prompt']
     if 'article_css' in data:
         settings['article_css'] = data['article_css']
     save_settings(settings)

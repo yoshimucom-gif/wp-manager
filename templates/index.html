@@ -486,9 +486,13 @@ tr.selected td { background: var(--accent-dim); }
               </select>
             </div>
             <div class="form-group">
-              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted)">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted);margin-bottom:6px">
                 <input type="checkbox" id="gen-include-amazon" style="accent-color:var(--accent)">
-                Amazon商品を自動挿入（価格・レビュー・画像・アフィリエイトリンク）
+                Amazon商品を自動挿入
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted)">
+                <input type="checkbox" id="gen-include-rakuten" style="accent-color:var(--accent)">
+                楽天市場商品を自動挿入（RINKERスタイル）
               </label>
             </div>
             <div class="toolbar" style="margin-bottom:0">
@@ -542,9 +546,13 @@ tr.selected td { background: var(--accent-dim); }
               </select>
             </div>
             <div class="form-group">
-              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted)">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted);margin-bottom:6px">
                 <input type="checkbox" id="batch-include-amazon" style="accent-color:var(--accent)">
                 Amazon商品を自動挿入
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted)">
+                <input type="checkbox" id="batch-include-rakuten" style="accent-color:var(--accent)">
+                楽天市場商品を自動挿入（RINKERスタイル）
               </label>
             </div>
             <div class="toolbar" style="flex-direction:column;align-items:stretch;gap:8px;margin-bottom:0">
@@ -623,7 +631,7 @@ tr.selected td { background: var(--accent-dim); }
       <div class="page" id="page-settings">
         <div class="page-header">
           <div class="page-title">設定</div>
-          <div class="page-subtitle">Claude API・Amazon PA-API・デフォルト設定</div>
+          <div class="page-subtitle">Claude API・Amazon PA-API・楽天市場API・楽天ASP・デフォルト設定</div>
         </div>
         <div style="max-width:520px">
           <div class="settings-section">
@@ -649,6 +657,46 @@ tr.selected td { background: var(--accent-dim); }
             </div>
             <button class="btn btn-secondary btn-sm" onclick="testAmazon()">🔍 接続テスト</button>
             <span id="amazon-test-msg" style="font-size:11px;margin-left:8px;color:var(--muted)"></span>
+          </div>
+          <div class="settings-section">
+            <div class="section-header">// 楽天市場 API 設定</div>
+            <div class="form-group">
+              <label class="form-label">アプリケーションID</label>
+              <input type="text" id="s-rkt-app-id" class="form-control" placeholder="1234567890">
+            </div>
+            <div class="form-group">
+              <label class="form-label">アフィリエイトID（任意）</label>
+              <input type="text" id="s-rkt-aff-id" class="form-control" placeholder="xxxxxxxxxxxx.xx.xx">
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">設定するとアフィリエイトリンクになります</div>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="testRakuten()">🔍 接続テスト</button>
+            <span id="rakuten-test-msg" style="font-size:11px;margin-left:8px;color:var(--muted)"></span>
+          </div>
+          <div class="settings-section">
+            <div class="section-header">// 楽天ASPリンク連携</div>
+            <div class="form-group">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted)">
+                <input type="checkbox" id="s-rkt-asp-enabled" style="accent-color:var(--accent)">
+                記事生成時に楽天ASPリンクを自動挿入する
+              </label>
+            </div>
+            <div class="form-group">
+              <label class="form-label">ASP名</label>
+              <input type="text" id="s-rkt-asp-name" class="form-control" placeholder="例: もしもアフィリエイト / 楽天アフィリエイト">
+            </div>
+            <div class="form-group">
+              <label class="form-label">リンクURLテンプレート</label>
+              <input type="url" id="s-rkt-asp-template" class="form-control" placeholder="https://example.com/link?keyword={encoded_keyword}">
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">使用可能: {title}, {keyword}, {keywords}, {encoded_title}, {encoded_keyword}, {encoded_keywords}</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">リンクテキスト</label>
+              <input type="text" id="s-rkt-asp-text" class="form-control" placeholder="楽天市場で詳細を見る">
+            </div>
+            <div class="form-group">
+              <label class="form-label">挿入ルール（任意）</label>
+              <textarea id="s-rkt-asp-prompt" class="form-control" rows="4" placeholder="例: 商品紹介の直後とまとめ前に自然に挿入。押し売り表現は避ける。"></textarea>
+            </div>
           </div>
           <div class="settings-section">
             <div class="section-header">// 記事CSS定義（全サイト共通）</div>
@@ -1311,11 +1359,12 @@ async function startGenerate() {
 
   try {
     const includeAmazon = document.getElementById('gen-include-amazon').checked;
+    const includeRakuten = document.getElementById('gen-include-rakuten').checked;
     const decorationId = document.getElementById('gen-decoration').value;
     const res = await fetch(`/api/generate/${articleId}`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({quality_id: qualityId, include_amazon: includeAmazon, decoration_id: decorationId})
+      body: JSON.stringify({quality_id: qualityId, include_amazon: includeAmazon, include_rakuten: includeRakuten, decoration_id: decorationId})
     });
 
     const reader = res.body.getReader();
@@ -1402,11 +1451,12 @@ async function startBatchGenerate() {
   if (!ids.length) { toast('記事を選択してください', 'error'); return; }
   const qualityId = document.getElementById('batch-quality').value;
   const includeAmazon = document.getElementById('batch-include-amazon').checked;
+  const includeRakuten = document.getElementById('batch-include-rakuten').checked;
   const decorationId = document.getElementById('batch-decoration').value;
   const res = await fetch('/api/batch-generate', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({article_ids: ids, quality_id: qualityId, include_amazon: includeAmazon, decoration_id: decorationId})
+    body: JSON.stringify({article_ids: ids, quality_id: qualityId, include_amazon: includeAmazon, include_rakuten: includeRakuten, decoration_id: decorationId})
   });
   const data = await res.json();
   if (data.success) {
@@ -1532,6 +1582,13 @@ async function loadSettings() {
   document.getElementById('s-amz-access-key').value = s.amazon_access_key || '';
   document.getElementById('s-amz-secret-key').value = s.amazon_secret_key || '';
   document.getElementById('s-amz-partner-tag').value = s.amazon_partner_tag || '';
+  document.getElementById('s-rkt-app-id').value = s.rakuten_application_id || '';
+  document.getElementById('s-rkt-aff-id').value = s.rakuten_affiliate_id || '';
+  document.getElementById('s-rkt-asp-enabled').checked = !!s.rakuten_asp_enabled;
+  document.getElementById('s-rkt-asp-name').value = s.rakuten_asp_name || '';
+  document.getElementById('s-rkt-asp-template').value = s.rakuten_asp_link_template || '';
+  document.getElementById('s-rkt-asp-text').value = s.rakuten_asp_link_text || '楽天市場で詳細を見る';
+  document.getElementById('s-rkt-asp-prompt').value = s.rakuten_asp_prompt || '';
   document.getElementById('s-article-css').value = s.article_css || '';
   await loadQuality();
   if (s.default_quality_id) document.getElementById('s-default-quality').value = s.default_quality_id;
@@ -1544,6 +1601,13 @@ async function saveSettings() {
     amazon_access_key: document.getElementById('s-amz-access-key').value,
     amazon_secret_key: document.getElementById('s-amz-secret-key').value,
     amazon_partner_tag: document.getElementById('s-amz-partner-tag').value,
+    rakuten_application_id: document.getElementById('s-rkt-app-id').value,
+    rakuten_affiliate_id: document.getElementById('s-rkt-aff-id').value,
+    rakuten_asp_enabled: document.getElementById('s-rkt-asp-enabled').checked,
+    rakuten_asp_name: document.getElementById('s-rkt-asp-name').value,
+    rakuten_asp_link_template: document.getElementById('s-rkt-asp-template').value,
+    rakuten_asp_link_text: document.getElementById('s-rkt-asp-text').value,
+    rakuten_asp_prompt: document.getElementById('s-rkt-asp-prompt').value,
     article_css: document.getElementById('s-article-css').value,
   };
   const res = await fetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
@@ -1552,6 +1616,25 @@ async function saveSettings() {
     toast('設定を保存しました', 'success');
     document.getElementById('settings-msg').textContent = '✓ 保存完了';
     setTimeout(() => document.getElementById('settings-msg').textContent = '', 3000);
+  }
+}
+
+async function testRakuten() {
+  const msgEl = document.getElementById('rakuten-test-msg');
+  msgEl.textContent = '接続中...';
+  msgEl.style.color = 'var(--muted)';
+  const res = await fetch('/api/rakuten/search', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({keywords: 'テスト', item_count: 1})
+  });
+  const data = await res.json();
+  if (res.ok && Array.isArray(data)) {
+    msgEl.textContent = `✓ 接続成功（${data.length}件取得）`;
+    msgEl.style.color = 'var(--success)';
+  } else {
+    msgEl.textContent = '✗ ' + (data.error || '接続失敗');
+    msgEl.style.color = 'var(--error)';
   }
 }
 
