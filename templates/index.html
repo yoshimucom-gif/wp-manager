@@ -3,25 +3,27 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WP Manager</title>
+<title>Affiros 9</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
   --bg: #ffffff;
-  --surface: #f6f8fa;
-  --surface2: #eaeef2;
-  --border: #d0d7de;
-  --accent: #0969da;
-  --accent-hover: #0550ae;
-  --accent-dim: rgba(9,105,218,0.08);
-  --text: #24292f;
-  --muted: #57606a;
+  --surface: #f7f7f7;
+  --surface2: #eeeeee;
+  --border: #d9d9d9;
+  --accent: #1687d9;
+  --accent-hover: #0d6fb7;
+  --accent-dim: rgba(22,135,217,0.08);
+  --text: #1f2933;
+  --muted: #68727d;
+  --nav: #252525;
+  --nav-muted: #cfd6dc;
   --success: #1a7f37;
   --error: #cf222e;
   --warning: #9a6700;
-  --font: 'IBM Plex Mono', monospace;
+  --font: 'IBM Plex Mono', 'Yu Gothic UI', 'Meiryo', sans-serif;
 }
 html, body { height: 100%; }
 body {
@@ -37,35 +39,52 @@ body {
 ::-webkit-scrollbar-track { background: var(--surface); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-.layout { display: flex; flex: 1; overflow: hidden; }
-.sidebar {
-  width: 200px;
-  min-width: 200px;
-  background: var(--surface);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-}
-.main { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+.layout { display: block; flex: 1; overflow: hidden; }
+.main { height: calc(100vh - 48px); overflow-y: auto; display: flex; flex-direction: column; }
 
 .header {
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  padding: 0 16px;
+  background: var(--nav);
+  color: #fff;
+  border-bottom: 1px solid #151515;
+  padding: 0 28px;
   height: 48px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 24px;
   flex-shrink: 0;
 }
-.header-logo { font-size: 14px; font-weight: 600; color: var(--accent); letter-spacing: 2px; }
+.header-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #54b9f7;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.logo-mark {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  grid-template-columns: repeat(3, 5px);
+  grid-template-rows: repeat(3, 5px);
+  gap: 2px;
+}
+.logo-mark span {
+  width: 5px;
+  height: 5px;
+  border-radius: 2px;
+  background: #2ca7ee;
+}
+.logo-mark span:nth-child(5) { background: transparent; border: 1px solid #2ca7ee; }
 .header-right { display: flex; align-items: center; gap: 12px; }
-.header-right .muted { color: var(--muted); font-size: 11px; }
+.header-right .muted { color: #9ca3af; font-size: 11px; }
 .logout-btn {
   background: none;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255,255,255,0.24);
   border-radius: 4px;
-  color: var(--muted);
+  color: var(--nav-muted);
   font-family: var(--font);
   font-size: 11px;
   padding: 4px 10px;
@@ -74,50 +93,47 @@ body {
 }
 .logout-btn:hover { border-color: var(--error); color: var(--error); }
 
-.sidebar-logo {
-  padding: 16px;
-  border-bottom: 1px solid var(--border);
-  font-size: 11px;
-  color: var(--muted);
-  letter-spacing: 1px;
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  overflow-x: auto;
+  height: 48px;
 }
-.nav { padding: 8px 0; flex: 1; }
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
+  gap: 6px;
+  padding: 0 12px;
+  height: 48px;
   cursor: pointer;
-  color: var(--muted);
+  color: var(--nav-muted);
   transition: all 0.15s;
   font-size: 12px;
-  border-left: 2px solid transparent;
+  border-left: 0;
+  border-bottom: 3px solid transparent;
+  white-space: nowrap;
 }
-.nav-item:hover { color: var(--text); background: var(--accent-dim); }
-.nav-item.active { color: var(--accent); border-left-color: var(--accent); background: var(--accent-dim); }
+.nav-item:hover { color: #fff; background: rgba(255,255,255,0.06); }
+.nav-item.active { color: #fff; border-bottom-color: #2ca7ee; background: rgba(44,167,238,0.12); }
 .nav-icon { font-size: 14px; width: 18px; text-align: center; }
-.sidebar-footer {
-  padding: 12px 16px;
-  border-top: 1px solid var(--border);
-  font-size: 10px;
-  color: var(--muted);
-}
 
-.content { padding: 24px; flex: 1; }
+.content { padding: 26px 32px; flex: 1; width: min(1660px, 100%); margin: 0 auto; }
 .page { display: none; }
 .page.active { display: block; }
 
 .page-header { margin-bottom: 20px; }
 .page-title {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--text);
   display: flex;
   align-items: center;
   gap: 8px;
 }
-.page-title::before { content: '> '; color: var(--accent); }
-.page-subtitle { color: var(--muted); font-size: 11px; margin-top: 4px; margin-left: 18px; }
+.page-title::before { content: ''; }
+.page-subtitle { color: var(--muted); font-size: 12px; margin-top: 5px; margin-left: 0; }
 
 .toolbar {
   display: flex;
@@ -196,6 +212,22 @@ tr.selected td { background: var(--accent-dim); }
 .badge-generated { background: rgba(26,127,55,0.1); color: var(--success); border: 1px solid rgba(26,127,55,0.2); }
 .badge-published { background: rgba(154,103,0,0.1); color: var(--warning); border: 1px solid rgba(154,103,0,0.2); }
 .badge-error { background: rgba(207,34,46,0.1); color: var(--error); border: 1px solid rgba(207,34,46,0.2); }
+
+.score-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.score-a { background: rgba(26,127,55,0.1); color: var(--success); border: 1px solid rgba(26,127,55,0.22); }
+.score-b { background: rgba(9,105,218,0.1); color: var(--accent); border: 1px solid rgba(9,105,218,0.22); }
+.score-c { background: rgba(154,103,0,0.1); color: var(--warning); border: 1px solid rgba(154,103,0,0.22); }
+.score-d { background: rgba(207,34,46,0.1); color: var(--error); border: 1px solid rgba(207,34,46,0.22); }
+.meta-line { font-size: 10px; color: var(--muted); margin-top: 4px; }
 
 #toast {
   position: fixed;
@@ -338,55 +370,181 @@ tr.selected td { background: var(--accent-dim); }
   padding: 20px;
   margin-bottom: 16px;
 }
+
+.dashboard-hero { margin-bottom: 22px; }
+.dashboard-title {
+  font-size: 24px;
+  font-weight: 500;
+  margin-bottom: 18px;
+}
+.module-panel {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  min-height: 168px;
+  overflow: hidden;
+}
+.module-tile {
+  border-right: 1px solid #eef0f2;
+  padding: 18px 12px 14px;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.module-tile:last-child { border-right: 0; }
+.module-tile:hover { background: var(--accent-dim); color: var(--accent); }
+.module-title { font-size: 13px; margin-bottom: 10px; color: #111827; }
+.module-art {
+  height: 90px;
+  display: grid;
+  place-items: center;
+  font-size: 42px;
+  filter: grayscale(1);
+}
+.dashboard-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(140px, 1fr));
+  gap: 26px;
+  margin: 20px 0 26px;
+}
+.dashboard-kpis .stat-card {
+  min-width: 0;
+  background: #fff;
+  text-align: center;
+  padding: 17px 16px;
+  border-radius: 8px;
+}
+.dashboard-kpis .stat-label { font-weight: 600; color: #4b5563; }
+
+@media (max-width: 1100px) {
+  .header { padding: 0 14px; gap: 12px; }
+  .module-panel { grid-template-columns: repeat(3, 1fr); }
+  .dashboard-kpis { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+}
+@media (max-width: 720px) {
+  .content { padding: 18px 14px; }
+  .header { align-items: stretch; flex-wrap: wrap; height: auto; min-height: 48px; }
+  .nav { order: 3; width: 100%; flex-basis: 100%; }
+  .module-panel { grid-template-columns: repeat(2, 1fr); }
+}
 </style>
 </head>
 <body>
 
 <div class="header">
-  <div class="header-logo">WP_MANAGER</div>
+  <div class="header-logo">
+    <span class="logo-mark" aria-hidden="true">
+      <span></span><span></span><span></span>
+      <span></span><span></span><span></span>
+      <span></span><span></span><span></span>
+    </span>
+    Affiros 9
+  </div>
+  <nav class="nav">
+    <div class="nav-item active" onclick="showPage('ranking')" id="nav-ranking">
+      <span class="nav-icon">#</span> ランキング記事
+    </div>
+    <div class="nav-item" onclick="showPage('brand')" id="nav-brand">
+      <span class="nav-icon">◎</span> 商標記事
+    </div>
+    <div class="nav-item" onclick="showPage('column')" id="nav-column">
+      <span class="nav-icon">¶</span> コラム記事
+    </div>
+    <div class="nav-item" onclick="showPage('batch')" id="nav-batch">
+      <span class="nav-icon">⇄</span> 一括処理
+    </div>
+    <div class="nav-item" onclick="showPage('rewrite')" id="nav-rewrite">
+      <span class="nav-icon">R</span> SEOリライト
+    </div>
+    <div class="nav-item" onclick="showPage('articles')" id="nav-articles">
+      <span class="nav-icon">H</span> 対応履歴
+    </div>
+    <div class="nav-item" onclick="showPage('quality')" id="nav-quality">
+      <span class="nav-icon">✦</span> 品質定義
+    </div>
+    <div class="nav-item" onclick="showPage('decoration')" id="nav-decoration">
+      <span class="nav-icon">D</span> 装飾定義
+    </div>
+    <div class="nav-item" onclick="showPage('ads')" id="nav-ads">
+      <span class="nav-icon">AD</span> 広告定義
+    </div>
+    <div class="nav-item" onclick="showPage('sites')" id="nav-sites">
+      <span class="nav-icon">S</span> サイト管理
+    </div>
+    <div class="nav-item" onclick="showPage('settings')" id="nav-settings">
+      <span class="nav-icon">⚙</span> 設定
+    </div>
+  </nav>
   <div class="header-right">
-    <span class="muted" id="header-status">● ONLINE</span>
+    <span class="muted" id="header-status">fmikata</span>
     <button class="logout-btn" onclick="window.location.href='/logout'">LOGOUT</button>
   </div>
 </div>
 
 <div class="layout">
-  <div class="sidebar">
-    <div class="sidebar-logo">// NAVIGATION</div>
-    <nav class="nav">
-      <div class="nav-item active" onclick="showPage('articles')" id="nav-articles">
-        <span class="nav-icon">📄</span> 記事一覧
-      </div>
-      <div class="nav-item" onclick="showPage('generate')" id="nav-generate">
-        <span class="nav-icon">⚡</span> 記事生成
-      </div>
-      <div class="nav-item" onclick="showPage('batch')" id="nav-batch">
-        <span class="nav-icon">🔁</span> バッチ生成
-      </div>
-      <div class="nav-item" onclick="showPage('quality')" id="nav-quality">
-        <span class="nav-icon">✦</span> 品質定義
-      </div>
-      <div class="nav-item" onclick="showPage('decoration')" id="nav-decoration">
-        <span class="nav-icon">🎨</span> 装飾定義
-      </div>
-      <div class="nav-item" onclick="showPage('sites')" id="nav-sites">
-        <span class="nav-icon">🌐</span> サイト管理
-      </div>
-      <div class="nav-item" onclick="showPage('settings')" id="nav-settings">
-        <span class="nav-icon">⚙</span> 設定
-      </div>
-    </nav>
-    <div class="sidebar-footer">v1.1.0 · Powered by Claude</div>
-  </div>
 
   <div class="main">
     <div class="content">
 
+      <div class="dashboard-hero" id="dashboard-hero">
+        <div class="dashboard-title">Affiros 9 Marketing へようこそ！</div>
+        <div class="module-panel">
+          <div class="module-tile" onclick="showPage('ranking')">
+            <div class="module-title">プランナー</div>
+            <div class="module-art">◉↺</div>
+          </div>
+          <div class="module-tile" onclick="showPage('batch')">
+            <div class="module-title">キャンペーン</div>
+            <div class="module-art">▣✉</div>
+          </div>
+          <div class="module-tile" onclick="showPage('rewrite')">
+            <div class="module-title">レポート</div>
+            <div class="module-art">▤◔</div>
+          </div>
+          <div class="module-tile" onclick="showPage('articles')">
+            <div class="module-title">データ管理</div>
+            <div class="module-art">▧⌁</div>
+          </div>
+          <div class="module-tile" onclick="showPage('decoration')">
+            <div class="module-title">カスタマイズ</div>
+            <div class="module-art">✉＋</div>
+          </div>
+          <div class="module-tile" onclick="showPage('settings')">
+            <div class="module-title">管理ツール</div>
+            <div class="module-art">⚙◌</div>
+          </div>
+        </div>
+        <div class="dashboard-kpis">
+          <div class="stat-card">
+            <div class="stat-label">新規記事</div>
+            <div class="stat-value"><span id="dash-total">0</span><span style="font-size:13px;font-weight:400">件</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">生成待ち</div>
+            <div class="stat-value"><span id="dash-pending">0</span><span style="font-size:13px;font-weight:400">件</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">生成済</div>
+            <div class="stat-value"><span id="dash-generated">0</span><span style="font-size:13px;font-weight:400">件</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">投稿済</div>
+            <div class="stat-value"><span id="dash-published">0</span><span style="font-size:13px;font-weight:400">件</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">リライト優先</div>
+            <div class="stat-value"><span id="dash-low-score">0</span><span style="font-size:13px;font-weight:400">件</span></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Articles Page -->
-      <div class="page active" id="page-articles">
+      <div class="page" id="page-articles">
         <div class="page-header">
-          <div class="page-title">記事一覧</div>
-          <div class="page-subtitle">インポートした記事の管理・生成・投稿</div>
+          <div class="page-title">対応履歴</div>
+          <div class="page-subtitle">生成・投稿・リライト対象の記事履歴を管理</div>
         </div>
 
         <div class="stats" id="stats-bar">
@@ -410,18 +568,22 @@ tr.selected td { background: var(--accent-dim); }
 
         <div class="toolbar">
           <label class="btn btn-secondary" style="cursor:pointer" id="import-btn-label">
-            <span>📥 Excelインポート</span>
-            <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importExcel(this)">
+            <span>📥 CSV/Excelインポート</span>
+            <input type="file" accept=".csv,.xlsx,.xls" style="display:none" onchange="importExcel(this)">
           </label>
           <button class="btn btn-primary" onclick="generateSelected()">⚡ 選択を生成</button>
           <button class="btn btn-success" onclick="publishSelected()">🚀 選択をWP投稿</button>
           <button class="btn btn-danger" onclick="deleteSelected()">🗑 選択を削除</button>
+          <button class="btn btn-secondary" onclick="rescoreArticles()">↯ スコア再計算</button>
           <div style="flex:1"></div>
           <select id="site-filter" style="font-size:12px;" onchange="loadArticles()">
             <option value="">全サイト</option>
           </select>
           <select id="quality-filter" style="font-size:12px;" onchange="filterArticles()">
             <option value="">全品質</option>
+          </select>
+          <select id="category-filter" style="font-size:12px;" onchange="filterArticles()">
+            <option value="">全カテゴリー</option>
           </select>
           <input type="text" id="search-input" placeholder="検索..." style="width:160px;font-size:12px;" oninput="filterArticles()">
           <button class="btn btn-secondary btn-sm" onclick="loadArticles()">↻ 更新</button>
@@ -433,8 +595,11 @@ tr.selected td { background: var(--accent-dim); }
               <tr>
                 <th><input type="checkbox" class="check-all" id="check-all" onchange="toggleAll(this)"></th>
                 <th>#</th>
+                <th>種類</th>
                 <th>タイトル</th>
                 <th>キーワード</th>
+                <th>カテゴリー</th>
+                <th>スコア</th>
                 <th>サイト</th>
                 <th>ステータス</th>
                 <th>生成日時</th>
@@ -452,13 +617,17 @@ tr.selected td { background: var(--accent-dim); }
       </div>
 
       <!-- Generate Page -->
-      <div class="page" id="page-generate">
+      <div class="page active" id="page-generate">
         <div class="page-header">
-          <div class="page-title">記事生成</div>
-          <div class="page-subtitle">Claude APIで個別記事を生成</div>
+          <div class="page-title" id="gen-page-title">ランキング記事</div>
+          <div class="page-subtitle" id="gen-page-subtitle">おすすめ・比較を統合したランキング記事を生成</div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
           <div>
+            <div class="form-group">
+              <label class="form-label">記事種類</label>
+              <input type="text" id="gen-article-type-label" class="form-control" value="ランキング記事" readonly>
+            </div>
             <div class="form-group">
               <label class="form-label">記事選択</label>
               <select id="gen-article-select" class="form-control" onchange="onArticleSelect()">
@@ -474,6 +643,10 @@ tr.selected td { background: var(--accent-dim); }
               <input type="text" id="gen-keywords" class="form-control" placeholder="キーワード（カンマ区切り）">
             </div>
             <div class="form-group">
+              <label class="form-label">カテゴリー</label>
+              <input type="text" id="gen-category" class="form-control" placeholder="例: 不動産投資 / 美容 / SaaS">
+            </div>
+            <div class="form-group">
               <label class="form-label">品質定義</label>
               <select id="gen-quality" class="form-control">
                 <option value="">-- 品質定義を選択 --</option>
@@ -484,6 +657,13 @@ tr.selected td { background: var(--accent-dim); }
               <select id="gen-decoration" class="form-control">
                 <option value="">-- 装飾定義を選択（任意）--</option>
               </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">広告定義</label>
+              <select id="gen-ad-definition" class="form-control">
+                <option value="">-- 広告定義を選択（任意）--</option>
+              </select>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">未選択の場合は下のAmazon/楽天チェックを使います</div>
             </div>
             <div class="form-group">
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted);margin-bottom:6px">
@@ -513,8 +693,8 @@ tr.selected td { background: var(--accent-dim); }
       <!-- Batch Page -->
       <div class="page" id="page-batch">
         <div class="page-header">
-          <div class="page-title">バッチ生成</div>
-          <div class="page-subtitle">複数記事を一括生成・投稿</div>
+          <div class="page-title">一括処理</div>
+          <div class="page-subtitle">CSV/Excelで取り込んだ記事や選択した記事をまとめて生成・投稿</div>
         </div>
         <div style="display:grid;grid-template-columns:300px 1fr;gap:20px">
           <div>
@@ -528,6 +708,12 @@ tr.selected td { background: var(--accent-dim); }
               <label class="form-label">装飾定義</label>
               <select id="batch-decoration" class="form-control">
                 <option value="">-- 装飾定義を選択（任意）--</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">広告定義</label>
+              <select id="batch-ad-definition" class="form-control">
+                <option value="">-- 広告定義を選択（任意）--</option>
               </select>
             </div>
             <div class="form-group">
@@ -546,6 +732,21 @@ tr.selected td { background: var(--accent-dim); }
               </select>
             </div>
             <div class="form-group">
+              <label class="form-label">記事種類</label>
+              <select id="batch-article-type-filter" class="form-control" onchange="loadBatchArticles()">
+                <option value="">全記事種類</option>
+                <option value="ranking">ランキング記事</option>
+                <option value="brand">商標記事</option>
+                <option value="column">コラム記事</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">カテゴリー</label>
+              <select id="batch-category-filter" class="form-control" onchange="loadBatchArticles()">
+                <option value="">全カテゴリー</option>
+              </select>
+            </div>
+            <div class="form-group">
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted);margin-bottom:6px">
                 <input type="checkbox" id="batch-include-amazon" style="accent-color:var(--accent)">
                 Amazon商品を自動挿入
@@ -556,8 +757,8 @@ tr.selected td { background: var(--accent-dim); }
               </label>
             </div>
             <div class="toolbar" style="flex-direction:column;align-items:stretch;gap:8px;margin-bottom:0">
-              <button class="btn btn-primary" onclick="startBatchGenerate()">⚡ バッチ生成開始</button>
-              <button class="btn btn-success" onclick="startBatchPublish()">🚀 バッチWP投稿</button>
+              <button class="btn btn-primary" onclick="startBatchGenerate()">⚡ 一括生成開始</button>
+              <button class="btn btn-success" onclick="startBatchPublish()">🚀 一括WP投稿</button>
               <button class="btn btn-secondary btn-sm" onclick="loadBatchArticles()">↻ 状態更新</button>
             </div>
             <div id="batch-msg" style="margin-top:12px;font-size:12px;color:var(--muted)"></div>
@@ -570,6 +771,8 @@ tr.selected td { background: var(--accent-dim); }
                   <tr>
                     <th><input type="checkbox" class="check-all" id="batch-check-all" onchange="toggleBatchAll(this)"></th>
                     <th>タイトル</th>
+                    <th>カテゴリー</th>
+                    <th>スコア</th>
                     <th>サイト</th>
                     <th>ステータス</th>
                   </tr>
@@ -581,11 +784,122 @@ tr.selected td { background: var(--accent-dim); }
         </div>
       </div>
 
+      <!-- Rewrite Page -->
+      <div class="page" id="page-rewrite">
+        <div class="page-header">
+          <div class="page-title">SEOリライト</div>
+          <div class="page-subtitle">WordPressサイト内の記事を取得してClaude APIでリライト</div>
+        </div>
+        <div style="display:grid;grid-template-columns:320px 1fr;gap:20px">
+          <div>
+            <div class="settings-section">
+              <div class="section-header">// 記事取得</div>
+              <div class="form-group">
+                <label class="form-label">取得元サイト</label>
+                <select id="rewrite-site" class="form-control">
+                  <option value="">-- サイトを選択 --</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">取得件数</label>
+                <select id="rewrite-per-page" class="form-control">
+                  <option value="20">20件</option>
+                  <option value="50">50件</option>
+                  <option value="100">100件</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">取得ページ数</label>
+                <input type="number" id="rewrite-max-pages" class="form-control" value="3" min="1" max="10">
+              </div>
+              <button class="btn btn-primary" onclick="fetchRewritePosts()">↧ サイトから記事取得</button>
+            </div>
+            <div class="settings-section">
+              <div class="section-header">// リライト設定</div>
+              <div class="form-group">
+                <label class="form-label">記事構成</label>
+                <select id="rewrite-structure" class="form-control">
+                  <option value="seo">SEO記事構成</option>
+                  <option value="keep">元構成を活かす</option>
+                  <option value="organize">段落をしっかり整理</option>
+                  <option value="rebuild">記事構成まで整える</option>
+                  <option value="cta">LP・CTA寄り</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">装飾レベル</label>
+                <select id="rewrite-decoration-level" class="form-control">
+                  <option value="standard">標準装飾</option>
+                  <option value="none">装飾なし</option>
+                  <option value="light">軽く装飾</option>
+                  <option value="rich">しっかり装飾</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">装飾定義</label>
+                <select id="rewrite-decoration" class="form-control">
+                  <option value="">-- 装飾定義を選択（任意）--</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">文体</label>
+                <select id="rewrite-tone" class="form-control">
+                  <option value="natural">自然で読みやすい</option>
+                  <option value="trust">丁寧で信頼感</option>
+                  <option value="friendly">親しみやすい</option>
+                  <option value="seo">SEOを意識</option>
+                  <option value="concise">簡潔で要点重視</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">目標文字数（任意）</label>
+                <input type="number" id="rewrite-target-chars" class="form-control" placeholder="例: 3000" min="1">
+              </div>
+              <div class="form-group">
+                <label class="form-label">許容範囲（%）</label>
+                <input type="number" id="rewrite-tolerance" class="form-control" value="10" min="0" max="50">
+              </div>
+              <button class="btn btn-secondary btn-sm" onclick="loadRewriteItems()">↻ 一覧更新</button>
+            </div>
+          </div>
+          <div>
+            <div class="toolbar">
+              <input type="text" id="rewrite-search" placeholder="リライト対象を検索..." style="width:240px;font-size:12px;" oninput="filterRewriteItems()">
+              <select id="rewrite-category-filter" style="font-size:12px;" onchange="filterRewriteItems()">
+                <option value="">全カテゴリー</option>
+              </select>
+              <button class="btn btn-secondary btn-sm" onclick="rescoreRewriteItems()">↯ スコア再計算</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteSelectedRewriteItems()">🗑 選択を削除</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th><input type="checkbox" class="check-all" onchange="toggleRewriteAll(this)"></th>
+                    <th>タイトル</th>
+                    <th>カテゴリー</th>
+                    <th>スコア</th>
+                    <th>サイト</th>
+                    <th>状態</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="rewrite-body"></tbody>
+              </table>
+            </div>
+            <div id="rewrite-empty" class="empty" style="display:none">
+              <div class="empty-icon">✍</div>
+              <div>リライト対象がありません。サイトから記事を取得してください。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Quality Page -->
       <div class="page" id="page-quality">
         <div class="page-header">
           <div class="page-title">品質定義</div>
-          <div class="page-subtitle">記事生成時の品質プロンプトを管理</div>
+          <div class="page-subtitle">文字数・文体・追加ルールを含む品質プリセットを管理</div>
         </div>
         <div class="toolbar">
           <button class="btn btn-primary" onclick="openQualityModal()">+ 新規追加</button>
@@ -597,7 +911,7 @@ tr.selected td { background: var(--accent-dim); }
       <div class="page" id="page-decoration">
         <div class="page-header">
           <div class="page-title">装飾定義</div>
-          <div class="page-subtitle">サンプル記事から装飾スタイルを読み込んで定義</div>
+          <div class="page-subtitle">ランキング・商標・コラム・SEOリライト別の参考記事を管理</div>
         </div>
         <div class="toolbar">
           <button class="btn btn-primary" onclick="openDecorationModal()">+ 新規追加</button>
@@ -606,6 +920,23 @@ tr.selected td { background: var(--accent-dim); }
           <div class="empty">
             <div class="empty-icon">🎨</div>
             <div>装飾定義がありません。WordPressのサンプル記事から読み込んで追加してください。</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ads Page -->
+      <div class="page" id="page-ads">
+        <div class="page-header">
+          <div class="page-title">広告定義</div>
+          <div class="page-subtitle">記事種類ごとのAmazon・楽天商品取得とRINKER風カード挿入ルールを管理</div>
+        </div>
+        <div class="toolbar">
+          <button class="btn btn-primary" onclick="openAdModal()">+ 新規追加</button>
+        </div>
+        <div class="quality-grid" id="ad-grid">
+          <div class="empty">
+            <div class="empty-icon">AD</div>
+            <div>広告定義がありません。記事種類ごとの商品取得ルールを追加してください。</div>
           </div>
         </div>
       </div>
@@ -739,6 +1070,26 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
       <input type="url" id="quality-reference-url" class="form-control" placeholder="https://example.com/reference-article">
       <div style="font-size:11px;color:var(--muted);margin-top:4px">生成時にこのページの内容を参考記事として読み込みます</div>
     </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group">
+        <label class="form-label">目標文字数</label>
+        <input type="number" id="quality-target-chars" class="form-control" placeholder="例: 3000" min="1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">文体</label>
+        <select id="quality-tone" class="form-control">
+          <option value="ですます調">ですます調</option>
+          <option value="である調">である調</option>
+          <option value="親しみやすいですます調">親しみやすいですます調</option>
+          <option value="専門家風の丁寧な文体">専門家風の丁寧な文体</option>
+          <option value="簡潔で要点重視">簡潔で要点重視</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">追加ルール（任意）</label>
+      <textarea id="quality-extra-rules" class="form-control" rows="3" placeholder="例: 結論を先に書く。箇条書きを多めにする。CTAは最後に1回だけ。"></textarea>
+    </div>
     <div class="form-group">
       <label class="form-label">プロンプト</label>
       <textarea id="quality-prompt" class="form-control" rows="8" placeholder="記事生成時の品質要件を記述してください..."></textarea>
@@ -764,6 +1115,16 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
     <div class="form-group">
       <label class="form-label">定義名</label>
       <input type="text" id="decoration-name" class="form-control" placeholder="例: レビュー記事スタイル">
+    </div>
+    <div class="form-group">
+      <label class="form-label">記事種類</label>
+      <select id="decoration-article-type" class="form-control">
+        <option value="common">共通</option>
+        <option value="ranking">ランキング記事</option>
+        <option value="brand">商標記事</option>
+        <option value="column">コラム記事</option>
+        <option value="rewrite">SEOリライト</option>
+      </select>
     </div>
     <div class="form-group">
       <label class="form-label">説明（任意）</label>
@@ -793,6 +1154,94 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeDecorationModal()">キャンセル</button>
       <button class="btn btn-primary" onclick="saveDecoration()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Ad Definition Modal -->
+<div class="modal-overlay" id="ad-modal">
+  <div class="modal" style="width:760px">
+    <div class="modal-title" id="ad-modal-title">// 広告定義を追加</div>
+    <input type="hidden" id="ad-edit-id">
+    <div class="form-group">
+      <label class="form-label">定義名</label>
+      <input type="text" id="ad-name" class="form-control" placeholder="例: ランキング記事用 RINKERカード">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group">
+        <label class="form-label">記事種類</label>
+        <select id="ad-article-type" class="form-control">
+          <option value="common">共通</option>
+          <option value="ranking">ランキング記事</option>
+          <option value="brand">商標記事</option>
+          <option value="column">コラム記事</option>
+          <option value="rewrite">SEOリライト</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">取得元</label>
+        <select id="ad-source" class="form-control">
+          <option value="both">Amazon + 楽天</option>
+          <option value="amazon">Amazonのみ</option>
+          <option value="rakuten">楽天のみ</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group">
+        <label class="form-label">検索語の作り方</label>
+        <select id="ad-keyword-mode" class="form-control">
+          <option value="article_keywords">記事キーワードを使う</option>
+          <option value="ad_keywords">記事の広告キーワードを優先</option>
+          <option value="title">タイトルを使う</option>
+          <option value="custom">固定検索語を使う</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">商品カード数</label>
+        <input type="number" id="ad-item-count" class="form-control" value="3" min="1" max="10">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">固定検索語（任意）</label>
+      <input type="text" id="ad-search-keywords" class="form-control" placeholder="固定検索語を使う場合のみ入力">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group">
+        <label class="form-label">挿入位置</label>
+        <select id="ad-insertion-position" class="form-control">
+          <option value="auto">自動</option>
+          <option value="after_intro">導入文の直後</option>
+          <option value="after_comparison">比較・レビュー説明の直後</option>
+          <option value="before_summary">まとめ前</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">優先度</label>
+        <input type="number" id="ad-priority" class="form-control" value="50" min="1" max="999">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group">
+        <label class="form-label">Amazonボタン文言</label>
+        <input type="text" id="ad-amazon-label" class="form-control" value="Amazonで見る">
+      </div>
+      <div class="form-group">
+        <label class="form-label">楽天ボタン文言</label>
+        <input type="text" id="ad-rakuten-label" class="form-control" value="楽天市場で見る">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">追加ルール（任意）</label>
+      <textarea id="ad-prompt" class="form-control" rows="4" placeholder="例: 押し売りせず、比較表の直後に自然に配置。商標記事では公式リンクの前に置く。"></textarea>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted)">
+      <input type="checkbox" id="ad-enabled" style="accent-color:var(--accent)" checked>
+      有効にする
+    </label>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeAdModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveAdDefinition()">保存</button>
     </div>
   </div>
 </div>
@@ -838,6 +1287,30 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
       <label class="form-label">キーワード</label>
       <input type="text" id="modal-keywords" class="form-control">
     </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group">
+        <label class="form-label">記事種類</label>
+        <select id="modal-article-type" class="form-control">
+          <option value="ranking">ランキング記事</option>
+          <option value="brand">商標記事</option>
+          <option value="column">コラム記事</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">広告キーワード</label>
+        <input type="text" id="modal-ad-keywords" class="form-control" placeholder="商品検索に使う語句">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">カテゴリー</label>
+      <input type="text" id="modal-category" class="form-control" placeholder="WordPressカテゴリー名。複数はカンマ区切り">
+    </div>
+    <div class="form-group">
+      <label class="form-label">広告定義</label>
+      <select id="modal-ad-definition-id" class="form-control">
+        <option value="">-- 広告定義を選択（任意）--</option>
+      </select>
+    </div>
     <div class="form-group">
       <label class="form-label">投稿先サイト</label>
       <select id="modal-site-id" class="form-control">
@@ -855,27 +1328,85 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
   </div>
 </div>
 
+<!-- Rewrite Modal -->
+<div class="modal-overlay" id="rewrite-modal">
+  <div class="modal" style="width:900px">
+    <div class="modal-title">// リライト結果</div>
+    <input type="hidden" id="rewrite-modal-id">
+    <div class="form-group">
+      <label class="form-label">タイトル</label>
+      <input type="text" id="rewrite-modal-title" class="form-control" readonly>
+    </div>
+    <div class="form-group">
+      <label class="form-label">リライトHTML</label>
+      <textarea id="rewrite-modal-content" class="form-control" rows="18"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeRewriteModal()">閉じる</button>
+      <button class="btn btn-danger" onclick="updateRewritePost()">元記事を上書き</button>
+    </div>
+  </div>
+</div>
+
 <script>
 let allArticles = [];
 let qualityList = [];
 let siteList = [];
 let decorationList = [];
+let adDefinitionList = [];
+let rewriteList = [];
 let currentGenArticleId = null;
+let currentArticleType = 'ranking';
+
+const articleTypeConfig = {
+  ranking: {
+    title: 'ランキング記事',
+    subtitle: 'おすすめ・比較を統合したランキング記事を生成',
+    label: 'ランキング記事（おすすめ・比較と統合）'
+  },
+  brand: {
+    title: '商標記事',
+    subtitle: '商品名・サービス名で検索する読者向けのレビュー記事を生成',
+    label: '商標記事（レビュー記事）'
+  },
+  column: {
+    title: 'コラム記事',
+    subtitle: '悩みや疑問に自然に答える読み物型の記事を生成',
+    label: 'コラム記事'
+  }
+};
 
 // ---- Navigation ----
 function showPage(name) {
+  if (name === 'generate') name = 'ranking';
+  const isArticleType = !!articleTypeConfig[name];
+  const pageName = isArticleType ? 'generate' : name;
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById('page-' + name).classList.add('active');
-  document.getElementById('nav-' + name).classList.add('active');
+  document.getElementById('page-' + pageName).classList.add('active');
+  const nav = document.getElementById('nav-' + name);
+  if (nav) nav.classList.add('active');
   localStorage.setItem('currentPage', name);
-  if (name === 'articles') loadArticles();
-  if (name === 'generate') { loadQualitySelects(); populateGenSelect(); }
-  if (name === 'batch') { loadQualitySelects(); loadBatchArticles(); }
-  if (name === 'quality') loadQuality();
-  if (name === 'decoration') loadDecorations();
-  if (name === 'sites') loadSites();
-  if (name === 'settings') loadSettings();
+  if (isArticleType) {
+    currentArticleType = name;
+    updateArticleTypeUI();
+  }
+  if (pageName === 'articles') loadArticles();
+  if (pageName === 'generate') { loadQualitySelects(); populateGenSelect(); }
+  if (pageName === 'batch') { loadQualitySelects(); loadBatchArticles(); }
+  if (pageName === 'rewrite') { loadRewritePage(); }
+  if (pageName === 'quality') loadQuality();
+  if (pageName === 'decoration') loadDecorations();
+  if (pageName === 'ads') loadAdDefinitions();
+  if (pageName === 'sites') loadSites();
+  if (pageName === 'settings') loadSettings();
+}
+
+function updateArticleTypeUI() {
+  const cfg = articleTypeConfig[currentArticleType] || articleTypeConfig.ranking;
+  document.getElementById('gen-page-title').textContent = cfg.title;
+  document.getElementById('gen-page-subtitle').textContent = cfg.subtitle;
+  document.getElementById('gen-article-type-label').value = cfg.label;
 }
 
 // ---- Toast ----
@@ -903,9 +1434,11 @@ function renderDecorations() {
     grid.innerHTML = '<div class="empty"><div class="empty-icon">🎨</div><div>装飾定義がありません。WordPressのサンプル記事から読み込んで追加してください。</div></div>';
     return;
   }
+  const typeLabels = {common:'共通', ranking:'ランキング記事', brand:'商標記事', column:'コラム記事', rewrite:'SEOリライト'};
   grid.innerHTML = decorationList.map(d => `
     <div class="quality-card">
       <div class="quality-name">🎨 ${esc(d.name)}</div>
+      <div style="font-size:10px;color:var(--accent);margin-bottom:6px">${typeLabels[d.article_type || 'common'] || '共通'}</div>
       ${d.description ? `<div class="quality-prompt">${esc(d.description)}</div>` : ''}
       <div style="font-size:10px;color:var(--muted);margin-top:6px">
         ${d.sample_html ? `HTMLサンプル: ${d.sample_html.length}文字` : '未設定'}
@@ -922,7 +1455,7 @@ function renderDecorations() {
 function updateDecorationSelects() {
   const opts = '<option value="">-- 装飾定義を選択（任意）--</option>' +
     decorationList.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
-  ['gen-decoration', 'batch-decoration'].forEach(id => {
+  ['gen-decoration', 'batch-decoration', 'rewrite-decoration'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.innerHTML = opts;
   });
@@ -937,6 +1470,7 @@ function updateDecorationSelects() {
 function openDecorationModal() {
   document.getElementById('decoration-edit-id').value = '';
   document.getElementById('decoration-name').value = '';
+  document.getElementById('decoration-article-type').value = 'common';
   document.getElementById('decoration-description').value = '';
   document.getElementById('decoration-sample-html').value = '';
   document.getElementById('decoration-fetch-msg').textContent = '';
@@ -951,6 +1485,7 @@ function editDecoration(id) {
   if (!d) return;
   document.getElementById('decoration-edit-id').value = id;
   document.getElementById('decoration-name').value = d.name;
+  document.getElementById('decoration-article-type').value = d.article_type || 'common';
   document.getElementById('decoration-description').value = d.description || '';
   document.getElementById('decoration-sample-html').value = d.sample_html || '';
   document.getElementById('decoration-fetch-msg').textContent = d.source_url ? `ソース: ${d.source_url}` : '';
@@ -993,6 +1528,7 @@ async function saveDecoration() {
   const id = document.getElementById('decoration-edit-id').value;
   const body = {
     name: document.getElementById('decoration-name').value,
+    article_type: document.getElementById('decoration-article-type').value,
     description: document.getElementById('decoration-description').value,
     sample_html: document.getElementById('decoration-sample-html').value,
   };
@@ -1013,6 +1549,131 @@ async function deleteDecoration(id) {
   await fetch(`/api/decorations/${id}`, {method:'DELETE'});
   toast('削除しました', 'success');
   await loadDecorations();
+}
+
+// ---- Ad Definitions ----
+async function loadAdDefinitions() {
+  const res = await fetch('/api/ad-definitions');
+  adDefinitionList = await res.json();
+  renderAdDefinitions();
+  updateAdDefinitionSelects();
+}
+
+function adTypeLabel(type) {
+  return {common:'共通', ranking:'ランキング記事', brand:'商標記事', column:'コラム記事', rewrite:'SEOリライト'}[type || 'common'] || '共通';
+}
+
+function adSourceLabel(source) {
+  return {both:'Amazon + 楽天', amazon:'Amazon', rakuten:'楽天'}[source || 'both'] || 'Amazon + 楽天';
+}
+
+function renderAdDefinitions() {
+  const grid = document.getElementById('ad-grid');
+  if (!grid) return;
+  if (!adDefinitionList.length) {
+    grid.innerHTML = '<div class="empty"><div class="empty-icon">AD</div><div>広告定義がありません。記事種類ごとの商品取得ルールを追加してください。</div></div>';
+    return;
+  }
+  grid.innerHTML = adDefinitionList.map(d => `
+    <div class="quality-card">
+      <div class="quality-name">AD ${esc(d.name)} ${d.enabled ? '' : '<span class="quality-default">停止中</span>'}</div>
+      <div style="font-size:10px;color:var(--accent);margin-bottom:6px">${adTypeLabel(d.article_type)} · ${adSourceLabel(d.source)} · ${d.item_count || 3}件</div>
+      <div class="quality-prompt">
+        検索語: ${esc(d.keyword_mode || 'article_keywords')}${d.search_keywords ? ` / ${esc(d.search_keywords)}` : ''}<br>
+        挿入位置: ${esc(d.insertion_position || 'auto')} / 優先度: ${esc(d.priority || 50)}
+      </div>
+      ${d.prompt ? `<div class="meta-line">${esc(d.prompt)}</div>` : ''}
+      <div class="quality-actions">
+        <button class="btn btn-secondary btn-sm" onclick="editAdDefinition('${d.id}')">✏ 編集</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteAdDefinition('${d.id}')">🗑</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function updateAdDefinitionSelects() {
+  const opts = '<option value="">-- 広告定義を選択（任意）--</option>' +
+    adDefinitionList.filter(d => d.enabled !== false).map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
+  ['gen-ad-definition', 'batch-ad-definition', 'modal-ad-definition-id'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { const v = el.value; el.innerHTML = opts; el.value = v; }
+  });
+}
+
+function openAdModal() {
+  document.getElementById('ad-edit-id').value = '';
+  document.getElementById('ad-name').value = '';
+  document.getElementById('ad-article-type').value = 'common';
+  document.getElementById('ad-source').value = 'both';
+  document.getElementById('ad-keyword-mode').value = 'article_keywords';
+  document.getElementById('ad-search-keywords').value = '';
+  document.getElementById('ad-item-count').value = 3;
+  document.getElementById('ad-insertion-position').value = 'auto';
+  document.getElementById('ad-priority').value = 50;
+  document.getElementById('ad-amazon-label').value = 'Amazonで見る';
+  document.getElementById('ad-rakuten-label').value = '楽天市場で見る';
+  document.getElementById('ad-prompt').value = '';
+  document.getElementById('ad-enabled').checked = true;
+  document.getElementById('ad-modal-title').textContent = '// 広告定義を追加';
+  document.getElementById('ad-modal').classList.add('open');
+}
+
+function editAdDefinition(id) {
+  const d = adDefinitionList.find(d => d.id === id);
+  if (!d) return;
+  document.getElementById('ad-edit-id').value = id;
+  document.getElementById('ad-name').value = d.name || '';
+  document.getElementById('ad-article-type').value = d.article_type || 'common';
+  document.getElementById('ad-source').value = d.source || 'both';
+  document.getElementById('ad-keyword-mode').value = d.keyword_mode || 'article_keywords';
+  document.getElementById('ad-search-keywords').value = d.search_keywords || '';
+  document.getElementById('ad-item-count').value = d.item_count || 3;
+  document.getElementById('ad-insertion-position').value = d.insertion_position || 'auto';
+  document.getElementById('ad-priority').value = d.priority || 50;
+  document.getElementById('ad-amazon-label').value = d.amazon_button_label || 'Amazonで見る';
+  document.getElementById('ad-rakuten-label').value = d.rakuten_button_label || '楽天市場で見る';
+  document.getElementById('ad-prompt').value = d.prompt || '';
+  document.getElementById('ad-enabled').checked = d.enabled !== false;
+  document.getElementById('ad-modal-title').textContent = '// 広告定義を編集';
+  document.getElementById('ad-modal').classList.add('open');
+}
+
+function closeAdModal() {
+  document.getElementById('ad-modal').classList.remove('open');
+}
+
+async function saveAdDefinition() {
+  const id = document.getElementById('ad-edit-id').value;
+  const body = {
+    name: document.getElementById('ad-name').value,
+    article_type: document.getElementById('ad-article-type').value,
+    source: document.getElementById('ad-source').value,
+    keyword_mode: document.getElementById('ad-keyword-mode').value,
+    search_keywords: document.getElementById('ad-search-keywords').value,
+    item_count: parseInt(document.getElementById('ad-item-count').value || '3', 10),
+    insertion_position: document.getElementById('ad-insertion-position').value,
+    priority: parseInt(document.getElementById('ad-priority').value || '50', 10),
+    amazon_button_label: document.getElementById('ad-amazon-label').value,
+    rakuten_button_label: document.getElementById('ad-rakuten-label').value,
+    prompt: document.getElementById('ad-prompt').value,
+    enabled: document.getElementById('ad-enabled').checked,
+  };
+  if (!body.name) { toast('定義名は必須です', 'error'); return; }
+  if (id) {
+    await fetch(`/api/ad-definitions/${id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  } else {
+    await fetch('/api/ad-definitions', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  }
+  toast('保存しました', 'success');
+  closeAdModal();
+  await loadAdDefinitions();
+}
+
+async function deleteAdDefinition(id) {
+  if (!confirm('この広告定義を削除しますか?')) return;
+  await fetch(`/api/ad-definitions/${id}`, {method:'DELETE'});
+  toast('削除しました', 'success');
+  await loadAdDefinitions();
 }
 
 // ---- Sites ----
@@ -1052,6 +1713,12 @@ function updateSiteSelects() {
     siteList.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
   const modalEl = document.getElementById('modal-site-id');
   if (modalEl) modalEl.innerHTML = modalOpts;
+  const rewriteEl = document.getElementById('rewrite-site');
+  if (rewriteEl) {
+    const v = rewriteEl.value;
+    rewriteEl.innerHTML = modalOpts;
+    rewriteEl.value = v;
+  }
 }
 
 function openSiteModal() {
@@ -1111,25 +1778,38 @@ async function loadArticles() {
   const res = await fetch('/api/articles');
   allArticles = await res.json();
   updateStats();
+  updateCategorySelects();
   filterArticles();
   populateGenSelect();
   loadBatchArticles();
 }
 
 function updateStats() {
-  document.getElementById('stat-total').textContent = allArticles.length;
-  document.getElementById('stat-pending').textContent = allArticles.filter(a => a.status === 'pending').length;
-  document.getElementById('stat-generated').textContent = allArticles.filter(a => a.status === 'generated').length;
-  document.getElementById('stat-published').textContent = allArticles.filter(a => a.status === 'published').length;
+  const pending = allArticles.filter(a => a.status === 'pending').length;
+  const generated = allArticles.filter(a => a.status === 'generated').length;
+  const published = allArticles.filter(a => a.status === 'published').length;
+  const lowScore = allArticles.filter(a => a.seo_score !== undefined && a.seo_score !== null && Number(a.seo_score) < 55).length;
+  const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+  set('stat-total', allArticles.length);
+  set('stat-pending', pending);
+  set('stat-generated', generated);
+  set('stat-published', published);
+  set('dash-total', allArticles.length);
+  set('dash-pending', pending);
+  set('dash-generated', generated);
+  set('dash-published', published);
+  set('dash-low-score', lowScore);
 }
 
 function filterArticles() {
   const q = document.getElementById('search-input').value.toLowerCase();
   const siteId = document.getElementById('site-filter').value;
   const qualityId = document.getElementById('quality-filter').value;
+  const category = document.getElementById('category-filter')?.value || '';
   let filtered = allArticles;
   if (siteId) filtered = filtered.filter(a => a.site_id === siteId);
   if (qualityId) filtered = filtered.filter(a => a.quality_id === qualityId);
+  if (category) filtered = filtered.filter(a => (a.category || '') === category);
   if (q) filtered = filtered.filter(a => a.title.toLowerCase().includes(q) || (a.keywords || '').toLowerCase().includes(q));
   renderArticles(filtered);
 }
@@ -1138,6 +1818,19 @@ function getSiteName(site_id) {
   if (!site_id) return '<span style="color:var(--muted);font-size:11px">—</span>';
   const s = siteList.find(s => s.id === site_id);
   return s ? `<span style="font-size:11px;color:var(--accent)">${esc(s.name)}</span>` : '<span style="color:var(--muted);font-size:11px">不明</span>';
+}
+
+function categoryOptions(source) {
+  const categories = [...new Set(source.map(a => a.category).filter(Boolean))].sort();
+  return '<option value="">全カテゴリー</option>' + categories.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+}
+
+function updateCategorySelects() {
+  const articleOpts = categoryOptions(allArticles);
+  ['category-filter', 'batch-category-filter'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { const v = el.value; el.innerHTML = articleOpts; el.value = v; }
+  });
 }
 
 function renderArticles(articles) {
@@ -1153,8 +1846,11 @@ function renderArticles(articles) {
     <tr id="row-${a.id}">
       <td><input type="checkbox" class="check-row" value="${a.id}"></td>
       <td style="color:var(--muted);font-size:11px">${i + 1}</td>
+      <td style="font-size:11px;color:var(--accent);white-space:nowrap">${adTypeLabel(a.article_type || 'ranking')}</td>
       <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.title)}">${esc(a.title)}</td>
       <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)" title="${esc(a.keywords)}">${esc(a.keywords)}</td>
+      <td style="font-size:11px;color:var(--muted);white-space:nowrap">${esc(a.category || '—')}</td>
+      <td>${scoreBadge(a)}</td>
       <td>${getSiteName(a.site_id)}</td>
       <td>${statusBadge(a.status)}</td>
       <td style="color:var(--muted);font-size:11px;white-space:nowrap">${a.generated_at ? fmtDate(a.generated_at) : '—'}</td>
@@ -1180,6 +1876,16 @@ function statusBadge(status) {
   };
   const [icon, label] = map[status] || ['?', status];
   return `<span class="badge badge-${status}">${icon} ${label}</span>`;
+}
+
+function scoreBadge(item) {
+  if (!item || item.seo_score === undefined || item.seo_score === null || item.seo_score === '') {
+    return '<span style="color:var(--muted);font-size:11px">—</span>';
+  }
+  const score = parseInt(item.seo_score, 10);
+  const grade = (item.score_grade || (score >= 85 ? 'A' : score >= 70 ? 'B' : score >= 55 ? 'C' : 'D')).toLowerCase();
+  const tip = item.score_data?.suggestions?.join(' / ') || '';
+  return `<span class="score-pill score-${grade}" title="${esc(tip)}">${score}</span>`;
 }
 
 function esc(str) {
@@ -1212,9 +1918,20 @@ async function importExcel(input) {
     toast(`${data.imported}件インポートしました${siteId ? '' : '（サイト未設定）'}`, 'success');
     loadArticles();
   } else {
-    toast(data.error || 'インポート失敗', 'error');
+    toast(data.error || 'CSV/Excelインポート失敗', 'error');
   }
   input.value = '';
+}
+
+async function rescoreArticles() {
+  const res = await fetch('/api/articles/score', {method:'POST'});
+  const data = await res.json();
+  if (data.success) {
+    toast(`${data.scored}件のスコアを再計算しました`, 'success');
+    await loadArticles();
+  } else {
+    toast(data.error || 'スコア再計算に失敗しました', 'error');
+  }
 }
 
 async function deleteSelected() {
@@ -1255,7 +1972,7 @@ function publishSelected() {
 async function quickGenerate(id) {
   const article = allArticles.find(a => a.id === id);
   if (!article) return;
-  showPage('generate');
+  showPage(article.article_type || 'ranking');
   setTimeout(() => {
     document.getElementById('gen-article-select').value = id;
     onArticleSelect();
@@ -1286,9 +2003,14 @@ async function openArticleModal(id) {
   document.getElementById('modal-article-id').value = id;
   document.getElementById('modal-title').value = article.title;
   document.getElementById('modal-keywords').value = article.keywords;
+  document.getElementById('modal-article-type').value = article.article_type || 'ranking';
+  document.getElementById('modal-ad-keywords').value = article.ad_keywords || '';
+  document.getElementById('modal-category').value = article.category || '';
   document.getElementById('modal-content').value = article.content || '';
   updateSiteSelects();
+  updateAdDefinitionSelects();
   document.getElementById('modal-site-id').value = article.site_id || '';
+  document.getElementById('modal-ad-definition-id').value = article.ad_definition_id || '';
   document.getElementById('article-modal').classList.add('open');
 }
 
@@ -1306,6 +2028,10 @@ async function saveArticleModal() {
       body: JSON.stringify({
         title: document.getElementById('modal-title').value,
         keywords: document.getElementById('modal-keywords').value,
+        article_type: document.getElementById('modal-article-type').value,
+        ad_keywords: document.getElementById('modal-ad-keywords').value,
+        category: document.getElementById('modal-category').value,
+        ad_definition_id: document.getElementById('modal-ad-definition-id').value || null,
         content: document.getElementById('modal-content').value,
       })
     }),
@@ -1324,8 +2050,9 @@ async function saveArticleModal() {
 function populateGenSelect() {
   const sel = document.getElementById('gen-article-select');
   const cur = sel.value;
+  const targets = allArticles.filter(a => !a.article_type || a.article_type === currentArticleType);
   sel.innerHTML = '<option value="">-- 記事を選択 --</option>' +
-    allArticles.map(a => `<option value="${a.id}">${esc(a.title)}</option>`).join('');
+    targets.map(a => `<option value="${a.id}">${esc(a.title)}${a.seo_score ? ` / ${a.seo_score}点` : ''}</option>`).join('');
   sel.value = cur;
 }
 
@@ -1335,6 +2062,8 @@ function onArticleSelect() {
   if (article) {
     document.getElementById('gen-title').value = article.title;
     document.getElementById('gen-keywords').value = article.keywords;
+    document.getElementById('gen-category').value = article.category || '';
+    document.getElementById('gen-ad-definition').value = article.ad_definition_id || '';
     currentGenArticleId = id;
   }
 }
@@ -1361,10 +2090,14 @@ async function startGenerate() {
     const includeAmazon = document.getElementById('gen-include-amazon').checked;
     const includeRakuten = document.getElementById('gen-include-rakuten').checked;
     const decorationId = document.getElementById('gen-decoration').value;
+    const adDefinitionId = document.getElementById('gen-ad-definition').value;
+    const title = document.getElementById('gen-title').value;
+    const keywords = document.getElementById('gen-keywords').value;
+    const category = document.getElementById('gen-category').value;
     const res = await fetch(`/api/generate/${articleId}`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({quality_id: qualityId, include_amazon: includeAmazon, include_rakuten: includeRakuten, decoration_id: decorationId})
+      body: JSON.stringify({quality_id: qualityId, title, keywords, category, article_type: currentArticleType, include_amazon: includeAmazon, include_rakuten: includeRakuten, decoration_id: decorationId, ad_definition_id: adDefinitionId})
     });
 
     const reader = res.body.getReader();
@@ -1422,16 +2155,22 @@ async function publishGenerated() {
 // ---- Batch ----
 function loadBatchArticles() {
   const filter = document.getElementById('batch-filter')?.value || 'pending';
+  const typeFilter = document.getElementById('batch-article-type-filter')?.value || '';
+  const category = document.getElementById('batch-category-filter')?.value || '';
   let targets;
   if (filter === 'pending') targets = allArticles.filter(a => a.status === 'pending' || a.status === 'error');
   else if (filter === 'generated') targets = allArticles.filter(a => a.status === 'generated');
   else targets = allArticles;
+  if (typeFilter) targets = targets.filter(a => (a.article_type || 'ranking') === typeFilter);
+  if (category) targets = targets.filter(a => (a.category || '') === category);
 
   document.getElementById('batch-count').textContent = targets.length;
   document.getElementById('batch-body').innerHTML = targets.map(a => `
     <tr>
       <td><input type="checkbox" class="check-row" value="${a.id}" checked></td>
       <td style="font-size:12px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.title)}</td>
+      <td style="font-size:11px;color:var(--muted);white-space:nowrap">${esc(a.category || '—')}</td>
+      <td>${scoreBadge(a)}</td>
       <td>${getSiteName(a.site_id)}</td>
       <td>${statusBadge(a.status)}</td>
     </tr>
@@ -1453,10 +2192,12 @@ async function startBatchGenerate() {
   const includeAmazon = document.getElementById('batch-include-amazon').checked;
   const includeRakuten = document.getElementById('batch-include-rakuten').checked;
   const decorationId = document.getElementById('batch-decoration').value;
+  const adDefinitionId = document.getElementById('batch-ad-definition').value;
+  const articleType = document.getElementById('batch-article-type-filter').value || currentArticleType;
   const res = await fetch('/api/batch-generate', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({article_ids: ids, quality_id: qualityId, include_amazon: includeAmazon, include_rakuten: includeRakuten, decoration_id: decorationId})
+    body: JSON.stringify({article_ids: ids, quality_id: qualityId, article_type: articleType, include_amazon: includeAmazon, include_rakuten: includeRakuten, decoration_id: decorationId, ad_definition_id: adDefinitionId})
   });
   const data = await res.json();
   if (data.success) {
@@ -1483,6 +2224,228 @@ async function startBatchPublish() {
   loadBatchArticles();
 }
 
+// ---- Rewrite ----
+async function loadRewritePage() {
+  updateSiteSelects();
+  updateDecorationSelects();
+  await loadRewriteItems();
+}
+
+async function loadRewriteItems() {
+  const res = await fetch('/api/rewrite/items');
+  rewriteList = await res.json();
+  updateRewriteCategorySelect();
+  filterRewriteItems();
+}
+
+function filterRewriteItems() {
+  const q = (document.getElementById('rewrite-search')?.value || '').toLowerCase();
+  const category = document.getElementById('rewrite-category-filter')?.value || '';
+  let items = rewriteList;
+  if (q) {
+    items = items.filter(i =>
+      (i.title || '').toLowerCase().includes(q) ||
+      (i.site_name || '').toLowerCase().includes(q)
+    );
+  }
+  if (category) items = items.filter(i => (i.category || '') === category);
+  items = [...items].sort((a, b) => (a.seo_score ?? 999) - (b.seo_score ?? 999));
+  renderRewriteItems(items);
+}
+
+function updateRewriteCategorySelect() {
+  const el = document.getElementById('rewrite-category-filter');
+  if (!el) return;
+  const v = el.value;
+  el.innerHTML = categoryOptions(rewriteList);
+  el.value = v;
+}
+
+function renderRewriteItems(items) {
+  const body = document.getElementById('rewrite-body');
+  const empty = document.getElementById('rewrite-empty');
+  if (!body) return;
+  empty.style.display = items.length ? 'none' : 'block';
+  body.innerHTML = items.map(item => `
+    <tr>
+      <td><input type="checkbox" class="check-row rewrite-check" value="${esc(item.id)}"></td>
+      <td style="max-width:360px">
+        <div style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(item.title)}">${esc(item.title || '(無題)')}</div>
+        ${item.link ? `<a href="${esc(item.link)}" target="_blank" rel="noopener" style="font-size:10px;color:var(--accent)">記事を開く</a>` : ''}
+      </td>
+      <td style="font-size:11px;color:var(--muted);white-space:nowrap">${esc(item.category || '—')}</td>
+      <td>${scoreBadge(item)}<div class="meta-line">${item.rewrite_priority === 'high' ? '優先高' : item.rewrite_priority === 'middle' ? '改善候補' : '低'}</div></td>
+      <td style="font-size:11px;color:var(--muted)">${esc(item.site_name || '')}</td>
+      <td>${rewriteStatusBadge(item.status)}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-primary btn-sm" onclick="startRewrite('${encodeURIComponent(item.id)}')">✍ リライト</button>
+        <button class="btn btn-secondary btn-sm" onclick="openRewriteModal('${encodeURIComponent(item.id)}')" ${item.rewritten_content ? '' : 'disabled'}>確認</button>
+        <button class="btn btn-danger btn-sm" onclick="updateRewritePost('${encodeURIComponent(item.id)}')" ${item.rewritten_content ? '' : 'disabled'}>上書き</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function rewriteStatusBadge(status) {
+  const map = {
+    fetched: ['badge-pending', '取得済'],
+    rewriting: ['badge-generating', 'リライト中'],
+    rewritten: ['badge-generated', 'リライト済'],
+    updated: ['badge-published', '上書き済'],
+    error: ['badge-error', 'エラー'],
+  };
+  const [cls, label] = map[status] || ['badge-pending', status || '取得済'];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+function rewriteOptions() {
+  return {
+    structure_mode: document.getElementById('rewrite-structure').value,
+    decoration_level: document.getElementById('rewrite-decoration-level').value,
+    decoration_id: document.getElementById('rewrite-decoration').value,
+    tone: document.getElementById('rewrite-tone').value,
+    target_chars: document.getElementById('rewrite-target-chars').value,
+    tolerance: document.getElementById('rewrite-tolerance').value,
+  };
+}
+
+async function fetchRewritePosts() {
+  const siteId = document.getElementById('rewrite-site').value;
+  if (!siteId) { toast('取得元サイトを選択してください', 'error'); return; }
+  const res = await fetch('/api/rewrite/fetch', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      site_id: siteId,
+      per_page: parseInt(document.getElementById('rewrite-per-page').value || '20', 10),
+      max_pages: parseInt(document.getElementById('rewrite-max-pages').value || '3', 10),
+      statuses: ['publish'],
+    })
+  });
+  const data = await res.json();
+  if (data.success) {
+    toast(`${data.fetched}件取得しました`, 'success');
+    await loadRewriteItems();
+  } else {
+    toast(data.error || '記事取得に失敗しました', 'error');
+  }
+}
+
+async function startRewrite(encodedId) {
+  const id = decodeURIComponent(encodedId);
+  const item = rewriteList.find(i => i.id === id);
+  if (!item) return;
+  item.status = 'rewriting';
+  filterRewriteItems();
+
+  try {
+    const res = await fetch(`/api/rewrite/${encodedId}`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(rewriteOptions())
+    });
+    if (!res.ok || !res.body) {
+      const data = await res.json();
+      toast(data.error || 'リライト開始に失敗しました', 'error');
+      await loadRewriteItems();
+      return;
+    }
+
+    let content = '';
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, {stream: true});
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (!raw) continue;
+        const msg = JSON.parse(raw);
+        if (msg.text) content += msg.text;
+        if (msg.error) toast('リライトエラー: ' + msg.error, 'error');
+        if (msg.done) {
+          toast('リライト完了', 'success');
+          await loadRewriteItems();
+          openRewriteModal(encodedId);
+        }
+      }
+    }
+  } catch (e) {
+    toast('接続エラー: ' + e.message, 'error');
+    await loadRewriteItems();
+  }
+}
+
+async function openRewriteModal(encodedId) {
+  const id = decodeURIComponent(encodedId);
+  const res = await fetch(`/api/rewrite/${encodedId}`);
+  const item = await res.json();
+  if (item.error) { toast(item.error, 'error'); return; }
+  document.getElementById('rewrite-modal-id').value = id;
+  document.getElementById('rewrite-modal-title').value = item.title || '';
+  document.getElementById('rewrite-modal-content').value = item.rewritten_content || '';
+  document.getElementById('rewrite-modal').classList.add('open');
+}
+
+function closeRewriteModal() {
+  document.getElementById('rewrite-modal').classList.remove('open');
+}
+
+async function updateRewritePost(encodedId = null) {
+  const id = encodedId ? decodeURIComponent(encodedId) : document.getElementById('rewrite-modal-id').value;
+  if (!id) return;
+  const item = rewriteList.find(i => i.id === id);
+  const title = item?.title || document.getElementById('rewrite-modal-title')?.value || '';
+  if (!confirm(`この投稿本文をAIリライト結果で上書きします。\n元に戻すにはWordPressのリビジョン機能を使用します。\n\n${title}\n\n実行しますか？`)) return;
+  const contentEl = document.getElementById('rewrite-modal-content');
+  const res = await fetch(`/api/rewrite/${encodeURIComponent(id)}/update`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({content: contentEl?.value || undefined})
+  });
+  const data = await res.json();
+  if (data.success) {
+    toast('元記事を上書きしました', 'success');
+    closeRewriteModal();
+    await loadRewriteItems();
+  } else {
+    toast(data.error || '上書きに失敗しました', 'error');
+  }
+}
+
+function toggleRewriteAll(cb) {
+  document.querySelectorAll('.rewrite-check').forEach(c => c.checked = cb.checked);
+}
+
+async function deleteSelectedRewriteItems() {
+  const ids = [...document.querySelectorAll('.rewrite-check:checked')].map(c => c.value);
+  if (!ids.length) { toast('削除する対象を選択してください', 'error'); return; }
+  if (!confirm(`${ids.length}件のリライト対象を一覧から削除しますか?`)) return;
+  await fetch('/api/rewrite/bulk-delete', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ids})
+  });
+  toast('削除しました', 'success');
+  await loadRewriteItems();
+}
+
+async function rescoreRewriteItems() {
+  const res = await fetch('/api/rewrite/score', {method:'POST'});
+  const data = await res.json();
+  if (data.success) {
+    toast(`${data.scored}件のスコアを再計算しました`, 'success');
+    await loadRewriteItems();
+  } else {
+    toast(data.error || 'スコア再計算に失敗しました', 'error');
+  }
+}
+
 // ---- Quality ----
 async function loadQuality() {
   const res = await fetch('/api/quality');
@@ -1497,6 +2460,9 @@ function renderQuality() {
       <div class="quality-name">
         ${esc(q.name)}
         ${q.is_default ? '<span class="quality-default">★ デフォルト</span>' : ''}
+      </div>
+      <div style="font-size:10px;color:var(--accent);margin-bottom:6px">
+        ${q.target_chars ? `${esc(q.target_chars)}文字` : '文字数指定なし'} · ${esc(q.tone || 'ですます調')}
       </div>
       <div class="quality-prompt">${esc(q.prompt)}</div>
       ${q.reference_url ? `<div style="font-size:10px;margin-top:6px"><a href="${esc(q.reference_url)}" target="_blank" style="color:var(--accent)">🔗 参考URL</a></div>` : ''}
@@ -1522,6 +2488,9 @@ function openQualityModal() {
   document.getElementById('quality-edit-id').value = '';
   document.getElementById('quality-name').value = '';
   document.getElementById('quality-reference-url').value = '';
+  document.getElementById('quality-target-chars').value = '';
+  document.getElementById('quality-tone').value = 'ですます調';
+  document.getElementById('quality-extra-rules').value = '';
   document.getElementById('quality-prompt').value = '';
   document.getElementById('quality-is-default').checked = false;
   document.getElementById('quality-modal-title').textContent = '// 品質定義を追加';
@@ -1534,6 +2503,9 @@ function editQuality(id) {
   document.getElementById('quality-edit-id').value = id;
   document.getElementById('quality-name').value = q.name;
   document.getElementById('quality-reference-url').value = q.reference_url || '';
+  document.getElementById('quality-target-chars').value = q.target_chars || '';
+  document.getElementById('quality-tone').value = q.tone || 'ですます調';
+  document.getElementById('quality-extra-rules').value = q.extra_rules || '';
   document.getElementById('quality-prompt').value = q.prompt;
   document.getElementById('quality-is-default').checked = q.is_default || false;
   document.getElementById('quality-modal-title').textContent = '// 品質定義を編集';
@@ -1549,6 +2521,9 @@ async function saveQuality() {
   const body = {
     name: document.getElementById('quality-name').value,
     reference_url: document.getElementById('quality-reference-url').value,
+    target_chars: document.getElementById('quality-target-chars').value,
+    tone: document.getElementById('quality-tone').value,
+    extra_rules: document.getElementById('quality-extra-rules').value,
     prompt: document.getElementById('quality-prompt').value,
     is_default: document.getElementById('quality-is-default').checked,
   };
@@ -1658,7 +2633,7 @@ async function testAmazon() {
 }
 
 // Close modals on overlay click
-['quality-modal','decoration-modal','site-modal','article-modal'].forEach(id => {
+['quality-modal','decoration-modal','ad-modal','site-modal','article-modal','rewrite-modal'].forEach(id => {
   document.getElementById(id).addEventListener('click', e => {
     if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
   });
@@ -1668,7 +2643,9 @@ async function testAmazon() {
   await loadSites();
   await loadQuality();
   await loadDecorations();
-  const savedPage = localStorage.getItem('currentPage') || 'articles';
+  await loadAdDefinitions();
+  await loadArticles();
+  const savedPage = localStorage.getItem('currentPage') || 'ranking';
   await showPage(savedPage);
 })();
 </script>
