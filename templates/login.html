@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WP Manager — Login</title>
+<title>Affiros9 - Login</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -40,11 +40,31 @@
     text-align: center;
     margin-bottom: 32px;
   }
+  .logo-mark {
+    width: 26px;
+    height: 26px;
+    display: grid;
+    grid-template-columns: repeat(3, 6px);
+    gap: 4px;
+    margin: 0 auto 10px;
+  }
+  .logo-mark span {
+    width: 6px;
+    height: 6px;
+    border-radius: 2px;
+    background: var(--accent);
+  }
+  .logo-mark span:nth-child(2),
+  .logo-mark span:nth-child(4),
+  .logo-mark span:nth-child(6),
+  .logo-mark span:nth-child(8) {
+    opacity: .45;
+  }
   .logo h1 {
-    font-size: 22px;
+    font-size: 24px;
     font-weight: 600;
     color: var(--accent);
-    letter-spacing: 2px;
+    letter-spacing: 0;
   }
   .logo p {
     font-size: 11px;
@@ -108,8 +128,13 @@
 <body>
 <div class="login-box">
   <div class="logo">
-    <h1>WP_MANAGER</h1>
-    <p>WordPress Article Management System</p>
+    <div class="logo-mark" aria-hidden="true">
+      <span></span><span></span><span></span>
+      <span></span><span></span><span></span>
+      <span></span><span></span><span></span>
+    </div>
+    <h1>Affiros9</h1>
+    <p>Affiliate Article Automation System</p>
   </div>
   <div class="prompt-line"><span>$</span> authenticate --user admin</div>
   <input type="password" id="password" placeholder="Enter password..." autofocus>

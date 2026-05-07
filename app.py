@@ -1009,7 +1009,7 @@ def generate_article(article_id):
         quality = next((q for q in quality_list if q.get('is_default')), quality_list[0] if quality_list else None)
 
     article_work = dict(article)
-    for key in ('title', 'keywords', 'category', 'ad_keywords'):
+    for key in ('title', 'keywords', 'category', 'ad_keywords', 'site_id'):
         if key in data:
             article_work[key] = data.get(key) or ''
     article_type = normalize_article_type(data.get('article_type') or article_work.get('article_type'), 'ranking')
@@ -1084,6 +1084,7 @@ def generate_article(article_id):
                     a['keywords'] = article_work.get('keywords', a.get('keywords', ''))
                     a['category'] = article_work.get('category', a.get('category', ''))
                     a['ad_keywords'] = article_work.get('ad_keywords', a.get('ad_keywords', ''))
+                    a['site_id'] = article_work.get('site_id') or a.get('site_id')
                     a['quality_id'] = quality_id
                     a['article_type'] = article_type
                     a['decoration_id'] = decoration_id or a.get('decoration_id')

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Affiros 9</title>
+<title>Affiros9</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -62,6 +62,7 @@ body {
   color: #54b9f7;
   letter-spacing: 0;
   white-space: nowrap;
+  cursor: pointer;
 }
 .logo-mark {
   width: 22px;
@@ -96,16 +97,18 @@ body {
 .nav {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   flex: 1;
-  overflow-x: auto;
+  overflow: visible;
   height: 48px;
 }
-.nav-item {
+.nav-group { position: relative; height: 48px; }
+.nav-item,
+.nav-trigger {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 12px;
+  gap: 0;
+  padding: 0 14px;
   height: 48px;
   cursor: pointer;
   color: var(--nav-muted);
@@ -115,11 +118,37 @@ body {
   border-bottom: 3px solid transparent;
   white-space: nowrap;
 }
-.nav-item:hover { color: #fff; background: rgba(255,255,255,0.06); }
-.nav-item.active { color: #fff; border-bottom-color: #2ca7ee; background: rgba(44,167,238,0.12); }
-.nav-icon { font-size: 14px; width: 18px; text-align: center; }
+.nav-item:hover,
+.nav-trigger:hover,
+.nav-group:hover .nav-trigger { color: #fff; background: rgba(255,255,255,0.06); }
+.nav-item.active,
+.nav-trigger.active { color: #fff; border-bottom-color: #2ca7ee; background: rgba(44,167,238,0.12); }
+.nav-icon { display: none; }
+.nav-menu {
+  position: absolute;
+  top: 48px;
+  left: 0;
+  min-width: 168px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 0 0 6px 6px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+  display: none;
+  z-index: 50;
+  padding: 6px 0;
+}
+.nav-group:hover .nav-menu { display: block; }
+.nav-link {
+  color: var(--text);
+  padding: 9px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.nav-link:hover,
+.nav-link.active { background: var(--accent-dim); color: var(--accent); }
 
-.content { padding: 26px 32px; flex: 1; width: min(1660px, 100%); margin: 0 auto; }
+.content { padding: 26px 24px; flex: 1; width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
 .page { display: none; }
 .page.active { display: block; }
 
@@ -434,47 +463,45 @@ tr.selected td { background: var(--accent-dim); }
 <body>
 
 <div class="header">
-  <div class="header-logo">
+  <div class="header-logo" onclick="goHome()">
     <span class="logo-mark" aria-hidden="true">
       <span></span><span></span><span></span>
       <span></span><span></span><span></span>
       <span></span><span></span><span></span>
     </span>
-    Affiros 9
+    Affiros9
   </div>
   <nav class="nav">
-    <div class="nav-item active" onclick="showPage('ranking')" id="nav-ranking">
-      <span class="nav-icon">#</span> ランキング記事
-    </div>
-    <div class="nav-item" onclick="showPage('brand')" id="nav-brand">
-      <span class="nav-icon">◎</span> 商標記事
-    </div>
-    <div class="nav-item" onclick="showPage('column')" id="nav-column">
-      <span class="nav-icon">¶</span> コラム記事
+    <div class="nav-group">
+      <div class="nav-trigger active" id="nav-create">記事作成</div>
+      <div class="nav-menu">
+        <div class="nav-link" onclick="showPage('ranking')" id="nav-ranking">ランキング記事</div>
+        <div class="nav-link" onclick="showPage('brand')" id="nav-brand">商標記事</div>
+        <div class="nav-link" onclick="showPage('column')" id="nav-column">コラム記事</div>
+      </div>
     </div>
     <div class="nav-item" onclick="showPage('batch')" id="nav-batch">
-      <span class="nav-icon">⇄</span> 一括処理
+      一括処理
     </div>
     <div class="nav-item" onclick="showPage('rewrite')" id="nav-rewrite">
-      <span class="nav-icon">R</span> SEOリライト
+      SEOリライト
     </div>
     <div class="nav-item" onclick="showPage('articles')" id="nav-articles">
-      <span class="nav-icon">H</span> 対応履歴
+      対応履歴
     </div>
-    <div class="nav-item" onclick="showPage('quality')" id="nav-quality">
-      <span class="nav-icon">✦</span> 品質定義
-    </div>
-    <div class="nav-item" onclick="showPage('decoration')" id="nav-decoration">
-      <span class="nav-icon">D</span> 装飾定義
-    </div>
-    <div class="nav-item" onclick="showPage('ads')" id="nav-ads">
-      <span class="nav-icon">AD</span> 広告定義
+    <div class="nav-group">
+      <div class="nav-trigger" id="nav-definitions">定義設定</div>
+      <div class="nav-menu">
+        <div class="nav-link" onclick="showPage('quality')" id="nav-quality">品質定義</div>
+        <div class="nav-link" onclick="showPage('decoration')" id="nav-decoration">装飾定義</div>
+        <div class="nav-link" onclick="showPage('ads')" id="nav-ads">広告定義</div>
+      </div>
     </div>
     <div class="nav-item" onclick="showPage('sites')" id="nav-sites">
-      <span class="nav-icon">S</span> サイト管理
+      サイト管理
     </div>
     <div class="nav-item" onclick="showPage('settings')" id="nav-settings">
-      <span class="nav-icon">⚙</span> 設定
+      API設定
     </div>
   </nav>
   <div class="header-right">
@@ -489,7 +516,7 @@ tr.selected td { background: var(--accent-dim); }
     <div class="content">
 
       <div class="dashboard-hero" id="dashboard-hero">
-        <div class="dashboard-title">Affiros 9 Marketing へようこそ！</div>
+        <div class="dashboard-title">Affiros9 へようこそ！</div>
         <div class="module-panel">
           <div class="module-tile" onclick="showPage('ranking')">
             <div class="module-title">プランナー</div>
@@ -632,6 +659,12 @@ tr.selected td { background: var(--accent-dim); }
               <label class="form-label">記事選択</label>
               <select id="gen-article-select" class="form-control" onchange="onArticleSelect()">
                 <option value="">-- 記事を選択 --</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">投稿先サイト</label>
+              <select id="gen-site" class="form-control">
+                <option value="">-- サイトを選択 --</option>
               </select>
             </div>
             <div class="form-group">
@@ -961,7 +994,7 @@ tr.selected td { background: var(--accent-dim); }
       <!-- Settings Page -->
       <div class="page" id="page-settings">
         <div class="page-header">
-          <div class="page-title">設定</div>
+          <div class="page-title">API設定</div>
           <div class="page-subtitle">Claude API・Amazon PA-API・楽天市場API・楽天ASP・デフォルト設定</div>
         </div>
         <div style="max-width:520px">
@@ -1382,17 +1415,19 @@ function showPage(name) {
   const isArticleType = !!articleTypeConfig[name];
   const pageName = isArticleType ? 'generate' : name;
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.nav-item,.nav-trigger,.nav-link').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + pageName).classList.add('active');
   const nav = document.getElementById('nav-' + name);
   if (nav) nav.classList.add('active');
+  if (isArticleType) document.getElementById('nav-create')?.classList.add('active');
+  if (['quality', 'decoration', 'ads'].includes(name)) document.getElementById('nav-definitions')?.classList.add('active');
   localStorage.setItem('currentPage', name);
   if (isArticleType) {
     currentArticleType = name;
     updateArticleTypeUI();
   }
   if (pageName === 'articles') loadArticles();
-  if (pageName === 'generate') { loadQualitySelects(); populateGenSelect(); }
+  if (pageName === 'generate') { loadQualitySelects(); updateSiteSelects(); populateGenSelect(); }
   if (pageName === 'batch') { loadQualitySelects(); loadBatchArticles(); }
   if (pageName === 'rewrite') { loadRewritePage(); }
   if (pageName === 'quality') loadQuality();
@@ -1400,6 +1435,12 @@ function showPage(name) {
   if (pageName === 'ads') loadAdDefinitions();
   if (pageName === 'sites') loadSites();
   if (pageName === 'settings') loadSettings();
+}
+
+function goHome() {
+  showPage('ranking');
+  const main = document.querySelector('.main');
+  if (main) main.scrollTop = 0;
 }
 
 function updateArticleTypeUI() {
@@ -1713,6 +1754,8 @@ function updateSiteSelects() {
     siteList.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
   const modalEl = document.getElementById('modal-site-id');
   if (modalEl) modalEl.innerHTML = modalOpts;
+  const genEl = document.getElementById('gen-site');
+  if (genEl) { const v = genEl.value; genEl.innerHTML = modalOpts; genEl.value = v; }
   const rewriteEl = document.getElementById('rewrite-site');
   if (rewriteEl) {
     const v = rewriteEl.value;
@@ -2063,6 +2106,7 @@ function onArticleSelect() {
     document.getElementById('gen-title').value = article.title;
     document.getElementById('gen-keywords').value = article.keywords;
     document.getElementById('gen-category').value = article.category || '';
+    document.getElementById('gen-site').value = article.site_id || '';
     document.getElementById('gen-ad-definition').value = article.ad_definition_id || '';
     currentGenArticleId = id;
   }
@@ -2071,7 +2115,9 @@ function onArticleSelect() {
 async function startGenerate() {
   const articleId = document.getElementById('gen-article-select').value;
   const qualityId = document.getElementById('gen-quality').value;
+  const siteId = document.getElementById('gen-site').value;
   if (!articleId) { toast('記事を選択してください', 'error'); return; }
+  if (!siteId) { toast('投稿先サイトを選択してください', 'error'); return; }
 
   const output = document.getElementById('gen-output');
   const btn = document.getElementById('gen-btn');
@@ -2097,7 +2143,7 @@ async function startGenerate() {
     const res = await fetch(`/api/generate/${articleId}`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({quality_id: qualityId, title, keywords, category, article_type: currentArticleType, include_amazon: includeAmazon, include_rakuten: includeRakuten, decoration_id: decorationId, ad_definition_id: adDefinitionId})
+      body: JSON.stringify({quality_id: qualityId, title, keywords, category, site_id: siteId, article_type: currentArticleType, include_amazon: includeAmazon, include_rakuten: includeRakuten, decoration_id: decorationId, ad_definition_id: adDefinitionId})
     });
 
     const reader = res.body.getReader();
