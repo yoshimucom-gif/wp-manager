@@ -706,6 +706,7 @@ tr.selected td { background: var(--accent-dim); }
             <span>📥 CSV/Excelインポート</span>
             <input type="file" accept=".csv,.xlsx,.xls" style="display:none" onchange="importExcel(this)">
           </label>
+          <button class="btn btn-secondary" onclick="downloadSampleCsv()">サンプルCSV</button>
           <button class="btn btn-primary" onclick="generateSelected()">⚡ 選択を生成</button>
           <button class="btn btn-success" onclick="publishSelected()">🚀 選択をWP投稿</button>
           <button class="btn btn-danger" onclick="deleteSelected()">🗑 選択を削除</button>
@@ -901,6 +902,11 @@ tr.selected td { background: var(--accent-dim); }
               </label>
             </div>
             <div class="toolbar" style="flex-direction:column;align-items:stretch;gap:8px;margin-bottom:0">
+              <label class="btn btn-secondary" style="cursor:pointer">
+                <span>CSV/Excelインポート</span>
+                <input type="file" accept=".csv,.xlsx,.xls" style="display:none" onchange="importExcel(this)">
+              </label>
+              <button class="btn btn-secondary" onclick="downloadSampleCsv()">サンプルCSV</button>
               <button class="btn btn-primary" onclick="startBatchGenerate()">⚡ 一括生成開始</button>
               <button class="btn btn-success" onclick="startBatchPublish()">🚀 一括WP投稿</button>
               <button class="btn btn-secondary btn-sm" onclick="loadBatchArticles()">↻ 状態更新</button>
@@ -2421,6 +2427,28 @@ function toggleAll(cb) {
 
 function getSelectedIds() {
   return [...document.querySelectorAll('#articles-body .check-row:checked')].map(c => c.value);
+}
+
+function downloadSampleCsv() {
+  const rows = [
+    ['記事タイトル', 'キーワード', 'カテゴリー', '記事種別', '投稿先サイト', '品質定義', '装飾定義', '広告定義', '広告キーワード', '優先度', '執筆予定日', 'メモ', '記事本文'],
+    ['おすすめ防水バッグ比較ランキング', '防水バッグ おすすめ,防水バッグ 比較', 'アウトドア', 'ランキング記事', 'メインブログ', '標準品質', '装飾サンプル', 'ランキング記事｜比較表直後 RINKER', '防水バッグ', '10', '2026-05-15', '投稿先サイト・品質定義・装飾定義・広告定義は名前またはIDで指定できます', ''],
+    ['〇〇防水バッグの口コミレビュー', '〇〇防水バッグ 口コミ,〇〇防水バッグ 評判', 'レビュー', '商標記事', 'メインブログ', '標準品質', '装飾サンプル', '商標記事｜CTA前 RINKER', '〇〇防水バッグ', '20', '2026-05-16', '商品名は実案件に置き換えてください', ''],
+    ['雨の日の荷物を守る防水グッズの選び方', '防水グッズ 選び方,雨の日 荷物 防水', 'コラム', 'コラム記事', 'メインブログ', '標準品質', '装飾サンプル', 'コラム記事｜本文中おすすめ商品', '防水スプレー,防水バッグ', '30', '2026-05-17', '記事本文を空にすると未生成として取り込まれます', ''],
+  ];
+  const csv = '\uFEFF' + rows
+    .map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(','))
+    .join('\r\n');
+  const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'affiros9_articles_sample.csv';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  toast('サンプルCSVをダウンロードしました', 'success');
 }
 
 async function importExcel(input) {
