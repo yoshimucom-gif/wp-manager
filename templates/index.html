@@ -2919,7 +2919,12 @@ async function testRakuten() {
   const res = await fetch('/api/rakuten/search', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({keywords: 'テスト', item_count: 1})
+    body: JSON.stringify({
+      keywords: 'テスト',
+      item_count: 1,
+      rakuten_application_id: document.getElementById('s-rkt-app-id').value.trim(),
+      rakuten_affiliate_id: document.getElementById('s-rkt-aff-id').value.trim()
+    })
   });
   const data = await res.json();
   if (res.ok && Array.isArray(data)) {
@@ -2938,7 +2943,13 @@ async function testAmazon() {
   const res = await fetch('/api/amazon/search', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({keywords: 'テスト', item_count: 1})
+    body: JSON.stringify({
+      keywords: 'テスト',
+      item_count: 1,
+      amazon_access_key: document.getElementById('s-amz-access-key').value.trim(),
+      amazon_secret_key: document.getElementById('s-amz-secret-key').value.trim(),
+      amazon_partner_tag: document.getElementById('s-amz-partner-tag').value.trim()
+    })
   });
   const data = await res.json();
   if (res.ok && Array.isArray(data)) {

@@ -2003,9 +2003,18 @@ def api_amazon_search():
     if not keywords:
         return jsonify({'error': 'キーワードが必要です'}), 400
     settings = load_settings()
+    requested_access_key = (data.get('amazon_access_key') or '').strip()
+    requested_secret_key = (data.get('amazon_secret_key') or '').strip()
+    requested_partner_tag = (data.get('amazon_partner_tag') or '').strip()
     access_key = settings.get('amazon_access_key', '')
     secret_key = settings.get('amazon_secret_key', '')
     partner_tag = settings.get('amazon_partner_tag', '')
+    if requested_access_key and '••••••••' not in requested_access_key:
+        access_key = requested_access_key
+    if requested_secret_key and '••••••••' not in requested_secret_key:
+        secret_key = requested_secret_key
+    if requested_partner_tag:
+        partner_tag = requested_partner_tag
     if not all([access_key, secret_key, partner_tag]):
         return jsonify({'error': 'Amazon API設定が不完全です'}), 400
     try:
@@ -2023,8 +2032,14 @@ def api_rakuten_search():
     if not keywords:
         return jsonify({'error': 'キーワードが必要です'}), 400
     settings = load_settings()
+    requested_app_id = (data.get('rakuten_application_id') or '').strip()
+    requested_aff_id = (data.get('rakuten_affiliate_id') or '').strip()
     app_id = settings.get('rakuten_application_id', '')
     aff_id = settings.get('rakuten_affiliate_id', '')
+    if requested_app_id and '••••••••' not in requested_app_id:
+        app_id = requested_app_id
+    if requested_aff_id:
+        aff_id = requested_aff_id
     if not app_id:
         return jsonify({'error': '楽天APIのアプリケーションIDが設定されていません'}), 400
     try:
