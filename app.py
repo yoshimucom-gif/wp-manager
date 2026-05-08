@@ -116,6 +116,71 @@ def apply_settings_env_fallbacks(settings):
                 settings[setting_key] = env_value
     return settings
 
+def storage_status():
+    data_dir = DATA_DIR.resolve()
+    is_render = bool(os.environ.get('RENDER'))
+    is_mount = os.path.ismount(str(data_dir))
+    expected_persistent = not is_render or is_mount
+    warning = ''
+    if is_render and not is_mount:
+        warning = 'Renderの永続ディスクがマウントされていない可能性があります。保存データがデプロイや再起動で消える恐れがあります。'
+    return {
+        'data_dir': str(data_dir),
+        'is_render': is_render,
+        'is_mount': is_mount,
+        'persistent': expected_persistent,
+        'warning': warning,
+    }
+
+def build_data_snapshot():
+    return {
+        'version': 1,
+        'exported_at': datetime.now().isoformat(),
+        'storage': storage_status(),
+        'settings': load_settings(),
+        'articles': load_articles(),
+        'quality': load_quality(),
+        'decorations': load_decorations(),
+        'rewrite_items': load_rewrites(),
+        'ad_definitions': load_ad_definitions(),
+    }
+
+def has_user_data(snapshot):
+    settings = snapshot.get('settings') or {}
+    quality = snapshot.get('quality') or []
+    non_default_quality = [
+        q for q in quality
+        if q.get('id') != 'default' or q.get('name') != '標準品質'
+    ]
+    setting_keys = (
+        'sites', 'claude_api_key', 'amazon_access_key', 'amazon_secret_key',
+        'amazon_partner_tag', 'rakuten_application_id', 'rakuten_affiliate_id',
+        'rakuten_asp_enabled', 'rakuten_asp_name', 'rakuten_asp_link_template',
+        'rakuten_asp_prompt', 'article_css'
+    )
+    return any([
+        bool(snapshot.get('articles')),
+        bool(snapshot.get('decorations')),
+        bool(snapshot.get('rewrite_items')),
+        bool(snapshot.get('ad_definitions')),
+        bool(non_default_quality),
+        any(bool(settings.get(k)) for k in setting_keys),
+    ])
+
+def restore_data_snapshot(snapshot):
+    if isinstance(snapshot.get('settings'), dict):
+        save_settings(snapshot['settings'])
+    if isinstance(snapshot.get('articles'), list):
+        save_articles(snapshot['articles'])
+    if isinstance(snapshot.get('quality'), list):
+        save_quality(snapshot['quality'])
+    if isinstance(snapshot.get('decorations'), list):
+        save_decorations(snapshot['decorations'])
+    if isinstance(snapshot.get('rewrite_items'), list):
+        save_rewrites(snapshot['rewrite_items'])
+    if isinstance(snapshot.get('ad_definitions'), list):
+        save_ad_definitions(snapshot['ad_definitions'])
+
 def load_settings():
     settings = load_json(SETTINGS_FILE, {
         "sites": [],
@@ -2039,6 +2104,28 @@ def update_article_site(article_id):
             break
     save_articles(articles)
     return jsonify({'success': True})
+
+
+@app.route('/api/storage/status', methods=['GET'])
+@login_required
+def api_storage_status():
+    return jsonify(storage_status())
+
+@app.route('/api/data-snapshot', methods=['GET'])
+@login_required
+def get_data_snapshot():
+    snapshot = build_data_snapshot()
+    snapshot['has_user_data'] = has_user_data(snapshot)
+    return jsonify(snapshot)
+
+@app.route('/api/data-snapshot', methods=['POST'])
+@login_required
+def restore_data_snapshot_api():
+    snapshot = request.json or {}
+    if not isinstance(snapshot, dict):
+        return jsonify({'error': 'スナップショット形式が不正です'}), 400
+    restore_data_snapshot(snapshot)
+    return jsonify({'success': True, 'storage': storage_status()})
 
 
 # Settings

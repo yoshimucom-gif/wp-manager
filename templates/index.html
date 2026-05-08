@@ -159,6 +159,18 @@ body {
 .page { display: none; }
 .page.active { display: block; }
 
+.storage-alert {
+  border: 1px solid rgba(207,34,46,0.35);
+  background: #fff5f5;
+  color: #8a1f28;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.storage-alert strong { font-weight: 700; }
+
 .page-header { margin-bottom: 20px; }
 .page-title {
   font-size: 18px;
@@ -582,6 +594,7 @@ tr.selected td { background: var(--accent-dim); }
 
   <div class="main">
     <div class="content">
+      <div id="storage-alert" class="storage-alert" style="display:none"></div>
 
       <div class="page" id="page-home">
         <div class="dashboard-hero" id="dashboard-hero">
@@ -1601,12 +1614,115 @@ function toast(msg, type = 'info') {
   toastTimer = setTimeout(() => el.style.display = 'none', 4000);
 }
 
+// ---- Data durability ----
+const DATA_SNAPSHOT_KEY = 'affiros9.dataSnapshot.v1';
+let dataSnapshotTimer = null;
+
+function renderStorageStatus(storage) {
+  const el = document.getElementById('storage-alert');
+  if (!el || !storage || storage.persistent) {
+    if (el) el.style.display = 'none';
+    return;
+  }
+  el.innerHTML = `<strong>保存先の確認が必要です。</strong> ${esc(storage.warning || '保存先が永続化されていない可能性があります。')}<br>保存先: ${esc(storage.data_dir || '')}`;
+  el.style.display = 'block';
+}
+
+function snapshotHasUserData(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') return false;
+  const settings = snapshot.settings || {};
+  const quality = Array.isArray(snapshot.quality) ? snapshot.quality : [];
+  const nonDefaultQuality = quality.some(q => q.id !== 'default' || q.name !== '標準品質');
+  return Boolean(
+    (Array.isArray(snapshot.articles) && snapshot.articles.length) ||
+    (Array.isArray(snapshot.decorations) && snapshot.decorations.length) ||
+    (Array.isArray(snapshot.rewrite_items) && snapshot.rewrite_items.length) ||
+    (Array.isArray(snapshot.ad_definitions) && snapshot.ad_definitions.length) ||
+    nonDefaultQuality ||
+    (Array.isArray(settings.sites) && settings.sites.length) ||
+    settings.claude_api_key ||
+    settings.amazon_access_key ||
+    settings.amazon_secret_key ||
+    settings.amazon_partner_tag ||
+    settings.rakuten_application_id ||
+    settings.rakuten_affiliate_id ||
+    settings.rakuten_asp_enabled ||
+    settings.rakuten_asp_name ||
+    settings.rakuten_asp_link_template ||
+    settings.rakuten_asp_prompt ||
+    settings.article_css
+  );
+}
+
+function readDataSnapshotBackup() {
+  try {
+    return JSON.parse(localStorage.getItem(DATA_SNAPSHOT_KEY) || '{}');
+  } catch (e) {
+    return {};
+  }
+}
+
+function writeDataSnapshotBackup(snapshot) {
+  if (!snapshotHasUserData(snapshot)) return;
+  try {
+    localStorage.setItem(DATA_SNAPSHOT_KEY, JSON.stringify({...snapshot, backed_up_at: new Date().toISOString()}));
+  } catch (e) {
+    console.warn('data snapshot backup failed', e);
+    toast('ブラウザ側バックアップの容量が不足しています。生成記事が多い場合は永続ディスク設定を確認してください。', 'error');
+  }
+}
+
+async function fetchDataSnapshot() {
+  const res = await fetch('/api/data-snapshot');
+  if (!res.ok) throw new Error('snapshot fetch failed');
+  return await res.json();
+}
+
+async function ensureDurableData() {
+  try {
+    const serverSnapshot = await fetchDataSnapshot();
+    renderStorageStatus(serverSnapshot.storage);
+    if (snapshotHasUserData(serverSnapshot)) {
+      writeDataSnapshotBackup(serverSnapshot);
+      return;
+    }
+    const backup = readDataSnapshotBackup();
+    const storageIsPersistent = !!serverSnapshot.storage?.persistent;
+    if (!storageIsPersistent && snapshotHasUserData(backup)) {
+      const res = await fetch('/api/data-snapshot', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(backup)
+      });
+      if (res.ok) {
+        toast('保存データを保護バックアップから戻しました', 'success');
+      }
+    }
+  } catch (e) {
+    console.warn('durability check failed', e);
+  }
+}
+
+function scheduleDataSnapshotBackup() {
+  clearTimeout(dataSnapshotTimer);
+  dataSnapshotTimer = setTimeout(async () => {
+    try {
+      const snapshot = await fetchDataSnapshot();
+      renderStorageStatus(snapshot.storage);
+      writeDataSnapshotBackup(snapshot);
+    } catch (e) {
+      console.warn('data snapshot backup failed', e);
+    }
+  }, 1200);
+}
+
 // ---- Decorations ----
 async function loadDecorations() {
   const res = await fetch('/api/decorations');
   decorationList = await res.json();
   renderDecorations();
   updateDecorationSelects();
+  scheduleDataSnapshotBackup();
 }
 
 function renderDecorations() {
@@ -1738,6 +1854,7 @@ async function loadAdDefinitions() {
   adDefinitionList = await res.json();
   renderAdDefinitions();
   updateAdDefinitionSelects();
+  scheduleDataSnapshotBackup();
 }
 
 function adTypeLabel(type) {
@@ -1863,6 +1980,7 @@ async function loadSites() {
   siteList = await res.json();
   renderSites();
   updateSiteSelects();
+  scheduleDataSnapshotBackup();
 }
 
 function renderSites() {
@@ -1972,6 +2090,7 @@ async function loadArticles() {
   populateGenSelect();
   loadBatchArticles();
   renderDashboardRewriteNeeds();
+  scheduleDataSnapshotBackup();
 }
 
 function updateStats() {
@@ -2554,6 +2673,7 @@ async function loadRewriteItems() {
   filterRewriteItems();
   updateStats();
   renderDashboardRewriteNeeds();
+  scheduleDataSnapshotBackup();
 }
 
 function filterRewriteItems() {
@@ -2770,6 +2890,7 @@ async function loadQuality() {
   qualityList = await res.json();
   renderQuality();
   loadQualitySelects();
+  scheduleDataSnapshotBackup();
 }
 
 function renderQuality() {
@@ -2987,6 +3108,7 @@ async function loadSettings() {
   document.getElementById('s-article-css').value = s.article_css || '';
   await loadQuality();
   if (s.default_quality_id) document.getElementById('s-default-quality').value = s.default_quality_id;
+  scheduleDataSnapshotBackup();
 }
 
 async function saveSettings() {
@@ -3066,6 +3188,7 @@ window.addEventListener('popstate', () => {
 (async function init() {
   const initialPage = pageFromUrl() || localStorage.getItem('currentPage') || 'home';
   showPage(initialPage, { replaceUrl: true, skipLoad: true });
+  await ensureDurableData();
   await loadSites();
   await loadQuality();
   await loadDecorations();
