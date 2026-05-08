@@ -2868,9 +2868,111 @@ async function deleteQuality(id) {
 }
 
 // ---- Settings ----
+const SETTINGS_BACKUP_KEY = 'affiros9.apiSettingsBackup.v1';
+const SETTINGS_BACKUP_FIELDS = [
+  'claude_api_key',
+  'default_quality_id',
+  'amazon_access_key',
+  'amazon_secret_key',
+  'amazon_partner_tag',
+  'rakuten_application_id',
+  'rakuten_affiliate_id',
+  'rakuten_asp_enabled',
+  'rakuten_asp_name',
+  'rakuten_asp_link_template',
+  'rakuten_asp_link_text',
+  'rakuten_asp_prompt',
+  'article_css'
+];
+const MASKED_SETTING_FIELDS = new Set([
+  'claude_api_key',
+  'amazon_access_key',
+  'amazon_secret_key',
+  'rakuten_application_id'
+]);
+
+function readSettingsBackup() {
+  try {
+    return JSON.parse(localStorage.getItem(SETTINGS_BACKUP_KEY) || '{}');
+  } catch (e) {
+    return {};
+  }
+}
+
+function isMaskedSettingValue(value) {
+  return String(value || '').includes('•');
+}
+
+function writeSettingsBackup(data) {
+  const previous = readSettingsBackup();
+  const backup = {...previous};
+  SETTINGS_BACKUP_FIELDS.forEach(field => {
+    if (!(field in data)) return;
+    const value = data[field];
+    if (MASKED_SETTING_FIELDS.has(field) && isMaskedSettingValue(value)) return;
+    backup[field] = value;
+  });
+  backup.updated_at = new Date().toISOString();
+  try {
+    localStorage.setItem(SETTINGS_BACKUP_KEY, JSON.stringify(backup));
+  } catch (e) {
+    console.warn('settings backup failed', e);
+  }
+}
+
+function settingHasValue(value) {
+  return typeof value === 'boolean' ? value : String(value || '').trim() !== '';
+}
+
+function collectSettingsFormData() {
+  return {
+    claude_api_key: document.getElementById('s-claude-key').value,
+    default_quality_id: document.getElementById('s-default-quality').value,
+    amazon_access_key: document.getElementById('s-amz-access-key').value,
+    amazon_secret_key: document.getElementById('s-amz-secret-key').value,
+    amazon_partner_tag: document.getElementById('s-amz-partner-tag').value,
+    rakuten_application_id: document.getElementById('s-rkt-app-id').value,
+    rakuten_affiliate_id: document.getElementById('s-rkt-aff-id').value,
+    rakuten_asp_enabled: document.getElementById('s-rkt-asp-enabled').checked,
+    rakuten_asp_name: document.getElementById('s-rkt-asp-name').value,
+    rakuten_asp_link_template: document.getElementById('s-rkt-asp-template').value,
+    rakuten_asp_link_text: document.getElementById('s-rkt-asp-text').value,
+    rakuten_asp_prompt: document.getElementById('s-rkt-asp-prompt').value,
+    article_css: document.getElementById('s-article-css').value,
+  };
+}
+
+async function restoreSettingsFromBrowserBackup(settings) {
+  const backup = readSettingsBackup();
+  if (!backup || Object.keys(backup).length === 0) return settings;
+
+  const restorePayload = {...settings};
+  let shouldRestore = false;
+  SETTINGS_BACKUP_FIELDS.forEach(field => {
+    const backupValue = backup[field];
+    if (!settingHasValue(restorePayload[field]) && settingHasValue(backupValue)) {
+      restorePayload[field] = backupValue;
+      shouldRestore = true;
+    }
+  });
+
+  if (!shouldRestore) return settings;
+
+  const res = await fetch('/api/settings', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(restorePayload)
+  });
+  if (!res.ok) return settings;
+  const fresh = await fetch('/api/settings');
+  toast('ブラウザのバックアップからAPI設定を復元しました', 'success');
+  return await fresh.json();
+}
+
 async function loadSettings() {
   const res = await fetch('/api/settings');
-  const s = await res.json();
+  let s = await res.json();
+  s = await restoreSettingsFromBrowserBackup(s);
   document.getElementById('s-claude-key').value = s.claude_api_key || '';
   document.getElementById('s-amz-access-key').value = s.amazon_access_key || '';
   document.getElementById('s-amz-secret-key').value = s.amazon_secret_key || '';
@@ -2888,24 +2990,11 @@ async function loadSettings() {
 }
 
 async function saveSettings() {
-  const data = {
-    claude_api_key: document.getElementById('s-claude-key').value,
-    default_quality_id: document.getElementById('s-default-quality').value,
-    amazon_access_key: document.getElementById('s-amz-access-key').value,
-    amazon_secret_key: document.getElementById('s-amz-secret-key').value,
-    amazon_partner_tag: document.getElementById('s-amz-partner-tag').value,
-    rakuten_application_id: document.getElementById('s-rkt-app-id').value,
-    rakuten_affiliate_id: document.getElementById('s-rkt-aff-id').value,
-    rakuten_asp_enabled: document.getElementById('s-rkt-asp-enabled').checked,
-    rakuten_asp_name: document.getElementById('s-rkt-asp-name').value,
-    rakuten_asp_link_template: document.getElementById('s-rkt-asp-template').value,
-    rakuten_asp_link_text: document.getElementById('s-rkt-asp-text').value,
-    rakuten_asp_prompt: document.getElementById('s-rkt-asp-prompt').value,
-    article_css: document.getElementById('s-article-css').value,
-  };
+  const data = collectSettingsFormData();
   const res = await fetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
   const result = await res.json();
   if (result.success) {
+    writeSettingsBackup(data);
     toast('設定を保存しました', 'success');
     document.getElementById('settings-msg').textContent = '✓ 保存完了';
     setTimeout(() => document.getElementById('settings-msg').textContent = '', 3000);
@@ -2928,6 +3017,7 @@ async function testRakuten() {
   });
   const data = await res.json();
   if (res.ok && Array.isArray(data)) {
+    writeSettingsBackup(collectSettingsFormData());
     msgEl.textContent = `✓ 接続成功（${data.length}件取得）`;
     msgEl.style.color = 'var(--success)';
   } else {
@@ -2953,6 +3043,7 @@ async function testAmazon() {
   });
   const data = await res.json();
   if (res.ok && Array.isArray(data)) {
+    writeSettingsBackup(collectSettingsFormData());
     msgEl.textContent = `✓ 接続成功（${data.length}件取得）`;
     msgEl.style.color = 'var(--success)';
   } else {

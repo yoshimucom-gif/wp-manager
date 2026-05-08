@@ -21,8 +21,16 @@ from requests_aws4auth import AWS4Auth
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
-DATA_DIR = Path(os.environ.get('DATA_DIR', 'data'))
-DATA_DIR.mkdir(exist_ok=True)
+def resolve_data_dir():
+    configured = os.environ.get('DATA_DIR')
+    if configured:
+        return Path(configured)
+    if os.environ.get('RENDER') and Path('/data').exists():
+        return Path('/data')
+    return Path('data')
+
+DATA_DIR = resolve_data_dir()
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 ARTICLES_FILE = DATA_DIR / 'articles.json'
 QUALITY_FILE = DATA_DIR / 'quality.json'
@@ -39,8 +47,11 @@ def load_json(path, default):
     return default
 
 def save_json(path, data):
-    with open(path, 'w', encoding='utf-8') as f:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(path.name + '.tmp')
+    with open(tmp_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(tmp_path, path)
 
 def load_articles():
     return load_json(ARTICLES_FILE, [])
@@ -82,8 +93,31 @@ def load_decorations():
 def save_decorations(decorations):
     save_json(DECORATIONS_FILE, decorations)
 
+def first_env(*names):
+    for name in names:
+        value = os.environ.get(name)
+        if value:
+            return value
+    return ''
+
+def apply_settings_env_fallbacks(settings):
+    fallback_map = {
+        'claude_api_key': ('ANTHROPIC_API_KEY', 'CLAUDE_API_KEY'),
+        'amazon_access_key': ('AMAZON_ACCESS_KEY_ID', 'AMAZON_ACCESS_KEY'),
+        'amazon_secret_key': ('AMAZON_SECRET_ACCESS_KEY', 'AMAZON_SECRET_KEY'),
+        'amazon_partner_tag': ('AMAZON_PARTNER_TAG',),
+        'rakuten_application_id': ('RAKUTEN_APPLICATION_ID',),
+        'rakuten_affiliate_id': ('RAKUTEN_AFFILIATE_ID',),
+    }
+    for setting_key, env_names in fallback_map.items():
+        if not settings.get(setting_key):
+            env_value = first_env(*env_names)
+            if env_value:
+                settings[setting_key] = env_value
+    return settings
+
 def load_settings():
-    return load_json(SETTINGS_FILE, {
+    settings = load_json(SETTINGS_FILE, {
         "sites": [],
         "claude_api_key": "",
         "default_quality_id": "default",
@@ -99,6 +133,7 @@ def load_settings():
         "rakuten_asp_prompt": "",
         "article_css": "",
     })
+    return apply_settings_env_fallbacks(settings)
 
 MASK_CHAR = '•'
 
