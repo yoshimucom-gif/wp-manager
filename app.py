@@ -5,14 +5,12 @@ import threading
 import re
 import csv
 import io
-import xml.etree.ElementTree as ET
 from datetime import datetime
-from email.utils import parsedate_to_datetime
 from pathlib import Path
 from functools import wraps
 from html import escape, unescape
 from html.parser import HTMLParser
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urljoin
 
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, Response, stream_with_context, send_from_directory
 import anthropic
@@ -117,6 +115,34 @@ class _TextExtractor(HTMLParser):
             t = data.strip()
             if t: self._parts.append(t)
     def text(self): return '\n'.join(self._parts)
+
+
+class _LinkExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.links = []
+        self._current = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag != 'a':
+            return
+        data = dict(attrs)
+        self._current = {'href': data.get('href', ''), 'text': []}
+
+    def handle_data(self, data):
+        if self._current is not None:
+            text = data.strip()
+            if text:
+                self._current['text'].append(text)
+
+    def handle_endtag(self, tag):
+        if tag == 'a' and self._current is not None:
+            self.links.append({
+                'href': self._current['href'],
+                'text': ' '.join(self._current['text']).strip()
+            })
+            self._current = None
+
 
 def fetch_url_text(url, max_chars=4000):
     resp = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
@@ -320,64 +346,77 @@ def apply_score_fields(item, title=None, content=None, keywords=None):
     return item
 
 
-SEO_NEWS_FEED_URL = 'https://feeds.feedburner.com/blogspot/amDG'
+SEO_NEWS_PAGE_URL = 'https://developers.google.com/search/blog?hl=ja'
 SEO_NEWS_FALLBACK = [
     {
-        'title': 'Google Search Central Blog',
-        'link': 'https://developers.google.com/search/blog',
-        'source': 'Google Search Central',
+        'title': 'Google 検索セントラル ブログ',
+        'link': SEO_NEWS_PAGE_URL,
+        'source': 'Google 検索セントラル',
         'published': '',
         'summary': 'Google検索のアルゴリズム更新、Search Console、構造化データなどの公式情報を確認できます。'
     },
     {
-        'title': 'Google Search ranking updates',
-        'link': 'https://status.search.google.com/products/rGHU1u87FJnkP6W2GwMi/history',
-        'source': 'Google Search Status Dashboard',
+        'title': 'Google 検索ランキングの更新履歴',
+        'link': 'https://status.search.google.com/products/rGHU1u87FJnkP6W2GwMi/history?hl=ja',
+        'source': 'Google 検索ステータス ダッシュボード',
         'published': '',
         'summary': 'コアアップデートなど、検索ランキングシステムの更新履歴を確認できます。'
     },
     {
-        'title': 'SEO Starter Guide',
-        'link': 'https://developers.google.com/search/docs/fundamentals/seo-starter-guide',
-        'source': 'Google Search Central',
+        'title': 'SEO スターター ガイド',
+        'link': 'https://developers.google.com/search/docs/fundamentals/seo-starter-guide?hl=ja',
+        'source': 'Google 検索セントラル',
         'published': '',
         'summary': '検索エンジン向けの基本改善ポイントを見直すための公式ガイドです。'
     },
 ]
 
 
-def format_feed_date(value):
-    if not value:
-        return ''
-    try:
-        return parsedate_to_datetime(value).strftime('%Y-%m-%d')
-    except Exception:
-        return value[:16]
+def japanese_search_blog_summary(title):
+    if any(word in title for word in ('コア アップデート', 'ランキング', 'スパム')):
+        return '検索順位や品質評価に関わる重要な更新です。リライト優先度の判断材料として確認してください。'
+    if any(word in title for word in ('Search Console', '分析', 'レポート')):
+        return 'Search Consoleや分析まわりの更新です。流入低下や改善候補の確認に役立ちます。'
+    if any(word in title for word in ('クロール', 'Googlebot', 'インデックス')):
+        return 'クロールやインデックス登録に関する更新です。技術SEOの見直しに使えます。'
+    if any(word in title for word in ('構造化データ', 'リッチリザルト', 'マークアップ')):
+        return '構造化データや検索での見え方に関する更新です。記事装飾や商品情報の改善に役立ちます。'
+    return 'Google検索セントラルの日本語記事です。SEO施策や記事改善の参考として確認できます。'
 
 
 def fetch_seo_news(limit=5):
     resp = requests.get(
-        SEO_NEWS_FEED_URL,
+        SEO_NEWS_PAGE_URL,
         timeout=10,
         headers={'User-Agent': 'Affiros9/1.0 (+https://wp-manager.onrender.com)'}
     )
     resp.raise_for_status()
-    root = ET.fromstring(resp.content)
+    parser = _LinkExtractor()
+    parser.feed(resp.text)
     items = []
-    for item in root.findall('.//item')[:limit]:
-        title = (item.findtext('title') or '').strip()
-        link = (item.findtext('link') or '').strip()
-        published = format_feed_date((item.findtext('pubDate') or '').strip())
-        description = html_to_text(item.findtext('description') or '')
-        summary = description[:120] + ('...' if len(description) > 120 else '')
-        if title and link:
-            items.append({
-                'title': title,
-                'link': link,
-                'source': 'Google Search Central',
-                'published': published,
-                'summary': summary
-            })
+    seen = set()
+    for link in parser.links:
+        href = link.get('href') or ''
+        title = unescape(link.get('text') or '').strip()
+        if not title or '/search/blog/' not in href or title in seen:
+            continue
+        if not re.search(r'/search/blog/\d{4}/\d{2}/', href):
+            continue
+        full_url = urljoin(SEO_NEWS_PAGE_URL, href)
+        if 'hl=' not in full_url:
+            full_url += ('&' if '?' in full_url else '?') + 'hl=ja'
+        published_match = re.search(r'/search/blog/(\d{4})/(\d{2})/', href)
+        published = '-'.join(published_match.groups()) if published_match else ''
+        items.append({
+            'title': title,
+            'link': full_url,
+            'source': 'Google 検索セントラル',
+            'published': published,
+            'summary': japanese_search_blog_summary(title)
+        })
+        seen.add(title)
+        if len(items) >= limit:
+            break
     return items or SEO_NEWS_FALLBACK[:limit]
 
 
@@ -1653,16 +1692,16 @@ def get_seo_news():
         items = fetch_seo_news(limit)
         return jsonify({
             'success': True,
-            'source': 'Google Search Central Blog',
-            'feed_url': SEO_NEWS_FEED_URL,
+            'source': 'Google 検索セントラル ブログ',
+            'feed_url': SEO_NEWS_PAGE_URL,
             'items': items,
             'fetched_at': datetime.now().isoformat()
         })
     except Exception as e:
         return jsonify({
             'success': False,
-            'source': 'Google Search Central Blog',
-            'feed_url': SEO_NEWS_FEED_URL,
+            'source': 'Google 検索セントラル ブログ',
+            'feed_url': SEO_NEWS_PAGE_URL,
             'items': SEO_NEWS_FALLBACK[:limit],
             'error': str(e)[:160],
             'fetched_at': datetime.now().isoformat()

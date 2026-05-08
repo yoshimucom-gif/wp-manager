@@ -582,79 +582,81 @@ tr.selected td { background: var(--accent-dim); }
   <div class="main">
     <div class="content">
 
-      <div class="dashboard-hero" id="dashboard-hero">
-        <div class="dashboard-title">Affiros9 へようこそ！</div>
-        <div class="module-panel">
-          <div class="module-tile" onclick="showPage('ranking')">
-            <div class="module-title">ランキング記事</div>
-            <div class="module-art">◉↺</div>
+      <div class="page" id="page-home">
+        <div class="dashboard-hero" id="dashboard-hero">
+          <div class="dashboard-title">Affiros9 へようこそ！</div>
+          <div class="module-panel">
+            <div class="module-tile" onclick="showPage('ranking')">
+              <div class="module-title">ランキング記事</div>
+              <div class="module-art">◉↺</div>
+            </div>
+            <div class="module-tile" onclick="showPage('brand')">
+              <div class="module-title">商標記事</div>
+              <div class="module-art">▣✉</div>
+            </div>
+            <div class="module-tile" onclick="showPage('column')">
+              <div class="module-title">コラム記事</div>
+              <div class="module-art">▤◔</div>
+            </div>
+            <div class="module-tile" onclick="showPage('batch')">
+              <div class="module-title">一括処理</div>
+              <div class="module-art">▧⌁</div>
+            </div>
+            <div class="module-tile" onclick="showPage('rewrite')">
+              <div class="module-title">SEOリライト</div>
+              <div class="module-art">✉＋</div>
+            </div>
+            <div class="module-tile" onclick="showPage('sites')">
+              <div class="module-title">サイト管理</div>
+              <div class="module-art">⚙◌</div>
+            </div>
           </div>
-          <div class="module-tile" onclick="showPage('brand')">
-            <div class="module-title">商標記事</div>
-            <div class="module-art">▣✉</div>
+          <div class="dashboard-kpis">
+            <div class="stat-card">
+              <div class="stat-label">新規記事</div>
+              <div class="stat-value"><span id="dash-total">0</span><span style="font-size:13px;font-weight:400">件</span></div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">生成待ち</div>
+              <div class="stat-value"><span id="dash-pending">0</span><span style="font-size:13px;font-weight:400">件</span></div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">生成済</div>
+              <div class="stat-value"><span id="dash-generated">0</span><span style="font-size:13px;font-weight:400">件</span></div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">投稿済</div>
+              <div class="stat-value"><span id="dash-published">0</span><span style="font-size:13px;font-weight:400">件</span></div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">リライト優先</div>
+              <div class="stat-value"><span id="dash-low-score">0</span><span style="font-size:13px;font-weight:400">件</span></div>
+            </div>
           </div>
-          <div class="module-tile" onclick="showPage('column')">
-            <div class="module-title">コラム記事</div>
-            <div class="module-art">▤◔</div>
-          </div>
-          <div class="module-tile" onclick="showPage('batch')">
-            <div class="module-title">一括処理</div>
-            <div class="module-art">▧⌁</div>
-          </div>
-          <div class="module-tile" onclick="showPage('rewrite')">
-            <div class="module-title">SEOリライト</div>
-            <div class="module-art">✉＋</div>
-          </div>
-          <div class="module-tile" onclick="showPage('sites')">
-            <div class="module-title">サイト管理</div>
-            <div class="module-art">⚙◌</div>
-          </div>
-        </div>
-        <div class="dashboard-kpis">
-          <div class="stat-card">
-            <div class="stat-label">新規記事</div>
-            <div class="stat-value"><span id="dash-total">0</span><span style="font-size:13px;font-weight:400">件</span></div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">生成待ち</div>
-            <div class="stat-value"><span id="dash-pending">0</span><span style="font-size:13px;font-weight:400">件</span></div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">生成済</div>
-            <div class="stat-value"><span id="dash-generated">0</span><span style="font-size:13px;font-weight:400">件</span></div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">投稿済</div>
-            <div class="stat-value"><span id="dash-published">0</span><span style="font-size:13px;font-weight:400">件</span></div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">リライト優先</div>
-            <div class="stat-value"><span id="dash-low-score">0</span><span style="font-size:13px;font-weight:400">件</span></div>
-          </div>
-        </div>
-        <div class="dashboard-intel">
-          <div class="intel-panel">
-            <div class="intel-header">
-              <div>
-                <div class="intel-title">リライトが必要な記事</div>
-                <div class="intel-sub">保存済み・取得済みの記事を点数が低い順に表示</div>
+          <div class="dashboard-intel">
+            <div class="intel-panel">
+              <div class="intel-header">
+                <div>
+                  <div class="intel-title">リライトが必要な記事</div>
+                  <div class="intel-sub">保存済み・取得済みの記事を点数が低い順に表示</div>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="rescoreArticles()">再計算</button>
               </div>
-              <button class="btn btn-secondary btn-sm" onclick="rescoreArticles()">再計算</button>
-            </div>
-            <div class="intel-list" id="dashboard-rewrite-list">
-              <div class="intel-empty">記事スコアを読み込み中...</div>
-            </div>
-          </div>
-          <div class="intel-panel">
-            <div class="intel-header">
-              <div>
-                <div class="intel-title">最新SEO情報</div>
-                <div class="intel-sub">Google Search Central Blogから取得</div>
+              <div class="intel-list" id="dashboard-rewrite-list">
+                <div class="intel-empty">記事スコアを読み込み中...</div>
               </div>
-              <button class="btn btn-secondary btn-sm" onclick="loadSeoNews()">更新</button>
             </div>
-            <div class="intel-list" id="dashboard-seo-news">
-              <div class="intel-empty">SEO情報を取得中...</div>
+            <div class="intel-panel">
+              <div class="intel-header">
+                <div>
+                  <div class="intel-title">最新SEO情報</div>
+                  <div class="intel-sub">Google 検索セントラルの日本語記事から取得</div>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="loadSeoNews()">更新</button>
+              </div>
+              <div class="intel-list" id="dashboard-seo-news">
+                <div class="intel-empty">SEO情報を取得中...</div>
+              </div>
             </div>
           </div>
         </div>
@@ -1486,7 +1488,8 @@ let currentGenArticleId = null;
 let currentArticleType = 'ranking';
 
 const pageUrlMap = {
-  ranking: '',
+  home: '',
+  ranking: 'ranking',
   brand: 'brand',
   column: 'column',
   batch: 'batch',
@@ -1505,7 +1508,7 @@ const urlPageMap = Object.entries(pageUrlMap).reduce((acc, [page, slug]) => {
 
 function pageFromUrl() {
   const slug = window.location.pathname.replace(/^\/+|\/+$/g, '');
-  if (!slug) return 'ranking';
+  if (!slug) return 'home';
   return urlPageMap[slug] || null;
 }
 
@@ -1549,15 +1552,17 @@ function showPage(name, opts = {}) {
     currentArticleType = name;
     updateArticleTypeUI();
   }
-  if (pageName === 'articles') loadArticles();
-  if (pageName === 'generate') { loadQualitySelects(); updateSiteSelects(); populateGenSelect(); }
-  if (pageName === 'batch') { loadQualitySelects(); loadBatchArticles(); }
-  if (pageName === 'rewrite') { loadRewritePage(); }
-  if (pageName === 'quality') loadQuality();
-  if (pageName === 'decoration') loadDecorations();
-  if (pageName === 'ads') loadAdDefinitions();
-  if (pageName === 'sites') loadSites();
-  if (pageName === 'settings') loadSettings();
+  if (!opts.skipLoad) {
+    if (pageName === 'articles') loadArticles();
+    if (pageName === 'generate') { loadQualitySelects(); updateSiteSelects(); populateGenSelect(); }
+    if (pageName === 'batch') { loadQualitySelects(); loadBatchArticles(); }
+    if (pageName === 'rewrite') { loadRewritePage(); }
+    if (pageName === 'quality') loadQuality();
+    if (pageName === 'decoration') loadDecorations();
+    if (pageName === 'ads') loadAdDefinitions();
+    if (pageName === 'sites') loadSites();
+    if (pageName === 'settings') loadSettings();
+  }
   if (opts.updateUrl !== false) {
     const nextPath = pagePath(name);
     const method = opts.replaceUrl ? 'replaceState' : 'pushState';
@@ -1570,8 +1575,8 @@ function showPage(name, opts = {}) {
 }
 
 function goHome() {
-  showPage('ranking', { updateUrl: false });
-  window.history.pushState({ page: 'ranking' }, '', '/');
+  showPage('home', { updateUrl: false });
+  window.history.pushState({ page: 'home' }, '', '/');
   const main = document.querySelector('.main');
   if (main) main.scrollTop = 0;
 }
@@ -2949,15 +2954,16 @@ window.addEventListener('popstate', () => {
 });
 
 (async function init() {
+  const initialPage = pageFromUrl() || localStorage.getItem('currentPage') || 'home';
+  showPage(initialPage, { replaceUrl: true, skipLoad: true });
   await loadSites();
   await loadQuality();
   await loadDecorations();
   await loadAdDefinitions();
   await loadArticles();
   await loadDashboardRewriteItems();
-  await loadSeoNews();
-  const initialPage = pageFromUrl() || localStorage.getItem('currentPage') || 'ranking';
   await showPage(initialPage, { replaceUrl: true });
+  loadSeoNews();
 })();
 </script>
 </body>
