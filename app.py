@@ -65,8 +65,131 @@ def load_rewrites():
 def save_rewrites(items):
     save_json(REWRITE_FILE, items)
 
+def default_ad_definitions():
+    now = datetime.now().isoformat()
+    return [
+        {
+            'id': 'preset-ranking-comparison-rinker',
+            'name': 'ランキング記事｜比較表直後 RINKER',
+            'article_type': 'ranking',
+            'source': 'both',
+            'keyword_mode': 'ad_keywords',
+            'search_keywords': '',
+            'item_count': 5,
+            'layout': 'rinker',
+            'insertion_position': 'after_comparison',
+            'amazon_button_label': 'Amazonで見る',
+            'rakuten_button_label': '楽天市場で見る',
+            'prompt': 'ランキング表や比較表の直後に、紹介商品と対応するカードを自然に配置。順位ごとの本文を邪魔しないよう、連続配置しすぎない。',
+            'priority': 20,
+            'enabled': True,
+            'created_at': now,
+            'updated_at': now,
+        },
+        {
+            'id': 'preset-brand-review-rinker',
+            'name': '商標記事｜レビューCTA RINKER',
+            'article_type': 'brand',
+            'source': 'both',
+            'keyword_mode': 'ad_keywords',
+            'search_keywords': '',
+            'item_count': 2,
+            'layout': 'rinker',
+            'insertion_position': 'after_intro',
+            'amazon_button_label': 'Amazonで見る',
+            'rakuten_button_label': '楽天市場で見る',
+            'prompt': '商品レビューの導入後、またはメリット・デメリット説明後に配置。公式リンクや結論CTAと競合しない位置に置く。',
+            'priority': 30,
+            'enabled': True,
+            'created_at': now,
+            'updated_at': now,
+        },
+        {
+            'id': 'preset-column-recommendation-rinker',
+            'name': 'コラム記事｜まとめ前おすすめ RINKER',
+            'article_type': 'column',
+            'source': 'both',
+            'keyword_mode': 'article_keywords',
+            'search_keywords': '',
+            'item_count': 3,
+            'layout': 'rinker',
+            'insertion_position': 'before_summary',
+            'amazon_button_label': 'Amazonで見る',
+            'rakuten_button_label': '楽天市場で見る',
+            'prompt': '悩み解決や選び方の説明が終わった後、まとめ前に関連商品を提案。記事内容と関係が薄い商品は避ける。',
+            'priority': 55,
+            'enabled': True,
+            'created_at': now,
+            'updated_at': now,
+        },
+        {
+            'id': 'preset-rewrite-revenue-rinker',
+            'name': 'SEOリライト｜収益導線補強 RINKER',
+            'article_type': 'rewrite',
+            'source': 'both',
+            'keyword_mode': 'ad_keywords',
+            'search_keywords': '',
+            'item_count': 2,
+            'layout': 'rinker',
+            'insertion_position': 'auto',
+            'amazon_button_label': 'Amazonで見る',
+            'rakuten_button_label': '楽天市場で見る',
+            'prompt': '既存記事の流れを崩さず、購入・比較意図がある見出し付近にだけ追加。情報記事では押し売り感を出さない。',
+            'priority': 40,
+            'enabled': True,
+            'created_at': now,
+            'updated_at': now,
+        },
+        {
+            'id': 'preset-common-amazon-only',
+            'name': '共通｜Amazonのみ補助CTA',
+            'article_type': 'common',
+            'source': 'amazon',
+            'keyword_mode': 'ad_keywords',
+            'search_keywords': '',
+            'item_count': 2,
+            'layout': 'rinker',
+            'insertion_position': 'before_summary',
+            'amazon_button_label': 'Amazonで見る',
+            'rakuten_button_label': '楽天市場で見る',
+            'prompt': 'Amazonでの購入意図が強い記事で使用。価格や在庫の断定は避け、比較・確認の導線として配置。',
+            'priority': 80,
+            'enabled': True,
+            'created_at': now,
+            'updated_at': now,
+        },
+        {
+            'id': 'preset-common-rakuten-only',
+            'name': '共通｜楽天のみ補助CTA',
+            'article_type': 'common',
+            'source': 'rakuten',
+            'keyword_mode': 'ad_keywords',
+            'search_keywords': '',
+            'item_count': 2,
+            'layout': 'rinker',
+            'insertion_position': 'before_summary',
+            'amazon_button_label': 'Amazonで見る',
+            'rakuten_button_label': '楽天市場で見る',
+            'prompt': '楽天市場との相性が高い商品記事で使用。ポイント訴求は控えめにし、商品確認の導線として配置。',
+            'priority': 85,
+            'enabled': True,
+            'created_at': now,
+            'updated_at': now,
+        },
+    ]
+
 def load_ad_definitions():
-    return load_json(AD_DEFINITIONS_FILE, [])
+    items = load_json(AD_DEFINITIONS_FILE, None)
+    if items:
+        return items
+    settings = load_settings()
+    if settings.get('ad_presets_seeded'):
+        return items or []
+    presets = default_ad_definitions()
+    save_ad_definitions(presets)
+    settings['ad_presets_seeded'] = True
+    save_settings(settings)
+    return presets
 
 def save_ad_definitions(items):
     save_json(AD_DEFINITIONS_FILE, items)
@@ -197,6 +320,7 @@ def load_settings():
         "rakuten_asp_link_text": "楽天市場で詳細を見る",
         "rakuten_asp_prompt": "",
         "article_css": "",
+        "ad_presets_seeded": False,
     })
     return apply_settings_env_fallbacks(settings)
 
