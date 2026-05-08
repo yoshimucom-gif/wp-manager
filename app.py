@@ -5,7 +5,9 @@ import threading
 import re
 import csv
 import io
+import xml.etree.ElementTree as ET
 from datetime import datetime
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from functools import wraps
 from html import escape, unescape
@@ -316,6 +318,67 @@ def apply_score_fields(item, title=None, content=None, keywords=None):
     item['rewrite_priority'] = score_data['priority']
     item['score_data'] = score_data
     return item
+
+
+SEO_NEWS_FEED_URL = 'https://feeds.feedburner.com/blogspot/amDG'
+SEO_NEWS_FALLBACK = [
+    {
+        'title': 'Google Search Central Blog',
+        'link': 'https://developers.google.com/search/blog',
+        'source': 'Google Search Central',
+        'published': '',
+        'summary': 'Google検索のアルゴリズム更新、Search Console、構造化データなどの公式情報を確認できます。'
+    },
+    {
+        'title': 'Google Search ranking updates',
+        'link': 'https://status.search.google.com/products/rGHU1u87FJnkP6W2GwMi/history',
+        'source': 'Google Search Status Dashboard',
+        'published': '',
+        'summary': 'コアアップデートなど、検索ランキングシステムの更新履歴を確認できます。'
+    },
+    {
+        'title': 'SEO Starter Guide',
+        'link': 'https://developers.google.com/search/docs/fundamentals/seo-starter-guide',
+        'source': 'Google Search Central',
+        'published': '',
+        'summary': '検索エンジン向けの基本改善ポイントを見直すための公式ガイドです。'
+    },
+]
+
+
+def format_feed_date(value):
+    if not value:
+        return ''
+    try:
+        return parsedate_to_datetime(value).strftime('%Y-%m-%d')
+    except Exception:
+        return value[:16]
+
+
+def fetch_seo_news(limit=5):
+    resp = requests.get(
+        SEO_NEWS_FEED_URL,
+        timeout=10,
+        headers={'User-Agent': 'Affiros9/1.0 (+https://wp-manager.onrender.com)'}
+    )
+    resp.raise_for_status()
+    root = ET.fromstring(resp.content)
+    items = []
+    for item in root.findall('.//item')[:limit]:
+        title = (item.findtext('title') or '').strip()
+        link = (item.findtext('link') or '').strip()
+        published = format_feed_date((item.findtext('pubDate') or '').strip())
+        description = html_to_text(item.findtext('description') or '')
+        summary = description[:120] + ('...' if len(description) > 120 else '')
+        if title and link:
+            items.append({
+                'title': title,
+                'link': link,
+                'source': 'Google Search Central',
+                'published': published,
+                'summary': summary
+            })
+    return items or SEO_NEWS_FALLBACK[:limit]
 
 
 def amazon_search(keywords, access_key, secret_key, partner_tag, item_count=3):
@@ -1580,6 +1643,30 @@ def score_rewrite_items():
             item['rewritten_score_data'] = score_article_content(item.get('title', ''), item.get('rewritten_content', ''), '')
     save_rewrites(items)
     return jsonify({'success': True, 'scored': len(items)})
+
+
+@app.route('/api/seo-news', methods=['GET'])
+@login_required
+def get_seo_news():
+    limit = clamp_int(request.args.get('limit'), 5, 1, 8)
+    try:
+        items = fetch_seo_news(limit)
+        return jsonify({
+            'success': True,
+            'source': 'Google Search Central Blog',
+            'feed_url': SEO_NEWS_FEED_URL,
+            'items': items,
+            'fetched_at': datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'source': 'Google Search Central Blog',
+            'feed_url': SEO_NEWS_FEED_URL,
+            'items': SEO_NEWS_FALLBACK[:limit],
+            'error': str(e)[:160],
+            'fetched_at': datetime.now().isoformat()
+        })
 
 
 # Ad definitions

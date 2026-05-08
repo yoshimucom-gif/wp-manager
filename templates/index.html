@@ -453,11 +453,71 @@ tr.selected td { background: var(--accent-dim); }
   border-radius: 8px;
 }
 .dashboard-kpis .stat-label { font-weight: 600; color: #4b5563; }
+.dashboard-intel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-top: 6px;
+}
+.intel-panel {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  min-height: 270px;
+  overflow: hidden;
+}
+.intel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  background: #f7f7f7;
+}
+.intel-title { font-size: 14px; font-weight: 700; }
+.intel-sub { font-size: 11px; color: var(--muted); }
+.intel-list { max-height: 276px; overflow-y: auto; }
+.intel-empty { padding: 36px 16px; text-align: center; color: var(--muted); font-size: 12px; }
+.rewrite-candidate,
+.seo-news-item {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #eef0f2;
+  background: #fff;
+}
+.rewrite-candidate { cursor: pointer; transition: background .15s; }
+.rewrite-candidate:hover { background: var(--accent-dim); }
+.candidate-main,
+.news-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.candidate-title,
+.news-title {
+  color: var(--text);
+  font-weight: 600;
+  line-height: 1.55;
+}
+.news-title { color: var(--accent); text-decoration: none; }
+.news-title:hover { text-decoration: underline; }
+.candidate-meta,
+.news-meta,
+.news-summary {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.candidate-reason { font-size: 11px; color: var(--warning); }
 
 @media (max-width: 1100px) {
   .header { padding: 0 14px; gap: 12px; }
   .module-panel { grid-template-columns: repeat(3, 1fr); }
   .dashboard-kpis { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .dashboard-intel { grid-template-columns: 1fr; }
 }
 @media (max-width: 720px) {
   .content { padding: 18px 14px; }
@@ -570,6 +630,32 @@ tr.selected td { background: var(--accent-dim); }
           <div class="stat-card">
             <div class="stat-label">リライト優先</div>
             <div class="stat-value"><span id="dash-low-score">0</span><span style="font-size:13px;font-weight:400">件</span></div>
+          </div>
+        </div>
+        <div class="dashboard-intel">
+          <div class="intel-panel">
+            <div class="intel-header">
+              <div>
+                <div class="intel-title">リライトが必要な記事</div>
+                <div class="intel-sub">保存済み・取得済みの記事を点数が低い順に表示</div>
+              </div>
+              <button class="btn btn-secondary btn-sm" onclick="rescoreArticles()">再計算</button>
+            </div>
+            <div class="intel-list" id="dashboard-rewrite-list">
+              <div class="intel-empty">記事スコアを読み込み中...</div>
+            </div>
+          </div>
+          <div class="intel-panel">
+            <div class="intel-header">
+              <div>
+                <div class="intel-title">最新SEO情報</div>
+                <div class="intel-sub">Google Search Central Blogから取得</div>
+              </div>
+              <button class="btn btn-secondary btn-sm" onclick="loadSeoNews()">更新</button>
+            </div>
+            <div class="intel-list" id="dashboard-seo-news">
+              <div class="intel-empty">SEO情報を取得中...</div>
+            </div>
           </div>
         </div>
       </div>
@@ -1395,11 +1481,12 @@ let siteList = [];
 let decorationList = [];
 let adDefinitionList = [];
 let rewriteList = [];
+let seoNewsList = [];
 let currentGenArticleId = null;
 let currentArticleType = 'ranking';
 
 const pageUrlMap = {
-  ranking: 'ranking',
+  ranking: '',
   brand: 'brand',
   column: 'column',
   batch: 'batch',
@@ -1414,16 +1501,17 @@ const pageUrlMap = {
 const urlPageMap = Object.entries(pageUrlMap).reduce((acc, [page, slug]) => {
   acc[slug] = page;
   return acc;
-}, { articles: 'articles', settings: 'settings' });
+}, { articles: 'articles', settings: 'settings', ranking: 'ranking' });
 
 function pageFromUrl() {
   const slug = window.location.pathname.replace(/^\/+|\/+$/g, '');
-  if (!slug) return null;
+  if (!slug) return 'ranking';
   return urlPageMap[slug] || null;
 }
 
 function pagePath(name) {
-  return '/' + (pageUrlMap[name] || pageUrlMap.ranking);
+  const slug = pageUrlMap[name] ?? pageUrlMap.ranking;
+  return slug ? '/' + slug : '/';
 }
 
 const articleTypeConfig = {
@@ -1482,7 +1570,8 @@ function showPage(name, opts = {}) {
 }
 
 function goHome() {
-  showPage('ranking');
+  showPage('ranking', { updateUrl: false });
+  window.history.pushState({ page: 'ranking' }, '', '/');
   const main = document.querySelector('.main');
   if (main) main.scrollTop = 0;
 }
@@ -1869,13 +1958,14 @@ async function loadArticles() {
   filterArticles();
   populateGenSelect();
   loadBatchArticles();
+  renderDashboardRewriteNeeds();
 }
 
 function updateStats() {
   const pending = allArticles.filter(a => a.status === 'pending').length;
   const generated = allArticles.filter(a => a.status === 'generated').length;
   const published = allArticles.filter(a => a.status === 'published').length;
-  const lowScore = allArticles.filter(a => a.seo_score !== undefined && a.seo_score !== null && Number(a.seo_score) < 55).length;
+  const lowScore = dashboardRewriteCandidates().length;
   const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
   set('stat-total', allArticles.length);
   set('stat-pending', pending);
@@ -1886,6 +1976,123 @@ function updateStats() {
   set('dash-generated', generated);
   set('dash-published', published);
   set('dash-low-score', lowScore);
+}
+
+async function loadDashboardRewriteItems() {
+  try {
+    const res = await fetch('/api/rewrite/items');
+    if (res.ok) rewriteList = await res.json();
+  } catch (e) {
+    console.warn('Failed to load rewrite dashboard items', e);
+  }
+  updateStats();
+  renderDashboardRewriteNeeds();
+}
+
+function dashboardRewriteCandidates() {
+  const articleCandidates = allArticles.map(a => ({
+    source: 'article',
+    id: a.id,
+    title: a.title || '(無題)',
+    score: Number(a.seo_score),
+    grade: a.score_grade || '',
+    siteName: getSitePlainName(a.site_id),
+    category: a.category || '',
+    suggestion: a.score_data?.suggestions?.[0] || '',
+    updatedAt: a.generated_at || a.published_at || a.created_at || ''
+  }));
+  const rewriteCandidates = rewriteList.map(i => ({
+    source: 'rewrite',
+    id: i.id,
+    title: i.title || '(無題)',
+    score: Number(i.seo_score),
+    grade: i.score_grade || '',
+    siteName: i.site_name || '',
+    category: i.category || '',
+    suggestion: i.score_data?.suggestions?.[0] || '',
+    updatedAt: i.modified || i.fetched_at || ''
+  }));
+  return [...articleCandidates, ...rewriteCandidates]
+    .filter(item => Number.isFinite(item.score) && item.score < 70)
+    .sort((a, b) => a.score - b.score)
+    .slice(0, 8);
+}
+
+function renderDashboardRewriteNeeds() {
+  const el = document.getElementById('dashboard-rewrite-list');
+  if (!el) return;
+  const candidates = dashboardRewriteCandidates();
+  if (!candidates.length) {
+    el.innerHTML = `
+      <div class="intel-empty">
+        まだリライト候補がありません。<br>
+        SEOリライト画面でサイト内記事を取得するか、対応履歴でスコア再計算してください。
+      </div>`;
+    return;
+  }
+  el.innerHTML = candidates.map(item => `
+    <div class="rewrite-candidate" onclick="openDashboardCandidate('${item.source}', '${encodeURIComponent(item.id)}')">
+      <div class="candidate-main">
+        <div class="candidate-title">${esc(item.title)}</div>
+        ${scoreBadge({seo_score: item.score, score_grade: item.grade})}
+      </div>
+      <div class="candidate-meta">
+        ${esc(item.source === 'rewrite' ? 'SEOリライト取得済み' : '対応履歴')} ${item.siteName ? ` / ${esc(item.siteName)}` : ''}${item.category ? ` / ${esc(item.category)}` : ''}
+      </div>
+      ${item.suggestion ? `<div class="candidate-reason">${esc(item.suggestion)}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+function openDashboardCandidate(source, encodedId) {
+  const id = decodeURIComponent(encodedId);
+  if (source === 'rewrite') {
+    const item = rewriteList.find(i => i.id === id);
+    showPage('rewrite');
+    setTimeout(() => {
+      const search = document.getElementById('rewrite-search');
+      if (search && item) {
+        search.value = item.title || '';
+        filterRewriteItems();
+      }
+    }, 0);
+    return;
+  }
+  showPage('articles');
+  setTimeout(() => openArticleModal(id), 0);
+}
+
+async function loadSeoNews() {
+  const el = document.getElementById('dashboard-seo-news');
+  if (el) el.innerHTML = '<div class="intel-empty">SEO情報を取得中...</div>';
+  try {
+    const res = await fetch('/api/seo-news?limit=5');
+    const data = await res.json();
+    seoNewsList = data.items || [];
+    renderSeoNews(data);
+  } catch (e) {
+    seoNewsList = [];
+    renderSeoNews({success: false, items: []});
+  }
+}
+
+function renderSeoNews(data = {}) {
+  const el = document.getElementById('dashboard-seo-news');
+  if (!el) return;
+  const items = data.items || seoNewsList || [];
+  if (!items.length) {
+    el.innerHTML = '<div class="intel-empty">SEO情報を取得できませんでした。あとで再度更新してください。</div>';
+    return;
+  }
+  el.innerHTML = items.map(item => `
+    <div class="seo-news-item">
+      <div class="news-main">
+        <a class="news-title" href="${esc(item.link)}" target="_blank" rel="noopener">${esc(item.title)}</a>
+      </div>
+      <div class="news-meta">${esc(item.source || 'SEO News')}${item.published ? ` / ${esc(item.published)}` : ''}</div>
+      ${item.summary ? `<div class="news-summary">${esc(item.summary)}</div>` : ''}
+    </div>
+  `).join('');
 }
 
 function filterArticles() {
@@ -1905,6 +2112,12 @@ function getSiteName(site_id) {
   if (!site_id) return '<span style="color:var(--muted);font-size:11px">—</span>';
   const s = siteList.find(s => s.id === site_id);
   return s ? `<span style="font-size:11px;color:var(--accent)">${esc(s.name)}</span>` : '<span style="color:var(--muted);font-size:11px">不明</span>';
+}
+
+function getSitePlainName(site_id) {
+  if (!site_id) return '';
+  const s = siteList.find(s => s.id === site_id);
+  return s ? s.name : '';
 }
 
 function categoryOptions(source) {
@@ -2326,6 +2539,8 @@ async function loadRewriteItems() {
   rewriteList = await res.json();
   updateRewriteCategorySelect();
   filterRewriteItems();
+  updateStats();
+  renderDashboardRewriteNeeds();
 }
 
 function filterRewriteItems() {
@@ -2739,6 +2954,8 @@ window.addEventListener('popstate', () => {
   await loadDecorations();
   await loadAdDefinitions();
   await loadArticles();
+  await loadDashboardRewriteItems();
+  await loadSeoNews();
   const initialPage = pageFromUrl() || localStorage.getItem('currentPage') || 'ranking';
   await showPage(initialPage, { replaceUrl: true });
 })();
