@@ -21,16 +21,38 @@ from requests_aws4auth import AWS4Auth
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
+DATA_DIR_WARNING = ''
+
+def is_writable_dir(path):
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        test_path = path / '.affiros9_write_test'
+        with open(test_path, 'w', encoding='utf-8') as f:
+            f.write('ok')
+        test_path.unlink(missing_ok=True)
+        return True
+    except Exception:
+        return False
+
 def resolve_data_dir():
+    global DATA_DIR_WARNING
     configured = os.environ.get('DATA_DIR')
     if configured:
-        return Path(configured)
-    if os.environ.get('RENDER') and Path('/data').exists():
+        path = Path(configured)
+        if is_writable_dir(path):
+            return path
+        DATA_DIR_WARNING = f'DATA_DIR={configured} に書き込めません。RenderのPersistent Disk設定を確認してください。'
+    if os.environ.get('RENDER') and Path('/data').exists() and is_writable_dir(Path('/data')):
         return Path('/data')
-    return Path('data')
+    fallback = Path('data')
+    if is_writable_dir(fallback):
+        if os.environ.get('RENDER') and not DATA_DIR_WARNING:
+            DATA_DIR_WARNING = 'Renderの永続ディスクがマウントされていない可能性があります。'
+        return fallback
+    DATA_DIR_WARNING = DATA_DIR_WARNING or '保存先ディレクトリに書き込めません。'
+    return fallback
 
 DATA_DIR = resolve_data_dir()
-DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 ARTICLES_FILE = DATA_DIR / 'articles.json'
 QUALITY_FILE = DATA_DIR / 'quality.json'
@@ -244,9 +266,9 @@ def storage_status():
     is_render = bool(os.environ.get('RENDER'))
     is_mount = os.path.ismount(str(data_dir))
     expected_persistent = not is_render or is_mount
-    warning = ''
+    warning = DATA_DIR_WARNING
     if is_render and not is_mount:
-        warning = 'Renderの永続ディスクがマウントされていない可能性があります。保存データがデプロイや再起動で消える恐れがあります。'
+        warning = warning or 'Renderの永続ディスクがマウントされていない可能性があります。保存データがデプロイや再起動で消える恐れがあります。'
     return {
         'data_dir': str(data_dir),
         'is_render': is_render,
