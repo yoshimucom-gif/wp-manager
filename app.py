@@ -442,7 +442,7 @@ def amazon_search(keywords, access_key, secret_key, partner_tag, item_count=3):
         'LanguagesOfPreference': ['ja_JP'],
     })
 
-    auth = AWS4Auth(access_key, secret_key, 'us-east-1', 'ProductAdvertisingAPI')
+    auth = AWS4Auth(access_key, secret_key, 'us-west-2', 'ProductAdvertisingAPI')
     resp = requests.post(
         f'https://{host}{path}',
         auth=auth,
