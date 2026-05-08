@@ -1197,10 +1197,11 @@ tr.selected td { background: var(--accent-dim); }
           <div class="settings-section">
             <div class="section-header">// 記事CSS定義（全サイト共通）</div>
             <div class="form-group">
-              <label class="form-label">CSS（投稿時に記事の先頭に自動挿入されます）</label>
-              <textarea id="s-article-css" class="form-control" rows="12" placeholder="/* テーマに合わせてCSSを記述 */
+              <label class="form-label">CSSのみ（投稿時に記事の先頭へ style タグで自動挿入）</label>
+              <textarea id="s-article-css" class="form-control" rows="12" placeholder="/* テーマに合わせてCSSだけを記述 */
 h2 { border-left: 4px solid #e47911; padding-left: 10px; }
 .amazon-btn { background: #ff9900; }"></textarea>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">HTMLやGutenbergブロックはここに入れず、定義設定 ＞ 装飾定義 ＞ サンプルHTML に貼り付けてください。</div>
             </div>
           </div>
           <div class="settings-section">
@@ -3148,6 +3149,11 @@ function isMaskedSettingValue(value) {
   return String(value || '').includes('•');
 }
 
+function looksLikeHtml(value) {
+  const text = String(value || '');
+  return /<!--\s*wp:/i.test(text) || /<\/?[a-z][\s\S]*>/i.test(text);
+}
+
 function writeSettingsBackup(data) {
   const previous = readSettingsBackup();
   const backup = {...previous};
@@ -3237,6 +3243,13 @@ async function loadSettings() {
 
 async function saveSettings() {
   const data = collectSettingsFormData();
+  if (looksLikeHtml(data.article_css)) {
+    toast('記事CSS定義にはHTMLを保存できません。装飾定義のサンプルHTMLに貼り付けてください。', 'error');
+    const msgEl = document.getElementById('settings-msg');
+    msgEl.textContent = '✗ CSS欄にHTML/Gutenbergブロックが入っています';
+    msgEl.style.color = 'var(--error)';
+    return;
+  }
   const res = await fetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
   const result = await res.json();
   if (result.success) {
@@ -3244,6 +3257,10 @@ async function saveSettings() {
     toast('設定を保存しました', 'success');
     document.getElementById('settings-msg').textContent = '✓ 保存完了';
     setTimeout(() => document.getElementById('settings-msg').textContent = '', 3000);
+  } else {
+    const msgEl = document.getElementById('settings-msg');
+    msgEl.textContent = '✗ ' + (result.error || '保存に失敗しました');
+    msgEl.style.color = 'var(--error)';
   }
 }
 

@@ -342,6 +342,10 @@ def mask_secret(value, visible_prefix=4):
 def is_masked_value(value):
     return MASK_CHAR in (value or '')
 
+def looks_like_html(value):
+    text = value or ''
+    return bool(re.search(r'<!--\s*wp:', text, re.I) or re.search(r'</?[a-z][\s\S]*>', text, re.I))
+
 class _TextExtractor(HTMLParser):
     SKIP = {'script', 'style', 'nav', 'header', 'footer', 'aside', 'noscript'}
     def __init__(self):
@@ -2490,6 +2494,8 @@ def update_settings():
     if 'rakuten_asp_prompt' in data:
         settings['rakuten_asp_prompt'] = data['rakuten_asp_prompt']
     if 'article_css' in data:
+        if looks_like_html(data.get('article_css', '')):
+            return jsonify({'success': False, 'error': '記事CSS定義にはHTMLを保存できません。装飾定義のサンプルHTMLに貼り付けてください。'}), 400
         settings['article_css'] = data['article_css']
     save_settings(settings)
     return jsonify({'success': True})
