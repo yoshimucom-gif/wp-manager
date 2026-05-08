@@ -100,6 +100,18 @@ def load_settings():
         "article_css": "",
     })
 
+MASK_CHAR = '•'
+
+def mask_secret(value, visible_prefix=4):
+    value = value or ''
+    if not value:
+        return ''
+    prefix_len = min(visible_prefix, len(value))
+    return value[:prefix_len] + (MASK_CHAR * (len(value) - prefix_len))
+
+def is_masked_value(value):
+    return MASK_CHAR in (value or '')
+
 class _TextExtractor(HTMLParser):
     SKIP = {'script', 'style', 'nav', 'header', 'footer', 'aside', 'noscript'}
     def __init__(self):
@@ -1932,7 +1944,7 @@ def get_sites():
     for s in settings.get('sites', []):
         sc = dict(s)
         if sc.get('wp_password'):
-            sc['wp_password'] = '••••••••'
+            sc['wp_password'] = mask_secret(sc['wp_password'], visible_prefix=0)
         safe.append(sc)
     return jsonify(safe)
 
@@ -1954,7 +1966,7 @@ def create_site():
     save_settings(settings)
     sc = dict(site)
     if sc.get('wp_password'):
-        sc['wp_password'] = '••••••••'
+        sc['wp_password'] = mask_secret(sc['wp_password'], visible_prefix=0)
     return jsonify(sc)
 
 @app.route('/api/sites/<site_id>', methods=['PUT'])
@@ -1967,7 +1979,7 @@ def update_site(site_id):
             s['name'] = data.get('name', s['name'])
             s['wp_url'] = data.get('wp_url', s['wp_url']).rstrip('/')
             s['wp_user'] = data.get('wp_user', s['wp_user'])
-            if data.get('wp_password') and data['wp_password'] != '••••••••':
+            if data.get('wp_password') and not is_masked_value(data['wp_password']):
                 s['wp_password'] = data['wp_password']
             break
     save_settings(settings)
@@ -2009,9 +2021,9 @@ def api_amazon_search():
     access_key = settings.get('amazon_access_key', '')
     secret_key = settings.get('amazon_secret_key', '')
     partner_tag = settings.get('amazon_partner_tag', '')
-    if requested_access_key and '••••••••' not in requested_access_key:
+    if requested_access_key and not is_masked_value(requested_access_key):
         access_key = requested_access_key
-    if requested_secret_key and '••••••••' not in requested_secret_key:
+    if requested_secret_key and not is_masked_value(requested_secret_key):
         secret_key = requested_secret_key
     if requested_partner_tag:
         partner_tag = requested_partner_tag
@@ -2036,7 +2048,7 @@ def api_rakuten_search():
     requested_aff_id = (data.get('rakuten_affiliate_id') or '').strip()
     app_id = settings.get('rakuten_application_id', '')
     aff_id = settings.get('rakuten_affiliate_id', '')
-    if requested_app_id and '••••••••' not in requested_app_id:
+    if requested_app_id and not is_masked_value(requested_app_id):
         app_id = requested_app_id
     if requested_aff_id:
         aff_id = requested_aff_id
@@ -2053,15 +2065,13 @@ def api_rakuten_search():
 @login_required
 def get_settings():
     settings = load_settings()
-    def mask(v):
-        return v[:4] + '••••••••' if len(v) > 4 else v
     safe = {
-        'claude_api_key': mask(settings.get('claude_api_key', '')),
+        'claude_api_key': mask_secret(settings.get('claude_api_key', '')),
         'default_quality_id': settings.get('default_quality_id', 'default'),
-        'amazon_access_key': mask(settings.get('amazon_access_key', '')),
-        'amazon_secret_key': '••••••••' if settings.get('amazon_secret_key') else '',
+        'amazon_access_key': mask_secret(settings.get('amazon_access_key', '')),
+        'amazon_secret_key': mask_secret(settings.get('amazon_secret_key', ''), visible_prefix=0),
         'amazon_partner_tag': settings.get('amazon_partner_tag', ''),
-        'rakuten_application_id': mask(settings.get('rakuten_application_id', '')),
+        'rakuten_application_id': mask_secret(settings.get('rakuten_application_id', '')),
         'rakuten_affiliate_id': settings.get('rakuten_affiliate_id', ''),
         'rakuten_asp_enabled': settings.get('rakuten_asp_enabled', False),
         'rakuten_asp_name': settings.get('rakuten_asp_name', ''),
@@ -2079,15 +2089,15 @@ def update_settings():
     settings = load_settings()
     if 'default_quality_id' in data:
         settings['default_quality_id'] = data['default_quality_id']
-    if data.get('claude_api_key') and '••••••••' not in data['claude_api_key']:
+    if data.get('claude_api_key') and not is_masked_value(data['claude_api_key']):
         settings['claude_api_key'] = data['claude_api_key']
-    if data.get('amazon_access_key') and '••••••••' not in data['amazon_access_key']:
+    if data.get('amazon_access_key') and not is_masked_value(data['amazon_access_key']):
         settings['amazon_access_key'] = data['amazon_access_key']
-    if data.get('amazon_secret_key') and '••••••••' not in data['amazon_secret_key']:
+    if data.get('amazon_secret_key') and not is_masked_value(data['amazon_secret_key']):
         settings['amazon_secret_key'] = data['amazon_secret_key']
     if 'amazon_partner_tag' in data:
         settings['amazon_partner_tag'] = data['amazon_partner_tag']
-    if data.get('rakuten_application_id') and '••••••••' not in data['rakuten_application_id']:
+    if data.get('rakuten_application_id') and not is_masked_value(data['rakuten_application_id']):
         settings['rakuten_application_id'] = data['rakuten_application_id']
     if 'rakuten_affiliate_id' in data:
         settings['rakuten_affiliate_id'] = data['rakuten_affiliate_id']
