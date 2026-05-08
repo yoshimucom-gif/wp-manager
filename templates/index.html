@@ -314,6 +314,7 @@ tr.selected td { background: var(--accent-dim); }
 
 .form-group { margin-bottom: 16px; }
 .form-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; display: block; }
+.form-help { font-size: 11px; color: var(--muted); line-height: 1.5; margin-top: 6px; }
 .form-control { width: 100%; }
 
 .stream-box {
@@ -1394,6 +1395,7 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
     <div class="form-group">
       <label class="form-label">アプリケーションパスワード</label>
       <input type="password" id="site-wp-password" class="form-control" placeholder="xxxx xxxx xxxx xxxx xxxx xxxx">
+      <div class="form-help" id="site-password-help">WordPressのユーザー設定で発行したアプリケーションパスワードを入力してください。</div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeSiteModal()">キャンセル</button>
@@ -1907,7 +1909,10 @@ function openSiteModal() {
   document.getElementById('site-name').value = '';
   document.getElementById('site-wp-url').value = '';
   document.getElementById('site-wp-user').value = '';
-  document.getElementById('site-wp-password').value = '';
+  const passwordEl = document.getElementById('site-wp-password');
+  passwordEl.value = '';
+  passwordEl.placeholder = 'xxxx xxxx xxxx xxxx xxxx xxxx';
+  document.getElementById('site-password-help').textContent = 'WordPressのユーザー設定で発行したアプリケーションパスワードを入力してください。';
   document.getElementById('site-modal-title').textContent = '// サイトを追加';
   document.getElementById('site-modal').classList.add('open');
 }
@@ -1919,7 +1924,10 @@ function editSite(id) {
   document.getElementById('site-name').value = s.name;
   document.getElementById('site-wp-url').value = s.wp_url;
   document.getElementById('site-wp-user').value = s.wp_user;
-  document.getElementById('site-wp-password').value = s.wp_password;
+  const passwordEl = document.getElementById('site-wp-password');
+  passwordEl.value = s.wp_password || '';
+  passwordEl.placeholder = '変更する場合のみ新しいパスワードを入力';
+  document.getElementById('site-password-help').textContent = '保存済みのパスワードは安全のため短く表示しています。変更しない場合はこのまま保存して大丈夫です。';
   document.getElementById('site-modal-title').textContent = '// サイトを編集';
   document.getElementById('site-modal').classList.add('open');
 }
