@@ -1027,6 +1027,46 @@ def resolve_wp_category_ids(wp_url, wp_user, wp_password, category_value):
     return ids
 
 
+def fetch_wp_categories(site, limit=100):
+    categories = []
+    page = 1
+    wp_url = site['wp_url'].rstrip('/')
+    while len(categories) < limit:
+        resp = requests.get(
+            f"{wp_url}/wp-json/wp/v2/categories",
+            auth=(site['wp_user'], site['wp_password']),
+            params={
+                'per_page': min(100, limit - len(categories)),
+                'page': page,
+                'orderby': 'name',
+                'order': 'asc',
+                'hide_empty': False,
+            },
+            timeout=15
+        )
+        if resp.status_code == 400 and page > 1:
+            break
+        resp.raise_for_status()
+        chunk = resp.json()
+        if not chunk:
+            break
+        categories.extend(chunk)
+        total_pages = int(resp.headers.get('X-WP-TotalPages') or page)
+        if page >= total_pages:
+            break
+        page += 1
+    return [
+        {
+            'id': c.get('id'),
+            'name': c.get('name', ''),
+            'slug': c.get('slug', ''),
+            'count': c.get('count', 0),
+        }
+        for c in categories
+        if c.get('name')
+    ]
+
+
 def get_rewrite_style_prompt(data, settings):
     structure_mode = data.get('structure_mode', 'seo')
     tone = data.get('tone', 'natural')
@@ -2216,6 +2256,19 @@ def delete_site(site_id):
     settings['sites'] = [s for s in settings.get('sites', []) if s['id'] != site_id]
     save_settings(settings)
     return jsonify({'success': True})
+
+@app.route('/api/sites/<site_id>/categories', methods=['GET'])
+@login_required
+def get_site_categories(site_id):
+    settings = load_settings()
+    site = get_site_by_id(site_id, settings)
+    if not site:
+        return jsonify({'error': 'サイトが見つかりません'}), 404
+    try:
+        limit = clamp_int(request.args.get('limit'), 100, 1, 200)
+        return jsonify(fetch_wp_categories(site, limit=limit))
+    except Exception as e:
+        return jsonify({'error': f'カテゴリー取得エラー: {str(e)}'}), 500
 
 @app.route('/api/articles/<article_id>/site', methods=['PUT'])
 @login_required

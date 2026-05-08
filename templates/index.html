@@ -765,14 +765,15 @@ tr.selected td { background: var(--accent-dim); }
               <input type="text" id="gen-article-type-label" class="form-control" value="ランキング記事" readonly>
             </div>
             <div class="form-group">
-              <label class="form-label">記事選択</label>
+              <label class="form-label">既存の記事データ（任意）</label>
               <select id="gen-article-select" class="form-control" onchange="onArticleSelect()">
-                <option value="">-- 記事を選択 --</option>
+                <option value="">-- インポート済み/作成済みの記事を選択 --</option>
               </select>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">CSVインポートや対応履歴にある記事情報を生成対象として呼び出します。タイトル等を編集してから生成できます。</div>
             </div>
             <div class="form-group">
               <label class="form-label">投稿先サイト</label>
-              <select id="gen-site" class="form-control">
+              <select id="gen-site" class="form-control" onchange="onGenerateSiteChange()">
                 <option value="">-- サイトを選択 --</option>
               </select>
             </div>
@@ -786,7 +787,9 @@ tr.selected td { background: var(--accent-dim); }
             </div>
             <div class="form-group">
               <label class="form-label">カテゴリー</label>
-              <input type="text" id="gen-category" class="form-control" placeholder="例: 不動産投資 / 美容 / SaaS">
+              <input type="text" id="gen-category" class="form-control" list="gen-category-options" placeholder="投稿先サイトを選ぶと既存カテゴリー候補が出ます">
+              <datalist id="gen-category-options"></datalist>
+              <div id="gen-category-help" style="font-size:11px;color:var(--muted);margin-top:4px">既存カテゴリーを選択できます。存在しない名前はWordPress投稿時に新規作成します。</div>
             </div>
             <div class="form-group">
               <label class="form-label">品質定義</label>
@@ -1446,7 +1449,9 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
     </div>
     <div class="form-group">
       <label class="form-label">カテゴリー</label>
-      <input type="text" id="modal-category" class="form-control" placeholder="WordPressカテゴリー名。複数はカンマ区切り">
+      <input type="text" id="modal-category" class="form-control" list="modal-category-options" placeholder="WordPressカテゴリー名。複数はカンマ区切り">
+      <datalist id="modal-category-options"></datalist>
+      <div id="modal-category-help" style="font-size:11px;color:var(--muted);margin-top:4px">投稿先サイトの既存カテゴリーを候補表示します。存在しない名前は投稿時に新規作成します。</div>
     </div>
     <div class="form-group">
       <label class="form-label">広告定義</label>
@@ -1456,7 +1461,7 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
     </div>
     <div class="form-group">
       <label class="form-label">投稿先サイト</label>
-      <select id="modal-site-id" class="form-control">
+      <select id="modal-site-id" class="form-control" onchange="onModalSiteChange()">
         <option value="">-- サイトを選択 --</option>
       </select>
     </div>
@@ -1499,6 +1504,7 @@ let decorationList = [];
 let adDefinitionList = [];
 let rewriteList = [];
 let seoNewsList = [];
+let siteCategoryCache = {};
 let currentGenArticleId = null;
 let currentArticleType = 'ranking';
 
@@ -2022,6 +2028,65 @@ function updateSiteSelects() {
   }
 }
 
+function setCategoryOptions(listId, categories) {
+  const list = document.getElementById(listId);
+  if (!list) return;
+  list.innerHTML = (categories || [])
+    .map(c => `<option value="${esc(c.name)}">${c.count ? `${esc(c.count)}件` : esc(c.slug || '')}</option>`)
+    .join('');
+}
+
+async function loadSiteCategories(siteId, listId, helpId) {
+  const help = document.getElementById(helpId);
+  if (!siteId) {
+    setCategoryOptions(listId, []);
+    if (help) help.textContent = '投稿先サイトを選ぶと既存カテゴリー候補が出ます。存在しない名前はWordPress投稿時に新規作成します。';
+    return;
+  }
+  if (help) {
+    help.textContent = '対象サイトのカテゴリーを取得中...';
+    help.style.color = 'var(--muted)';
+  }
+  try {
+    if (!siteCategoryCache[siteId]) {
+      const res = await fetch(`/api/sites/${siteId}/categories?limit=200`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'カテゴリー取得に失敗しました');
+      siteCategoryCache[siteId] = data;
+    }
+    const categories = siteCategoryCache[siteId] || [];
+    setCategoryOptions(listId, categories);
+    if (help) {
+      help.textContent = categories.length
+        ? `既存カテゴリー ${categories.length}件を候補表示中。存在しない名前は投稿時に新規作成します。`
+        : '既存カテゴリーが見つかりません。入力した名前でWordPress投稿時に新規作成します。';
+      help.style.color = 'var(--muted)';
+    }
+  } catch (e) {
+    setCategoryOptions(listId, []);
+    if (help) {
+      help.textContent = e.message || 'カテゴリー取得に失敗しました。入力した名前で投稿時に新規作成します。';
+      help.style.color = 'var(--error)';
+    }
+  }
+}
+
+function onGenerateSiteChange() {
+  loadSiteCategories(
+    document.getElementById('gen-site').value,
+    'gen-category-options',
+    'gen-category-help'
+  );
+}
+
+function onModalSiteChange() {
+  loadSiteCategories(
+    document.getElementById('modal-site-id').value,
+    'modal-category-options',
+    'modal-category-help'
+  );
+}
+
 function openSiteModal() {
   document.getElementById('site-edit-id').value = '';
   document.getElementById('site-name').value = '';
@@ -2443,6 +2508,7 @@ async function openArticleModal(id) {
   updateAdDefinitionSelects();
   document.getElementById('modal-site-id').value = article.site_id || '';
   document.getElementById('modal-ad-definition-id').value = article.ad_definition_id || '';
+  onModalSiteChange();
   document.getElementById('article-modal').classList.add('open');
 }
 
@@ -2498,6 +2564,7 @@ function onArticleSelect() {
     document.getElementById('gen-site').value = article.site_id || '';
     document.getElementById('gen-ad-definition').value = article.ad_definition_id || '';
     currentGenArticleId = id;
+    onGenerateSiteChange();
   }
 }
 
