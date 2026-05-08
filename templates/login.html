@@ -7,7 +7,7 @@
 <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
 <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.svg') }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -20,7 +20,8 @@
     --muted: #57606a;
     --success: #1a7f37;
     --error: #cf222e;
-    --font: 'IBM Plex Mono', monospace;
+    --font: 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', 'Yu Gothic UI', 'Meiryo', sans-serif;
+    --font-logo: 'Nunito', var(--font);
   }
   body {
     font-family: var(--font);
@@ -30,6 +31,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    line-height: 1.65;
+    font-feature-settings: "palt";
   }
   .login-box {
     background: var(--surface);
@@ -63,8 +66,9 @@
     opacity: .45;
   }
   .logo h1 {
+    font-family: var(--font-logo);
     font-size: 24px;
-    font-weight: 600;
+    font-weight: 800;
     color: var(--accent);
     letter-spacing: 0;
   }
@@ -105,7 +109,7 @@
     padding: 10px;
     cursor: pointer;
     transition: background 0.15s;
-    letter-spacing: 1px;
+    letter-spacing: .02em;
   }
   button:hover { background: var(--accent-hover); }
   .error-msg {

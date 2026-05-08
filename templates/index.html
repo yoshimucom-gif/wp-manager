@@ -7,7 +7,7 @@
 <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
 <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.svg') }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -25,7 +25,8 @@
   --success: #1a7f37;
   --error: #cf222e;
   --warning: #9a6700;
-  --font: 'IBM Plex Mono', 'Yu Gothic UI', 'Meiryo', sans-serif;
+  --font: 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', 'Yu Gothic UI', 'Meiryo', sans-serif;
+  --font-logo: 'Nunito', var(--font);
 }
 html, body { height: 100%; }
 body {
@@ -35,6 +36,8 @@ body {
   display: flex;
   flex-direction: column;
   font-size: 13px;
+  line-height: 1.65;
+  font-feature-settings: "palt";
 }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -59,8 +62,9 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  font-family: var(--font-logo);
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 800;
   color: #54b9f7;
   letter-spacing: 0;
   white-space: nowrap;
@@ -116,6 +120,7 @@ body {
   color: var(--nav-muted);
   transition: all 0.15s;
   font-size: 12px;
+  font-weight: 500;
   border-left: 0;
   border-bottom: 3px solid transparent;
   white-space: nowrap;
