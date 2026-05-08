@@ -288,6 +288,7 @@ def has_user_data(snapshot):
         bool(snapshot.get('ad_definitions')),
         bool(non_default_quality),
         any(bool(settings.get(k)) for k in setting_keys),
+        any(bool(v) for v in (settings.get('quality_style_references') or {}).values()),
     ])
 
 def restore_data_snapshot(snapshot):
@@ -321,6 +322,11 @@ def load_settings():
         "rakuten_asp_prompt": "",
         "article_css": "",
         "ad_presets_seeded": False,
+        "quality_style_references": {
+            "ranking": "",
+            "brand": "",
+            "column": "",
+        },
     })
     return apply_settings_env_fallbacks(settings)
 
@@ -978,6 +984,19 @@ def build_quality_prompt(quality):
     return '\n'.join(parts)
 
 
+def quality_style_reference_url(article_type, settings):
+    refs = settings.get('quality_style_references') or {}
+    normalized = normalize_article_type(article_type, 'ranking')
+    return (refs.get(normalized) or '').strip()
+
+
+def fetch_quality_style_reference(article_type, settings):
+    url = quality_style_reference_url(article_type, settings)
+    if not url:
+        return '', ''
+    return url, fetch_url_text(url)
+
+
 def get_site_credentials(article, settings):
     site_id = article.get('site_id')
     if site_id:
@@ -1412,11 +1431,17 @@ def generate_article(article_id):
     quality_prompt = build_quality_prompt(quality)
     article_type_prompt = build_article_type_prompt(article_type)
     reference_text = ''
+    style_reference_url = ''
+    style_reference_text = ''
     if quality and quality.get('reference_url'):
         try:
             reference_text = fetch_url_text(quality['reference_url'])
         except Exception:
             pass
+    try:
+        style_reference_url, style_reference_text = fetch_quality_style_reference(article_type, settings)
+    except Exception:
+        style_reference_text = ''
     include_amazon = data.get('include_amazon', False)
     include_rakuten = data.get('include_rakuten', False)
     decoration_id = data.get('decoration_id')
@@ -1446,6 +1471,16 @@ def generate_article(article_id):
 
             if reference_text:
                 prompt += f'\n\n以下の参考記事の内容・構成・論点を参考にして執筆してください（コピーは不可）：\n\n{reference_text}'
+
+            if style_reference_text:
+                prompt += f'''\n\n記事品質の書き方参考:
+- 参考URL: {style_reference_url}
+- この参考記事は内容・事実・固有名詞を流用するためではありません。
+- 文章構成、導入の作り方、権威性の示し方、根拠の置き方、説得力の作り方、CTAまでの流れだけを参考にしてください。
+- テーマや読者に合わない表現は使わず、今回の記事内容に自然に合わせてください。
+
+参考記事テキスト:
+{style_reference_text[:5000]}'''
 
             if decoration and decoration.get('sample_html'):
                 prompt += f'\n\n以下のサンプル記事のHTML構造・装飾スタイルを踏襲して記事を作成してください。同じクラス名・ボックスデザイン・見出し構造・装飾パターンを使用してください：\n\n{decoration["sample_html"][:4000]}'
@@ -1532,6 +1567,7 @@ def batch_generate():
             reference_text = fetch_url_text(quality['reference_url'])
         except Exception:
             pass
+    style_reference_cache = {}
     include_amazon = data.get('include_amazon', False)
     include_rakuten = data.get('include_rakuten', False)
     decoration_id = data.get('decoration_id')
@@ -1543,6 +1579,13 @@ def batch_generate():
             try:
                 article_type = normalize_article_type(article.get('article_type') or batch_article_type, batch_article_type)
                 article_type_prompt = build_article_type_prompt(article_type)
+                style_reference_url, style_reference_text = style_reference_cache.get(article_type, ('', ''))
+                if article_type not in style_reference_cache:
+                    try:
+                        style_reference_url, style_reference_text = fetch_quality_style_reference(article_type, settings)
+                    except Exception:
+                        style_reference_url, style_reference_text = '', ''
+                    style_reference_cache[article_type] = (style_reference_url, style_reference_text)
                 prompt = f"""以下の情報をもとに、WordPressに投稿する記事を書いてください。
 
 タイトル: {article['title']}
@@ -1558,6 +1601,16 @@ def batch_generate():
 
                 if reference_text:
                     prompt += f'\n\n以下の参考記事の内容・構成・論点を参考にして執筆してください（コピーは不可）：\n\n{reference_text}'
+
+                if style_reference_text:
+                    prompt += f'''\n\n記事品質の書き方参考:
+- 参考URL: {style_reference_url}
+- この参考記事は内容・事実・固有名詞を流用するためではありません。
+- 文章構成、導入の作り方、権威性の示し方、根拠の置き方、説得力の作り方、CTAまでの流れだけを参考にしてください。
+- テーマや読者に合わない表現は使わず、今回の記事内容に自然に合わせてください。
+
+参考記事テキスト:
+{style_reference_text[:5000]}'''
 
                 if decoration and decoration.get('sample_html'):
                     prompt += f'\n\n以下のサンプル記事のHTML構造・装飾スタイルを踏襲して記事を作成してください。同じクラス名・ボックスデザイン・見出し構造・装飾パターンを使用してください：\n\n{decoration["sample_html"][:4000]}'
@@ -2197,6 +2250,32 @@ def delete_quality(quality_id):
     quality_list = [q for q in load_quality() if q['id'] != quality_id]
     save_quality(quality_list)
     return jsonify({'success': True})
+
+
+@app.route('/api/quality/style-references', methods=['GET'])
+@login_required
+def get_quality_style_references():
+    settings = load_settings()
+    refs = settings.get('quality_style_references') or {}
+    return jsonify({
+        'ranking': refs.get('ranking', ''),
+        'brand': refs.get('brand', ''),
+        'column': refs.get('column', ''),
+    })
+
+
+@app.route('/api/quality/style-references', methods=['POST'])
+@login_required
+def update_quality_style_references():
+    data = request.json or {}
+    settings = load_settings()
+    settings['quality_style_references'] = {
+        'ranking': data.get('ranking', '').strip(),
+        'brand': data.get('brand', '').strip(),
+        'column': data.get('column', '').strip(),
+    }
+    save_settings(settings)
+    return jsonify({'success': True, 'quality_style_references': settings['quality_style_references']})
 
 
 # Sites
