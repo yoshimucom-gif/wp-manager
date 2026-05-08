@@ -12,7 +12,7 @@ from html import escape, unescape
 from html.parser import HTMLParser
 from urllib.parse import quote_plus
 
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, Response, stream_with_context
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, Response, stream_with_context, send_from_directory
 import anthropic
 import openpyxl
 import requests
@@ -776,10 +776,27 @@ def login_required(f):
 
 
 @app.route('/')
+@app.route('/ranking')
+@app.route('/brand')
+@app.route('/column')
+@app.route('/batch')
+@app.route('/rewrite')
+@app.route('/history')
+@app.route('/articles')
+@app.route('/quality')
+@app.route('/decoration')
+@app.route('/ads')
+@app.route('/sites')
+@app.route('/api-settings')
+@app.route('/settings')
 def index():
     if not session.get('authenticated'):
         return redirect(url_for('login_page'))
     return render_template('index.html')
+
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(app.static_folder, 'favicon.svg', mimetype='image/svg+xml')
 
 @app.route('/login', methods=['GET'])
 def login_page():

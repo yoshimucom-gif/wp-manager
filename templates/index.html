@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Affiros9</title>
+<link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+<link rel="shortcut icon" href="{{ url_for('static', filename='favicon.svg') }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -519,27 +521,27 @@ tr.selected td { background: var(--accent-dim); }
         <div class="dashboard-title">Affiros9 へようこそ！</div>
         <div class="module-panel">
           <div class="module-tile" onclick="showPage('ranking')">
-            <div class="module-title">プランナー</div>
+            <div class="module-title">ランキング記事</div>
             <div class="module-art">◉↺</div>
           </div>
-          <div class="module-tile" onclick="showPage('batch')">
-            <div class="module-title">キャンペーン</div>
+          <div class="module-tile" onclick="showPage('brand')">
+            <div class="module-title">商標記事</div>
             <div class="module-art">▣✉</div>
           </div>
-          <div class="module-tile" onclick="showPage('rewrite')">
-            <div class="module-title">レポート</div>
+          <div class="module-tile" onclick="showPage('column')">
+            <div class="module-title">コラム記事</div>
             <div class="module-art">▤◔</div>
           </div>
-          <div class="module-tile" onclick="showPage('articles')">
-            <div class="module-title">データ管理</div>
+          <div class="module-tile" onclick="showPage('batch')">
+            <div class="module-title">一括処理</div>
             <div class="module-art">▧⌁</div>
           </div>
-          <div class="module-tile" onclick="showPage('decoration')">
-            <div class="module-title">カスタマイズ</div>
+          <div class="module-tile" onclick="showPage('rewrite')">
+            <div class="module-title">SEOリライト</div>
             <div class="module-art">✉＋</div>
           </div>
-          <div class="module-tile" onclick="showPage('settings')">
-            <div class="module-title">管理ツール</div>
+          <div class="module-tile" onclick="showPage('sites')">
+            <div class="module-title">サイト管理</div>
             <div class="module-art">⚙◌</div>
           </div>
         </div>
@@ -1391,6 +1393,34 @@ let rewriteList = [];
 let currentGenArticleId = null;
 let currentArticleType = 'ranking';
 
+const pageUrlMap = {
+  ranking: 'ranking',
+  brand: 'brand',
+  column: 'column',
+  batch: 'batch',
+  rewrite: 'rewrite',
+  articles: 'history',
+  quality: 'quality',
+  decoration: 'decoration',
+  ads: 'ads',
+  sites: 'sites',
+  settings: 'api-settings'
+};
+const urlPageMap = Object.entries(pageUrlMap).reduce((acc, [page, slug]) => {
+  acc[slug] = page;
+  return acc;
+}, { articles: 'articles', settings: 'settings' });
+
+function pageFromUrl() {
+  const slug = window.location.pathname.replace(/^\/+|\/+$/g, '');
+  if (!slug) return null;
+  return urlPageMap[slug] || null;
+}
+
+function pagePath(name) {
+  return '/' + (pageUrlMap[name] || pageUrlMap.ranking);
+}
+
 const articleTypeConfig = {
   ranking: {
     title: 'ランキング記事',
@@ -1410,7 +1440,7 @@ const articleTypeConfig = {
 };
 
 // ---- Navigation ----
-function showPage(name) {
+function showPage(name, opts = {}) {
   if (name === 'generate') name = 'ranking';
   const isArticleType = !!articleTypeConfig[name];
   const pageName = isArticleType ? 'generate' : name;
@@ -1435,6 +1465,15 @@ function showPage(name) {
   if (pageName === 'ads') loadAdDefinitions();
   if (pageName === 'sites') loadSites();
   if (pageName === 'settings') loadSettings();
+  if (opts.updateUrl !== false) {
+    const nextPath = pagePath(name);
+    const method = opts.replaceUrl ? 'replaceState' : 'pushState';
+    if (window.location.pathname !== nextPath) {
+      window.history[method]({ page: name }, '', nextPath);
+    } else {
+      window.history.replaceState({ page: name }, '', nextPath);
+    }
+  }
 }
 
 function goHome() {
@@ -2685,14 +2724,18 @@ async function testAmazon() {
   });
 });
 
+window.addEventListener('popstate', () => {
+  showPage(pageFromUrl() || 'ranking', { updateUrl: false });
+});
+
 (async function init() {
   await loadSites();
   await loadQuality();
   await loadDecorations();
   await loadAdDefinitions();
   await loadArticles();
-  const savedPage = localStorage.getItem('currentPage') || 'ranking';
-  await showPage(savedPage);
+  const initialPage = pageFromUrl() || localStorage.getItem('currentPage') || 'ranking';
+  await showPage(initialPage, { replaceUrl: true });
 })();
 </script>
 </body>
