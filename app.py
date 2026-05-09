@@ -5,6 +5,7 @@ import threading
 import re
 import csv
 import io
+import math
 from datetime import datetime, timedelta
 from pathlib import Path
 from functools import wraps
@@ -22,6 +23,10 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
 DATA_DIR_WARNING = ''
+CLAUDE_ARTICLE_MODEL = 'claude-sonnet-4-6'
+SONNET_INPUT_USD_PER_MTOK = 3.0
+SONNET_OUTPUT_USD_PER_MTOK = 15.0
+USAGE_ESTIMATE_USD_JPY = 155
 
 def is_writable_dir(path):
     try:
@@ -502,6 +507,45 @@ def normalize_schedule_date_key(value, fallback):
         return datetime.strptime(str(value or '').strip(), '%Y-%m-%d').strftime('%Y-%m-%d')
     except ValueError:
         return fallback
+
+
+def estimate_tokens_from_text(text):
+    return max(1, math.ceil(len(str(text or '')) / 2))
+
+
+def extract_usage_value(usage, name):
+    if not usage:
+        return None
+    if isinstance(usage, dict):
+        return usage.get(name)
+    return getattr(usage, name, None)
+
+
+def build_article_usage(prompt, content, message=None):
+    usage = getattr(message, 'usage', None) if message else None
+    input_tokens = extract_usage_value(usage, 'input_tokens')
+    output_tokens = extract_usage_value(usage, 'output_tokens')
+    estimated = False
+    if input_tokens is None:
+        input_tokens = estimate_tokens_from_text(prompt)
+        estimated = True
+    if output_tokens is None:
+        output_tokens = estimate_tokens_from_text(content)
+        estimated = True
+    cost_usd = (input_tokens / 1_000_000 * SONNET_INPUT_USD_PER_MTOK) + (output_tokens / 1_000_000 * SONNET_OUTPUT_USD_PER_MTOK)
+    return {
+        'model': CLAUDE_ARTICLE_MODEL,
+        'input_tokens': int(input_tokens),
+        'output_tokens': int(output_tokens),
+        'cost_usd': round(cost_usd, 6),
+        'cost_yen': round(cost_usd * USAGE_ESTIMATE_USD_JPY, 2),
+        'estimated': estimated,
+        'pricing': {
+            'input_usd_per_mtok': SONNET_INPUT_USD_PER_MTOK,
+            'output_usd_per_mtok': SONNET_OUTPUT_USD_PER_MTOK,
+            'usd_jpy': USAGE_ESTIMATE_USD_JPY,
+        }
+    }
 
 
 def score_article_content(title, content, keywords=''):
@@ -1609,6 +1653,10 @@ def generate_article(article_id):
                 for text in stream.text_stream:
                     full_content += text
                     yield f"data: {json.dumps({'text': text})}\n\n"
+                try:
+                    final_message = stream.get_final_message()
+                except Exception:
+                    final_message = None
 
             current_articles = load_articles()
             for a in current_articles:
@@ -1627,6 +1675,7 @@ def generate_article(article_id):
                     if ad_definition:
                         a['ad_definition_id'] = ad_definition.get('id')
                     a['generated_at'] = datetime.now().isoformat()
+                    a['usage'] = build_article_usage(prompt, full_content, final_message)
                     apply_score_fields(a)
                     break
             save_articles(current_articles)
@@ -1754,6 +1803,7 @@ def batch_generate():
                         if ad_definition:
                             a['ad_definition_id'] = ad_definition.get('id')
                         a['generated_at'] = datetime.now().isoformat()
+                        a['usage'] = build_article_usage(prompt, content, message)
                         apply_score_fields(a)
                         break
                 save_articles(current_articles)

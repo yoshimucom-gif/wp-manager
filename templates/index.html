@@ -526,6 +526,15 @@ tr.selected td { background: var(--accent-dim); }
   line-height: 1.5;
 }
 .candidate-reason { font-size: 11px; color: var(--warning); }
+.usage-summary { padding: 14px; display: grid; gap: 12px; background: #fff; }
+.usage-total { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid #eef0f2; }
+.usage-total-label { color: var(--muted); font-size: 12px; }
+.usage-total-value { font-size: 28px; font-weight: 700; color: var(--text); }
+.usage-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.usage-metric { border: 1px solid var(--border); border-radius: 4px; padding: 10px; background: #fafafa; }
+.usage-metric-label { color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+.usage-metric-value { font-weight: 700; font-size: 16px; }
+.usage-note { color: var(--muted); font-size: 11px; line-height: 1.6; }
 
 @media (max-width: 1100px) {
   .header { padding: 0 14px; gap: 12px; }
@@ -663,13 +672,13 @@ tr.selected td { background: var(--accent-dim); }
             <div class="intel-panel">
               <div class="intel-header">
                 <div>
-                  <div class="intel-title">最新SEO情報</div>
-                  <div class="intel-sub">Google 検索セントラルの日本語記事から取得</div>
+                  <div class="intel-title">今月の記事作成料金目安</div>
+                  <div class="intel-sub">Claude API利用量を記事生成履歴から概算</div>
                 </div>
-                <button class="btn btn-secondary btn-sm" onclick="loadSeoNews()">更新</button>
+                <button class="btn btn-secondary btn-sm" onclick="renderMonthlyUsageEstimate()">再計算</button>
               </div>
-              <div class="intel-list" id="dashboard-seo-news">
-                <div class="intel-empty">SEO情報を取得中...</div>
+              <div class="intel-list" id="dashboard-usage-estimate">
+                <div class="intel-empty">使用量を計算中...</div>
               </div>
             </div>
           </div>
@@ -1571,6 +1580,14 @@ let adDefinitionList = [];
 let rewriteList = [];
 let seoNewsList = [];
 let siteCategoryCache = {};
+const usageEstimateConfig = {
+  model: 'claude-sonnet-4-6',
+  inputUsdPerMTok: 3,
+  outputUsdPerMTok: 15,
+  usdJpy: 155,
+  fallbackInputTokensPerArticle: 3500,
+  outputCharsPerToken: 2,
+};
 let currentGenArticleId = null;
 let currentArticleType = 'ranking';
 
@@ -2222,6 +2239,7 @@ async function loadArticles() {
   populateGenSelect();
   loadBatchArticles();
   renderDashboardRewriteNeeds();
+  renderMonthlyUsageEstimate();
   scheduleDataSnapshotBackup();
 }
 
@@ -2324,6 +2342,97 @@ function openDashboardCandidate(source, encodedId) {
   }
   showPage('articles');
   setTimeout(() => openArticleModal(id), 0);
+}
+
+function stripHtmlText(html) {
+  const div = document.createElement('div');
+  div.innerHTML = html || '';
+  return (div.textContent || div.innerText || '').replace(/\s+/g, '');
+}
+
+function isThisMonth(iso) {
+  if (!iso) return false;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return false;
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+}
+
+function estimateArticleUsage(article) {
+  const usage = article.usage || {};
+  const inputTokens = Number(usage.input_tokens) || usageEstimateConfig.fallbackInputTokensPerArticle;
+  const outputTokens = Number(usage.output_tokens) || Math.ceil(stripHtmlText(article.content || '').length / usageEstimateConfig.outputCharsPerToken);
+  const costUsd = Number(usage.cost_usd) || (
+    inputTokens / 1000000 * usageEstimateConfig.inputUsdPerMTok +
+    outputTokens / 1000000 * usageEstimateConfig.outputUsdPerMTok
+  );
+  return {
+    inputTokens,
+    outputTokens,
+    costUsd,
+    costYen: Number(usage.cost_yen) || costUsd * usageEstimateConfig.usdJpy,
+    estimated: usage.estimated !== false,
+  };
+}
+
+function renderMonthlyUsageEstimate() {
+  const el = document.getElementById('dashboard-usage-estimate');
+  if (!el) return;
+  const generatedThisMonth = allArticles.filter(a =>
+    a.content && isThisMonth(a.generated_at || a.created_at)
+  );
+  if (!generatedThisMonth.length) {
+    el.innerHTML = `
+      <div class="intel-empty">
+        今月生成された記事はまだありません。<br>
+        記事を生成すると、ここに概算料金が表示されます。
+      </div>`;
+    return;
+  }
+  const totals = generatedThisMonth.reduce((acc, article) => {
+    const usage = estimateArticleUsage(article);
+    acc.inputTokens += usage.inputTokens;
+    acc.outputTokens += usage.outputTokens;
+    acc.costYen += usage.costYen;
+    acc.costUsd += usage.costUsd;
+    if (usage.estimated) acc.estimatedCount += 1;
+    return acc;
+  }, {inputTokens: 0, outputTokens: 0, costYen: 0, costUsd: 0, estimatedCount: 0});
+  const avgYen = totals.costYen / generatedThisMonth.length;
+  const yen = Math.ceil(totals.costYen);
+  const monthLabel = new Date().toLocaleDateString('ja-JP', {year: 'numeric', month: 'long'});
+  el.innerHTML = `
+    <div class="usage-summary">
+      <div class="usage-total">
+        <div>
+          <div class="usage-total-label">${esc(monthLabel)} の概算</div>
+          <div class="usage-total-value">約 ${yen.toLocaleString()}円</div>
+        </div>
+        <span class="badge badge-generated">${generatedThisMonth.length}件</span>
+      </div>
+      <div class="usage-grid">
+        <div class="usage-metric">
+          <div class="usage-metric-label">生成記事</div>
+          <div class="usage-metric-value">${generatedThisMonth.length.toLocaleString()}件</div>
+        </div>
+        <div class="usage-metric">
+          <div class="usage-metric-label">平均/記事</div>
+          <div class="usage-metric-value">約 ${Math.ceil(avgYen).toLocaleString()}円</div>
+        </div>
+        <div class="usage-metric">
+          <div class="usage-metric-label">入力トークン</div>
+          <div class="usage-metric-value">${Math.round(totals.inputTokens).toLocaleString()}</div>
+        </div>
+        <div class="usage-metric">
+          <div class="usage-metric-label">出力トークン</div>
+          <div class="usage-metric-value">${Math.round(totals.outputTokens).toLocaleString()}</div>
+        </div>
+      </div>
+      <div class="usage-note">
+        ${usageEstimateConfig.model} を ${usageEstimateConfig.inputUsdPerMTok} USD/100万入力token・${usageEstimateConfig.outputUsdPerMTok} USD/100万出力token、1 USD=${usageEstimateConfig.usdJpy}円で換算した目安です。<br>
+        新しく生成した記事はAPIの実トークンを保存し、過去記事は本文量から概算します。
+      </div>
+    </div>`;
 }
 
 async function loadSeoNews() {
@@ -3519,7 +3628,7 @@ window.addEventListener('popstate', () => {
   await loadArticles();
   await loadDashboardRewriteItems();
   await showPage(initialPage, { replaceUrl: true });
-  loadSeoNews();
+  renderMonthlyUsageEstimate();
 })();
 </script>
 </body>
