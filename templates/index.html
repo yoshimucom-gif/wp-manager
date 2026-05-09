@@ -2621,11 +2621,11 @@ function renderArticles(articles) {
       <td>${statusBadge(a.status)}</td>
       <td style="color:var(--muted);font-size:11px;white-space:nowrap">${a.generated_at ? fmtDate(a.generated_at) : '—'}</td>
       <td>
-        <div style="display:flex;gap:4px">
-          <button class="btn btn-secondary btn-sm" onclick="openArticleModal('${a.id}')">✏</button>
-          <button class="btn btn-primary btn-sm" onclick="quickGenerate('${a.id}')">⚡</button>
-          ${a.content ? `<button class="btn btn-success btn-sm" onclick="quickPublish('${a.id}')">🚀</button>` : ''}
-          ${a.wp_url ? `<a href="${esc(a.wp_url)}" target="_blank" class="btn btn-secondary btn-sm">↗</a>` : ''}
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-secondary btn-sm" title="記事情報と本文を編集" onclick="openArticleModal('${a.id}')">編集</button>
+          <button class="btn btn-primary btn-sm" title="この記事を生成画面で生成し直す" onclick="quickGenerate('${a.id}')">生成</button>
+          ${a.content ? `<button class="btn btn-success btn-sm" title="WordPressに下書き投稿" onclick="quickPublish('${a.id}')">WP投稿</button>` : ''}
+          ${a.wp_url ? `<a href="${esc(a.wp_url)}" target="_blank" class="btn btn-secondary btn-sm" title="投稿済み記事を開く">記事を開く</a>` : ''}
         </div>
       </td>
     </tr>
