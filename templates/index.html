@@ -1740,8 +1740,19 @@ function updateArticleTypeUI() {
 }
 
 function updateDefinitionDefaultsForCurrentContext() {
+  updateQualityDefaultsForCurrentContext();
   updateDecorationSelects();
   updateAdDefinitionSelects();
+}
+
+function updateQualityDefaultsForCurrentContext() {
+  const gen = document.getElementById('gen-quality');
+  if (gen) gen.value = defaultQualityId(currentArticleType) || gen.value;
+  const batch = document.getElementById('batch-quality');
+  if (batch) {
+    const articleType = document.getElementById('batch-article-type-filter')?.value || currentArticleType;
+    batch.value = defaultQualityId(articleType) || batch.value;
+  }
 }
 
 // ---- Toast ----
@@ -2999,6 +3010,7 @@ async function startGenerate() {
     let buffer = '';
     let charCount = 0;
     let generationCompleted = false;
+    let generationError = false;
 
     const handleGenerateMessage = async (msg) => {
       if (msg.text) {
@@ -3012,6 +3024,8 @@ async function startGenerate() {
         await finalizeGenerateSuccess(articleId);
       }
       if (msg.error) {
+        generationError = true;
+        if (publishBtn) publishBtn.disabled = true;
         toast('エラー: ' + msg.error, 'error');
       }
     };
@@ -3035,7 +3049,7 @@ async function startGenerate() {
       const raw = tail.slice(6).trim();
       if (raw) await handleGenerateMessage(JSON.parse(raw));
     }
-    if (!generationCompleted && output.textContent.trim()) {
+    if (!generationCompleted && !generationError && output.textContent.trim()) {
       await finalizeGenerateSuccess(articleId);
     }
   } catch (e) {
@@ -3537,6 +3551,7 @@ async function loadQuality() {
   qualityList = await res.json();
   renderQuality();
   loadQualitySelects();
+  updateQualityDefaultsForCurrentContext();
   await loadQualityStyleReferences();
   scheduleDataSnapshotBackup();
 }
@@ -3608,15 +3623,24 @@ function loadQualitySelects() {
       if (id === 'quality-filter') {
         el.value = qualityList.some(q => q.id === prev) ? prev : '';
       } else {
-        const fallback = defaultQualityId();
+        const articleType = id === 'batch-quality'
+          ? (document.getElementById('batch-article-type-filter')?.value || currentArticleType)
+          : currentArticleType;
+        const fallback = defaultQualityId(articleType);
         el.value = qualityList.some(q => q.id === prev) ? prev : (fallback || '');
       }
     }
   });
 }
 
-function defaultQualityId() {
-  return qualityList.find(q => q.is_default)?.id || qualityList[0]?.id || '';
+function defaultQualityId(articleType = currentArticleType) {
+  return (
+    qualityList.find(q => q.article_type === articleType)?.id ||
+    (articleType === 'ranking' ? qualityList.find(q => q.id === 'ranking-quality')?.id : '') ||
+    qualityList.find(q => q.is_default)?.id ||
+    qualityList[0]?.id ||
+    ''
+  );
 }
 
 function openQualityModal() {

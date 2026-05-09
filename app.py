@@ -233,18 +233,59 @@ def load_ad_definitions():
 def save_ad_definitions(items):
     save_json(AD_DEFINITIONS_FILE, items)
 
-def load_quality():
-    return load_json(QUALITY_FILE, [
+OLD_DEFAULT_QUALITY_PROMPT = "SEOに最適化された、読みやすく情報量の多い記事を書いてください。見出しを適切に使い、具体例を含めてください。"
+
+
+def default_quality_presets():
+    return [
         {
             "id": "default",
             "name": "標準品質",
-            "prompt": "SEOに最適化された、読みやすく情報量の多い記事を書いてください。見出しを適切に使い、具体例を含めてください。",
+            "prompt": """検索意図に正面から答える、読みやすく情報量のある記事を書いてください。
+- 冒頭で読者の悩みと記事で分かることを明確にする
+- h2/h3の階層を崩さず、1見出し1テーマで整理する
+- 具体例、判断基準、注意点を入れて薄い一般論で終わらせない
+- 事実不明な内容は断定せず、確認が必要な表現にする
+- 本文にAIの説明文、Markdown、Gutenbergコメント、サンプル文を出さない""",
             "target_chars": "",
             "tone": "ですます調",
             "extra_rules": "",
             "is_default": True
+        },
+        {
+            "id": "ranking-quality",
+            "name": "ランキング記事品質",
+            "article_type": "ranking",
+            "prompt": """ランキング記事専用の品質要件:
+- タイトルに「N選」が含まれる場合、必ずN件の商品・サービス・選択肢を掲載する
+- 比較表はヘッダーを除いてN行、個別ランキング見出しも1位〜N位まで欠番なく作る
+- 冒頭に選定基準を3〜5個提示し、順位の理由が分かるようにする
+- 各ランキング項目には「特徴」「おすすめ理由」「注意点」「向いている人」を入れる
+- 価格、仕様、口コミなど未確認の情報は断定せず、目安・確認推奨として書く
+- 4件だけ、途中まで、表だけ、まとめだけで終わらせない
+- 比較表のセルは短くし、スマホ表示で崩れにくい列数にする
+- 本文にAIの説明文、Markdown、Gutenbergコメント、サンプル文を出さない""",
+            "target_chars": "6000",
+            "tone": "ですます調",
+            "extra_rules": "導入 → 選定基準 → 比較表 → 1位から順番に個別解説 → 選び方 → FAQ → まとめの順で構成する。",
+            "is_default": False
         }
-    ])
+    ]
+
+
+def load_quality():
+    presets = default_quality_presets()
+    quality = load_json(QUALITY_FILE, presets)
+    existing_ids = {q.get('id') for q in quality}
+    for preset in presets:
+        if preset['id'] not in existing_ids:
+            quality.append(preset)
+            continue
+        if preset['id'] == 'default':
+            existing = next((q for q in quality if q.get('id') == 'default'), None)
+            if existing and existing.get('prompt') == OLD_DEFAULT_QUALITY_PROMPT:
+                existing['prompt'] = preset['prompt']
+    return quality
 
 def save_quality(quality):
     save_json(QUALITY_FILE, quality)
@@ -448,7 +489,7 @@ def article_html_output_rules():
 - 記事本文HTMLのみを出力する。説明文、前置き、「以下に作成しました」、Markdownの```は絶対に出力しない
 - <style>、<script>、<html>、<body>、<article>、<main>、iframe、form、input、buttonは出力しない
 - tableを使う場合は <table><thead><tbody><tr><th><td> を正しく閉じ、tableの外に他要素が漏れないようにする
-- WordPress/Gutenbergコメントを使う場合は開始コメントと終了コメントの対応を必ず取る。終了コメントだけを単独で出力しない
+- WordPress/Gutenbergコメント（<!-- wp:... -->、<!-- /wp:... -->）は出力しない
 - 装飾サンプルはCSSクラスや構造の参考にするだけ。サンプル本文、人物画像URL、質問文、回答文、プレースホルダーは流用しない
 - 比較表は横幅が崩れにくいように列を増やしすぎず、セル内は短くする
 - 断定しすぎず、選び方・比較理由・向いている人・注意点を具体的に書く"""
@@ -469,8 +510,17 @@ def decoration_reference_prompt(sample_html, limit=4000):
 --- 装飾サンプルここまで ---"""
 
 
+def strip_wp_block_artifacts(html):
+    text = str(html or '')
+    text = re.sub(r'&lt;!--\s*/?wp:[\s\S]*?--&gt;', '', text, flags=re.I)
+    text = re.sub(r'<!--\s*/?wp:[\s\S]*?-->', '', text, flags=re.I)
+    text = re.sub(r'(?im)^\s*/?wp:[a-z0-9_/\-]+(?:\s+\{[^\n\r]*\})?\s*$', '', text)
+    text = re.sub(r'(?i)(?:^|\s)/?wp:[a-z0-9_/\-]+(?:\s+\{[^<\n\r]*?\})?', ' ', text)
+    return text
+
+
 def strip_generated_noise(content):
-    text = str(content or '').strip()
+    text = strip_wp_block_artifacts(content).strip()
     text = re.sub(r'(?m)^\s*`{3,}(?:html|HTML)?\s*$', '', text)
     text = re.sub(r'^\s*```(?:html|HTML)?\s*', '', text)
     text = re.sub(r'\s*```\s*$', '', text)
@@ -498,7 +548,7 @@ def balance_common_html_tags(html):
 
 
 def sanitize_generated_html(content):
-    html = strip_generated_noise(content)
+    html = strip_wp_block_artifacts(strip_generated_noise(content))
     html = re.sub(r'<\s*(script|style|iframe|object|embed|form|input|textarea|button)\b[\s\S]*?<\s*/\s*\1\s*>', '', html, flags=re.I)
     html = re.sub(r'<\s*(script|style|iframe|object|embed|form|input|textarea|button)\b[^>]*?/?>', '', html, flags=re.I)
     html = re.sub(r'</?\s*(html|body|article|main|head|meta|link)\b[^>]*>', '', html, flags=re.I)
@@ -519,7 +569,7 @@ def sanitize_generated_html(content):
         html = ''.join(str(child) for child in root.contents)
     if not BeautifulSoup:
         html = balance_common_html_tags(html)
-    return html.strip().strip('`').strip()
+    return strip_wp_block_artifacts(html).strip().strip('`').strip()
 
 
 def safe_article_css(value):
@@ -1162,6 +1212,91 @@ def build_ad_product_blocks(article, settings, ad_definition=None, include_amazo
     return product_blocks, prompt
 
 
+def normalize_digits(text):
+    return str(text or '').translate(str.maketrans('０１２３４５６７８９', '0123456789'))
+
+
+def extract_ranking_count(article):
+    source = normalize_digits(' '.join([
+        article.get('title', ''),
+        article.get('keywords', ''),
+        article.get('category', ''),
+    ]))
+    match = re.search(r'([1-9][0-9]?)\s*選', source)
+    if not match:
+        return None
+    count = int(match.group(1))
+    return count if 2 <= count <= 30 else None
+
+
+def build_ranking_count_prompt(article, article_type):
+    if normalize_article_type(article_type, 'ranking') != 'ranking':
+        return ''
+    count = extract_ranking_count(article)
+    if not count:
+        return ''
+    return f"""
+
+ランキング件数の厳守:
+- タイトルから「{count}選」と判断しています。本文では必ず{count}件を紹介してください。
+- 比較表はヘッダーを除いて{count}行にしてください。
+- 個別解説は「1位」から「{count}位」まで欠番・重複なしで作ってください。
+- {count}件未満で終了しないでください。商品名や候補が不足する場合でも、記事テーマに合う候補を補って{count}件にしてください。"""
+
+
+def count_table_rows_from_html(content):
+    html = str(content or '')
+    if BeautifulSoup:
+        try:
+            soup = BeautifulSoup(html, 'html5lib')
+        except FeatureNotFound:
+            soup = BeautifulSoup(html, 'html.parser')
+        counts = []
+        for table in soup.find_all('table'):
+            body_rows = table.select('tbody tr')
+            if body_rows:
+                counts.append(len(body_rows))
+            else:
+                rows = table.find_all('tr')
+                data_rows = [row for row in rows if row.find('td')]
+                counts.append(len(data_rows))
+        return max(counts or [0])
+    table_counts = []
+    for table in re.findall(r'<table\b[\s\S]*?</table>', html, flags=re.I):
+        rows = re.findall(r'<tr\b[\s\S]*?</tr>', table, flags=re.I)
+        data_rows = [row for row in rows if re.search(r'<td\b', row, flags=re.I)]
+        table_counts.append(len(data_rows))
+    return max(table_counts or [0])
+
+
+def count_ranked_items_from_text(content):
+    text = html_to_text(content)
+    ranked = {
+        int(m.group(1))
+        for m in re.finditer(r'(?:^|\n|\s)(?:第\s*)?([1-9][0-9]?)\s*位(?:\s|[:：.、]|$)', text)
+    }
+    return len(ranked)
+
+
+def detect_ranking_item_count(content):
+    return max(count_ranked_items_from_text(content), count_table_rows_from_html(content))
+
+
+def validate_generated_article(article, article_type, content):
+    if normalize_article_type(article_type, 'ranking') != 'ranking':
+        return ''
+    expected = extract_ranking_count(article)
+    if not expected:
+        return ''
+    ranked_count = count_ranked_items_from_text(content)
+    table_rows = count_table_rows_from_html(content)
+    if ranked_count < expected:
+        return f'タイトルは{expected}選ですが、個別ランキング見出しが{ranked_count}件しか検出できませんでした。もう一度生成してください。'
+    if table_rows < expected:
+        return f'タイトルは{expected}選ですが、比較表が{table_rows}行しか検出できませんでした。もう一度生成してください。'
+    return ''
+
+
 def build_article_type_prompt(article_type):
     prompts = {
         'ranking': """記事種類: ランキング記事
@@ -1169,7 +1304,8 @@ def build_article_type_prompt(article_type):
 - 読者が商品やサービスを選びやすいよう、選定基準、比較軸、ランキング理由を明確にする
 - 比較表、ランキング理由、選び方、向いている人、注意点を入れる
 - 根拠のない順位付けを避け、比較軸ごとに理由を書く
-- ランキング表は商品名、特徴、価格帯、向いている人程度に絞り、セルを長文にしない""",
+- ランキング表は商品名、特徴、価格帯、向いている人程度に絞り、セルを長文にしない
+- 各商品の個別解説は順位付きのh3にし、比較表だけで終わらせない""",
         'brand': """記事種類: 商標記事（レビュー記事）
 - 特定の商品・サービス名で検索する読者に向けたレビュー記事にする
 - 特徴、口コミ・評判、メリット・デメリット、向いている人、購入・申込前の注意点を整理する
@@ -1196,6 +1332,19 @@ def build_quality_prompt(quality):
     if quality.get('extra_rules'):
         parts.append(f"追加品質ルール: {quality.get('extra_rules')}")
     return '\n'.join(parts)
+
+
+def select_quality_definition(quality_list, quality_id=None, article_type='ranking'):
+    if quality_id:
+        found = next((q for q in quality_list if q.get('id') == quality_id), None)
+        if found:
+            return found
+    normalized_type = normalize_article_type(article_type, 'ranking')
+    return (
+        next((q for q in quality_list if q.get('article_type') == normalized_type), None) or
+        next((q for q in quality_list if q.get('is_default')), None) or
+        (quality_list[0] if quality_list else None)
+    )
 
 
 def quality_style_reference_url(article_type, settings):
@@ -1677,19 +1826,17 @@ def generate_article(article_id):
     if not api_key:
         return jsonify({'error': 'Claude APIキーが設定されていません'}), 400
 
-    quality_list = load_quality()
-    quality = next((q for q in quality_list if q['id'] == quality_id), None)
-    if not quality:
-        quality = next((q for q in quality_list if q.get('is_default')), quality_list[0] if quality_list else None)
-
     article_work = dict(article)
     for key in ('title', 'keywords', 'category', 'ad_keywords', 'site_id', 'slug'):
         if key in data:
             article_work[key] = data.get(key) or ''
     article_type = normalize_article_type(data.get('article_type') or article_work.get('article_type'), 'ranking')
     article_work['article_type'] = article_type
+    quality_list = load_quality()
+    quality = select_quality_definition(quality_list, quality_id, article_type)
     quality_prompt = build_quality_prompt(quality)
     article_type_prompt = build_article_type_prompt(article_type)
+    ranking_count_prompt = build_ranking_count_prompt(article_work, article_type)
     reference_text = ''
     style_reference_url = ''
     style_reference_text = ''
@@ -1726,6 +1873,7 @@ def generate_article(article_id):
 {quality_prompt}
 
 {article_type_prompt}
+{ranking_count_prompt}
 
 {article_html_output_rules()}"""
 
@@ -1758,7 +1906,7 @@ def generate_article(article_id):
 
             with client.messages.stream(
                 model="claude-sonnet-4-6",
-                max_tokens=4096,
+                max_tokens=8192,
                 messages=[{"role": "user", "content": prompt}]
             ) as stream:
                 for text in stream.text_stream:
@@ -1773,6 +1921,13 @@ def generate_article(article_id):
             for a in current_articles:
                 if a['id'] == article_id:
                     clean_content = sanitize_generated_html(full_content)
+                    validation_error = validate_generated_article(article_work, article_type, clean_content)
+                    if validation_error:
+                        a['status'] = 'error'
+                        a['error'] = validation_error
+                        save_articles(current_articles)
+                        yield f"data: {json.dumps({'error': validation_error})}\n\n"
+                        return
                     a['content'] = clean_content
                     a['status'] = 'generated'
                     a['title'] = article_work.get('title', a.get('title', ''))
@@ -1781,7 +1936,7 @@ def generate_article(article_id):
                     a['slug'] = normalize_slug(article_work.get('slug', a.get('slug', '')))
                     a['ad_keywords'] = article_work.get('ad_keywords', a.get('ad_keywords', ''))
                     a['site_id'] = article_work.get('site_id') or a.get('site_id')
-                    a['quality_id'] = quality_id
+                    a['quality_id'] = quality.get('id') if quality else quality_id
                     a['article_type'] = article_type
                     a['decoration_id'] = decoration_id or a.get('decoration_id')
                     if ad_definition:
@@ -1825,10 +1980,8 @@ def batch_generate():
         return jsonify({'error': 'Claude APIキーが設定されていません'}), 400
 
     quality_list = load_quality()
-    quality = next((q for q in quality_list if q['id'] == quality_id), None)
-    if not quality:
-        quality = next((q for q in quality_list if q.get('is_default')), quality_list[0] if quality_list else None)
     batch_article_type = normalize_article_type(data.get('article_type'), 'ranking')
+    quality = select_quality_definition(quality_list, quality_id, batch_article_type)
     quality_prompt = build_quality_prompt(quality)
     reference_text = ''
     if quality and quality.get('reference_url'):
@@ -1884,6 +2037,7 @@ def batch_generate():
                 update_job(current_title=article.get('title', ''), message=f"生成中: {article.get('title', '')}")
                 article_type = normalize_article_type(article.get('article_type') or batch_article_type, batch_article_type)
                 article_type_prompt = build_article_type_prompt(article_type)
+                ranking_count_prompt = build_ranking_count_prompt(article, article_type)
                 style_reference_url, style_reference_text = style_reference_cache.get(article_type, ('', ''))
                 if article_type not in style_reference_cache:
                     try:
@@ -1901,6 +2055,7 @@ def batch_generate():
 {quality_prompt}
 
 {article_type_prompt}
+{ranking_count_prompt}
 
 {article_html_output_rules()}"""
 
@@ -1937,10 +2092,13 @@ def batch_generate():
 
                 message = client.messages.create(
                     model="claude-sonnet-4-6",
-                    max_tokens=4096,
+                    max_tokens=8192,
                     messages=[{"role": "user", "content": prompt}]
                 )
                 content = sanitize_generated_html(message.content[0].text)
+                validation_error = validate_generated_article(article, article_type, content)
+                if validation_error:
+                    raise ValueError(validation_error)
 
                 current_articles = load_articles()
                 for a in current_articles:
@@ -1948,7 +2106,7 @@ def batch_generate():
                         a['content'] = content
                         a['status'] = 'generated'
                         a.pop('batch_job_id', None)
-                        a['quality_id'] = quality_id
+                        a['quality_id'] = quality.get('id') if quality else quality_id
                         a['article_type'] = article_type
                         a['decoration_id'] = decoration_id or a.get('decoration_id')
                         if ad_definition:
