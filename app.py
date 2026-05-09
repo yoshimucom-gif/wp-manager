@@ -5,7 +5,7 @@ import threading
 import re
 import csv
 import io
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from functools import wraps
 from html import escape, unescape
@@ -466,6 +466,42 @@ def clamp_int(value, default, min_value, max_value):
     except (TypeError, ValueError):
         return default
     return max(min_value, min(number, max_value))
+
+
+def normalize_slug(value):
+    slug = str(value or '').strip().strip('/')
+    slug = re.sub(r'\s+', '-', slug)
+    slug = re.sub(r'-{2,}', '-', slug)
+    return slug
+
+
+def build_schedule_datetime(index, schedule_data, date_override=None, slot_override=None):
+    daily_limit = clamp_int(schedule_data.get('daily_limit'), 20, 1, 20)
+    interval_minutes = clamp_int(schedule_data.get('interval_minutes'), 30, 1, 180)
+    start_date = str(date_override or schedule_data.get('start_date') or '').strip()
+    start_time = str(schedule_data.get('start_time') or '09:00').strip()
+    try:
+        base = datetime.strptime(start_date, '%Y-%m-%d')
+    except ValueError:
+        base = datetime.now() + timedelta(days=1)
+        base = base.replace(hour=0, minute=0, second=0, microsecond=0)
+    match = re.match(r'^(\d{1,2}):(\d{2})$', start_time)
+    hour = clamp_int(match.group(1), 9, 0, 23) if match else 9
+    minute = clamp_int(match.group(2), 0, 0, 59) if match else 0
+    base = base.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    minimum = datetime.now() + timedelta(minutes=10)
+    if base < minimum:
+        base = minimum.replace(second=0, microsecond=0)
+    day_offset = 0 if date_override else index // daily_limit
+    slot_offset = slot_override if slot_override is not None else index % daily_limit
+    return base + timedelta(days=day_offset, minutes=interval_minutes * slot_offset)
+
+
+def normalize_schedule_date_key(value, fallback):
+    try:
+        return datetime.strptime(str(value or '').strip(), '%Y-%m-%d').strftime('%Y-%m-%d')
+    except ValueError:
+        return fallback
 
 
 def score_article_content(title, content, keywords=''):
@@ -1266,10 +1302,12 @@ def update_article(article_id):
             for key in [
                 'title', 'keywords', 'content', 'article_type', 'ad_keywords',
                 'category', 'priority', 'memo', 'schedule_date', 'quality_id',
-                'decoration_id', 'ad_definition_id'
+                'decoration_id', 'ad_definition_id', 'scheduled_at'
             ]:
                 if key in data:
                     a[key] = data[key]
+            if 'slug' in data:
+                a['slug'] = normalize_slug(data.get('slug'))
             if 'article_type' in data:
                 a['article_type'] = normalize_article_type(data.get('article_type'), a.get('article_type', 'ranking'))
             if 'content' in data:
@@ -1339,6 +1377,7 @@ def import_excel():
         'title': {'title', 'タイトル', '記事タイトル', '記事名'},
         'keywords': {'keyword', 'keywords', 'キーワード', 'seoキーワード', '検索キーワード'},
         'category': {'category', 'categories', 'カテゴリ', 'カテゴリー', 'wpカテゴリー', '投稿カテゴリー'},
+        'slug': {'slug', 'スラッグ', 'urlスラッグ', '投稿スラッグ', 'post_name'},
         'article_type': {'type', 'article_type', '記事種類', '記事種別', '種類', '種別'},
         'site': {'site', 'サイト', '投稿先', '投稿先サイト', 'site_id', 'サイトid'},
         'quality': {'quality', '品質', '品質定義', 'quality_id', '品質id'},
@@ -1400,6 +1439,7 @@ def import_excel():
             'title': title,
             'keywords': cell(row, 'keywords'),
             'category': cell(row, 'category'),
+            'slug': normalize_slug(cell(row, 'slug')),
             'article_type': normalize_article_type(cell(row, 'article_type'), 'ranking'),
             'ad_keywords': cell(row, 'ad_keywords'),
             'priority': cell(row, 'priority'),
@@ -1715,6 +1755,13 @@ def publish_article(article_id):
     if article_css:
         content = f'<style>{article_css}</style>\n' + content
     post_payload = {'title': article['title'], 'content': content, 'status': post_status}
+    slug = normalize_slug(article.get('slug'))
+    if slug:
+        post_payload['slug'] = slug
+    if data.get('scheduled_at'):
+        scheduled_at = str(data.get('scheduled_at')).strip()
+        post_payload['date'] = scheduled_at
+        post_payload['status'] = 'future'
     category_ids = resolve_wp_category_ids(wp_url, wp_user, wp_password, article.get('category', ''))
     if category_ids:
         post_payload['categories'] = category_ids
@@ -1735,6 +1782,10 @@ def publish_article(article_id):
                 a['wp_post_id'] = post_data['id']
                 a['wp_url'] = post_data.get('link', '')
                 a['published_at'] = datetime.now().isoformat()
+                if data.get('scheduled_at'):
+                    a['status'] = 'scheduled'
+                    a['scheduled_at'] = data.get('scheduled_at')
+                    a['schedule_date'] = str(data.get('scheduled_at'))[:10]
                 break
         save_articles(articles)
         return jsonify({'success': True, 'wp_url': post_data.get('link', ''), 'wp_post_id': post_data['id']})
@@ -1747,16 +1798,24 @@ def publish_article(article_id):
 @login_required
 def batch_publish():
     data = request.json or {}
-    article_ids = set(data.get('article_ids', []))
+    article_ids = data.get('article_ids', [])
     post_status = data.get('post_status', 'draft')
+    schedule_enabled = bool(data.get('schedule_enabled'))
+    schedule_data = data.get('schedule') or {}
 
     settings = load_settings()
     articles = load_articles()
-    targets = [a for a in articles if a['id'] in article_ids and a.get('content')]
+    article_lookup = {a['id']: a for a in articles}
+    targets = [article_lookup[i] for i in article_ids if i in article_lookup and article_lookup[i].get('content')]
+    if post_status == 'publish' and not schedule_enabled and len(targets) > 20:
+        return jsonify({'error': '即時公開は1日20件までです。21件以上は予約投稿を有効にしてください。'}), 400
 
     article_css = settings.get('article_css', '')
     results = {'success': 0, 'error': 0, 'errors': []}
-    for article in targets:
+    daily_limit = clamp_int(schedule_data.get('daily_limit'), 20, 1, 20)
+    schedule_start_key = normalize_schedule_date_key(schedule_data.get('start_date'), (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d'))
+    schedule_day_counts = {}
+    for index, article in enumerate(targets):
         wp_url, wp_user, wp_password = get_site_credentials(article, settings)
         if not all([wp_url, wp_user, wp_password]):
             results['error'] += 1
@@ -1765,7 +1824,23 @@ def batch_publish():
         content = article['content']
         if article_css:
             content = f'<style>{article_css}</style>\n' + content
-        post_payload = {'title': article['title'], 'content': content, 'status': post_status}
+        scheduled_at = None
+        payload_status = post_status
+        if schedule_enabled:
+            date_key = normalize_schedule_date_key(article.get('schedule_date'), schedule_start_key)
+            while schedule_day_counts.get(date_key, 0) >= daily_limit:
+                date_key = (datetime.strptime(date_key, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
+            slot_index = schedule_day_counts.get(date_key, 0)
+            schedule_day_counts[date_key] = slot_index + 1
+            scheduled_dt = build_schedule_datetime(index, schedule_data, date_override=date_key, slot_override=slot_index)
+            scheduled_at = scheduled_dt.strftime('%Y-%m-%dT%H:%M:%S')
+            payload_status = 'future'
+        post_payload = {'title': article['title'], 'content': content, 'status': payload_status}
+        slug = normalize_slug(article.get('slug'))
+        if slug:
+            post_payload['slug'] = slug
+        if scheduled_at:
+            post_payload['date'] = scheduled_at
         category_ids = resolve_wp_category_ids(wp_url, wp_user, wp_password, article.get('category', ''))
         if category_ids:
             post_payload['categories'] = category_ids
@@ -1780,10 +1855,13 @@ def batch_publish():
             post_data = response.json()
             for a in articles:
                 if a['id'] == article['id']:
-                    a['status'] = 'published'
+                    a['status'] = 'scheduled' if scheduled_at else 'published'
                     a['wp_post_id'] = post_data['id']
                     a['wp_url'] = post_data.get('link', '')
                     a['published_at'] = datetime.now().isoformat()
+                    if scheduled_at:
+                        a['scheduled_at'] = scheduled_at
+                        a['schedule_date'] = scheduled_at[:10]
                     break
             results['success'] += 1
         except Exception as e:
