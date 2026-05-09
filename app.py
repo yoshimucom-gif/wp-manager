@@ -18,6 +18,11 @@ import anthropic
 import openpyxl
 import requests
 from requests_aws4auth import AWS4Auth
+try:
+    from bs4 import BeautifulSoup, FeatureNotFound
+except ImportError:
+    BeautifulSoup = None
+    FeatureNotFound = Exception
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -436,6 +441,100 @@ def html_to_text(html):
     parser = _TextExtractor()
     parser.feed(html or '')
     return parser.text()
+
+
+def article_html_output_rules():
+    return """出力ルール:
+- 記事本文HTMLのみを出力する。説明文、前置き、「以下に作成しました」、Markdownの```は絶対に出力しない
+- <style>、<script>、<html>、<body>、<article>、<main>、iframe、form、input、buttonは出力しない
+- tableを使う場合は <table><thead><tbody><tr><th><td> を正しく閉じ、tableの外に他要素が漏れないようにする
+- WordPress/Gutenbergコメントを使う場合は開始コメントと終了コメントの対応を必ず取る。終了コメントだけを単独で出力しない
+- 装飾サンプルはCSSクラスや構造の参考にするだけ。サンプル本文、人物画像URL、質問文、回答文、プレースホルダーは流用しない
+- 比較表は横幅が崩れにくいように列を増やしすぎず、セル内は短くする
+- 断定しすぎず、選び方・比較理由・向いている人・注意点を具体的に書く"""
+
+
+def decoration_reference_prompt(sample_html, limit=4000):
+    sample = str(sample_html or '').strip()
+    if not sample:
+        return ''
+    return f"""
+装飾サンプルHTML（参考専用・本文にコピー禁止）:
+- 以下はCSSクラス、ボックス構造、見出し構造、装飾パターンを学ぶための資料です
+- サンプル本文、画像URL、質問文、回答文、プレースホルダー、Gutenbergコメントをそのまま出力しないでください
+- 記事テーマに合わせて中身を必ず置き換え、壊れたHTMLや途中で切れたブロックは出力しないでください
+
+--- 装飾サンプルここから ---
+{sample[:limit]}
+--- 装飾サンプルここまで ---"""
+
+
+def strip_generated_noise(content):
+    text = str(content or '').strip()
+    text = re.sub(r'(?m)^\s*`{3,}(?:html|HTML)?\s*$', '', text)
+    text = re.sub(r'^\s*```(?:html|HTML)?\s*', '', text)
+    text = re.sub(r'\s*```\s*$', '', text)
+    text = text.replace('```html', '').replace('```HTML', '').replace('```', '')
+    first = re.search(
+        r'(<h[2-4]\b|<p\b|<ul\b|<ol\b|<table\b|<div\b|<!--\s*wp:(?!/))',
+        text,
+        flags=re.I
+    )
+    if first:
+        text = text[first.start():]
+    text = re.sub(r'^(?:\s*</[^>]+>\s*|\s*<!--\s*/wp:[\s\S]*?-->\s*)+', '', text, flags=re.I)
+    return text.strip().strip('`').strip()
+
+
+def balance_common_html_tags(html):
+    closing_order = ['td', 'th', 'tr', 'tbody', 'thead', 'table', 'li', 'ul', 'ol', 'div']
+    fixed = html
+    for tag in closing_order:
+        opens = len(re.findall(fr'<{tag}\b[^>]*>', fixed, flags=re.I))
+        closes = len(re.findall(fr'</{tag}\s*>', fixed, flags=re.I))
+        if opens > closes:
+            fixed += ''.join(f'</{tag}>' for _ in range(opens - closes))
+    return fixed
+
+
+def sanitize_generated_html(content):
+    html = strip_generated_noise(content)
+    html = re.sub(r'<\s*(script|style|iframe|object|embed|form|input|textarea|button)\b[\s\S]*?<\s*/\s*\1\s*>', '', html, flags=re.I)
+    html = re.sub(r'<\s*(script|style|iframe|object|embed|form|input|textarea|button)\b[^>]*?/?>', '', html, flags=re.I)
+    html = re.sub(r'</?\s*(html|body|article|main|head|meta|link)\b[^>]*>', '', html, flags=re.I)
+    if BeautifulSoup:
+        try:
+            soup = BeautifulSoup(f'<div id="affiros9-root">{html}</div>', 'html5lib')
+        except FeatureNotFound:
+            soup = BeautifulSoup(f'<div id="affiros9-root">{html}</div>', 'html.parser')
+        root = soup.find(id='affiros9-root')
+        if not root:
+            return balance_common_html_tags(html).strip().strip('`').strip()
+        for tag in root.find_all(['script', 'style', 'iframe', 'object', 'embed', 'form', 'input', 'textarea', 'button']):
+            tag.decompose()
+        for tag in root.find_all(True):
+            for attr in list(tag.attrs):
+                if attr.lower().startswith('on'):
+                    del tag.attrs[attr]
+        html = ''.join(str(child) for child in root.contents)
+    if not BeautifulSoup:
+        html = balance_common_html_tags(html)
+    return html.strip().strip('`').strip()
+
+
+def safe_article_css(value):
+    css = str(value or '').strip()
+    if not css or looks_like_html(css):
+        return ''
+    return re.sub(r'</?\s*style\b[^>]*>', '', css, flags=re.I).strip()
+
+
+def prepare_article_content_for_publish(content, settings):
+    clean_content = sanitize_generated_html(content)
+    article_css = safe_article_css(settings.get('article_css', ''))
+    if article_css:
+        return f'<style>{article_css}</style>\n' + clean_content
+    return clean_content
 
 
 def normalize_article_type(value, default='ranking'):
@@ -1068,7 +1167,9 @@ def build_article_type_prompt(article_type):
         'ranking': """記事種類: ランキング記事
 - おすすめ記事・比較記事を統合した構成にする
 - 読者が商品やサービスを選びやすいよう、選定基準、比較軸、ランキング理由を明確にする
-- 可能であれば比較表、ランキング枠、メリット・デメリット、選び方を入れる""",
+- 比較表、ランキング理由、選び方、向いている人、注意点を入れる
+- 根拠のない順位付けを避け、比較軸ごとに理由を書く
+- ランキング表は商品名、特徴、価格帯、向いている人程度に絞り、セルを長文にしない""",
         'brand': """記事種類: 商標記事（レビュー記事）
 - 特定の商品・サービス名で検索する読者に向けたレビュー記事にする
 - 特徴、口コミ・評判、メリット・デメリット、向いている人、購入・申込前の注意点を整理する
@@ -1235,7 +1336,8 @@ def get_rewrite_style_prompt(data, settings):
 - 元記事の事実関係、固有名詞、重要な主張は保持する
 - 重複表現、冗長な表現、読みにくい段落を整理する
 - WordPress本文として使えるHTML形式で出力する
-- <article>タグ、```、解説文、前置きは出力しない"""
+
+{article_html_output_rules()}"""
 
     if target_chars:
         try:
@@ -1255,19 +1357,14 @@ def get_rewrite_style_prompt(data, settings):
     decoration_id = data.get('decoration_id')
     decoration = next((d for d in load_decorations() if d['id'] == decoration_id), None) if decoration_id else None
     if decoration and decoration.get('sample_html'):
-        prompt += f"""
-
-装飾ルール:
-以下のサンプル記事のHTML構造・CSSクラス・装飾パターンを参考にしてください。同じクラス名やボックス構造を優先して使ってください。
-
-{decoration['sample_html'][:5000]}"""
-    elif settings.get('article_css'):
+        prompt += decoration_reference_prompt(decoration.get('sample_html'), limit=5000)
+    elif safe_article_css(settings.get('article_css')):
         prompt += f"""
 
 サイト共通CSS:
 以下のCSSに合うHTML構造とクラス設計を意識してください。
 
-{settings.get('article_css', '')[:3000]}"""
+{safe_article_css(settings.get('article_css'))[:3000]}"""
 
     return prompt
 
@@ -1630,7 +1727,7 @@ def generate_article(article_id):
 
 {article_type_prompt}
 
-記事はHTML形式で書いてください。<article>タグは不要です。h2, h3, p, ul, li等のHTML要素を使用してください。"""
+{article_html_output_rules()}"""
 
             if reference_text:
                 prompt += f'\n\n以下の参考記事の内容・構成・論点を参考にして執筆してください（コピーは不可）：\n\n{reference_text}'
@@ -1646,7 +1743,7 @@ def generate_article(article_id):
 {style_reference_text[:5000]}'''
 
             if decoration and decoration.get('sample_html'):
-                prompt += f'\n\n以下のサンプル記事のHTML構造・装飾スタイルを踏襲して記事を作成してください。同じクラス名・ボックスデザイン・見出し構造・装飾パターンを使用してください：\n\n{decoration["sample_html"][:4000]}'
+                prompt += decoration_reference_prompt(decoration.get('sample_html'), limit=4000)
 
             if rakuten_asp_instruction:
                 prompt += rakuten_asp_instruction
@@ -1675,7 +1772,8 @@ def generate_article(article_id):
             current_articles = load_articles()
             for a in current_articles:
                 if a['id'] == article_id:
-                    a['content'] = full_content
+                    clean_content = sanitize_generated_html(full_content)
+                    a['content'] = clean_content
                     a['status'] = 'generated'
                     a['title'] = article_work.get('title', a.get('title', ''))
                     a['keywords'] = article_work.get('keywords', a.get('keywords', ''))
@@ -1689,7 +1787,7 @@ def generate_article(article_id):
                     if ad_definition:
                         a['ad_definition_id'] = ad_definition.get('id')
                     a['generated_at'] = datetime.now().isoformat()
-                    a['usage'] = build_article_usage(prompt, full_content, final_message)
+                    a['usage'] = build_article_usage(prompt, clean_content, final_message)
                     apply_score_fields(a)
                     break
             save_articles(current_articles)
@@ -1804,7 +1902,7 @@ def batch_generate():
 
 {article_type_prompt}
 
-記事はHTML形式で書いてください。<article>タグは不要です。h2, h3, p, ul, li等のHTML要素を使用してください。"""
+{article_html_output_rules()}"""
 
                 if reference_text:
                     prompt += f'\n\n以下の参考記事の内容・構成・論点を参考にして執筆してください（コピーは不可）：\n\n{reference_text}'
@@ -1820,7 +1918,7 @@ def batch_generate():
 {style_reference_text[:5000]}'''
 
                 if decoration and decoration.get('sample_html'):
-                    prompt += f'\n\n以下のサンプル記事のHTML構造・装飾スタイルを踏襲して記事を作成してください。同じクラス名・ボックスデザイン・見出し構造・装飾パターンを使用してください：\n\n{decoration["sample_html"][:4000]}'
+                    prompt += decoration_reference_prompt(decoration.get('sample_html'), limit=4000)
 
                 rakuten_asp_instruction = build_rakuten_asp_instruction(article, settings)
                 if rakuten_asp_instruction:
@@ -1842,7 +1940,7 @@ def batch_generate():
                     max_tokens=4096,
                     messages=[{"role": "user", "content": prompt}]
                 )
-                content = message.content[0].text
+                content = sanitize_generated_html(message.content[0].text)
 
                 current_articles = load_articles()
                 for a in current_articles:
@@ -1907,10 +2005,7 @@ def publish_article(article_id):
 
     data = request.json or {}
     post_status = data.get('post_status', 'draft')
-    article_css = settings.get('article_css', '')
-    content = article['content']
-    if article_css:
-        content = f'<style>{article_css}</style>\n' + content
+    content = prepare_article_content_for_publish(article['content'], settings)
     post_payload = {'title': article['title'], 'content': content, 'status': post_status}
     slug = normalize_slug(article.get('slug'))
     if slug:
@@ -1967,7 +2062,6 @@ def batch_publish():
     if post_status == 'publish' and not schedule_enabled and len(targets) > 20:
         return jsonify({'error': '即時公開は1日20件までです。21件以上は予約投稿を有効にしてください。'}), 400
 
-    article_css = settings.get('article_css', '')
     results = {'success': 0, 'error': 0, 'errors': []}
     daily_limit = clamp_int(schedule_data.get('daily_limit'), 20, 1, 20)
     schedule_start_key = normalize_schedule_date_key(schedule_data.get('start_date'), (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d'))
@@ -1978,9 +2072,7 @@ def batch_publish():
             results['error'] += 1
             results['errors'].append({'title': article['title'], 'error': 'サイト未設定'})
             continue
-        content = article['content']
-        if article_css:
-            content = f'<style>{article_css}</style>\n' + content
+        content = prepare_article_content_for_publish(article['content'], settings)
         scheduled_at = None
         payload_status = post_status
         if schedule_enabled:

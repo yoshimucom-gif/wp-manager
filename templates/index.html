@@ -2997,6 +2997,9 @@ async function finalizeGenerateSuccess(articleId) {
   if (publishBtn) publishBtn.disabled = false;
   await loadArticles();
   document.getElementById('gen-article-select').value = articleId;
+  const article = allArticles.find(a => a.id === articleId);
+  const output = document.getElementById('gen-output');
+  if (article?.content && output) output.textContent = article.content;
   toast('記事生成が完了しました。WP投稿できます。', 'success');
 }
 
