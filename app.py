@@ -743,11 +743,75 @@ def build_article_usage(prompt, content, message=None):
     }
 
 
+SCORE_VERSION = 2
+
+
+def critical_html_tag_issues(html):
+    raw = re.sub(r'<!--[\s\S]*?-->', '', str(html or ''))
+    issues = []
+    for tag in ['table', 'thead', 'tbody', 'tr', 'td', 'th', 'ul', 'ol', 'li', 'div']:
+        opens = len(re.findall(fr'<{tag}\b[^>]*>', raw, flags=re.I))
+        closes = len(re.findall(fr'</{tag}\s*>', raw, flags=re.I))
+        if opens != closes:
+            issues.append(f'{tag}タグの開始/終了数が不一致です')
+    return issues
+
+
+def visible_generation_artifact_count(html, text):
+    raw = str(html or '')
+    visible = str(text or '')
+    patterns = [
+        r'/?wp:[a-z0-9_/\-]+',
+        r'<!--\s*/?wp:',
+        r'&lt;!--\s*/?wp:',
+        r'```',
+        r'className\s*:',
+        r'iconColor\s*:',
+        r'\{["\'](?:level|count|design|type)["\']\s*:',
+        r'以下に.*作成',
+        r'HTML構造',
+    ]
+    return sum(len(re.findall(pattern, raw, flags=re.I)) + len(re.findall(pattern, visible, flags=re.I)) for pattern in patterns)
+
+
+def scoring_caps_and_penalties(title, html, text, keywords=''):
+    suggestions = []
+    penalties = 0
+    caps = []
+
+    artifact_count = visible_generation_artifact_count(html, text)
+    if artifact_count:
+        caps.append(20)
+        penalties += min(30, artifact_count * 5)
+        suggestions.append('GutenbergコメントやAI出力の残骸が本文に出ています。記事HTMLが崩壊しているため再生成が必要です。')
+
+    tag_issues = critical_html_tag_issues(html)
+    if tag_issues:
+        caps.append(35)
+        penalties += min(25, len(tag_issues) * 6)
+        suggestions.append('HTMLタグの閉じ忘れや入れ子崩れがあります。WordPress表示崩れの原因になるため修復してください。')
+
+    ranking_expected = extract_ranking_count({'title': title or '', 'keywords': keywords or ''})
+    if ranking_expected:
+        ranked_count = count_ranked_items_from_text(html)
+        table_rows = count_table_rows_from_html(html)
+        if ranked_count < ranking_expected:
+            caps.append(35)
+            penalties += 25
+            suggestions.append(f'タイトルは{ranking_expected}選ですが、個別ランキング見出しが{ranked_count}件しかありません。')
+        if table_rows < ranking_expected:
+            caps.append(45)
+            penalties += 15
+            suggestions.append(f'タイトルは{ranking_expected}選ですが、比較表が{table_rows}行しかありません。')
+
+    return caps, penalties, suggestions
+
+
 def score_article_content(title, content, keywords=''):
     text = html_to_text(content)
     compact_text = re.sub(r'\s+', '', text)
     char_count = len(compact_text)
-    html = content or ''
+    html = str(content or '')
     h2_count = len(re.findall(r'<h2\b', html, re.I))
     h3_count = len(re.findall(r'<h3\b', html, re.I))
     list_count = len(re.findall(r'<(ul|ol)\b', html, re.I))
@@ -765,6 +829,8 @@ def score_article_content(title, content, keywords=''):
 
     score = 0
     suggestions = []
+    caps, penalties, critical_suggestions = scoring_caps_and_penalties(title, html, text, keywords)
+    suggestions.extend(critical_suggestions)
 
     if char_count >= 3500:
         score += 25
@@ -847,6 +913,10 @@ def score_article_content(title, content, keywords=''):
     else:
         suggestions.append('長すぎる段落が多いため、短い段落や箇条書きに分割してください。')
 
+    if penalties:
+        score -= penalties
+    if caps:
+        score = min(score, min(caps))
     score = max(0, min(100, score))
     grade = 'A' if score >= 85 else 'B' if score >= 70 else 'C' if score >= 55 else 'D'
     priority = 'high' if score < 55 else 'middle' if score < 70 else 'low'
@@ -871,7 +941,11 @@ def score_article_content(title, content, keywords=''):
             'main_keyword': main_keyword,
             'title_has_keyword': title_has_keyword,
             'body_has_keyword': body_has_keyword,
+            'artifact_count': visible_generation_artifact_count(html, text),
+            'html_issues': critical_html_tag_issues(html),
+            'score_version': SCORE_VERSION,
         },
+        'score_version': SCORE_VERSION,
         'scored_at': datetime.now().isoformat(),
     }
 
@@ -886,7 +960,24 @@ def apply_score_fields(item, title=None, content=None, keywords=None):
     item['score_grade'] = score_data['grade']
     item['rewrite_priority'] = score_data['priority']
     item['score_data'] = score_data
+    item['score_version'] = SCORE_VERSION
     return item
+
+
+def score_is_current(item):
+    try:
+        return int(item.get('score_version') or item.get('score_data', {}).get('score_version') or 0) >= SCORE_VERSION
+    except (TypeError, ValueError):
+        return False
+
+
+def ensure_article_scores_current(articles):
+    changed = False
+    for article in articles:
+        if article.get('content') and not score_is_current(article):
+            apply_score_fields(article)
+            changed = True
+    return changed
 
 
 SEO_NEWS_PAGE_URL = 'https://developers.google.com/search/blog?hl=ja'
@@ -1618,7 +1709,10 @@ def logout():
 @app.route('/api/articles', methods=['GET'])
 @login_required
 def get_articles():
-    return jsonify(load_articles())
+    articles = load_articles()
+    if ensure_article_scores_current(articles):
+        save_articles(articles)
+    return jsonify(articles)
 
 
 @app.route('/api/articles', methods=['POST'])
