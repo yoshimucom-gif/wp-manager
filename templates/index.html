@@ -2940,6 +2940,23 @@ async function startGenerate() {
     const decoder = new TextDecoder();
     let buffer = '';
     let charCount = 0;
+    let generationCompleted = false;
+
+    const handleGenerateMessage = async (msg) => {
+      if (msg.text) {
+        output.textContent += msg.text;
+        output.scrollTop = output.scrollHeight;
+        charCount += msg.text.length;
+        fill.style.width = Math.min(90, 10 + charCount / 50) + '%';
+      }
+      if (msg.done) {
+        generationCompleted = true;
+        await finalizeGenerateSuccess(articleId);
+      }
+      if (msg.error) {
+        toast('エラー: ' + msg.error, 'error');
+      }
+    };
 
     while (true) {
       const {done, value} = await reader.read();
@@ -2952,21 +2969,16 @@ async function startGenerate() {
         const raw = line.slice(6).trim();
         if (!raw) continue;
         const msg = JSON.parse(raw);
-        if (msg.text) {
-          output.textContent += msg.text;
-          output.scrollTop = output.scrollHeight;
-          charCount += msg.text.length;
-          fill.style.width = Math.min(90, 10 + charCount / 50) + '%';
-        }
-        if (msg.done) {
-          fill.style.width = '100%';
-          toast('記事生成完了！', 'success');
-          publishBtn.disabled = false;
-          currentGenArticleId = articleId;
-          loadArticles();
-        }
-        if (msg.error) toast('エラー: ' + msg.error, 'error');
+        await handleGenerateMessage(msg);
       }
+    }
+    const tail = buffer.trim();
+    if (tail.startsWith('data: ')) {
+      const raw = tail.slice(6).trim();
+      if (raw) await handleGenerateMessage(JSON.parse(raw));
+    }
+    if (!generationCompleted && output.textContent.trim()) {
+      await finalizeGenerateSuccess(articleId);
     }
   } catch (e) {
     toast('接続エラー: ' + e.message, 'error');
@@ -2975,6 +2987,17 @@ async function startGenerate() {
   btn.disabled = false;
   btn.textContent = '⚡ 生成開始';
   setTimeout(() => progress.style.display = 'none', 1000);
+}
+
+async function finalizeGenerateSuccess(articleId) {
+  const fill = document.getElementById('gen-progress-fill');
+  const publishBtn = document.getElementById('gen-publish-btn');
+  if (fill) fill.style.width = '100%';
+  currentGenArticleId = articleId;
+  if (publishBtn) publishBtn.disabled = false;
+  await loadArticles();
+  document.getElementById('gen-article-select').value = articleId;
+  toast('記事生成が完了しました。WP投稿できます。', 'success');
 }
 
 async function publishGenerated() {
