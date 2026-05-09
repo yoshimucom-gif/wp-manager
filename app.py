@@ -65,6 +65,7 @@ DECORATIONS_FILE = DATA_DIR / 'decorations.json'
 SETTINGS_FILE = DATA_DIR / 'settings.json'
 REWRITE_FILE = DATA_DIR / 'rewrite_items.json'
 AD_DEFINITIONS_FILE = DATA_DIR / 'ad_definitions.json'
+BATCH_JOBS_FILE = DATA_DIR / 'batch_jobs.json'
 
 
 def load_json(path, default):
@@ -85,6 +86,12 @@ def load_articles():
 
 def save_articles(articles):
     save_json(ARTICLES_FILE, articles)
+
+def load_batch_jobs():
+    return load_json(BATCH_JOBS_FILE, [])
+
+def save_batch_jobs(jobs):
+    save_json(BATCH_JOBS_FILE, jobs[:50])
 
 def load_rewrites():
     return load_json(REWRITE_FILE, [])
@@ -1426,6 +1433,13 @@ def score_articles():
     return jsonify({'success': True, 'scored': sum(1 for a in articles if a.get('content'))})
 
 
+@app.route('/api/batch-jobs/latest', methods=['GET'])
+@login_required
+def get_latest_batch_job():
+    jobs = load_batch_jobs()
+    return jsonify(jobs[0] if jobs else None)
+
+
 # Import
 @app.route('/api/import', methods=['POST'])
 @login_required
@@ -1695,11 +1709,13 @@ def generate_article(article_id):
 @login_required
 def batch_generate():
     data = request.json or {}
-    article_ids = set(data.get('article_ids', []))
+    requested_ids = list(dict.fromkeys(data.get('article_ids', [])))
+    article_ids = set(requested_ids)
     quality_id = data.get('quality_id')
 
     articles = load_articles()
-    pending = [a for a in articles if a['id'] in article_ids and a['status'] in ('pending', 'error')]
+    article_lookup = {a['id']: a for a in articles}
+    pending = [article_lookup[i] for i in requested_ids if i in article_lookup and article_lookup[i].get('status') in ('pending', 'error')]
 
     if not pending:
         return jsonify({'error': '処理対象の記事がありません'}), 400
@@ -1727,11 +1743,47 @@ def batch_generate():
     include_rakuten = data.get('include_rakuten', False)
     decoration_id = data.get('decoration_id')
     decoration = next((d for d in load_decorations() if d['id'] == decoration_id), None) if decoration_id else None
+    now = datetime.now().isoformat()
+    job_id = str(uuid.uuid4())
+    job = {
+        'id': job_id,
+        'type': 'generate',
+        'status': 'running',
+        'total': len(pending),
+        'completed': 0,
+        'failed': 0,
+        'current_title': '',
+        'article_ids': [a['id'] for a in pending],
+        'started_at': now,
+        'updated_at': now,
+        'message': '一括生成を開始しました。ページを移動しても処理は継続します。',
+    }
+    jobs = load_batch_jobs()
+    jobs.insert(0, job)
+    save_batch_jobs(jobs)
+    for a in articles:
+        if a['id'] in job['article_ids']:
+            a['status'] = 'generating'
+            a['batch_job_id'] = job_id
+            a.pop('error', None)
+    save_articles(articles)
+
+    def update_job(**changes):
+        jobs = load_batch_jobs()
+        for item in jobs:
+            if item.get('id') == job_id:
+                item.update(changes)
+                item['updated_at'] = datetime.now().isoformat()
+                break
+        save_batch_jobs(jobs)
 
     def run_batch():
         client = anthropic.Anthropic(api_key=api_key)
+        completed = 0
+        failed = 0
         for article in pending:
             try:
+                update_job(current_title=article.get('title', ''), message=f"生成中: {article.get('title', '')}")
                 article_type = normalize_article_type(article.get('article_type') or batch_article_type, batch_article_type)
                 article_type_prompt = build_article_type_prompt(article_type)
                 style_reference_url, style_reference_text = style_reference_cache.get(article_type, ('', ''))
@@ -1797,6 +1849,7 @@ def batch_generate():
                     if a['id'] == article['id']:
                         a['content'] = content
                         a['status'] = 'generated'
+                        a.pop('batch_job_id', None)
                         a['quality_id'] = quality_id
                         a['article_type'] = article_type
                         a['decoration_id'] = decoration_id or a.get('decoration_id')
@@ -1807,18 +1860,32 @@ def batch_generate():
                         apply_score_fields(a)
                         break
                 save_articles(current_articles)
+                completed += 1
+                update_job(completed=completed, failed=failed, message=f"{completed}/{len(pending)}件生成済み")
             except Exception as e:
                 current_articles = load_articles()
                 for a in current_articles:
                     if a['id'] == article['id']:
                         a['status'] = 'error'
                         a['error'] = str(e)
+                        a.pop('batch_job_id', None)
                         break
                 save_articles(current_articles)
+                failed += 1
+                update_job(completed=completed, failed=failed, message=f"{completed}件生成済み / {failed}件エラー")
+        final_status = 'completed' if failed == 0 else 'completed_with_errors'
+        update_job(
+            status=final_status,
+            current_title='',
+            completed=completed,
+            failed=failed,
+            completed_at=datetime.now().isoformat(),
+            message=f"一括生成完了: 成功 {completed}件 / エラー {failed}件"
+        )
 
     thread = threading.Thread(target=run_batch, daemon=True)
     thread.start()
-    return jsonify({'success': True, 'message': f'{len(pending)}件の記事生成を開始しました'})
+    return jsonify({'success': True, 'job_id': job_id, 'message': f'{len(pending)}件の記事生成を開始しました'})
 
 
 # WordPress publish

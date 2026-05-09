@@ -1588,6 +1588,7 @@ const usageEstimateConfig = {
   fallbackInputTokensPerArticle: 3500,
   outputCharsPerToken: 2,
 };
+let batchPollTimer = null;
 let currentGenArticleId = null;
 let currentArticleType = 'ranking';
 
@@ -1659,7 +1660,7 @@ function showPage(name, opts = {}) {
   if (!opts.skipLoad) {
     if (pageName === 'articles') loadArticles();
     if (pageName === 'generate') { loadQualitySelects(); updateSiteSelects(); populateGenSelect(); }
-    if (pageName === 'batch') { loadQualitySelects(); initBatchScheduleDefaults(); loadBatchArticles(); }
+    if (pageName === 'batch') { loadQualitySelects(); initBatchScheduleDefaults(); loadArticles(); loadLatestBatchJob(); }
     if (pageName === 'rewrite') { loadRewritePage(); }
     if (pageName === 'quality') loadQuality();
     if (pageName === 'decoration') loadDecorations();
@@ -2957,12 +2958,62 @@ async function assignBatchScheduleDates() {
   toast(`${ids.length}件に投稿予定日を割り当てました`, 'success');
 }
 
+function startBatchPolling() {
+  if (batchPollTimer) return;
+  batchPollTimer = setInterval(async () => {
+    await loadArticles();
+    await loadLatestBatchJob();
+  }, 10000);
+}
+
+function stopBatchPolling() {
+  if (!batchPollTimer) return;
+  clearInterval(batchPollTimer);
+  batchPollTimer = null;
+}
+
+async function loadLatestBatchJob() {
+  try {
+    const res = await fetch('/api/batch-jobs/latest');
+    if (!res.ok) return null;
+    const job = await res.json();
+    renderBatchJobStatus(job);
+    return job;
+  } catch (e) {
+    return null;
+  }
+}
+
+function renderBatchJobStatus(job) {
+  const el = document.getElementById('batch-msg');
+  if (!el) return;
+  const generatingCount = allArticles.filter(a => a.status === 'generating').length;
+  if (!job && !generatingCount) {
+    el.textContent = '';
+    stopBatchPolling();
+    return;
+  }
+  const isRunning = job?.status === 'running' || generatingCount > 0;
+  if (isRunning) {
+    const completed = Number(job?.completed || 0);
+    const failed = Number(job?.failed || 0);
+    const total = Number(job?.total || generatingCount);
+    el.innerHTML = `一括生成中: ${completed}/${total}件完了${failed ? ` / エラー ${failed}件` : ''}<br>ページを移動しても処理は継続します。戻ってきたら自動で状況を更新します。`;
+    startBatchPolling();
+    return;
+  }
+  stopBatchPolling();
+  if (job?.status) {
+    el.textContent = job.message || `一括生成完了: 成功 ${job.completed || 0}件 / エラー ${job.failed || 0}件`;
+  }
+}
+
 function loadBatchArticles() {
   const filter = document.getElementById('batch-filter')?.value || 'pending';
   const typeFilter = document.getElementById('batch-article-type-filter')?.value || '';
   const category = document.getElementById('batch-category-filter')?.value || '';
   let targets;
-  if (filter === 'pending') targets = allArticles.filter(a => a.status === 'pending' || a.status === 'error');
+  if (filter === 'pending') targets = allArticles.filter(a => ['pending', 'generating', 'error'].includes(a.status));
   else if (filter === 'generated') targets = allArticles.filter(a => a.status === 'generated');
   else targets = allArticles;
   if (typeFilter) targets = targets.filter(a => (a.article_type || 'ranking') === typeFilter);
@@ -3008,7 +3059,10 @@ async function startBatchGenerate() {
   const data = await res.json();
   if (data.success) {
     toast(data.message, 'success');
-    document.getElementById('batch-msg').textContent = '生成中... 「↻ 状態更新」で確認してください';
+    document.getElementById('batch-msg').innerHTML = '一括生成中...<br>ページを移動しても処理は継続します。';
+    await loadArticles();
+    await loadLatestBatchJob();
+    startBatchPolling();
   } else {
     toast(data.error || '失敗', 'error');
   }
