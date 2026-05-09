@@ -234,41 +234,56 @@ def save_ad_definitions(items):
     save_json(AD_DEFINITIONS_FILE, items)
 
 OLD_DEFAULT_QUALITY_PROMPT = "SEOに最適化された、読みやすく情報量の多い記事を書いてください。見出しを適切に使い、具体例を含めてください。"
+QUALITY_PRESET_VERSION = 2
 
 
 def default_quality_presets():
     return [
         {
             "id": "default",
-            "name": "標準品質",
-            "prompt": """検索意図に正面から答える、読みやすく情報量のある記事を書いてください。
-- 冒頭で読者の悩みと記事で分かることを明確にする
+            "name": "SEO基本品質",
+            "prompt": """SEOに強い記事の定義:
+検索ユーザーの疑問・悩み・比較検討に対して、検索意図どおりに、信頼できる根拠と独自の判断材料を出し、読み終わった人が追加検索しなくても次の判断に進める記事にする。
+
+必ず守る品質要件:
+- 冒頭で「誰の、どんな悩みに、何を答える記事か」を明確にする
+- 最初の1〜2見出し以内で結論や判断基準を提示し、読者を待たせない
+- 検索意図に対する答え、理由、具体例、注意点、次の行動を本文内で完結させる
+- 他サイトの一般論の要約で終わらせず、比較軸、選び方、判断コメント、失敗回避ポイントを入れる
+- 価格、効果、口コミ、仕様、ランキング根拠など未確認情報は断定しない
 - h2/h3の階層を崩さず、1見出し1テーマで整理する
-- 具体例、判断基準、注意点を入れて薄い一般論で終わらせない
-- 事実不明な内容は断定せず、確認が必要な表現にする
+- 読者が判断に迷う箇所にはFAQ、比較表、チェックリスト、注意ボックスを使う
+- 広告やCTAは文脈に合う場所だけに置き、押し売りにしない
 - 本文にAIの説明文、Markdown、Gutenbergコメント、サンプル文を出さない""",
             "target_chars": "",
             "tone": "ですます調",
-            "extra_rules": "",
-            "is_default": True
+            "extra_rules": "Helpful / Reliable / People-first を優先する。読者が読み終えた時点で「何を選ぶべきか」「次に何を確認すべきか」が分かる状態にする。",
+            "is_default": True,
+            "system_preset_version": QUALITY_PRESET_VERSION
         },
         {
             "id": "ranking-quality",
-            "name": "ランキング記事品質",
+            "name": "ランキング記事品質（SEO強化）",
             "article_type": "ranking",
-            "prompt": """ランキング記事専用の品質要件:
+            "prompt": """ランキング記事でSEOに強い状態:
+読者が「自分に合う商品・サービスはどれか」を追加検索せず判断できるように、選定基準、比較表、順位理由、弱点、向いている人をセットで提示する。
+
+必ず守るランキング品質要件:
 - タイトルに「N選」が含まれる場合、必ずN件の商品・サービス・選択肢を掲載する
 - 比較表はヘッダーを除いてN行、個別ランキング見出しも1位〜N位まで欠番なく作る
-- 冒頭に選定基準を3〜5個提示し、順位の理由が分かるようにする
-- 各ランキング項目には「特徴」「おすすめ理由」「注意点」「向いている人」を入れる
-- 価格、仕様、口コミなど未確認の情報は断定せず、目安・確認推奨として書く
-- 4件だけ、途中まで、表だけ、まとめだけで終わらせない
-- 比較表のセルは短くし、スマホ表示で崩れにくい列数にする
+- 冒頭で「選定基準」を3〜5個提示し、なぜその順位なのか読者が追えるようにする
+- 各ランキング項目は「特徴」「おすすめ理由」「注意点・弱点」「向いている人」を必ず含める
+- 比較表だけで終わらせず、1位からN位まで本文で個別解説する
+- 価格、仕様、口コミ、効果は未確認なら断定せず「目安」「公式情報で確認」など安全な表現にする
+- 全商品を無理に褒めず、向かない人や注意点も書いて信頼性を出す
+- 最後に読者タイプ別の選び方、FAQ、迷った時の判断基準を入れる
+- 比較表はスマホで崩れない列数にし、セル内を短くする
 - 本文にAIの説明文、Markdown、Gutenbergコメント、サンプル文を出さない""",
-            "target_chars": "6000",
+            "target_chars": "",
             "tone": "ですます調",
-            "extra_rules": "導入 → 選定基準 → 比較表 → 1位から順番に個別解説 → 選び方 → FAQ → まとめの順で構成する。",
-            "is_default": False
+            "extra_rules": "基本構成は、導入 → 結論/おすすめ早見表 → 選定基準 → 比較表 → 1位から順番に個別解説 → 選び方 → FAQ → まとめ。N選の件数不足は不可。",
+            "is_default": False,
+            "system_preset_version": QUALITY_PRESET_VERSION
         }
     ]
 
@@ -277,14 +292,38 @@ def load_quality():
     presets = default_quality_presets()
     quality = load_json(QUALITY_FILE, presets)
     existing_ids = {q.get('id') for q in quality}
+    changed = False
     for preset in presets:
         if preset['id'] not in existing_ids:
             quality.append(preset)
+            changed = True
             continue
-        if preset['id'] == 'default':
-            existing = next((q for q in quality if q.get('id') == 'default'), None)
-            if existing and existing.get('prompt') == OLD_DEFAULT_QUALITY_PROMPT:
-                existing['prompt'] = preset['prompt']
+        existing = next((q for q in quality if q.get('id') == preset['id']), None)
+        if not existing:
+            continue
+        version = int(existing.get('system_preset_version') or 0)
+        should_upgrade = version < preset.get('system_preset_version', 0)
+        if preset['id'] == 'default' and existing.get('prompt') == OLD_DEFAULT_QUALITY_PROMPT:
+            should_upgrade = True
+        if should_upgrade:
+            preserve_default = existing.get('is_default', preset.get('is_default', False))
+            preserve_reference = existing.get('reference_url', preset.get('reference_url', ''))
+            existing.update({
+                'name': preset.get('name', existing.get('name', '')),
+                'article_type': preset.get('article_type', existing.get('article_type')),
+                'prompt': preset.get('prompt', existing.get('prompt', '')),
+                'target_chars': preset.get('target_chars', existing.get('target_chars', '')),
+                'tone': preset.get('tone', existing.get('tone', 'ですます調')),
+                'extra_rules': preset.get('extra_rules', existing.get('extra_rules', '')),
+                'system_preset_version': preset.get('system_preset_version', version),
+                'is_default': preserve_default,
+                'reference_url': preserve_reference,
+            })
+            if existing.get('article_type') is None:
+                existing.pop('article_type', None)
+            changed = True
+    if changed:
+        save_json(QUALITY_FILE, quality)
     return quality
 
 def save_quality(quality):
