@@ -5,7 +5,7 @@ services:
     region: singapore
     plan: starter
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --workers 2 --timeout 120 --bind 0.0.0.0:$PORT
+    startCommand: gunicorn app:app --workers 1 --timeout 120 --bind 0.0.0.0:$PORT
     envVars:
       - key: APP_PASSWORD
         sync: false
