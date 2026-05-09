@@ -377,6 +377,35 @@ tr.selected td { background: var(--accent-dim); }
   background: var(--accent);
   transition: width 0.3s;
 }
+.batch-layout {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.batch-side {
+  position: sticky;
+  top: 64px;
+  max-height: calc(100vh - 86px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.batch-main {
+  min-width: 0;
+  max-height: calc(100vh - 150px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.batch-progress {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 4px;
+  padding: 10px;
+  margin-top: 12px;
+  font-size: 12px;
+}
+.batch-progress .progress-bar { height: 6px; margin: 8px 0 6px; }
+.batch-progress-meta { display:flex; justify-content:space-between; gap:10px; color:var(--muted); font-size:11px; }
 
 .quality-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .quality-card {
@@ -541,6 +570,9 @@ tr.selected td { background: var(--accent-dim); }
   .module-panel { grid-template-columns: repeat(3, 1fr); }
   .dashboard-kpis { grid-template-columns: repeat(2, 1fr); gap: 12px; }
   .dashboard-intel { grid-template-columns: 1fr; }
+  .batch-layout { grid-template-columns: 1fr; }
+  .batch-side { position: static; max-height: none; overflow: visible; }
+  .batch-main { max-height: none; overflow: visible; }
 }
 @media (max-width: 720px) {
   .content { padding: 18px 14px; }
@@ -855,8 +887,8 @@ tr.selected td { background: var(--accent-dim); }
           <div class="page-title">一括処理</div>
           <div class="page-subtitle">CSV/Excelで取り込んだ記事や選択した記事をまとめて生成・投稿</div>
         </div>
-        <div style="display:grid;grid-template-columns:300px 1fr;gap:20px">
-          <div>
+        <div class="batch-layout">
+          <div class="batch-side">
             <div class="form-group">
               <label class="form-label">品質定義</label>
               <select id="batch-quality" class="form-control">
@@ -907,14 +939,15 @@ tr.selected td { background: var(--accent-dim); }
             <div class="form-group">
               <label class="form-label">対象フィルター</label>
               <select id="batch-filter" class="form-control" onchange="loadBatchArticles()">
-                <option value="pending">未生成のみ</option>
-                <option value="all">全記事</option>
-                <option value="generated">生成済のみ</option>
+                <option value="pending">一括生成対象（未生成・エラー）</option>
+                <option value="generated">WP投稿対象（生成済）</option>
+                <option value="all">全記事（確認用）</option>
               </select>
+              <div class="form-help">過去に作成済みの記事は「WP投稿対象」または「全記事」で確認できます。</div>
             </div>
             <div class="form-group">
               <label class="form-label">記事種類</label>
-              <select id="batch-article-type-filter" class="form-control" onchange="loadBatchArticles()">
+              <select id="batch-article-type-filter" class="form-control" onchange="updateDefinitionDefaultsForCurrentContext(); loadBatchArticles()">
                 <option value="">全記事種類</option>
                 <option value="ranking">ランキング記事</option>
                 <option value="brand">商標記事</option>
@@ -949,10 +982,21 @@ tr.selected td { background: var(--accent-dim); }
               <button class="btn btn-secondary btn-sm" onclick="loadBatchArticles()">↻ 状態更新</button>
             </div>
             <div id="batch-msg" style="margin-top:12px;font-size:12px;color:var(--muted)"></div>
+            <div id="batch-progress" class="batch-progress" style="display:none">
+              <div class="batch-progress-meta">
+                <span id="batch-progress-label">一括生成中</span>
+                <span id="batch-progress-percent">0%</span>
+              </div>
+              <div class="progress-bar"><div class="progress-fill" id="batch-progress-fill" style="width:0%"></div></div>
+              <div class="batch-progress-meta">
+                <span id="batch-progress-count">0/0件</span>
+                <span id="batch-progress-current"></span>
+              </div>
+            </div>
           </div>
-          <div>
+          <div class="batch-main">
             <label class="form-label">対象記事 (<span id="batch-count">0</span>件)</label>
-            <div style="background:var(--surface);border:1px solid var(--border);border-radius:4px;max-height:400px;overflow:auto;">
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:4px;overflow:auto;">
               <table style="width:100%;min-width:980px">
                 <thead>
                   <tr>
@@ -1691,6 +1735,12 @@ function updateArticleTypeUI() {
   document.getElementById('gen-page-title').textContent = cfg.title;
   document.getElementById('gen-page-subtitle').textContent = cfg.subtitle;
   document.getElementById('gen-article-type-label').value = cfg.label;
+  updateDefinitionDefaultsForCurrentContext();
+}
+
+function updateDefinitionDefaultsForCurrentContext() {
+  updateDecorationSelects();
+  updateAdDefinitionSelects();
 }
 
 // ---- Toast ----
@@ -1845,7 +1895,17 @@ function updateDecorationSelects() {
     decorationList.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
   ['gen-decoration', 'batch-decoration', 'rewrite-decoration'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.innerHTML = opts;
+    if (el) {
+      const prev = el.value;
+      el.innerHTML = opts;
+      const articleType = id === 'rewrite-decoration'
+        ? 'rewrite'
+        : id === 'batch-decoration'
+          ? (document.getElementById('batch-article-type-filter')?.value || currentArticleType)
+          : currentArticleType;
+      const fallback = defaultDecorationId(articleType);
+      el.value = decorationList.some(d => d.id === prev) ? prev : (fallback || '');
+    }
   });
   const fetchSite = document.getElementById('decoration-fetch-site');
   if (fetchSite) {
@@ -1853,6 +1913,16 @@ function updateDecorationSelects() {
       siteList.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
     fetchSite.innerHTML = siteOpts;
   }
+}
+
+function defaultDecorationId(articleType = currentArticleType) {
+  const enabled = decorationList;
+  return (
+    enabled.find(d => d.article_type === articleType)?.id ||
+    enabled.find(d => d.article_type === 'common')?.id ||
+    enabled[0]?.id ||
+    ''
+  );
 }
 
 function openDecorationModal() {
@@ -1985,8 +2055,30 @@ function updateAdDefinitionSelects() {
     adDefinitionList.filter(d => d.enabled !== false).map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
   ['gen-ad-definition', 'batch-ad-definition', 'modal-ad-definition-id'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) { const v = el.value; el.innerHTML = opts; el.value = v; }
+    if (el) {
+      const prev = el.value;
+      el.innerHTML = opts;
+      const articleType = id === 'batch-ad-definition'
+        ? (document.getElementById('batch-article-type-filter')?.value || currentArticleType)
+        : id === 'modal-ad-definition-id'
+          ? (document.getElementById('modal-article-type')?.value || currentArticleType)
+          : currentArticleType;
+      const fallback = defaultAdDefinitionId(articleType);
+      el.value = adDefinitionList.some(d => d.id === prev) ? prev : (fallback || '');
+    }
   });
+}
+
+function defaultAdDefinitionId(articleType = currentArticleType) {
+  const enabled = adDefinitionList
+    .filter(d => d.enabled !== false)
+    .sort((a, b) => (Number(a.priority || 50) - Number(b.priority || 50)));
+  return (
+    enabled.find(d => d.article_type === articleType)?.id ||
+    enabled.find(d => d.article_type === 'common')?.id ||
+    enabled[0]?.id ||
+    ''
+  );
 }
 
 function openAdModal() {
@@ -2986,24 +3078,39 @@ async function loadLatestBatchJob() {
 
 function renderBatchJobStatus(job) {
   const el = document.getElementById('batch-msg');
+  const progress = document.getElementById('batch-progress');
+  const fill = document.getElementById('batch-progress-fill');
+  const percentEl = document.getElementById('batch-progress-percent');
+  const countEl = document.getElementById('batch-progress-count');
+  const currentEl = document.getElementById('batch-progress-current');
   if (!el) return;
   const generatingCount = allArticles.filter(a => a.status === 'generating').length;
   if (!job && !generatingCount) {
     el.textContent = '';
+    if (progress) progress.style.display = 'none';
     stopBatchPolling();
     return;
   }
   const isRunning = job?.status === 'running' || generatingCount > 0;
+  const completed = Number(job?.completed || 0);
+  const failed = Number(job?.failed || 0);
+  const total = Number(job?.total || generatingCount);
+  const done = Math.min(total, completed + failed);
+  const percent = total ? Math.round((done / total) * 100) : 0;
+  if (progress) progress.style.display = job || generatingCount ? 'block' : 'none';
+  if (fill) fill.style.width = `${percent}%`;
+  if (percentEl) percentEl.textContent = `${percent}%`;
+  if (countEl) countEl.textContent = `${done}/${total}件`;
+  if (currentEl) currentEl.textContent = job?.current_title ? `処理中: ${job.current_title}` : '';
   if (isRunning) {
-    const completed = Number(job?.completed || 0);
-    const failed = Number(job?.failed || 0);
-    const total = Number(job?.total || generatingCount);
     el.innerHTML = `一括生成中: ${completed}/${total}件完了${failed ? ` / エラー ${failed}件` : ''}<br>ページを移動しても処理は継続します。戻ってきたら自動で状況を更新します。`;
     startBatchPolling();
     return;
   }
   stopBatchPolling();
   if (job?.status) {
+    if (fill) fill.style.width = '100%';
+    if (percentEl) percentEl.textContent = '100%';
     el.textContent = job.message || `一括生成完了: 成功 ${job.completed || 0}件 / エラー ${job.failed || 0}件`;
   }
 }
@@ -3022,7 +3129,7 @@ function loadBatchArticles() {
   document.getElementById('batch-count').textContent = targets.length;
   document.getElementById('batch-body').innerHTML = targets.map(a => `
     <tr>
-      <td><input type="checkbox" class="check-row" value="${a.id}" checked></td>
+      <td><input type="checkbox" class="check-row" value="${a.id}" ${batchRowSelectable(a, filter) ? 'checked' : 'disabled'}></td>
       <td style="font-size:12px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.title)}</td>
       <td><input type="text" class="form-control" value="${esc(a.slug || '')}" placeholder="自動" style="font-size:11px;height:28px" onchange="saveBatchField('${a.id}', 'slug', this.value)"></td>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${esc(a.category || '—')}</td>
@@ -3032,6 +3139,12 @@ function loadBatchArticles() {
       <td>${statusBadge(a.status)}</td>
     </tr>
   `).join('');
+}
+
+function batchRowSelectable(article, filter) {
+  if (filter === 'pending') return ['pending', 'error'].includes(article.status);
+  if (filter === 'generated') return article.status === 'generated';
+  return ['pending', 'error', 'generated'].includes(article.status);
 }
 
 function toggleBatchAll(cb) {
@@ -3060,6 +3173,10 @@ async function startBatchGenerate() {
   if (data.success) {
     toast(data.message, 'success');
     document.getElementById('batch-msg').innerHTML = '一括生成中...<br>ページを移動しても処理は継続します。';
+    const progress = document.getElementById('batch-progress');
+    if (progress) progress.style.display = 'block';
+    const fill = document.getElementById('batch-progress-fill');
+    if (fill) fill.style.width = '0%';
     await loadArticles();
     await loadLatestBatchJob();
     startBatchPolling();
@@ -3389,8 +3506,21 @@ function loadQualitySelects() {
     qualityList.map(q => `<option value="${q.id}">${esc(q.name)}</option>`).join('');
   ['quality-filter', 'gen-quality', 'batch-quality', 's-default-quality'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.innerHTML = opts;
+    if (el) {
+      const prev = el.value;
+      el.innerHTML = opts;
+      if (id === 'quality-filter') {
+        el.value = qualityList.some(q => q.id === prev) ? prev : '';
+      } else {
+        const fallback = defaultQualityId();
+        el.value = qualityList.some(q => q.id === prev) ? prev : (fallback || '');
+      }
+    }
   });
+}
+
+function defaultQualityId() {
+  return qualityList.find(q => q.is_default)?.id || qualityList[0]?.id || '';
 }
 
 function openQualityModal() {
