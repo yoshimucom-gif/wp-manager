@@ -793,6 +793,10 @@ tr.selected td { background: var(--accent-dim); }
               <div id="gen-category-help" style="font-size:11px;color:var(--muted);margin-top:4px">既存カテゴリーを選択できます。存在しない名前はWordPress投稿時に新規作成します。</div>
             </div>
             <div class="form-group">
+              <label class="form-label">スラッグ（任意）</label>
+              <input type="text" id="gen-slug" class="form-control" placeholder="例: waterproof-bag-ranking">
+            </div>
+            <div class="form-group">
               <label class="form-label">品質定義</label>
               <select id="gen-quality" class="form-control">
                 <option value="">-- 品質定義を選択 --</option>
@@ -2651,6 +2655,7 @@ function onArticleSelect() {
     document.getElementById('gen-title').value = article.title;
     document.getElementById('gen-keywords').value = article.keywords;
     document.getElementById('gen-category').value = article.category || '';
+    document.getElementById('gen-slug').value = article.slug || '';
     document.getElementById('gen-site').value = article.site_id || '';
     document.getElementById('gen-ad-definition').value = article.ad_definition_id || '';
     currentGenArticleId = id;
@@ -2658,12 +2663,48 @@ function onArticleSelect() {
   }
 }
 
+async function createArticleFromGenerateForm() {
+  const title = document.getElementById('gen-title').value.trim();
+  if (!title) throw new Error('タイトルを入力してください');
+  const payload = {
+    title,
+    keywords: document.getElementById('gen-keywords').value,
+    category: document.getElementById('gen-category').value,
+    slug: document.getElementById('gen-slug').value,
+    site_id: document.getElementById('gen-site').value || null,
+    quality_id: document.getElementById('gen-quality').value || null,
+    decoration_id: document.getElementById('gen-decoration').value || null,
+    ad_definition_id: document.getElementById('gen-ad-definition').value || null,
+    article_type: currentArticleType,
+  };
+  const res = await fetch('/api/articles', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const article = await res.json();
+  if (!res.ok) throw new Error(article.error || '記事データの作成に失敗しました');
+  allArticles.push(article);
+  populateGenSelect();
+  document.getElementById('gen-article-select').value = article.id;
+  currentGenArticleId = article.id;
+  return article.id;
+}
+
 async function startGenerate() {
-  const articleId = document.getElementById('gen-article-select').value;
+  let articleId = document.getElementById('gen-article-select').value;
   const qualityId = document.getElementById('gen-quality').value;
   const siteId = document.getElementById('gen-site').value;
-  if (!articleId) { toast('記事を選択してください', 'error'); return; }
   if (!siteId) { toast('投稿先サイトを選択してください', 'error'); return; }
+  if (!articleId) {
+    try {
+      articleId = await createArticleFromGenerateForm();
+      toast('新規記事データを作成しました', 'success');
+    } catch (e) {
+      toast(e.message || '記事データの作成に失敗しました', 'error');
+      return;
+    }
+  }
 
   const output = document.getElementById('gen-output');
   const btn = document.getElementById('gen-btn');
@@ -2686,10 +2727,11 @@ async function startGenerate() {
     const title = document.getElementById('gen-title').value;
     const keywords = document.getElementById('gen-keywords').value;
     const category = document.getElementById('gen-category').value;
+    const slug = document.getElementById('gen-slug').value;
     const res = await fetch(`/api/generate/${articleId}`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({quality_id: qualityId, title, keywords, category, site_id: siteId, article_type: currentArticleType, include_amazon: includeAmazon, include_rakuten: includeRakuten, decoration_id: decorationId, ad_definition_id: adDefinitionId})
+      body: JSON.stringify({quality_id: qualityId, title, keywords, category, slug, site_id: siteId, article_type: currentArticleType, include_amazon: includeAmazon, include_rakuten: includeRakuten, decoration_id: decorationId, ad_definition_id: adDefinitionId})
     });
 
     const reader = res.body.getReader();

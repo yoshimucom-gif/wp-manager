@@ -1284,6 +1284,45 @@ def logout():
 def get_articles():
     return jsonify(load_articles())
 
+
+@app.route('/api/articles', methods=['POST'])
+@login_required
+def create_article():
+    data = request.json or {}
+    title = str(data.get('title') or '').strip()
+    if not title:
+        return jsonify({'error': 'タイトルを入力してください'}), 400
+    article = {
+        'id': str(uuid.uuid4()),
+        'title': title,
+        'keywords': data.get('keywords', ''),
+        'category': data.get('category', ''),
+        'slug': normalize_slug(data.get('slug')),
+        'article_type': normalize_article_type(data.get('article_type'), 'ranking'),
+        'ad_keywords': data.get('ad_keywords', ''),
+        'priority': data.get('priority', ''),
+        'schedule_date': data.get('schedule_date', ''),
+        'memo': data.get('memo', ''),
+        'status': 'pending',
+        'content': data.get('content', ''),
+        'created_at': datetime.now().isoformat(),
+        'quality_id': data.get('quality_id') or None,
+        'decoration_id': data.get('decoration_id') or None,
+        'ad_definition_id': data.get('ad_definition_id') or None,
+        'site_id': data.get('site_id') or None,
+        'wp_post_id': None,
+        'wp_url': None,
+    }
+    if article.get('content'):
+        article['status'] = 'generated'
+        article['generated_at'] = datetime.now().isoformat()
+        apply_score_fields(article)
+    articles = load_articles()
+    articles.append(article)
+    save_articles(articles)
+    return jsonify(article)
+
+
 @app.route('/api/articles/<article_id>', methods=['GET'])
 @login_required
 def get_article(article_id):
@@ -1489,7 +1528,7 @@ def generate_article(article_id):
         quality = next((q for q in quality_list if q.get('is_default')), quality_list[0] if quality_list else None)
 
     article_work = dict(article)
-    for key in ('title', 'keywords', 'category', 'ad_keywords', 'site_id'):
+    for key in ('title', 'keywords', 'category', 'ad_keywords', 'site_id', 'slug'):
         if key in data:
             article_work[key] = data.get(key) or ''
     article_type = normalize_article_type(data.get('article_type') or article_work.get('article_type'), 'ranking')
@@ -1579,6 +1618,7 @@ def generate_article(article_id):
                     a['title'] = article_work.get('title', a.get('title', ''))
                     a['keywords'] = article_work.get('keywords', a.get('keywords', ''))
                     a['category'] = article_work.get('category', a.get('category', ''))
+                    a['slug'] = normalize_slug(article_work.get('slug', a.get('slug', '')))
                     a['ad_keywords'] = article_work.get('ad_keywords', a.get('ad_keywords', ''))
                     a['site_id'] = article_work.get('site_id') or a.get('site_id')
                     a['quality_id'] = quality_id
