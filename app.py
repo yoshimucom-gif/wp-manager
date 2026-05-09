@@ -1987,6 +1987,38 @@ def batch_generate():
 
 
 # WordPress publish
+def update_wordpress_post_from_article(article, settings):
+    if not article.get('content'):
+        raise ValueError('記事コンテンツがありません。先に生成してください。')
+    if not article.get('wp_post_id'):
+        raise ValueError('既存のWordPress投稿IDがありません。先にWP投稿してください。')
+
+    wp_url, wp_user, wp_password = get_site_credentials(article, settings)
+    if not all([wp_url, wp_user, wp_password]):
+        raise ValueError('サイトが設定されていません。記事にサイトを紐付けてください。')
+
+    clean_content = sanitize_generated_html(article.get('content', ''))
+    post_payload = {
+        'title': article.get('title', ''),
+        'content': prepare_article_content_for_publish(clean_content, settings),
+    }
+    slug = normalize_slug(article.get('slug'))
+    if slug:
+        post_payload['slug'] = slug
+    category_ids = resolve_wp_category_ids(wp_url, wp_user, wp_password, article.get('category', ''))
+    if category_ids:
+        post_payload['categories'] = category_ids
+
+    response = requests.post(
+        f"{wp_url}/wp-json/wp/v2/posts/{article['wp_post_id']}",
+        auth=(wp_user, wp_password),
+        json=post_payload,
+        timeout=30
+    )
+    response.raise_for_status()
+    return response.json(), clean_content
+
+
 @app.route('/api/publish/<article_id>', methods=['POST'])
 @login_required
 def publish_article(article_id):
@@ -2043,6 +2075,65 @@ def publish_article(article_id):
         return jsonify({'success': True, 'wp_url': post_data.get('link', ''), 'wp_post_id': post_data['id']})
     except requests.exceptions.RequestException as e:
         return jsonify({'error': f'WordPress投稿エラー: {str(e)}'}), 500
+
+
+@app.route('/api/articles/<article_id>/repair-post', methods=['POST'])
+@login_required
+def repair_article_post(article_id):
+    articles = load_articles()
+    article = next((a for a in articles if a['id'] == article_id), None)
+    if not article:
+        return jsonify({'error': '記事が見つかりません'}), 404
+
+    settings = load_settings()
+    try:
+        post_data, clean_content = update_wordpress_post_from_article(article, settings)
+        for a in articles:
+            if a['id'] == article_id:
+                a['content'] = clean_content
+                if a.get('status') != 'scheduled':
+                    a['status'] = 'published'
+                a['wp_url'] = post_data.get('link', a.get('wp_url', ''))
+                a['repaired_at'] = datetime.now().isoformat()
+                a['updated_at'] = datetime.now().isoformat()
+                apply_score_fields(a)
+                break
+        save_articles(articles)
+        return jsonify({'success': True, 'wp_url': post_data.get('link', article.get('wp_url', ''))})
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except requests.exceptions.RequestException as e:
+        return jsonify({'error': f'WordPress上書き更新エラー: {str(e)}'}), 500
+
+
+@app.route('/api/articles/bulk-repair-posts', methods=['POST'])
+@login_required
+def bulk_repair_article_posts():
+    ids = set((request.json or {}).get('ids', []))
+    articles = load_articles()
+    settings = load_settings()
+    results = {'success': 0, 'error': 0, 'errors': []}
+    now = datetime.now().isoformat()
+
+    for article in articles:
+        if article.get('id') not in ids:
+            continue
+        try:
+            post_data, clean_content = update_wordpress_post_from_article(article, settings)
+            article['content'] = clean_content
+            if article.get('status') != 'scheduled':
+                article['status'] = 'published'
+            article['wp_url'] = post_data.get('link', article.get('wp_url', ''))
+            article['repaired_at'] = now
+            article['updated_at'] = now
+            apply_score_fields(article)
+            results['success'] += 1
+        except Exception as e:
+            results['error'] += 1
+            results['errors'].append({'title': article.get('title', ''), 'error': str(e)})
+
+    save_articles(articles)
+    return jsonify(results)
 
 
 # Batch publish

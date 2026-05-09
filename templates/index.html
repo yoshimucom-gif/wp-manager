@@ -751,6 +751,7 @@ tr.selected td { background: var(--accent-dim); }
           <button class="btn btn-secondary" onclick="downloadSampleCsv()">サンプルCSV</button>
           <button class="btn btn-primary" onclick="generateSelected()">⚡ 選択を生成</button>
           <button class="btn btn-success" onclick="publishSelected()">🚀 選択をWP投稿</button>
+          <button class="btn btn-secondary" onclick="repairSelected()">選択を既存WPに上書き修復</button>
           <button class="btn btn-danger" onclick="deleteSelected()">🗑 選択を削除</button>
           <button class="btn btn-secondary" onclick="rescoreArticles()">↯ スコア再計算</button>
           <div style="flex:1"></div>
@@ -2624,7 +2625,8 @@ function renderArticles(articles) {
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button class="btn btn-secondary btn-sm" title="記事情報と本文を編集" onclick="openArticleModal('${a.id}')">編集</button>
           <button class="btn btn-primary btn-sm" title="この記事を生成画面で生成し直す" onclick="quickGenerate('${a.id}')">生成</button>
-          ${a.content ? `<button class="btn btn-success btn-sm" title="WordPressに下書き投稿" onclick="quickPublish('${a.id}')">WP投稿</button>` : ''}
+          ${a.content && !a.wp_post_id ? `<button class="btn btn-success btn-sm" title="WordPressに下書き投稿" onclick="quickPublish('${a.id}')">WP下書き投稿</button>` : ''}
+          ${a.content && a.wp_post_id ? `<button class="btn btn-secondary btn-sm" title="既存のWordPress投稿を現在の本文で上書き修復" onclick="quickRepair('${a.id}')">WP上書き修復</button>` : ''}
           ${a.wp_url ? `<a href="${esc(a.wp_url)}" target="_blank" class="btn btn-secondary btn-sm" title="投稿済み記事を開く">記事を開く</a>` : ''}
         </div>
       </td>
@@ -2758,6 +2760,31 @@ function publishSelected() {
   }, 300);
 }
 
+async function repairSelected() {
+  const ids = getSelectedIds();
+  if (!ids.length) { toast('記事を選択してください', 'error'); return; }
+  const targets = ids
+    .map(id => allArticles.find(a => a.id === id))
+    .filter(a => a && a.content && a.wp_post_id);
+  if (!targets.length) {
+    toast('既存WP投稿IDがある生成済み記事を選択してください', 'error');
+    return;
+  }
+  if (!confirm(`${targets.length}件の既存WordPress投稿を現在の本文で上書き修復しますか?`)) return;
+  const res = await fetch('/api/articles/bulk-repair-posts', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ids: targets.map(a => a.id)})
+  });
+  const data = await res.json();
+  if (data.success !== undefined) {
+    toast(`上書き修復: 成功 ${data.success}件 / エラー ${data.error}件`, data.error ? 'error' : 'success');
+    await loadArticles();
+  } else {
+    toast(data.error || '上書き修復に失敗しました', 'error');
+  }
+}
+
 async function quickGenerate(id) {
   const article = allArticles.find(a => a.id === id);
   if (!article) return;
@@ -2782,6 +2809,23 @@ async function quickPublish(id) {
     loadArticles();
   } else {
     toast(data.error || '投稿失敗', 'error');
+  }
+}
+
+async function quickRepair(id) {
+  const article = allArticles.find(a => a.id === id);
+  if (!article?.wp_post_id) {
+    toast('既存WP投稿IDがありません', 'error');
+    return;
+  }
+  if (!confirm('既存のWordPress投稿を現在の本文で上書き修復しますか?')) return;
+  const res = await fetch(`/api/articles/${id}/repair-post`, {method: 'POST'});
+  const data = await res.json();
+  if (data.success) {
+    toast('既存投稿を上書き修復しました: ' + (data.wp_url || ''), 'success');
+    await loadArticles();
+  } else {
+    toast(data.error || '上書き修復に失敗しました', 'error');
   }
 }
 
@@ -2862,7 +2906,21 @@ function onArticleSelect() {
     document.getElementById('gen-ad-definition').value = article.ad_definition_id || '';
     currentGenArticleId = id;
     onGenerateSiteChange();
+  } else {
+    currentGenArticleId = null;
   }
+  updateGeneratePublishButton(id);
+}
+
+function updateGeneratePublishButton(articleId = currentGenArticleId) {
+  const btn = document.getElementById('gen-publish-btn');
+  if (!btn) return;
+  const article = allArticles.find(a => a.id === articleId);
+  btn.disabled = !article?.content;
+  btn.textContent = article?.wp_post_id ? 'WP上書き修復' : 'WP下書き投稿';
+  btn.title = article?.wp_post_id
+    ? '既存のWordPress投稿を現在の本文で上書き修復します'
+    : 'WordPressに新規下書き投稿します';
 }
 
 async function createArticleFromGenerateForm() {
@@ -3000,18 +3058,30 @@ async function finalizeGenerateSuccess(articleId) {
   const article = allArticles.find(a => a.id === articleId);
   const output = document.getElementById('gen-output');
   if (article?.content && output) output.textContent = article.content;
-  toast('記事生成が完了しました。WP投稿できます。', 'success');
+  updateGeneratePublishButton(articleId);
+  toast(article?.wp_post_id ? '記事生成が完了しました。既存WP投稿を上書き修復できます。' : '記事生成が完了しました。WP下書き投稿できます。', 'success');
 }
 
 async function publishGenerated() {
   if (!currentGenArticleId) return;
-  const res = await fetch(`/api/publish/${currentGenArticleId}`, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({post_status:'draft'})
-  });
+  const article = allArticles.find(a => a.id === currentGenArticleId);
+  const isRepair = !!article?.wp_post_id;
+  if (isRepair && !confirm('既存のWordPress投稿を現在の本文で上書き修復しますか?')) return;
+  const res = isRepair
+    ? await fetch(`/api/articles/${currentGenArticleId}/repair-post`, {method:'POST'})
+    : await fetch(`/api/publish/${currentGenArticleId}`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({post_status:'draft'})
+      });
   const data = await res.json();
-  if (data.success) toast('投稿しました: ' + data.wp_url, 'success');
-  else toast(data.error || '投稿失敗', 'error');
+  if (data.success) {
+    toast((isRepair ? '既存投稿を上書き修復しました: ' : '投稿しました: ') + data.wp_url, 'success');
+    await loadArticles();
+    updateGeneratePublishButton(currentGenArticleId);
+  } else {
+    toast(data.error || (isRepair ? '上書き修復に失敗しました' : '投稿失敗'), 'error');
+  }
 }
 
 // ---- Batch ----
