@@ -754,7 +754,7 @@ tr.selected td { background: var(--accent-dim); }
           <button class="btn btn-secondary" onclick="downloadSampleCsv()">サンプルCSV</button>
           <button class="btn btn-primary" onclick="generateSelected()">⚡ 選択を生成</button>
           <button class="btn btn-success" onclick="publishSelected()">🚀 選択をWP投稿</button>
-          <button class="btn btn-secondary" onclick="repairSelected()">選択を既存WPに上書き修復</button>
+          <button class="btn btn-secondary" onclick="repairSelected()">選択を既存WPへ上書き送信</button>
           <button class="btn btn-danger" onclick="deleteSelected()">🗑 選択を削除</button>
           <button class="btn btn-secondary" onclick="rescoreArticles()">↯ スコア再計算</button>
           <div style="flex:1"></div>
@@ -2711,9 +2711,9 @@ function renderArticles(articles) {
   tbody.innerHTML = articles.map((a, i) => {
     const busy = isArticleBusy(a.status);
     const disabled = busy ? 'disabled' : '';
-    const generateLabel = a.status === 'generating' ? '再生成中...' : '生成';
+    const generateLabel = a.status === 'generating' ? '再生成中...' : (a.content ? '再生成' : '生成');
     const publishLabel = a.status === 'publishing' ? '投稿中...' : 'WP下書き投稿';
-    const repairLabel = a.status === 'repairing' ? '更新中...' : 'WP上書き修復';
+    const repairLabel = a.status === 'repairing' ? '送信中...' : 'WPへ上書き送信';
     const statusDetail = a.processing_message
       ? `<div style="font-size:10px;color:var(--muted);margin-top:4px">${esc(a.processing_message)}</div>`
       : '';
@@ -2734,7 +2734,7 @@ function renderArticles(articles) {
           <button class="btn btn-secondary btn-sm" ${disabled} title="記事情報と本文を編集" onclick="openArticleModal('${a.id}')">編集</button>
           <button class="btn btn-primary btn-sm" ${disabled} title="この記事を生成画面で生成し直す" onclick="quickGenerate('${a.id}')">${generateLabel}</button>
           ${a.content && !a.wp_post_id ? `<button class="btn btn-success btn-sm" ${disabled} title="WordPressに下書き投稿" onclick="quickPublish('${a.id}')">${publishLabel}</button>` : ''}
-          ${a.content && a.wp_post_id ? `<button class="btn btn-secondary btn-sm" ${disabled} title="既存のWordPress投稿を現在の本文で上書き更新" onclick="quickRepair('${a.id}')">${repairLabel}</button>` : ''}
+          ${a.content && a.wp_post_id ? `<button class="btn btn-secondary btn-sm" ${disabled} title="Affiros9に保存されている本文を既存WordPress投稿へ送信" onclick="quickRepair('${a.id}')">${repairLabel}</button>` : ''}
           ${a.wp_url ? `<a href="${esc(a.wp_url)}" target="_blank" class="btn btn-secondary btn-sm" title="投稿済み記事を開く">記事を開く</a>` : ''}
         </div>
       </td>
@@ -2750,7 +2750,7 @@ function statusBadge(status) {
     generated: ['✓', '生成済'],
     publishing: ['◌', '投稿中'],
     published: ['★', '投稿済'],
-    repairing: ['◌', 'WP更新中'],
+    repairing: ['◌', 'WP送信中'],
     updated: ['✓', '更新完了'],
     scheduled: ['◷', '予約済'],
     error: ['✗', 'エラー'],
@@ -2882,9 +2882,9 @@ async function repairSelected() {
     toast('既存WP投稿IDがある生成済み記事を選択してください', 'error');
     return;
   }
-  if (!confirm(`${targets.length}件の既存WordPress投稿を現在の本文で上書き修復しますか?`)) return;
+  if (!confirm(`${targets.length}件のAffiros9保存本文を、既存WordPress投稿へ上書き送信します。Claude生成やリライトは行いません。実行しますか?`)) return;
   const targetIds = targets.map(a => a.id);
-  setArticlesLocalStatus(targetIds, 'repairing', 'WP更新中です。完了後に記事一覧を更新します。');
+  setArticlesLocalStatus(targetIds, 'repairing', 'WPへ上書き送信中です。完了後に記事一覧を更新します。');
   try {
     const res = await fetch('/api/articles/bulk-repair-posts', {
       method: 'POST',
@@ -2893,15 +2893,18 @@ async function repairSelected() {
     });
     const data = await res.json();
     if (data.success !== undefined) {
-      toast(`上書き修復完了: 成功 ${data.success}件 / エラー ${data.error}件`, data.error ? 'error' : 'success');
+      const note = data.unchanged ? ` / 変化なし ${data.unchanged}件` : '';
+      toast(`WP上書き送信完了: 成功 ${data.success}件${note} / エラー ${data.error}件`, data.error || data.unchanged ? 'error' : 'success');
       await loadArticles();
-      setArticlesLocalMessage(targetIds, 'WP更新完了しました。点数は現在の本文で再計算済みです。');
+      setArticlesLocalMessage(targetIds, data.unchanged
+        ? 'WPへ送信しましたが、更新前後のWP本文が同じ投稿があります。Affiros9保存本文とWP本文がすでに同じ可能性があります。'
+        : 'WP更新完了しました。WordPress側の本文変更を確認済みです。');
     } else {
-      toast(data.error || '上書き修復に失敗しました', 'error');
+      toast(data.error || 'WP上書き送信に失敗しました', 'error');
       await loadArticles();
     }
   } catch (e) {
-    toast('上書き修復エラー: ' + e.message, 'error');
+    toast('WP上書き送信エラー: ' + e.message, 'error');
     await loadArticles();
   }
 }
@@ -2948,18 +2951,23 @@ async function quickRepair(id) {
     toast('既存WP投稿IDがありません', 'error');
     return;
   }
-  if (!confirm('既存のWordPress投稿を現在の本文で上書き修復しますか?')) return;
-  setArticleLocalStatus(id, 'repairing', 'WP更新中です。完了後に記事一覧を更新します。');
+  if (!confirm('Affiros9に保存されている本文を、既存のWordPress投稿へ上書き送信します。Claude生成やリライトは行いません。実行しますか?')) return;
+  setArticleLocalStatus(id, 'repairing', 'WPへ上書き送信中です。完了後に記事一覧を更新します。');
   try {
     const res = await fetch(`/api/articles/${id}/repair-post`, {method: 'POST'});
     const data = await res.json();
     if (data.success) {
-      toast('WP更新完了: ' + (data.wp_url || ''), 'success');
+      toast((data.wp_changed ? 'WP更新完了: ' : 'WP送信完了（本文変化なし）: ') + (data.wp_url || ''), data.wp_changed ? 'success' : 'error');
       await loadArticles();
       const chars = data.content_chars ? `${Number(data.content_chars).toLocaleString()}文字を` : '';
-      setArticleLocalMessage(id, `WP更新完了しました。${chars}WordPressへ送信済みです。点数は現在の本文で再計算済みです。`);
+      const info = data.repair_info || {};
+      const compare = `WP本文 ${Number(info.before_content_chars || 0).toLocaleString()}文字 → ${Number(info.after_content_chars || 0).toLocaleString()}文字`;
+      const detail = data.wp_changed
+        ? `WP更新完了しました。${chars}WordPressへ送信し、WordPress側の本文変更を確認しました（${compare}）。`
+        : `WPへ送信しましたが、WordPress側の本文は更新前と同じでした（${compare}）。Affiros9保存本文とWP本文がすでに同じ可能性があります。`;
+      setArticleLocalMessage(id, detail);
     } else {
-      toast(data.error || '上書き修復に失敗しました', 'error');
+      toast(data.error || 'WP上書き送信に失敗しました', 'error');
       await loadArticles();
     }
   } catch (e) {
@@ -3036,6 +3044,8 @@ function populateGenSelect() {
 function onArticleSelect() {
   const id = document.getElementById('gen-article-select').value;
   const article = allArticles.find(a => a.id === id);
+  const output = document.getElementById('gen-output');
+  const genBtn = document.getElementById('gen-btn');
   if (article) {
     document.getElementById('gen-title').value = article.title;
     document.getElementById('gen-keywords').value = article.keywords;
@@ -3044,9 +3054,13 @@ function onArticleSelect() {
     document.getElementById('gen-slug').value = article.slug || '';
     document.getElementById('gen-site').value = article.site_id || '';
     document.getElementById('gen-ad-definition').value = article.ad_definition_id || '';
+    if (output) output.textContent = article.content || '// ここに生成された記事が表示されます...';
+    if (genBtn) genBtn.textContent = article.content ? '⚡ 再生成開始' : '⚡ 生成開始';
     currentGenArticleId = id;
     onGenerateSiteChange();
   } else {
+    if (output) output.textContent = '// ここに生成された記事が表示されます...';
+    if (genBtn) genBtn.textContent = '⚡ 生成開始';
     currentGenArticleId = null;
   }
   updateGeneratePublishButton(id);
@@ -3057,9 +3071,9 @@ function updateGeneratePublishButton(articleId = currentGenArticleId) {
   if (!btn) return;
   const article = allArticles.find(a => a.id === articleId);
   btn.disabled = !article?.content;
-  btn.textContent = article?.wp_post_id ? 'WP上書き修復' : 'WP下書き投稿';
+  btn.textContent = article?.wp_post_id ? 'WPへ上書き送信' : 'WP下書き投稿';
   btn.title = article?.wp_post_id
-    ? '既存のWordPress投稿を現在の本文で上書き修復します'
+    ? 'Affiros9に保存されている本文を既存WordPress投稿へ送信します'
     : 'WordPressに新規下書き投稿します';
 }
 
@@ -3205,7 +3219,8 @@ async function startGenerate() {
   }
 
   btn.disabled = false;
-  btn.textContent = '⚡ 生成開始';
+  const refreshedArticle = allArticles.find(a => a.id === articleId);
+  btn.textContent = refreshedArticle?.content ? '⚡ 再生成開始' : '⚡ 生成開始';
   setTimeout(() => progress.style.display = 'none', 1000);
 }
 
@@ -3227,18 +3242,18 @@ async function finalizeGenerateSuccess(articleId, result = {}) {
   const output = document.getElementById('gen-output');
   if (article?.content && output) output.textContent = article.content;
   updateGeneratePublishButton(articleId);
-  toast(article?.wp_post_id ? '記事生成が完了しました。既存WP投稿を上書き修復できます。' : '記事生成が完了しました。WP下書き投稿できます。', result.changed === false ? 'error' : 'success');
+  toast(article?.wp_post_id ? '記事生成が完了しました。既存WPへ上書き送信できます。' : '記事生成が完了しました。WP下書き投稿できます。', result.changed === false ? 'error' : 'success');
 }
 
 async function publishGenerated() {
   if (!currentGenArticleId) return;
   const article = allArticles.find(a => a.id === currentGenArticleId);
   const isRepair = !!article?.wp_post_id;
-  if (isRepair && !confirm('既存のWordPress投稿を現在の本文で上書き修復しますか?')) return;
+  if (isRepair && !confirm('Affiros9に保存されている本文を、既存のWordPress投稿へ上書き送信します。Claude生成やリライトは行いません。実行しますか?')) return;
   setArticleLocalStatus(
     currentGenArticleId,
     isRepair ? 'repairing' : 'publishing',
-    isRepair ? 'WP更新中です。完了後に記事一覧を更新します。' : 'WordPressへ下書き投稿中です。'
+    isRepair ? 'WPへ上書き送信中です。完了後に記事一覧を更新します。' : 'WordPressへ下書き投稿中です。'
   );
   try {
     const res = isRepair
@@ -3250,13 +3265,18 @@ async function publishGenerated() {
         });
     const data = await res.json();
     if (data.success) {
-      toast((isRepair ? 'WP更新完了: ' : '投稿完了: ') + data.wp_url, 'success');
+      toast((isRepair ? (data.wp_changed ? 'WP更新完了: ' : 'WP送信完了（本文変化なし）: ') : '投稿完了: ') + data.wp_url, isRepair && !data.wp_changed ? 'error' : 'success');
       await loadArticles();
       const chars = data.content_chars ? `${Number(data.content_chars).toLocaleString()}文字を` : '';
-      setArticleLocalMessage(currentGenArticleId, isRepair ? `WP更新完了しました。${chars}WordPressへ送信済みです。点数は現在の本文で再計算済みです。` : '投稿完了しました。');
+      const info = data.repair_info || {};
+      const compare = `WP本文 ${Number(info.before_content_chars || 0).toLocaleString()}文字 → ${Number(info.after_content_chars || 0).toLocaleString()}文字`;
+      const repairMessage = data.wp_changed
+        ? `WP更新完了しました。${chars}WordPressへ送信し、WordPress側の本文変更を確認しました（${compare}）。`
+        : `WPへ送信しましたが、WordPress側の本文は更新前と同じでした（${compare}）。Affiros9保存本文とWP本文がすでに同じ可能性があります。`;
+      setArticleLocalMessage(currentGenArticleId, isRepair ? repairMessage : '投稿完了しました。');
       updateGeneratePublishButton(currentGenArticleId);
     } else {
-      toast(data.error || (isRepair ? '上書き修復に失敗しました' : '投稿失敗'), 'error');
+      toast(data.error || (isRepair ? 'WP上書き送信に失敗しました' : '投稿失敗'), 'error');
       await loadArticles();
     }
   } catch (e) {

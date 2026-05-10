@@ -7,6 +7,7 @@ import csv
 import io
 import math
 import hashlib
+import difflib
 from datetime import datetime, timedelta
 from pathlib import Path
 from functools import wraps
@@ -945,6 +946,14 @@ def content_hash(content):
     return hashlib.sha256(str(content or '').encode('utf-8')).hexdigest()
 
 
+def content_similarity(a, b):
+    left = re.sub(r'\s+', '', html_to_text(a or ''))[:20000]
+    right = re.sub(r'\s+', '', html_to_text(b or ''))[:20000]
+    if not left or not right:
+        return 0.0
+    return difflib.SequenceMatcher(None, left, right).ratio()
+
+
 SCORE_VERSION = 2
 
 
@@ -1576,6 +1585,23 @@ def build_ranking_count_prompt(article, article_type):
 - {count}件未満で終了しないでください。商品名や候補が不足する場合でも、記事テーマに合う候補を補って{count}件にしてください。"""
 
 
+def build_regeneration_instruction(previous_content):
+    if not previous_content or not html_to_text(previous_content).strip():
+        return ''
+    return f"""
+
+再生成モード:
+- これは既存記事の「再生成」です。下に旧本文があります。
+- 旧本文の文章・見出し順・言い回し・比較表をそのまま流用せず、検索意図から逆算して全面的に書き直してください。
+- 旧本文の良くない点を改善し、導入、見出し構成、比較軸、結論、CTAを作り直してください。
+- 商品数や記事種別の品質条件は必ず守ってください。
+- 出力は新しい記事本文のみ。旧本文との差分説明、作業メモ、前置きは出力しないでください。
+
+旧本文（参考。コピー禁止）:
+{previous_content[:25000]}
+"""
+
+
 def count_table_rows_from_html(content):
     html = str(content or '')
     if BeautifulSoup:
@@ -2169,7 +2195,11 @@ def generate_article(article_id):
     article_work['article_type'] = article_type
     now = datetime.now().isoformat()
     generation_run_id = str(uuid.uuid4())
-    previous_content_hash = content_hash(article.get('content', ''))
+    previous_content = article.get('content', '')
+    previous_content_hash = content_hash(previous_content)
+    previous_content_text = html_to_text(previous_content)
+    is_regeneration = bool(previous_content_text.strip())
+    regeneration_instruction = build_regeneration_instruction(previous_content)
     for a in articles:
         if a['id'] == article_id:
             for key in ('title', 'keywords', 'category', 'ad_keywords', 'site_id', 'slug'):
@@ -2244,7 +2274,8 @@ def generate_article(article_id):
 {article_type_prompt}
 {ranking_count_prompt}
 
-{article_html_output_rules()}"""
+{article_html_output_rules()}
+{regeneration_instruction}"""
 
             if reference_text:
                 prompt += f'\n\n以下の参考記事の内容・構成・論点を参考にして執筆してください（コピーは不可）：\n\n{reference_text}'
@@ -2292,8 +2323,11 @@ def generate_article(article_id):
                     clean_content = sanitize_generated_html(full_content)
                     validation_error = validate_generated_article(article_work, article_type, clean_content)
                     content_chars = len(html_to_text(clean_content))
+                    similarity = content_similarity(previous_content, clean_content) if is_regeneration else 0
                     if not validation_error and content_chars < 500:
                         validation_error = f'生成結果が短すぎます（{content_chars}文字）。Claude生成が途中で止まった可能性があります。もう一度生成してください。'
+                    if not validation_error and is_regeneration and similarity >= 0.985:
+                        validation_error = f'再生成しましたが既存本文とほぼ同じです（類似度 {round(similarity * 100, 1)}%）。保存しませんでした。条件を変えるか、もう一度再生成してください。'
                     if validation_error:
                         a['status'] = 'error'
                         a['error'] = validation_error
@@ -2324,12 +2358,13 @@ def generate_article(article_id):
                     a['generation_finished_at'] = generated_at
                     a['last_generation_changed'] = changed
                     a['last_generation_chars'] = content_chars
+                    a['last_generation_similarity'] = round(similarity, 4)
                     usage = build_article_usage(prompt, clean_content, final_message)
                     append_generation_usage(a, usage, generation_run_id, generated_at, clean_content)
                     apply_score_fields(a)
                     break
             save_articles(current_articles)
-            yield f"data: {json.dumps({'done': True, 'run_id': generation_run_id, 'content_chars': content_chars, 'changed': changed, 'usage': usage})}\n\n"
+            yield f"data: {json.dumps({'done': True, 'run_id': generation_run_id, 'content_chars': content_chars, 'changed': changed, 'similarity': round(similarity, 4), 'usage': usage})}\n\n"
         except Exception as e:
             current_articles = load_articles()
             for a in current_articles:
@@ -2430,6 +2465,7 @@ def batch_generate():
                 article_type = normalize_article_type(article.get('article_type') or batch_article_type, batch_article_type)
                 article_type_prompt = build_article_type_prompt(article_type)
                 ranking_count_prompt = build_ranking_count_prompt(article, article_type)
+                regeneration_instruction = build_regeneration_instruction(article.get('content', ''))
                 style_reference_url, style_reference_text = style_reference_cache.get(article_type, ('', ''))
                 if article_type not in style_reference_cache:
                     try:
@@ -2449,7 +2485,8 @@ def batch_generate():
 {article_type_prompt}
 {ranking_count_prompt}
 
-{article_html_output_rules()}"""
+{article_html_output_rules()}
+{regeneration_instruction}"""
 
                 if reference_text:
                     prompt += f'\n\n以下の参考記事の内容・構成・論点を参考にして執筆してください（コピーは不可）：\n\n{reference_text}'
@@ -2545,6 +2582,29 @@ def batch_generate():
 
 
 # WordPress publish
+def extract_wp_edit_content(post_data):
+    content = post_data.get('content') if isinstance(post_data, dict) else {}
+    if isinstance(content, dict):
+        return content.get('raw') or content.get('rendered') or ''
+    return str(content or '')
+
+
+def normalized_text_hash(content):
+    text = re.sub(r'\s+', '', html_to_text(content or ''))
+    return content_hash(text)
+
+
+def fetch_wordpress_post_for_edit(wp_url, wp_user, wp_password, post_id):
+    response = requests.get(
+        f"{wp_url}/wp-json/wp/v2/posts/{post_id}",
+        auth=(wp_user, wp_password),
+        params={'context': 'edit'},
+        timeout=30
+    )
+    response.raise_for_status()
+    return response.json()
+
+
 def update_wordpress_post_from_article(article, settings):
     if not article.get('content'):
         raise ValueError('記事コンテンツがありません。先に生成してください。')
@@ -2556,9 +2616,12 @@ def update_wordpress_post_from_article(article, settings):
         raise ValueError('サイトが設定されていません。記事にサイトを紐付けてください。')
 
     clean_content = sanitize_generated_html(article.get('content', ''))
+    publish_content = prepare_article_content_for_publish(clean_content, settings)
+    before_data = fetch_wordpress_post_for_edit(wp_url, wp_user, wp_password, article['wp_post_id'])
+    before_content = extract_wp_edit_content(before_data)
     post_payload = {
         'title': article.get('title', ''),
-        'content': prepare_article_content_for_publish(clean_content, settings),
+        'content': publish_content,
     }
     slug = normalize_slug(article.get('slug'))
     if slug:
@@ -2574,7 +2637,24 @@ def update_wordpress_post_from_article(article, settings):
         timeout=30
     )
     response.raise_for_status()
-    return response.json(), clean_content
+    post_data = response.json()
+    after_data = fetch_wordpress_post_for_edit(wp_url, wp_user, wp_password, article['wp_post_id'])
+    after_content = extract_wp_edit_content(after_data)
+    repair_info = {
+        'source_content_chars': len(html_to_text(clean_content)),
+        'sent_content_chars': len(html_to_text(publish_content)),
+        'before_content_chars': len(html_to_text(before_content)),
+        'after_content_chars': len(html_to_text(after_content)),
+        'before_hash': content_hash(before_content),
+        'after_hash': content_hash(after_content),
+        'sent_hash': content_hash(publish_content),
+        'before_text_hash': normalized_text_hash(before_content),
+        'after_text_hash': normalized_text_hash(after_content),
+        'sent_text_hash': normalized_text_hash(publish_content),
+    }
+    repair_info['wp_changed'] = repair_info['before_text_hash'] != repair_info['after_text_hash']
+    repair_info['wp_matches_sent'] = repair_info['after_text_hash'] == repair_info['sent_text_hash']
+    return post_data, clean_content, repair_info
 
 
 @app.route('/api/publish/<article_id>', methods=['POST'])
@@ -2645,7 +2725,7 @@ def repair_article_post(article_id):
 
     settings = load_settings()
     try:
-        post_data, clean_content = update_wordpress_post_from_article(article, settings)
+        post_data, clean_content, repair_info = update_wordpress_post_from_article(article, settings)
         for a in articles:
             if a['id'] == article_id:
                 a['content'] = clean_content
@@ -2662,6 +2742,9 @@ def repair_article_post(article_id):
             'wp_url': post_data.get('link', article.get('wp_url', '')),
             'content_chars': len(html_to_text(clean_content)),
             'content_hash': content_hash(clean_content),
+            'repair_info': repair_info,
+            'wp_changed': repair_info.get('wp_changed'),
+            'wp_matches_sent': repair_info.get('wp_matches_sent'),
         })
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
@@ -2675,14 +2758,14 @@ def bulk_repair_article_posts():
     ids = set((request.json or {}).get('ids', []))
     articles = load_articles()
     settings = load_settings()
-    results = {'success': 0, 'error': 0, 'errors': []}
+    results = {'success': 0, 'unchanged': 0, 'mismatch': 0, 'error': 0, 'errors': []}
     now = datetime.now().isoformat()
 
     for article in articles:
         if article.get('id') not in ids:
             continue
         try:
-            post_data, clean_content = update_wordpress_post_from_article(article, settings)
+            post_data, clean_content, repair_info = update_wordpress_post_from_article(article, settings)
             article['content'] = clean_content
             if article.get('status') != 'scheduled':
                 article['status'] = 'published'
@@ -2691,6 +2774,10 @@ def bulk_repair_article_posts():
             article['updated_at'] = now
             apply_score_fields(article)
             results['success'] += 1
+            if not repair_info.get('wp_changed'):
+                results['unchanged'] += 1
+            if not repair_info.get('wp_matches_sent'):
+                results['mismatch'] += 1
         except Exception as e:
             results['error'] += 1
             results['errors'].append({'title': article.get('title', ''), 'error': str(e)})
