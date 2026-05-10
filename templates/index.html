@@ -829,6 +829,11 @@ tr.selected td { background: var(--accent-dim); }
               <input type="text" id="gen-keywords" class="form-control" placeholder="キーワード（カンマ区切り）">
             </div>
             <div class="form-group">
+              <label class="form-label">広告キーワード / 商品検索キーワード</label>
+              <input type="text" id="gen-ad-keywords" class="form-control" placeholder="例: ネックウォーマー 極暖 メンズ, コロンビア ネックウォーマー">
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">Amazon・楽天APIで商品を探すためのキーワードです。SEOキーワードと分けて記事ごとに指定できます。</div>
+            </div>
+            <div class="form-group">
               <label class="form-label">カテゴリー</label>
               <input type="text" id="gen-category" class="form-control" list="gen-category-options" placeholder="投稿先サイトを選ぶと既存カテゴリー候補が出ます">
               <datalist id="gen-category-options"></datalist>
@@ -998,12 +1003,13 @@ tr.selected td { background: var(--accent-dim); }
           <div class="batch-main">
             <label class="form-label">対象記事 (<span id="batch-count">0</span>件)</label>
             <div style="background:var(--surface);border:1px solid var(--border);border-radius:4px;overflow:auto;">
-              <table style="width:100%;min-width:980px">
+              <table style="width:100%;min-width:1180px">
                 <thead>
                   <tr>
                     <th><input type="checkbox" class="check-all" id="batch-check-all" onchange="toggleBatchAll(this)"></th>
                     <th>タイトル</th>
                     <th>スラッグ</th>
+                    <th>広告キーワード</th>
                     <th>カテゴリー</th>
                     <th>投稿予定</th>
                     <th>スコア</th>
@@ -2688,9 +2694,9 @@ function getSelectedIds() {
 function downloadSampleCsv() {
   const rows = [
     ['記事タイトル', 'キーワード', 'カテゴリー', 'スラッグ', '記事種別', '投稿先サイト', '品質定義', '装飾定義', '広告定義', '広告キーワード', '優先度', '執筆予定日', 'メモ', '記事本文'],
-    ['【サンプル1】おすすめ防水バッグ比較ランキング', '防水バッグ おすすめ,防水バッグ 比較', 'アウトドア', 'waterproof-bag-ranking', 'ランキング記事', 'メインブログ', '標準品質', '装飾サンプル', 'ランキング記事｜比較表直後 RINKER', '防水バッグ', '10', '2026-05-15', 'サンプル行です。不要なら削除して実データに置き換えてください。投稿先サイト・各定義は名前またはIDで指定できます。', ''],
-    ['【サンプル2】〇〇防水バッグの口コミレビュー', '〇〇防水バッグ 口コミ,〇〇防水バッグ 評判', 'レビュー', 'sample-waterproof-bag-review', '商標記事', 'メインブログ', '標準品質', '装飾サンプル', '商標記事｜CTA前 RINKER', '〇〇防水バッグ', '20', '2026-05-16', '商品名や広告キーワードを実案件に置き換えてください。', ''],
-    ['【サンプル3】雨の日の荷物を守る防水グッズの選び方', '防水グッズ 選び方,雨の日 荷物 防水', 'コラム', 'rainy-day-waterproof-goods', 'コラム記事', 'メインブログ', '標準品質', '装飾サンプル', 'コラム記事｜本文中おすすめ商品', '防水スプレー,防水バッグ', '30', '2026-05-17', '記事本文を空にすると未生成として取り込まれます。本文を入れると生成済として取り込まれます。', ''],
+    ['【サンプル1】おすすめ防水バッグ比較ランキング', '防水バッグ おすすめ,防水バッグ 比較', 'アウトドア', 'waterproof-bag-ranking', 'ランキング記事', 'メインブログ', 'ランキング記事品質（SEO強化）', '装飾サンプル', 'ランキング記事｜比較表直後 RINKER', '防水バッグ 30L 完全防水, アウトドア 防水バッグ', '10', '2026-05-15', '広告キーワードはAmazon・楽天の商品検索に使います。SEOキーワードと分けて指定できます。', ''],
+    ['【サンプル2】〇〇防水バッグの口コミレビュー', '〇〇防水バッグ 口コミ,〇〇防水バッグ 評判', 'レビュー', 'sample-waterproof-bag-review', '商標記事', 'メインブログ', 'SEO基本品質', '装飾サンプル', '商標記事｜レビューCTA RINKER', '〇〇防水バッグ', '20', '2026-05-16', '商品名や広告キーワードを実案件に置き換えてください。', ''],
+    ['【サンプル3】雨の日の荷物を守る防水グッズの選び方', '防水グッズ 選び方,雨の日 荷物 防水', 'コラム', 'rainy-day-waterproof-goods', 'コラム記事', 'メインブログ', 'SEO基本品質', '装飾サンプル', 'コラム記事｜まとめ前おすすめ RINKER', '防水スプレー,防水バッグ', '30', '2026-05-17', '記事本文を空にすると未生成として取り込まれます。本文を入れると生成済として取り込まれます。', ''],
   ];
   const csv = '\uFEFF' + rows
     .map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(','))
@@ -2911,6 +2917,7 @@ function onArticleSelect() {
   if (article) {
     document.getElementById('gen-title').value = article.title;
     document.getElementById('gen-keywords').value = article.keywords;
+    document.getElementById('gen-ad-keywords').value = article.ad_keywords || '';
     document.getElementById('gen-category').value = article.category || '';
     document.getElementById('gen-slug').value = article.slug || '';
     document.getElementById('gen-site').value = article.site_id || '';
@@ -2940,6 +2947,7 @@ async function createArticleFromGenerateForm() {
   const payload = {
     title,
     keywords: document.getElementById('gen-keywords').value,
+    ad_keywords: document.getElementById('gen-ad-keywords').value,
     category: document.getElementById('gen-category').value,
     slug: document.getElementById('gen-slug').value,
     site_id: document.getElementById('gen-site').value || null,
@@ -2997,12 +3005,13 @@ async function startGenerate() {
     const adDefinitionId = document.getElementById('gen-ad-definition').value;
     const title = document.getElementById('gen-title').value;
     const keywords = document.getElementById('gen-keywords').value;
+    const adKeywords = document.getElementById('gen-ad-keywords').value;
     const category = document.getElementById('gen-category').value;
     const slug = document.getElementById('gen-slug').value;
     const res = await fetch(`/api/generate/${articleId}`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({quality_id: qualityId, title, keywords, category, slug, site_id: siteId, article_type: currentArticleType, include_amazon: includeAmazon, include_rakuten: includeRakuten, decoration_id: decorationId, ad_definition_id: adDefinitionId})
+      body: JSON.stringify({quality_id: qualityId, title, keywords, ad_keywords: adKeywords, category, slug, site_id: siteId, article_type: currentArticleType, include_amazon: includeAmazon, include_rakuten: includeRakuten, decoration_id: decorationId, ad_definition_id: adDefinitionId})
     });
 
     const reader = res.body.getReader();
@@ -3242,6 +3251,7 @@ function loadBatchArticles() {
       <td><input type="checkbox" class="check-row" value="${a.id}" ${batchRowSelectable(a, filter) ? 'checked' : 'disabled'}></td>
       <td style="font-size:12px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.title)}</td>
       <td><input type="text" class="form-control" value="${esc(a.slug || '')}" placeholder="自動" style="font-size:11px;height:28px" onchange="saveBatchField('${a.id}', 'slug', this.value)"></td>
+      <td><input type="text" class="form-control" value="${esc(a.ad_keywords || '')}" placeholder="商品検索語" style="font-size:11px;height:28px;min-width:180px" onchange="saveBatchField('${a.id}', 'ad_keywords', this.value)"></td>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${esc(a.category || '—')}</td>
       <td><input type="date" class="form-control" value="${esc(a.schedule_date || '')}" style="font-size:11px;height:28px" onchange="saveBatchField('${a.id}', 'schedule_date', this.value)"></td>
       <td>${scoreBadge(a)}</td>
