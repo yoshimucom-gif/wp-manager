@@ -2141,6 +2141,24 @@ def generate_article(article_id):
             article_work[key] = data.get(key) or ''
     article_type = normalize_article_type(data.get('article_type') or article_work.get('article_type'), 'ranking')
     article_work['article_type'] = article_type
+    now = datetime.now().isoformat()
+    for a in articles:
+        if a['id'] == article_id:
+            for key in ('title', 'keywords', 'category', 'ad_keywords', 'site_id', 'slug'):
+                a[key] = article_work.get(key, '')
+            a['article_type'] = article_type
+            if quality_id:
+                a['quality_id'] = quality_id
+            if data.get('decoration_id'):
+                a['decoration_id'] = data.get('decoration_id')
+            if data.get('ad_definition_id'):
+                a['ad_definition_id'] = data.get('ad_definition_id')
+            a['status'] = 'generating'
+            a['generation_started_at'] = now
+            a['updated_at'] = now
+            a.pop('error', None)
+            break
+    save_articles(articles)
     quality_list = load_quality()
     quality = select_quality_definition(quality_list, quality_id, article_type)
     quality_prompt = build_quality_prompt(quality)
@@ -2164,14 +2182,25 @@ def generate_article(article_id):
     decoration = next((d for d in load_decorations() if d['id'] == decoration_id), None) if decoration_id else None
     rakuten_asp_instruction = build_rakuten_asp_instruction(article_work, settings)
     ad_definition = select_ad_definition({**data, 'article_type': article_type}, article_work)
-    product_blocks, ad_instruction = build_ad_product_blocks(
-        article_work, settings, ad_definition, include_amazon=include_amazon, include_rakuten=include_rakuten
-    )
+    try:
+        product_blocks, ad_instruction = build_ad_product_blocks(
+            article_work, settings, ad_definition, include_amazon=include_amazon, include_rakuten=include_rakuten
+        )
+    except Exception as e:
+        current_articles = load_articles()
+        for a in current_articles:
+            if a['id'] == article_id:
+                a['status'] = 'error'
+                a['error'] = str(e)
+                a['updated_at'] = datetime.now().isoformat()
+                break
+        save_articles(current_articles)
+        return jsonify({'error': str(e)}), 500
 
     def generate():
-        client = anthropic.Anthropic(api_key=api_key)
         full_content = ''
         try:
+            client = anthropic.Anthropic(api_key=api_key)
             prompt = f"""以下の情報をもとに、WordPressに投稿する記事を書いてください。
 
 タイトル: {article_work.get('title', '')}
@@ -2234,6 +2263,7 @@ def generate_article(article_id):
                     if validation_error:
                         a['status'] = 'error'
                         a['error'] = validation_error
+                        a['updated_at'] = datetime.now().isoformat()
                         save_articles(current_articles)
                         yield f"data: {json.dumps({'error': validation_error})}\n\n"
                         return
@@ -2257,6 +2287,14 @@ def generate_article(article_id):
             save_articles(current_articles)
             yield f"data: {json.dumps({'done': True})}\n\n"
         except Exception as e:
+            current_articles = load_articles()
+            for a in current_articles:
+                if a['id'] == article_id:
+                    a['status'] = 'error'
+                    a['error'] = str(e)
+                    a['updated_at'] = datetime.now().isoformat()
+                    break
+            save_articles(current_articles)
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
     return Response(

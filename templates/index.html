@@ -259,6 +259,9 @@ tr.selected td { background: var(--accent-dim); }
 .badge-generating { background: rgba(9,105,218,0.1); color: var(--accent); border: 1px solid rgba(9,105,218,0.2); }
 .badge-generated { background: rgba(26,127,55,0.1); color: var(--success); border: 1px solid rgba(26,127,55,0.2); }
 .badge-published { background: rgba(154,103,0,0.1); color: var(--warning); border: 1px solid rgba(154,103,0,0.2); }
+.badge-publishing,
+.badge-repairing { background: rgba(9,105,218,0.1); color: var(--accent); border: 1px solid rgba(9,105,218,0.2); }
+.badge-updated { background: rgba(26,127,55,0.1); color: var(--success); border: 1px solid rgba(26,127,55,0.2); }
 .badge-scheduled { background: rgba(111,66,193,0.1); color: #6f42c1; border: 1px solid rgba(111,66,193,0.2); }
 .badge-error { background: rgba(207,34,46,0.1); color: var(--error); border: 1px solid rgba(207,34,46,0.2); }
 
@@ -2354,6 +2357,54 @@ async function loadArticles() {
   scheduleDataSnapshotBackup();
 }
 
+function isArticleBusy(status) {
+  return ['generating', 'publishing', 'repairing'].includes(status);
+}
+
+function setArticleLocalStatus(id, status, message = '') {
+  const article = allArticles.find(a => a.id === id);
+  if (!article) return;
+  article.status = status;
+  if (message) article.processing_message = message;
+  else delete article.processing_message;
+  updateStats();
+  filterArticles();
+  loadBatchArticles();
+}
+
+function setArticlesLocalStatus(ids, status, message = '') {
+  ids.forEach(id => {
+    const article = allArticles.find(a => a.id === id);
+    if (!article) return;
+    article.status = status;
+    if (message) article.processing_message = message;
+    else delete article.processing_message;
+  });
+  updateStats();
+  filterArticles();
+  loadBatchArticles();
+}
+
+function setArticleLocalMessage(id, message = '') {
+  const article = allArticles.find(a => a.id === id);
+  if (!article) return;
+  if (message) article.processing_message = message;
+  else delete article.processing_message;
+  filterArticles();
+  loadBatchArticles();
+}
+
+function setArticlesLocalMessage(ids, message = '') {
+  ids.forEach(id => {
+    const article = allArticles.find(a => a.id === id);
+    if (!article) return;
+    if (message) article.processing_message = message;
+    else delete article.processing_message;
+  });
+  filterArticles();
+  loadBatchArticles();
+}
+
 function updateStats() {
   const pending = allArticles.filter(a => a.status === 'pending').length;
   const generated = allArticles.filter(a => a.status === 'generated').length;
@@ -2626,7 +2677,16 @@ function renderArticles(articles) {
     return;
   }
   empty.style.display = 'none';
-  tbody.innerHTML = articles.map((a, i) => `
+  tbody.innerHTML = articles.map((a, i) => {
+    const busy = isArticleBusy(a.status);
+    const disabled = busy ? 'disabled' : '';
+    const generateLabel = a.status === 'generating' ? '再生成中...' : '生成';
+    const publishLabel = a.status === 'publishing' ? '投稿中...' : 'WP下書き投稿';
+    const repairLabel = a.status === 'repairing' ? '更新中...' : 'WP上書き修復';
+    const statusDetail = a.processing_message
+      ? `<div style="font-size:10px;color:var(--muted);margin-top:4px">${esc(a.processing_message)}</div>`
+      : '';
+    return `
     <tr id="row-${a.id}">
       <td><input type="checkbox" class="check-row" value="${a.id}"></td>
       <td style="color:var(--muted);font-size:11px">${i + 1}</td>
@@ -2636,27 +2696,31 @@ function renderArticles(articles) {
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${esc(a.category || '—')}</td>
       <td>${scoreBadge(a)}</td>
       <td>${getSiteName(a.site_id)}</td>
-      <td>${statusBadge(a.status)}</td>
+      <td>${statusBadge(a.status)}${statusDetail}</td>
       <td style="color:var(--muted);font-size:11px;white-space:nowrap">${a.generated_at ? fmtDate(a.generated_at) : '—'}</td>
       <td>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn btn-secondary btn-sm" title="記事情報と本文を編集" onclick="openArticleModal('${a.id}')">編集</button>
-          <button class="btn btn-primary btn-sm" title="この記事を生成画面で生成し直す" onclick="quickGenerate('${a.id}')">生成</button>
-          ${a.content && !a.wp_post_id ? `<button class="btn btn-success btn-sm" title="WordPressに下書き投稿" onclick="quickPublish('${a.id}')">WP下書き投稿</button>` : ''}
-          ${a.content && a.wp_post_id ? `<button class="btn btn-secondary btn-sm" title="既存のWordPress投稿を現在の本文で上書き修復" onclick="quickRepair('${a.id}')">WP上書き修復</button>` : ''}
+          <button class="btn btn-secondary btn-sm" ${disabled} title="記事情報と本文を編集" onclick="openArticleModal('${a.id}')">編集</button>
+          <button class="btn btn-primary btn-sm" ${disabled} title="この記事を生成画面で生成し直す" onclick="quickGenerate('${a.id}')">${generateLabel}</button>
+          ${a.content && !a.wp_post_id ? `<button class="btn btn-success btn-sm" ${disabled} title="WordPressに下書き投稿" onclick="quickPublish('${a.id}')">${publishLabel}</button>` : ''}
+          ${a.content && a.wp_post_id ? `<button class="btn btn-secondary btn-sm" ${disabled} title="既存のWordPress投稿を現在の本文で上書き更新" onclick="quickRepair('${a.id}')">${repairLabel}</button>` : ''}
           ${a.wp_url ? `<a href="${esc(a.wp_url)}" target="_blank" class="btn btn-secondary btn-sm" title="投稿済み記事を開く">記事を開く</a>` : ''}
         </div>
       </td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function statusBadge(status) {
   const map = {
     pending: ['⊙', '未生成'],
-    generating: ['◌', '生成中'],
+    generating: ['◌', '再生成中'],
     generated: ['✓', '生成済'],
+    publishing: ['◌', '投稿中'],
     published: ['★', '投稿済'],
+    repairing: ['◌', 'WP更新中'],
+    updated: ['✓', '更新完了'],
     scheduled: ['◷', '予約済'],
     error: ['✗', 'エラー'],
   };
@@ -2788,23 +2852,33 @@ async function repairSelected() {
     return;
   }
   if (!confirm(`${targets.length}件の既存WordPress投稿を現在の本文で上書き修復しますか?`)) return;
-  const res = await fetch('/api/articles/bulk-repair-posts', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ids: targets.map(a => a.id)})
-  });
-  const data = await res.json();
-  if (data.success !== undefined) {
-    toast(`上書き修復: 成功 ${data.success}件 / エラー ${data.error}件`, data.error ? 'error' : 'success');
+  const targetIds = targets.map(a => a.id);
+  setArticlesLocalStatus(targetIds, 'repairing', 'WP更新中です。完了後に記事一覧を更新します。');
+  try {
+    const res = await fetch('/api/articles/bulk-repair-posts', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ids: targetIds})
+    });
+    const data = await res.json();
+    if (data.success !== undefined) {
+      toast(`上書き修復完了: 成功 ${data.success}件 / エラー ${data.error}件`, data.error ? 'error' : 'success');
+      await loadArticles();
+      setArticlesLocalMessage(targetIds, 'WP更新完了しました。点数は現在の本文で再計算済みです。');
+    } else {
+      toast(data.error || '上書き修復に失敗しました', 'error');
+      await loadArticles();
+    }
+  } catch (e) {
+    toast('上書き修復エラー: ' + e.message, 'error');
     await loadArticles();
-  } else {
-    toast(data.error || '上書き修復に失敗しました', 'error');
   }
 }
 
 async function quickGenerate(id) {
   const article = allArticles.find(a => a.id === id);
   if (!article) return;
+  setArticleLocalStatus(id, 'generating', '再生成中です。完了後に本文と点数を更新します。');
   showPage(article.article_type || 'ranking');
   setTimeout(() => {
     document.getElementById('gen-article-select').value = id;
@@ -2815,17 +2889,25 @@ async function quickGenerate(id) {
 
 async function quickPublish(id) {
   if (!confirm('WordPress下書きとして投稿しますか?')) return;
-  const res = await fetch(`/api/publish/${id}`, {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({post_status: 'draft'})
-  });
-  const data = await res.json();
-  if (data.success) {
-    toast('投稿しました: ' + data.wp_url, 'success');
-    loadArticles();
-  } else {
-    toast(data.error || '投稿失敗', 'error');
+  setArticleLocalStatus(id, 'publishing', 'WordPressへ下書き投稿中です。');
+  try {
+    const res = await fetch(`/api/publish/${id}`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({post_status: 'draft'})
+    });
+    const data = await res.json();
+    if (data.success) {
+      toast('投稿完了: ' + data.wp_url, 'success');
+      await loadArticles();
+      setArticleLocalMessage(id, '投稿完了しました。');
+    } else {
+      toast(data.error || '投稿失敗', 'error');
+      await loadArticles();
+    }
+  } catch (e) {
+    toast('投稿エラー: ' + e.message, 'error');
+    await loadArticles();
   }
 }
 
@@ -2836,13 +2918,21 @@ async function quickRepair(id) {
     return;
   }
   if (!confirm('既存のWordPress投稿を現在の本文で上書き修復しますか?')) return;
-  const res = await fetch(`/api/articles/${id}/repair-post`, {method: 'POST'});
-  const data = await res.json();
-  if (data.success) {
-    toast('既存投稿を上書き修復しました: ' + (data.wp_url || ''), 'success');
+  setArticleLocalStatus(id, 'repairing', 'WP更新中です。完了後に記事一覧を更新します。');
+  try {
+    const res = await fetch(`/api/articles/${id}/repair-post`, {method: 'POST'});
+    const data = await res.json();
+    if (data.success) {
+      toast('WP更新完了: ' + (data.wp_url || ''), 'success');
+      await loadArticles();
+      setArticleLocalMessage(id, 'WP更新完了しました。点数は現在の本文で再計算済みです。');
+    } else {
+      toast(data.error || '上書き修復に失敗しました', 'error');
+      await loadArticles();
+    }
+  } catch (e) {
+    toast('WP更新エラー: ' + e.message, 'error');
     await loadArticles();
-  } else {
-    toast(data.error || '上書き修復に失敗しました', 'error');
   }
 }
 
@@ -2992,6 +3082,7 @@ async function startGenerate() {
   btn.disabled = true;
   btn.textContent = '⌛ 生成中...';
   publishBtn.disabled = true;
+  setArticleLocalStatus(articleId, 'generating', '再生成中です。完了後に本文と点数を更新します。');
 
   const progress = document.getElementById('gen-progress');
   const fill = document.getElementById('gen-progress-fill');
@@ -3013,6 +3104,13 @@ async function startGenerate() {
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({quality_id: qualityId, title, keywords, ad_keywords: adKeywords, category, slug, site_id: siteId, article_type: currentArticleType, include_amazon: includeAmazon, include_rakuten: includeRakuten, decoration_id: decorationId, ad_definition_id: adDefinitionId})
     });
+    if (!res.ok || !res.body) {
+      const data = await res.json().catch(() => ({}));
+      const message = data.error || '生成開始に失敗しました';
+      setArticleLocalStatus(articleId, 'error', message);
+      toast('エラー: ' + message, 'error');
+      return;
+    }
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
@@ -3035,6 +3133,8 @@ async function startGenerate() {
       if (msg.error) {
         generationError = true;
         if (publishBtn) publishBtn.disabled = true;
+        setArticleLocalStatus(articleId, 'error', msg.error);
+        await loadArticles();
         toast('エラー: ' + msg.error, 'error');
       }
     };
@@ -3062,6 +3162,7 @@ async function startGenerate() {
       await finalizeGenerateSuccess(articleId);
     }
   } catch (e) {
+    setArticleLocalStatus(articleId, 'error', e.message);
     toast('接続エラー: ' + e.message, 'error');
   }
 
@@ -3077,6 +3178,7 @@ async function finalizeGenerateSuccess(articleId) {
   currentGenArticleId = articleId;
   if (publishBtn) publishBtn.disabled = false;
   await loadArticles();
+  setArticleLocalMessage(articleId, '生成完了しました。点数も更新済みです。');
   document.getElementById('gen-article-select').value = articleId;
   const article = allArticles.find(a => a.id === articleId);
   const output = document.getElementById('gen-output');
@@ -3090,20 +3192,32 @@ async function publishGenerated() {
   const article = allArticles.find(a => a.id === currentGenArticleId);
   const isRepair = !!article?.wp_post_id;
   if (isRepair && !confirm('既存のWordPress投稿を現在の本文で上書き修復しますか?')) return;
-  const res = isRepair
-    ? await fetch(`/api/articles/${currentGenArticleId}/repair-post`, {method:'POST'})
-    : await fetch(`/api/publish/${currentGenArticleId}`, {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({post_status:'draft'})
-      });
-  const data = await res.json();
-  if (data.success) {
-    toast((isRepair ? '既存投稿を上書き修復しました: ' : '投稿しました: ') + data.wp_url, 'success');
+  setArticleLocalStatus(
+    currentGenArticleId,
+    isRepair ? 'repairing' : 'publishing',
+    isRepair ? 'WP更新中です。完了後に記事一覧を更新します。' : 'WordPressへ下書き投稿中です。'
+  );
+  try {
+    const res = isRepair
+      ? await fetch(`/api/articles/${currentGenArticleId}/repair-post`, {method:'POST'})
+      : await fetch(`/api/publish/${currentGenArticleId}`, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({post_status:'draft'})
+        });
+    const data = await res.json();
+    if (data.success) {
+      toast((isRepair ? 'WP更新完了: ' : '投稿完了: ') + data.wp_url, 'success');
+      await loadArticles();
+      setArticleLocalMessage(currentGenArticleId, isRepair ? 'WP更新完了しました。点数は現在の本文で再計算済みです。' : '投稿完了しました。');
+      updateGeneratePublishButton(currentGenArticleId);
+    } else {
+      toast(data.error || (isRepair ? '上書き修復に失敗しました' : '投稿失敗'), 'error');
+      await loadArticles();
+    }
+  } catch (e) {
+    toast((isRepair ? 'WP更新エラー: ' : '投稿エラー: ') + e.message, 'error');
     await loadArticles();
-    updateGeneratePublishButton(currentGenArticleId);
-  } else {
-    toast(data.error || (isRepair ? '上書き修復に失敗しました' : '投稿失敗'), 'error');
   }
 }
 
@@ -3256,7 +3370,7 @@ function loadBatchArticles() {
       <td><input type="date" class="form-control" value="${esc(a.schedule_date || '')}" style="font-size:11px;height:28px" onchange="saveBatchField('${a.id}', 'schedule_date', this.value)"></td>
       <td>${scoreBadge(a)}</td>
       <td>${getSiteName(a.site_id)}</td>
-      <td>${statusBadge(a.status)}</td>
+      <td>${statusBadge(a.status)}${a.processing_message ? `<div style="font-size:10px;color:var(--muted);margin-top:4px">${esc(a.processing_message)}</div>` : ''}</td>
     </tr>
   `).join('');
 }
@@ -3278,6 +3392,7 @@ function getBatchSelectedIds() {
 async function startBatchGenerate() {
   const ids = getBatchSelectedIds();
   if (!ids.length) { toast('記事を選択してください', 'error'); return; }
+  setArticlesLocalStatus(ids, 'generating', '一括生成中です。完了後に点数を更新します。');
   const qualityId = document.getElementById('batch-quality').value;
   const includeAmazon = document.getElementById('batch-include-amazon').checked;
   const includeRakuten = document.getElementById('batch-include-rakuten').checked;
@@ -3302,6 +3417,7 @@ async function startBatchGenerate() {
     startBatchPolling();
   } else {
     toast(data.error || '失敗', 'error');
+    await loadArticles();
   }
 }
 
