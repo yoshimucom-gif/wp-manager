@@ -1542,7 +1542,7 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
 <!-- Article Detail Modal -->
 <div class="modal-overlay" id="article-modal">
   <div class="modal" style="width:800px">
-    <div class="modal-title">// 記事詳細</div>
+    <div class="modal-title">// 本文/設定編集</div>
     <input type="hidden" id="modal-article-id">
     <div class="form-group">
       <label class="form-label">タイトル</label>
@@ -1597,6 +1597,7 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
     <div class="form-group">
       <label class="form-label">コンテンツ (HTML)</label>
       <textarea id="modal-content" class="form-control" rows="14"></textarea>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">ここで保存してもWordPressには反映されません。既存投稿へ反映する場合は、保存後に「WPへ上書き送信」を実行してください。</div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeArticleModal()">閉じる</button>
@@ -2731,8 +2732,8 @@ function renderArticles(articles) {
       <td style="color:var(--muted);font-size:11px;white-space:nowrap">${a.generated_at ? fmtDate(a.generated_at) : '—'}</td>
       <td>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn btn-secondary btn-sm" ${disabled} title="記事情報と本文を編集" onclick="openArticleModal('${a.id}')">編集</button>
-          <button class="btn btn-primary btn-sm" ${disabled} title="この記事を生成画面で生成し直す" onclick="quickGenerate('${a.id}')">${generateLabel}</button>
+          <button class="btn btn-secondary btn-sm" ${disabled} title="Affiros9内の記事情報と保存本文を手動編集。Claude生成やWordPress送信は行いません。" onclick="openArticleModal('${a.id}')">本文/設定編集</button>
+          <button class="btn btn-primary btn-sm" ${disabled} title="生成画面で広告設定などを確認してから開始" onclick="quickGenerate('${a.id}')">${generateLabel}</button>
           ${a.content && !a.wp_post_id ? `<button class="btn btn-success btn-sm" ${disabled} title="WordPressに下書き投稿" onclick="quickPublish('${a.id}')">${publishLabel}</button>` : ''}
           ${a.content && a.wp_post_id ? `<button class="btn btn-secondary btn-sm" ${disabled} title="Affiros9に保存されている本文を既存WordPress投稿へ送信" onclick="quickRepair('${a.id}')">${repairLabel}</button>` : ''}
           ${a.wp_url ? `<a href="${esc(a.wp_url)}" target="_blank" class="btn btn-secondary btn-sm" title="投稿済み記事を開く">記事を開く</a>` : ''}
@@ -2912,12 +2913,15 @@ async function repairSelected() {
 async function quickGenerate(id) {
   const article = allArticles.find(a => a.id === id);
   if (!article) return;
-  setArticleLocalStatus(id, 'generating', '再生成中です。完了後に本文と点数を更新します。');
   showPage(article.article_type || 'ranking');
   setTimeout(() => {
     document.getElementById('gen-article-select').value = id;
     onArticleSelect();
-    startGenerate();
+    const main = document.querySelector('.main');
+    if (main) main.scrollTop = 0;
+    toast(article.content
+      ? '再生成画面を開きました。広告設定などを確認してから「再生成開始」を押してください。'
+      : '生成画面を開きました。広告設定などを確認してから「生成開始」を押してください。', 'info');
   }, 100);
 }
 
