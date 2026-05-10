@@ -611,6 +611,114 @@ def sanitize_generated_html(content):
     return strip_wp_block_artifacts(html).strip().strip('`').strip()
 
 
+def block_attrs(attrs=None):
+    return '' if not attrs else ' ' + json.dumps(attrs, ensure_ascii=False, separators=(',', ':'))
+
+
+def wp_block(name, inner='', attrs=None):
+    return f'<!-- wp:{name}{block_attrs(attrs)} -->\n{inner.strip()}\n<!-- /wp:{name} -->'
+
+
+def tag_inner_html(tag):
+    return ''.join(str(child) for child in tag.contents)
+
+
+def list_to_block(tag):
+    ordered = tag.name == 'ol'
+    tag.name = 'ol' if ordered else 'ul'
+    classes = list(tag.get('class', []))
+    if 'wp-block-list' not in classes:
+        classes.append('wp-block-list')
+    tag['class'] = classes
+    list_name = tag.name
+    item_blocks = []
+    for li in tag.find_all('li', recursive=False):
+        item_blocks.append(wp_block('list-item', str(li)))
+    if item_blocks:
+        attrs = ' '.join(f'{k}="{escape(" ".join(v) if isinstance(v, list) else str(v), quote=True)}"' for k, v in tag.attrs.items())
+        inner = f'<{list_name} {attrs}>\n' + '\n'.join(item_blocks) + f'\n</{list_name}>'
+    else:
+        inner = str(tag)
+    return wp_block('list', inner, {'ordered': True} if ordered else None)
+
+
+def table_to_block(tag):
+    table_html = str(tag)
+    return wp_block('table', f'<figure class="wp-block-table">{table_html}</figure>')
+
+
+def image_to_block(tag):
+    return wp_block('image', f'<figure class="wp-block-image">{str(tag)}</figure>')
+
+
+def node_to_gutenberg_block(node):
+    if not getattr(node, 'name', None):
+        text = str(node).strip()
+        return wp_block('paragraph', f'<p>{escape(text)}</p>') if text else ''
+
+    name = node.name.lower()
+    if name in ('html', 'body'):
+        return '\n\n'.join(filter(None, (node_to_gutenberg_block(child) for child in node.contents)))
+    if name == 'p':
+        if not node.get_text(strip=True) and not node.find(['img', 'a', 'mark', 'strong', 'em']):
+            return ''
+        if node.find('img') and len([c for c in node.contents if str(c).strip()]) == 1:
+            img = node.find('img')
+            return image_to_block(img)
+        return wp_block('paragraph', str(node))
+    if re.fullmatch(r'h[1-6]', name):
+        level = int(name[1])
+        if level == 1:
+            level = 2
+            node.name = 'h2'
+        attrs = {'level': level} if level != 2 else None
+        return wp_block('heading', str(node), attrs)
+    if name in ('ul', 'ol'):
+        return list_to_block(node)
+    if name == 'table':
+        return table_to_block(node)
+    if name == 'figure':
+        table = node.find('table')
+        if table:
+            node['class'] = list(set(list(node.get('class', [])) + ['wp-block-table']))
+            return wp_block('table', str(node))
+        image = node.find('img')
+        if image:
+            node['class'] = list(set(list(node.get('class', [])) + ['wp-block-image']))
+            return wp_block('image', str(node))
+        return wp_block('html', str(node))
+    if name == 'img':
+        return image_to_block(node)
+    if name == 'blockquote':
+        return wp_block('quote', str(node))
+    if name == 'pre':
+        return wp_block('code', str(node))
+    if name == 'hr':
+        return '<!-- wp:separator -->\n<hr class="wp-block-separator has-alpha-channel-opacity"/>\n<!-- /wp:separator -->'
+    if name in ('div', 'section', 'aside'):
+        if node.attrs:
+            return wp_block('html', str(node))
+        return '\n\n'.join(filter(None, (node_to_gutenberg_block(child) for child in node.contents)))
+    return wp_block('html', str(node))
+
+
+def convert_html_to_gutenberg_blocks(content):
+    html = sanitize_generated_html(content)
+    if not html:
+        return ''
+    if not BeautifulSoup:
+        return html
+    try:
+        soup = BeautifulSoup(f'<div id="affiros9-block-root">{html}</div>', 'html5lib')
+    except FeatureNotFound:
+        soup = BeautifulSoup(f'<div id="affiros9-block-root">{html}</div>', 'html.parser')
+    root = soup.find(id='affiros9-block-root')
+    if not root:
+        return html
+    blocks = [node_to_gutenberg_block(child) for child in root.contents]
+    return '\n\n'.join(block for block in blocks if block.strip())
+
+
 def safe_article_css(value):
     css = str(value or '').strip()
     if not css or looks_like_html(css):
@@ -619,10 +727,11 @@ def safe_article_css(value):
 
 
 def prepare_article_content_for_publish(content, settings):
-    clean_content = sanitize_generated_html(content)
+    clean_content = convert_html_to_gutenberg_blocks(content)
     article_css = safe_article_css(settings.get('article_css', ''))
     if article_css:
-        return f'<style>{article_css}</style>\n' + clean_content
+        css_block = wp_block('html', f'<style>{article_css}</style>')
+        return css_block + '\n\n' + clean_content
     return clean_content
 
 
@@ -2705,10 +2814,11 @@ def update_rewritten_post(item_id):
         return jsonify({'error': 'サイト設定が見つかりません'}), 404
 
     try:
+        publish_content = prepare_article_content_for_publish(content, settings)
         resp = requests.post(
             f"{site['wp_url'].rstrip('/')}/wp-json/wp/v2/posts/{item['wp_post_id']}",
             auth=(site['wp_user'], site['wp_password']),
-            json={'content': content},
+            json={'content': publish_content},
             timeout=30
         )
         resp.raise_for_status()
