@@ -754,7 +754,6 @@ tr.selected td { background: var(--accent-dim); }
           <button class="btn btn-secondary" onclick="downloadSampleCsv()">サンプルCSV</button>
           <button class="btn btn-primary" onclick="generateSelected()">⚡ 選択を生成</button>
           <button class="btn btn-success" onclick="publishSelected()">🚀 選択をWP投稿</button>
-          <button class="btn btn-secondary" onclick="repairSelected()">選択を既存WPへ上書き送信</button>
           <button class="btn btn-danger" onclick="deleteSelected()">🗑 選択を削除</button>
           <button class="btn btn-secondary" onclick="rescoreArticles()">↯ スコア再計算</button>
           <div style="flex:1"></div>
@@ -1597,7 +1596,7 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
     <div class="form-group">
       <label class="form-label">コンテンツ (HTML)</label>
       <textarea id="modal-content" class="form-control" rows="14"></textarea>
-      <div style="font-size:11px;color:var(--muted);margin-top:4px">ここで保存してもWordPressには反映されません。既存投稿へ反映する場合は、保存後に「WPへ上書き送信」を実行してください。</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">ここで保存してもWordPressには反映されません。既存投稿へ反映する場合は、保存後に生成画面で内容を確認してから「WPへ上書き送信」を実行してください。</div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeArticleModal()">閉じる</button>
@@ -2714,7 +2713,6 @@ function renderArticles(articles) {
     const disabled = busy ? 'disabled' : '';
     const generateLabel = a.status === 'generating' ? '再生成中...' : (a.content ? '再生成' : '生成');
     const publishLabel = a.status === 'publishing' ? '投稿中...' : 'WP下書き投稿';
-    const repairLabel = a.status === 'repairing' ? '送信中...' : 'WPへ上書き送信';
     const statusDetail = a.processing_message
       ? `<div style="font-size:10px;color:var(--muted);margin-top:4px">${esc(a.processing_message)}</div>`
       : '';
@@ -2735,7 +2733,6 @@ function renderArticles(articles) {
           <button class="btn btn-secondary btn-sm" ${disabled} title="Affiros9内の記事情報と保存本文を手動編集。Claude生成やWordPress送信は行いません。" onclick="openArticleModal('${a.id}')">本文/設定編集</button>
           <button class="btn btn-primary btn-sm" ${disabled} title="生成画面で広告設定などを確認してから開始" onclick="quickGenerate('${a.id}')">${generateLabel}</button>
           ${a.content && !a.wp_post_id ? `<button class="btn btn-success btn-sm" ${disabled} title="WordPressに下書き投稿" onclick="quickPublish('${a.id}')">${publishLabel}</button>` : ''}
-          ${a.content && a.wp_post_id ? `<button class="btn btn-secondary btn-sm" ${disabled} title="Affiros9に保存されている本文を既存WordPress投稿へ送信" onclick="quickRepair('${a.id}')">${repairLabel}</button>` : ''}
           ${a.wp_url ? `<a href="${esc(a.wp_url)}" target="_blank" class="btn btn-secondary btn-sm" title="投稿済み記事を開く">記事を開く</a>` : ''}
         </div>
       </td>
