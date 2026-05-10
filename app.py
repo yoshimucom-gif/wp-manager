@@ -34,6 +34,12 @@ CLAUDE_ARTICLE_MODEL = 'claude-sonnet-4-6'
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
+APP_STARTED_AT = datetime.now()
+STALE_ARTICLE_STATUS_MINUTES = {
+    'generating': 30,
+    'publishing': 15,
+    'repairing': 15,
+}
 
 def is_writable_dir(path):
     try:
@@ -99,6 +105,75 @@ def load_batch_jobs():
 
 def save_batch_jobs(jobs):
     save_json(BATCH_JOBS_FILE, jobs[:50])
+
+def parse_saved_datetime(value):
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value))
+        if parsed.tzinfo:
+            parsed = parsed.replace(tzinfo=None)
+        return parsed
+    except (TypeError, ValueError):
+        return None
+
+def fallback_article_status(article):
+    if article.get('wp_post_id') or article.get('wp_url'):
+        return 'published'
+    if article.get('content'):
+        return 'generated'
+    return 'pending'
+
+def recover_stale_article_statuses(articles, jobs=None):
+    now = datetime.now()
+    jobs_by_id = {job.get('id'): job for job in (jobs or []) if job.get('id')}
+    changed = False
+
+    for article in articles:
+        status = article.get('status')
+        limit_minutes = STALE_ARTICLE_STATUS_MINUTES.get(status)
+        if not limit_minutes:
+            continue
+
+        timestamps = [
+            article.get('generation_started_at'),
+            article.get('updated_at'),
+            article.get('created_at'),
+        ]
+        started_at = next((dt for dt in (parse_saved_datetime(ts) for ts in timestamps) if dt), None)
+
+        job = jobs_by_id.get(article.get('batch_job_id'))
+        job_updated_at = None
+        if job:
+            job_status = job.get('status')
+            job_updated_at = parse_saved_datetime(job.get('updated_at') or job.get('started_at'))
+            if (
+                job_status == 'running'
+                and job_updated_at
+                and job_updated_at >= APP_STARTED_AT - timedelta(seconds=5)
+                and now - job_updated_at <= timedelta(minutes=limit_minutes)
+            ):
+                continue
+            if job_status == 'running' and not started_at:
+                started_at = job_updated_at
+
+        active_at = job_updated_at or started_at
+        if active_at and active_at < APP_STARTED_AT - timedelta(seconds=5):
+            pass
+        elif started_at and now - started_at <= timedelta(minutes=limit_minutes):
+            continue
+
+        article['status'] = fallback_article_status(article)
+        article['generation_warning'] = '前回の処理が途中で止まったため、操作できる状態に戻しました。必要なら再生成してください。'
+        article['last_generation_interrupted'] = True
+        article['updated_at'] = now.isoformat()
+        article['generation_finished_at'] = now.isoformat()
+        article.pop('batch_job_id', None)
+        article.pop('processing_message', None)
+        article.pop('error', None)
+        changed = True
+
+    return changed
 
 def load_rewrites():
     return load_json(REWRITE_FILE, [])
@@ -1938,7 +2013,10 @@ def logout():
 @login_required
 def get_articles():
     articles = load_articles()
+    changed = recover_stale_article_statuses(articles, load_batch_jobs())
     if ensure_article_scores_current(articles):
+        changed = True
+    if changed:
         save_articles(articles)
     return jsonify(articles)
 
@@ -2216,6 +2294,8 @@ def generate_article(article_id):
             a['generation_started_at'] = now
             a['updated_at'] = now
             a.pop('error', None)
+            a.pop('generation_warning', None)
+            a.pop('last_generation_interrupted', None)
             break
     save_articles(articles)
     quality_list = load_quality()
@@ -2341,6 +2421,8 @@ def generate_article(article_id):
                     changed = new_content_hash != previous_content_hash
                     a['content'] = clean_content
                     a['status'] = 'generated'
+                    a.pop('generation_warning', None)
+                    a.pop('last_generation_interrupted', None)
                     a['title'] = article_work.get('title', a.get('title', ''))
                     a['keywords'] = article_work.get('keywords', a.get('keywords', ''))
                     a['category'] = article_work.get('category', a.get('category', ''))
@@ -2443,7 +2525,11 @@ def batch_generate():
         if a['id'] in job['article_ids']:
             a['status'] = 'generating'
             a['batch_job_id'] = job_id
+            a['generation_started_at'] = now
+            a['updated_at'] = now
             a.pop('error', None)
+            a.pop('generation_warning', None)
+            a.pop('last_generation_interrupted', None)
     save_articles(articles)
 
     def update_job(**changes):
@@ -2540,6 +2626,8 @@ def batch_generate():
                         a['content'] = content
                         a['status'] = 'generated'
                         a.pop('batch_job_id', None)
+                        a.pop('generation_warning', None)
+                        a.pop('last_generation_interrupted', None)
                         a['quality_id'] = quality.get('id') if quality else quality_id
                         a['article_type'] = article_type
                         a['decoration_id'] = decoration_id or a.get('decoration_id')

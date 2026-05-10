@@ -2713,8 +2713,10 @@ function renderArticles(articles) {
     const disabled = busy ? 'disabled' : '';
     const generateLabel = a.status === 'generating' ? '再生成中...' : (a.content ? '再生成' : '生成');
     const publishLabel = a.status === 'publishing' ? '投稿中...' : 'WP下書き投稿';
-    const statusDetail = a.processing_message
-      ? `<div style="font-size:10px;color:var(--muted);margin-top:4px">${esc(a.processing_message)}</div>`
+    const statusDetailText = a.processing_message || a.generation_warning || (a.status === 'error' ? a.error : '');
+    const statusDetailColor = a.status === 'error' ? 'var(--danger)' : 'var(--muted)';
+    const statusDetail = statusDetailText
+      ? `<div style="font-size:10px;color:${statusDetailColor};margin-top:4px">${esc(statusDetailText)}</div>`
       : '';
     return `
     <tr id="row-${a.id}">
