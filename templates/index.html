@@ -1746,6 +1746,7 @@ function updateArticleTypeUI() {
   document.getElementById('gen-page-subtitle').textContent = cfg.subtitle;
   document.getElementById('gen-article-type-label').value = cfg.label;
   updateDefinitionDefaultsForCurrentContext();
+  fillAdKeywordsFromTitle('gen-title', 'gen-keywords', 'gen-ad-keywords', currentArticleType);
 }
 
 function updateDefinitionDefaultsForCurrentContext() {
@@ -1773,6 +1774,56 @@ function toast(msg, type = 'info') {
   el.style.display = 'block';
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.style.display = 'none', 4000);
+}
+
+function inferAdKeywordsFromTitle(title, keywords = '', articleType = 'ranking') {
+  const cleanCandidate = (value) => {
+    let text = String(value || '').trim();
+    text = text.split(/[｜|]/)[0] || '';
+    text = text
+      .replace(/【[^】]{0,40}】/g, ' ')
+      .replace(/\[[^\]]{0,40}\]/g, ' ')
+      .replace(/（[^）]{0,40}）/g, ' ')
+      .replace(/\([^)]{0,40}\)/g, ' ')
+      .replace(/[「」『』“”"'`]/g, ' ')
+      .replace(/[0-9０-９][0-9０-９,，.．]*\s*円台?(?:で買える|以下|以内|前後)?/g, ' ')
+      .replace(/[0-9０-９]+\s*(?:選|社|個|本|枚|種類|台)\s*.*$/g, ' ');
+    const prefix = /^(?:最新版|最新|徹底|安い|格安|高コスパ|コスパ|おすすめ|人気|厳選|初心者向け|保存版|完全版|比較)\s*/;
+    let previous = '';
+    while (previous !== text) {
+      previous = text;
+      text = text.replace(prefix, '');
+    }
+    const suffix = /(?:の)?(?:おすすめ|比較|ランキング|口コミ|評判|レビュー|選び方|使い方|料金|価格|効果|メリット|デメリット|とは|まとめ|向け|ランキング形式).*$/;
+    const match = text.match(new RegExp('(.+?)' + suffix.source));
+    if (match && match[1].trim().length >= 2) text = match[1];
+    else text = text.replace(suffix, '');
+    return text
+      .replace(/(?:で買える|で購入できる|買える|購入できる|探している|欲しい|選ぶべき)/g, ' ')
+      .replace(/[!?！？、。:：;；/／・\-―–—]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 80);
+  };
+  const candidate = cleanCandidate(title);
+  if (candidate.length >= 2) return candidate;
+  const firstKeyword = String(keywords || '').split(/[,、\n]/)[0].trim();
+  const keywordCandidate = cleanCandidate(firstKeyword);
+  return keywordCandidate.length >= 2 ? keywordCandidate : firstKeyword.slice(0, 80);
+}
+
+function fillAdKeywordsFromTitle(titleId, keywordsId, targetId, articleType = currentArticleType, force = false) {
+  const titleEl = document.getElementById(titleId);
+  const keywordsEl = document.getElementById(keywordsId);
+  const targetEl = document.getElementById(targetId);
+  if (!titleEl || !targetEl) return;
+  const inferred = inferAdKeywordsFromTitle(titleEl.value, keywordsEl?.value || '', articleType);
+  const current = targetEl.value.trim();
+  const previousAuto = targetEl.dataset.autoValue || '';
+  if (!inferred) return;
+  if (!force && current && current !== previousAuto) return;
+  targetEl.value = inferred;
+  targetEl.dataset.autoValue = inferred;
 }
 
 // ---- Data durability ----
@@ -2987,7 +3038,10 @@ async function openArticleModal(id) {
   document.getElementById('modal-title').value = article.title;
   document.getElementById('modal-keywords').value = article.keywords;
   document.getElementById('modal-article-type').value = article.article_type || 'ranking';
-  document.getElementById('modal-ad-keywords').value = article.ad_keywords || '';
+  const inferredAdKeywords = inferAdKeywordsFromTitle(article.title, article.keywords, article.article_type || 'ranking');
+  const modalAdKeywords = document.getElementById('modal-ad-keywords');
+  modalAdKeywords.value = article.ad_keywords || inferredAdKeywords;
+  modalAdKeywords.dataset.autoValue = article.ad_keywords ? '' : inferredAdKeywords;
   document.getElementById('modal-category').value = article.category || '';
   document.getElementById('modal-slug').value = article.slug || '';
   document.getElementById('modal-schedule-date').value = article.schedule_date || '';
@@ -3015,7 +3069,11 @@ async function saveArticleModal() {
         title: document.getElementById('modal-title').value,
         keywords: document.getElementById('modal-keywords').value,
         article_type: document.getElementById('modal-article-type').value,
-        ad_keywords: document.getElementById('modal-ad-keywords').value,
+        ad_keywords: document.getElementById('modal-ad-keywords').value || inferAdKeywordsFromTitle(
+          document.getElementById('modal-title').value,
+          document.getElementById('modal-keywords').value,
+          document.getElementById('modal-article-type').value
+        ),
         category: document.getElementById('modal-category').value,
         slug: document.getElementById('modal-slug').value,
         schedule_date: document.getElementById('modal-schedule-date').value,
@@ -3052,7 +3110,10 @@ function onArticleSelect() {
   if (article) {
     document.getElementById('gen-title').value = article.title;
     document.getElementById('gen-keywords').value = article.keywords;
-    document.getElementById('gen-ad-keywords').value = article.ad_keywords || '';
+    const inferredAdKeywords = inferAdKeywordsFromTitle(article.title, article.keywords, article.article_type || currentArticleType);
+    const genAdKeywords = document.getElementById('gen-ad-keywords');
+    genAdKeywords.value = article.ad_keywords || inferredAdKeywords;
+    genAdKeywords.dataset.autoValue = article.ad_keywords ? '' : inferredAdKeywords;
     document.getElementById('gen-category').value = article.category || '';
     document.getElementById('gen-slug').value = article.slug || '';
     document.getElementById('gen-site').value = article.site_id || '';
@@ -3086,7 +3147,7 @@ async function createArticleFromGenerateForm() {
   const payload = {
     title,
     keywords: document.getElementById('gen-keywords').value,
-    ad_keywords: document.getElementById('gen-ad-keywords').value,
+    ad_keywords: document.getElementById('gen-ad-keywords').value || inferAdKeywordsFromTitle(title, document.getElementById('gen-keywords').value, currentArticleType),
     category: document.getElementById('gen-category').value,
     slug: document.getElementById('gen-slug').value,
     site_id: document.getElementById('gen-site').value || null,
@@ -3145,7 +3206,7 @@ async function startGenerate() {
     const adDefinitionId = document.getElementById('gen-ad-definition').value;
     const title = document.getElementById('gen-title').value;
     const keywords = document.getElementById('gen-keywords').value;
-    const adKeywords = document.getElementById('gen-ad-keywords').value;
+    const adKeywords = document.getElementById('gen-ad-keywords').value || inferAdKeywordsFromTitle(title, keywords, currentArticleType);
     const category = document.getElementById('gen-category').value;
     const slug = document.getElementById('gen-slug').value;
     const res = await fetch(`/api/generate/${articleId}`, {
@@ -3432,7 +3493,7 @@ function loadBatchArticles() {
       <td><input type="checkbox" class="check-row" value="${a.id}" ${batchRowSelectable(a, filter) ? 'checked' : 'disabled'}></td>
       <td style="font-size:12px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.title)}</td>
       <td><input type="text" class="form-control" value="${esc(a.slug || '')}" placeholder="自動" style="font-size:11px;height:28px" onchange="saveBatchField('${a.id}', 'slug', this.value)"></td>
-      <td><input type="text" class="form-control" value="${esc(a.ad_keywords || '')}" placeholder="商品検索語" style="font-size:11px;height:28px;min-width:180px" onchange="saveBatchField('${a.id}', 'ad_keywords', this.value)"></td>
+      <td><input type="text" class="form-control" value="${esc(a.ad_keywords || inferAdKeywordsFromTitle(a.title, a.keywords, a.article_type || 'ranking'))}" placeholder="商品検索語" style="font-size:11px;height:28px;min-width:180px" onchange="saveBatchField('${a.id}', 'ad_keywords', this.value)"></td>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${esc(a.category || '—')}</td>
       <td><input type="date" class="form-control" value="${esc(a.schedule_date || '')}" style="font-size:11px;height:28px" onchange="saveBatchField('${a.id}', 'schedule_date', this.value)"></td>
       <td>${scoreBadge(a)}</td>
@@ -4112,11 +4173,44 @@ async function testAmazon() {
   });
 });
 
+function bindAdKeywordAutoFill() {
+  ['gen-title', 'gen-keywords'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', () => {
+      fillAdKeywordsFromTitle('gen-title', 'gen-keywords', 'gen-ad-keywords', currentArticleType);
+    });
+  });
+  document.getElementById('gen-ad-keywords')?.addEventListener('input', e => {
+    if (e.target.value.trim() !== (e.target.dataset.autoValue || '')) e.target.dataset.autoValue = '';
+  });
+  ['modal-title', 'modal-keywords'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', () => {
+      fillAdKeywordsFromTitle(
+        'modal-title',
+        'modal-keywords',
+        'modal-ad-keywords',
+        document.getElementById('modal-article-type')?.value || 'ranking'
+      );
+    });
+  });
+  document.getElementById('modal-article-type')?.addEventListener('change', () => {
+    fillAdKeywordsFromTitle(
+      'modal-title',
+      'modal-keywords',
+      'modal-ad-keywords',
+      document.getElementById('modal-article-type')?.value || 'ranking'
+    );
+  });
+  document.getElementById('modal-ad-keywords')?.addEventListener('input', e => {
+    if (e.target.value.trim() !== (e.target.dataset.autoValue || '')) e.target.dataset.autoValue = '';
+  });
+}
+
 window.addEventListener('popstate', () => {
   showPage(pageFromUrl() || 'ranking', { updateUrl: false });
 });
 
 (async function init() {
+  bindAdKeywordAutoFill();
   const initialPage = pageFromUrl() || localStorage.getItem('currentPage') || 'home';
   showPage(initialPage, { replaceUrl: true, skipLoad: true });
   await ensureDurableData();

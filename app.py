@@ -913,6 +913,48 @@ def article_type_label(article_type):
     }.get(article_type, 'ランキング記事')
 
 
+def infer_ad_keywords_from_title(title, keywords='', article_type='ranking'):
+    source = str(title or '').strip()
+
+    def clean_candidate(value):
+        text = str(value or '').strip()
+        text = re.split(r'[｜|]', text, maxsplit=1)[0]
+        text = re.sub(r'【[^】]{0,40}】', ' ', text)
+        text = re.sub(r'\[[^\]]{0,40}\]', ' ', text)
+        text = re.sub(r'（[^）]{0,40}）', ' ', text)
+        text = re.sub(r'\([^)]{0,40}\)', ' ', text)
+        text = re.sub(r'[「」『』“”"\'`]', ' ', text)
+        text = re.sub(r'[0-9０-９][0-9０-９,，.．]*\s*円台?(?:で買える|以下|以内|前後)?', ' ', text)
+        text = re.sub(r'[0-9０-９]+\s*(?:選|社|個|本|枚|種類|台)\s*.*$', '', text)
+        prefix_pattern = r'^(?:最新版|最新|徹底|安い|格安|高コスパ|コスパ|おすすめ|人気|厳選|初心者向け|保存版|完全版|比較)\s*'
+        previous = None
+        while previous != text:
+            previous = text
+            text = re.sub(prefix_pattern, '', text)
+        suffix_pattern = r'(?:の)?(?:おすすめ|比較|ランキング|口コミ|評判|レビュー|選び方|使い方|料金|価格|効果|メリット|デメリット|とは|まとめ|向け|ランキング形式).*$'
+        match = re.search(r'(.+?)' + suffix_pattern, text)
+        if match and len(match.group(1).strip()) >= 2:
+            text = match.group(1)
+        else:
+            text = re.sub(suffix_pattern, '', text)
+        text = re.sub(r'(?:で買える|で購入できる|買える|購入できる|探している|欲しい|選ぶべき)', ' ', text)
+        text = re.sub(r'[!?！？、。:：;；/／・\-―–—]+', ' ', text)
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text[:80]
+
+    candidate = clean_candidate(source)
+    if len(candidate) >= 2:
+        return candidate
+
+    keyword_source = str(keywords or '').strip()
+    first_keyword = re.split(r'[,、\n]', keyword_source, maxsplit=1)[0].strip()
+    candidate = clean_candidate(first_keyword)
+    if len(candidate) >= 2:
+        return candidate
+
+    return first_keyword[:80]
+
+
 def clamp_int(value, default, min_value, max_value):
     try:
         number = int(value)
@@ -1548,13 +1590,18 @@ def select_ad_definition(data, article):
 
 def ad_search_keywords(article, ad_definition):
     mode = (ad_definition or {}).get('keyword_mode', 'article_keywords')
+    inferred = infer_ad_keywords_from_title(
+        article.get('title', ''),
+        article.get('keywords', ''),
+        article.get('article_type', 'ranking')
+    )
     if mode == 'custom':
         return (ad_definition or {}).get('search_keywords', '').strip()
     if mode == 'title':
-        return article.get('title', '').strip()
+        return inferred or article.get('title', '').strip()
     if mode == 'ad_keywords':
-        return article.get('ad_keywords', '').strip() or (ad_definition or {}).get('search_keywords', '').strip()
-    return article.get('ad_keywords', '').strip() or article.get('keywords', '').strip() or article.get('title', '').strip()
+        return article.get('ad_keywords', '').strip() or inferred or (ad_definition or {}).get('search_keywords', '').strip()
+    return article.get('ad_keywords', '').strip() or inferred or article.get('keywords', '').strip() or article.get('title', '').strip()
 
 
 def build_ad_product_blocks(article, settings, ad_definition=None, include_amazon=False, include_rakuten=False):
@@ -2028,14 +2075,17 @@ def create_article():
     title = str(data.get('title') or '').strip()
     if not title:
         return jsonify({'error': 'タイトルを入力してください'}), 400
+    article_type = normalize_article_type(data.get('article_type'), 'ranking')
+    keywords = data.get('keywords', '')
+    ad_keywords = str(data.get('ad_keywords') or '').strip() or infer_ad_keywords_from_title(title, keywords, article_type)
     article = {
         'id': str(uuid.uuid4()),
         'title': title,
-        'keywords': data.get('keywords', ''),
+        'keywords': keywords,
         'category': data.get('category', ''),
         'slug': normalize_slug(data.get('slug')),
-        'article_type': normalize_article_type(data.get('article_type'), 'ranking'),
-        'ad_keywords': data.get('ad_keywords', ''),
+        'article_type': article_type,
+        'ad_keywords': ad_keywords,
         'priority': data.get('priority', ''),
         'schedule_date': data.get('schedule_date', ''),
         'memo': data.get('memo', ''),
@@ -2085,6 +2135,12 @@ def update_article(article_id):
                 a['slug'] = normalize_slug(data.get('slug'))
             if 'article_type' in data:
                 a['article_type'] = normalize_article_type(data.get('article_type'), a.get('article_type', 'ranking'))
+            if ('ad_keywords' in data or 'title' in data or 'keywords' in data) and not str(a.get('ad_keywords') or '').strip():
+                a['ad_keywords'] = infer_ad_keywords_from_title(
+                    a.get('title', ''),
+                    a.get('keywords', ''),
+                    a.get('article_type', 'ranking')
+                )
             if 'content' in data:
                 apply_score_fields(a)
             break
@@ -2216,14 +2272,17 @@ def import_excel():
         if not title:
             continue
         content = cell(row, 'content')
+        article_type = normalize_article_type(cell(row, 'article_type'), 'ranking')
+        keywords = cell(row, 'keywords')
+        ad_keywords = cell(row, 'ad_keywords') or infer_ad_keywords_from_title(title, keywords, article_type)
         article = {
             'id': str(uuid.uuid4()),
             'title': title,
-            'keywords': cell(row, 'keywords'),
+            'keywords': keywords,
             'category': cell(row, 'category'),
             'slug': normalize_slug(cell(row, 'slug')),
-            'article_type': normalize_article_type(cell(row, 'article_type'), 'ranking'),
-            'ad_keywords': cell(row, 'ad_keywords'),
+            'article_type': article_type,
+            'ad_keywords': ad_keywords,
             'priority': cell(row, 'priority'),
             'schedule_date': cell(row, 'schedule_date'),
             'memo': cell(row, 'memo'),
@@ -2271,6 +2330,12 @@ def generate_article(article_id):
             article_work[key] = data.get(key) or ''
     article_type = normalize_article_type(data.get('article_type') or article_work.get('article_type'), 'ranking')
     article_work['article_type'] = article_type
+    if not str(article_work.get('ad_keywords') or '').strip():
+        article_work['ad_keywords'] = infer_ad_keywords_from_title(
+            article_work.get('title', ''),
+            article_work.get('keywords', ''),
+            article_type
+        )
     now = datetime.now().isoformat()
     generation_run_id = str(uuid.uuid4())
     previous_content = article.get('content', '')
@@ -2549,6 +2614,12 @@ def batch_generate():
             try:
                 update_job(current_title=article.get('title', ''), message=f"生成中: {article.get('title', '')}")
                 article_type = normalize_article_type(article.get('article_type') or batch_article_type, batch_article_type)
+                if not str(article.get('ad_keywords') or '').strip():
+                    article['ad_keywords'] = infer_ad_keywords_from_title(
+                        article.get('title', ''),
+                        article.get('keywords', ''),
+                        article_type
+                    )
                 article_type_prompt = build_article_type_prompt(article_type)
                 ranking_count_prompt = build_ranking_count_prompt(article, article_type)
                 regeneration_instruction = build_regeneration_instruction(article.get('content', ''))
@@ -2630,6 +2701,7 @@ def batch_generate():
                         a.pop('last_generation_interrupted', None)
                         a['quality_id'] = quality.get('id') if quality else quality_id
                         a['article_type'] = article_type
+                        a['ad_keywords'] = article.get('ad_keywords', a.get('ad_keywords', ''))
                         a['decoration_id'] = decoration_id or a.get('decoration_id')
                         if ad_definition:
                             a['ad_definition_id'] = ad_definition.get('id')
