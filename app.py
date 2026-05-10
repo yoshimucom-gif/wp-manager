@@ -31,6 +31,10 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-producti
 
 DATA_DIR_WARNING = ''
 CLAUDE_ARTICLE_MODEL = 'claude-sonnet-4-6'
+try:
+    CLAUDE_ARTICLE_MAX_TOKENS = int(os.environ.get('CLAUDE_ARTICLE_MAX_TOKENS', '16000'))
+except ValueError:
+    CLAUDE_ARTICLE_MAX_TOKENS = 16000
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -1707,6 +1711,25 @@ def build_ranking_count_prompt(article, article_type):
 - {count}件未満で終了しないでください。商品名や候補が不足する場合でも、記事テーマに合う候補を補って{count}件にしてください。"""
 
 
+def build_ranking_structure_prompt(article, article_type):
+    if normalize_article_type(article_type, 'ranking') != 'ranking':
+        return ''
+    count = extract_ranking_count(article)
+    if not count:
+        return ''
+    return f"""
+
+ランキング記事の必須構成:
+- リード文 → 結論早見表 → 比較表 → ランキング本文 → 選び方 → FAQ → まとめ、の順で書いてください。
+- 比較表は <table><tbody> に商品行を必ず{count}行入れてください。
+- ランキング本文では、必ず <h3>1位：商品名</h3> から <h3>{count}位：商品名</h3> まで、順位番号入りのh3見出しを{count}個出してください。
+- 各順位のh3ごとに、特徴・おすすめな人・注意点を最低2段落以上で書いてください。
+- {count}位まで書き終える前に「選定基準」「選び方」「FAQ」「まとめ」へ進まないでください。
+- 比較表だけで商品紹介を終わらせないでください。比較表とは別に、必ず{count}商品の個別解説を本文に含めてください。
+- 途中で終わりそうな場合は、装飾よりも{count}位までの個別解説とまとめを優先してください。
+"""
+
+
 def build_regeneration_instruction(previous_content):
     if not previous_content or not html_to_text(previous_content).strip():
         return ''
@@ -2439,7 +2462,10 @@ def generate_article(article_id):
     quality = select_quality_definition(quality_list, quality_id, article_type)
     quality_prompt = build_quality_prompt(quality)
     article_type_prompt = build_article_type_prompt(article_type)
-    ranking_count_prompt = build_ranking_count_prompt(article_work, article_type)
+    ranking_count_prompt = (
+        build_ranking_count_prompt(article_work, article_type) +
+        build_ranking_structure_prompt(article_work, article_type)
+    )
     reference_text = ''
     style_reference_url = ''
     style_reference_text = ''
@@ -2523,7 +2549,7 @@ def generate_article(article_id):
 
             with client.messages.stream(
                 model=CLAUDE_ARTICLE_MODEL,
-                max_tokens=8192,
+                max_tokens=CLAUDE_ARTICLE_MAX_TOKENS,
                 messages=[{"role": "user", "content": prompt}]
             ) as stream:
                 for text in stream.text_stream:
@@ -2693,7 +2719,10 @@ def batch_generate():
                         article_type
                     )
                 article_type_prompt = build_article_type_prompt(article_type)
-                ranking_count_prompt = build_ranking_count_prompt(article, article_type)
+                ranking_count_prompt = (
+                    build_ranking_count_prompt(article, article_type) +
+                    build_ranking_structure_prompt(article, article_type)
+                )
                 regeneration_instruction = build_regeneration_instruction(article.get('content', ''))
                 style_reference_url, style_reference_text = style_reference_cache.get(article_type, ('', ''))
                 if article_type not in style_reference_cache:
@@ -2750,7 +2779,7 @@ def batch_generate():
 
                 message = client.messages.create(
                     model=CLAUDE_ARTICLE_MODEL,
-                    max_tokens=8192,
+                    max_tokens=CLAUDE_ARTICLE_MAX_TOKENS,
                     messages=[{"role": "user", "content": prompt}]
                 )
                 content = sanitize_generated_html(message.content[0].text)
