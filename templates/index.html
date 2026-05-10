@@ -2695,8 +2695,8 @@ function downloadSampleCsv() {
   const rows = [
     ['記事タイトル', 'キーワード', 'カテゴリー', 'スラッグ', '記事種別', '投稿先サイト', '品質定義', '装飾定義', '広告定義', '広告キーワード', '優先度', '執筆予定日', 'メモ', '記事本文'],
     ['【サンプル1】おすすめ防水バッグ比較ランキング', '防水バッグ おすすめ,防水バッグ 比較', 'アウトドア', 'waterproof-bag-ranking', 'ランキング記事', 'メインブログ', 'ランキング記事品質（SEO強化）', '装飾サンプル', 'ランキング記事｜比較表直後 RINKER', '防水バッグ 30L 完全防水, アウトドア 防水バッグ', '10', '2026-05-15', '広告キーワードはAmazon・楽天の商品検索に使います。SEOキーワードと分けて指定できます。', ''],
-    ['【サンプル2】〇〇防水バッグの口コミレビュー', '〇〇防水バッグ 口コミ,〇〇防水バッグ 評判', 'レビュー', 'sample-waterproof-bag-review', '商標記事', 'メインブログ', 'SEO基本品質', '装飾サンプル', '商標記事｜レビューCTA RINKER', '〇〇防水バッグ', '20', '2026-05-16', '商品名や広告キーワードを実案件に置き換えてください。', ''],
-    ['【サンプル3】雨の日の荷物を守る防水グッズの選び方', '防水グッズ 選び方,雨の日 荷物 防水', 'コラム', 'rainy-day-waterproof-goods', 'コラム記事', 'メインブログ', 'SEO基本品質', '装飾サンプル', 'コラム記事｜まとめ前おすすめ RINKER', '防水スプレー,防水バッグ', '30', '2026-05-17', '記事本文を空にすると未生成として取り込まれます。本文を入れると生成済として取り込まれます。', ''],
+    ['【サンプル2】〇〇防水バッグの口コミレビュー', '〇〇防水バッグ 口コミ,〇〇防水バッグ 評判', 'レビュー', 'sample-waterproof-bag-review', '商標記事', 'メインブログ', '商標記事品質（SEO強化）', '装飾サンプル', '商標記事｜レビューCTA RINKER', '〇〇防水バッグ', '20', '2026-05-16', '商品名や広告キーワードを実案件に置き換えてください。', ''],
+    ['【サンプル3】雨の日の荷物を守る防水グッズの選び方', '防水グッズ 選び方,雨の日 荷物 防水', 'コラム', 'rainy-day-waterproof-goods', 'コラム記事', 'メインブログ', 'コラム記事品質（SEO強化）', '装飾サンプル', 'コラム記事｜まとめ前おすすめ RINKER', '防水スプレー,防水バッグ', '30', '2026-05-17', '記事本文を空にすると未生成として取り込まれます。本文を入れると生成済として取り込まれます。', ''],
   ];
   const csv = '\uFEFF' + rows
     .map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(','))
@@ -3647,6 +3647,8 @@ function defaultQualityId(articleType = currentArticleType) {
   return (
     qualityList.find(q => q.article_type === articleType)?.id ||
     (articleType === 'ranking' ? qualityList.find(q => q.id === 'ranking-quality')?.id : '') ||
+    (articleType === 'brand' ? qualityList.find(q => q.id === 'brand-quality')?.id : '') ||
+    (articleType === 'column' ? qualityList.find(q => q.id === 'column-quality')?.id : '') ||
     qualityList.find(q => q.is_default)?.id ||
     qualityList[0]?.id ||
     ''
