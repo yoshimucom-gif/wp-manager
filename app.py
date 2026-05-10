@@ -2147,6 +2147,68 @@ def update_article(article_id):
     save_articles(articles)
     return jsonify({'success': True})
 
+@app.route('/api/articles/<article_id>/recover-generated-content', methods=['POST'])
+@login_required
+def recover_generated_content(article_id):
+    data = request.json or {}
+    clean_content = sanitize_generated_html(data.get('content', ''))
+    content_chars = len(html_to_text(clean_content))
+    if content_chars < 500:
+        return jsonify({'success': False, 'error': f'復旧できる本文が短すぎます（{content_chars}文字）'}), 400
+
+    articles = load_articles()
+    for article in articles:
+        if article['id'] != article_id:
+            continue
+
+        previous_hash = content_hash(article.get('content', ''))
+        for key in ('title', 'keywords', 'category', 'ad_keywords', 'site_id', 'slug'):
+            if key in data:
+                article[key] = data.get(key) or ''
+        if 'slug' in data:
+            article['slug'] = normalize_slug(data.get('slug'))
+        article['article_type'] = normalize_article_type(
+            data.get('article_type') or article.get('article_type'),
+            'ranking'
+        )
+        if not str(article.get('ad_keywords') or '').strip():
+            article['ad_keywords'] = infer_ad_keywords_from_title(
+                article.get('title', ''),
+                article.get('keywords', ''),
+                article.get('article_type', 'ranking')
+            )
+        for key in ('quality_id', 'decoration_id', 'ad_definition_id'):
+            if key in data:
+                article[key] = data.get(key) or None
+
+        now = datetime.now().isoformat()
+        new_hash = content_hash(clean_content)
+        article['content'] = clean_content
+        article['status'] = 'generated'
+        article['generated_at'] = now
+        article['updated_at'] = now
+        article['generation_finished_at'] = now
+        article['content_hash'] = new_hash
+        article['last_generation_changed'] = new_hash != previous_hash
+        article['last_generation_chars'] = content_chars
+        article['last_generation_recovered'] = True
+        article.pop('error', None)
+        article.pop('generation_warning', None)
+        article.pop('last_generation_interrupted', None)
+        usage = build_article_usage('', clean_content)
+        usage['estimated_from_recovery'] = True
+        append_generation_usage(article, usage, data.get('run_id') or str(uuid.uuid4()), now, clean_content)
+        apply_score_fields(article)
+        save_articles(articles)
+        return jsonify({
+            'success': True,
+            'content_chars': content_chars,
+            'changed': article['last_generation_changed'],
+            'usage': usage,
+        })
+
+    return jsonify({'success': False, 'error': '記事が見つかりません'}), 404
+
 @app.route('/api/articles/<article_id>', methods=['DELETE'])
 @login_required
 def delete_article(article_id):

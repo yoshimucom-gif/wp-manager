@@ -3170,6 +3170,48 @@ async function createArticleFromGenerateForm() {
   return article.id;
 }
 
+function generatedTextLength(content) {
+  const text = String(content || '')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, '');
+  return text.length;
+}
+
+async function recoverGenerateAfterStreamLoss(articleId, formData, streamedContent) {
+  await loadArticles();
+  const savedArticle = allArticles.find(a => a.id === articleId);
+  if (savedArticle?.status === 'generated' && savedArticle.content) {
+    await finalizeGenerateSuccess(articleId, {
+      content_chars: savedArticle.last_generation_chars || generatedTextLength(savedArticle.content),
+      changed: savedArticle.last_generation_changed,
+      usage: savedArticle.usage || null,
+      recovered: true,
+    });
+    setArticleLocalMessage(articleId, '生成完了信号は途切れましたが、保存済み本文を確認できました。');
+    return true;
+  }
+
+  if (generatedTextLength(streamedContent) < 500) return false;
+
+  const res = await fetch(`/api/articles/${articleId}/recover-generated-content`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({...formData, content: streamedContent})
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) return false;
+
+  await finalizeGenerateSuccess(articleId, {
+    content_chars: data.content_chars,
+    changed: data.changed,
+    usage: data.usage || null,
+    recovered: true,
+  });
+  setArticleLocalMessage(articleId, '生成完了信号は途切れましたが、画面に届いた本文を保存して復旧しました。');
+  return true;
+}
+
 async function startGenerate() {
   let articleId = document.getElementById('gen-article-select').value;
   const qualityId = document.getElementById('gen-quality').value;
@@ -3199,6 +3241,7 @@ async function startGenerate() {
   progress.style.display = 'block';
   fill.style.width = '10%';
 
+  let generatePayloadForRecovery = null;
   try {
     const includeAmazon = document.getElementById('gen-include-amazon').checked;
     const includeRakuten = document.getElementById('gen-include-rakuten').checked;
@@ -3209,10 +3252,12 @@ async function startGenerate() {
     const adKeywords = document.getElementById('gen-ad-keywords').value || inferAdKeywordsFromTitle(title, keywords, currentArticleType);
     const category = document.getElementById('gen-category').value;
     const slug = document.getElementById('gen-slug').value;
+    const generatePayload = {quality_id: qualityId, title, keywords, ad_keywords: adKeywords, category, slug, site_id: siteId, article_type: currentArticleType, include_amazon: includeAmazon, include_rakuten: includeRakuten, decoration_id: decorationId, ad_definition_id: adDefinitionId};
+    generatePayloadForRecovery = generatePayload;
     const res = await fetch(`/api/generate/${articleId}`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({quality_id: qualityId, title, keywords, ad_keywords: adKeywords, category, slug, site_id: siteId, article_type: currentArticleType, include_amazon: includeAmazon, include_rakuten: includeRakuten, decoration_id: decorationId, ad_definition_id: adDefinitionId})
+      body: JSON.stringify(generatePayload)
     });
     if (!res.ok || !res.body) {
       const data = await res.json().catch(() => ({}));
@@ -3254,7 +3299,10 @@ async function startGenerate() {
 
     while (true) {
       const {done, value} = await reader.read();
-      if (done) break;
+      if (done) {
+        buffer += decoder.decode();
+        break;
+      }
       buffer += decoder.decode(value, {stream: true});
       const lines = buffer.split('\n');
       buffer = lines.pop();
@@ -3272,14 +3320,22 @@ async function startGenerate() {
       if (raw) await handleGenerateMessage(JSON.parse(raw));
     }
     if (!generationCompleted && !generationError) {
-      const message = '生成完了信号を受信できませんでした。保存本文は更新されていない可能性があります。もう一度生成してください。';
-      setArticleLocalStatus(articleId, 'error', message);
-      await loadArticles();
-      toast(message, 'error');
+      const recovered = await recoverGenerateAfterStreamLoss(articleId, generatePayload, output.textContent);
+      if (!recovered) {
+        const message = '生成完了信号を受信できませんでした。保存本文は更新されていない可能性があります。もう一度生成してください。';
+        setArticleLocalStatus(articleId, 'error', message);
+        await loadArticles();
+        toast(message, 'error');
+      }
     }
   } catch (e) {
-    setArticleLocalStatus(articleId, 'error', e.message);
-    toast('接続エラー: ' + e.message, 'error');
+    const recovered = generatePayloadForRecovery
+      ? await recoverGenerateAfterStreamLoss(articleId, generatePayloadForRecovery, output.textContent)
+      : false;
+    if (!recovered) {
+      setArticleLocalStatus(articleId, 'error', e.message);
+      toast('接続エラー: ' + e.message, 'error');
+    }
   }
 
   btn.disabled = false;
