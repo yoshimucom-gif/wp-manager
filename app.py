@@ -2161,16 +2161,26 @@ def recover_generated_content(article_id):
         if article['id'] != article_id:
             continue
 
+        article_type = normalize_article_type(
+            data.get('article_type') or article.get('article_type'),
+            'ranking'
+        )
+        validation_article = dict(article)
+        for key in ('title', 'keywords', 'category', 'ad_keywords', 'site_id', 'slug'):
+            if key in data:
+                validation_article[key] = data.get(key) or ''
+        validation_article['article_type'] = article_type
+        validation_error = validate_generated_article(validation_article, article_type, clean_content)
+        if validation_error:
+            return jsonify({'success': False, 'error': validation_error}), 400
+
         previous_hash = content_hash(article.get('content', ''))
         for key in ('title', 'keywords', 'category', 'ad_keywords', 'site_id', 'slug'):
             if key in data:
                 article[key] = data.get(key) or ''
         if 'slug' in data:
             article['slug'] = normalize_slug(data.get('slug'))
-        article['article_type'] = normalize_article_type(
-            data.get('article_type') or article.get('article_type'),
-            'ranking'
-        )
+        article['article_type'] = article_type
         if not str(article.get('ad_keywords') or '').strip():
             article['ad_keywords'] = infer_ad_keywords_from_title(
                 article.get('title', ''),
@@ -2838,6 +2848,14 @@ def update_wordpress_post_from_article(article, settings):
         raise ValueError('サイトが設定されていません。記事にサイトを紐付けてください。')
 
     clean_content = sanitize_generated_html(article.get('content', ''))
+    validation_error = validate_generated_article(
+        article,
+        article.get('article_type', 'ranking'),
+        clean_content
+    )
+    if validation_error:
+        raise ValueError(f'この記事は品質チェックに通っていないため、WordPressへ上書き送信しません: {validation_error}')
+
     publish_content = prepare_article_content_for_publish(clean_content, settings)
     before_data = fetch_wordpress_post_for_edit(wp_url, wp_user, wp_password, article['wp_post_id'])
     before_content = extract_wp_edit_content(before_data)
@@ -2876,6 +2894,12 @@ def update_wordpress_post_from_article(article, settings):
     }
     repair_info['wp_changed'] = repair_info['before_text_hash'] != repair_info['after_text_hash']
     repair_info['wp_matches_sent'] = repair_info['after_text_hash'] == repair_info['sent_text_hash']
+    if not repair_info['wp_matches_sent']:
+        raise ValueError(
+            'WordPressへ送信しましたが、保存後の本文が送信本文と一致しませんでした。'
+            f"送信 {repair_info['sent_content_chars']}文字 / 保存後 {repair_info['after_content_chars']}文字。"
+            ' キャッシュではなくWordPress保存処理側で差分が発生している可能性があります。'
+        )
     return post_data, clean_content, repair_info
 
 

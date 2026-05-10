@@ -3200,7 +3200,14 @@ async function recoverGenerateAfterStreamLoss(articleId, formData, streamedConte
     body: JSON.stringify({...formData, content: streamedContent})
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data.success) return false;
+  if (!res.ok || !data.success) {
+    if (data.error) {
+      setArticleLocalStatus(articleId, 'error', data.error);
+      toast(data.error, 'error');
+      return true;
+    }
+    return false;
+  }
 
   await finalizeGenerateSuccess(articleId, {
     content_chars: data.content_chars,
