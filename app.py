@@ -6,6 +6,7 @@ import re
 import csv
 import io
 import math
+import hashlib
 from datetime import datetime, timedelta
 from pathlib import Path
 from functools import wraps
@@ -917,6 +918,31 @@ def build_article_usage(prompt, content, message=None):
             'usd_jpy': USAGE_ESTIMATE_USD_JPY,
         }
     }
+
+
+def append_generation_usage(article, usage, run_id=None, generated_at=None, content=''):
+    if not isinstance(usage, dict):
+        return
+    generated_at = generated_at or datetime.now().isoformat()
+    run_id = run_id or str(uuid.uuid4())
+    event = dict(usage)
+    event.update({
+        'run_id': run_id,
+        'created_at': generated_at,
+        'content_chars': len(html_to_text(content or '')),
+    })
+    history = article.get('usage_history')
+    if not isinstance(history, list):
+        history = []
+    history.append(event)
+    article['usage_history'] = history[-500:]
+    article['usage'] = usage
+    article['last_generation_run_id'] = run_id
+    article['generation_count'] = int(article.get('generation_count') or 0) + 1
+
+
+def content_hash(content):
+    return hashlib.sha256(str(content or '').encode('utf-8')).hexdigest()
 
 
 SCORE_VERSION = 2
@@ -2142,6 +2168,8 @@ def generate_article(article_id):
     article_type = normalize_article_type(data.get('article_type') or article_work.get('article_type'), 'ranking')
     article_work['article_type'] = article_type
     now = datetime.now().isoformat()
+    generation_run_id = str(uuid.uuid4())
+    previous_content_hash = content_hash(article.get('content', ''))
     for a in articles:
         if a['id'] == article_id:
             for key in ('title', 'keywords', 'category', 'ad_keywords', 'site_id', 'slug'):
@@ -2154,6 +2182,7 @@ def generate_article(article_id):
             if data.get('ad_definition_id'):
                 a['ad_definition_id'] = data.get('ad_definition_id')
             a['status'] = 'generating'
+            a['generation_run_id'] = generation_run_id
             a['generation_started_at'] = now
             a['updated_at'] = now
             a.pop('error', None)
@@ -2193,6 +2222,7 @@ def generate_article(article_id):
                 a['status'] = 'error'
                 a['error'] = str(e)
                 a['updated_at'] = datetime.now().isoformat()
+                a['generation_finished_at'] = a['updated_at']
                 break
         save_articles(current_articles)
         return jsonify({'error': str(e)}), 500
@@ -2200,6 +2230,7 @@ def generate_article(article_id):
     def generate():
         full_content = ''
         try:
+            yield f"data: {json.dumps({'status': 'started', 'run_id': generation_run_id})}\n\n"
             client = anthropic.Anthropic(api_key=api_key)
             prompt = f"""以下の情報をもとに、WordPressに投稿する記事を書いてください。
 
@@ -2243,7 +2274,7 @@ def generate_article(article_id):
                     prompt += f'\n{block}\n'
 
             with client.messages.stream(
-                model="claude-sonnet-4-6",
+                model=CLAUDE_ARTICLE_MODEL,
                 max_tokens=8192,
                 messages=[{"role": "user", "content": prompt}]
             ) as stream:
@@ -2260,13 +2291,20 @@ def generate_article(article_id):
                 if a['id'] == article_id:
                     clean_content = sanitize_generated_html(full_content)
                     validation_error = validate_generated_article(article_work, article_type, clean_content)
+                    content_chars = len(html_to_text(clean_content))
+                    if not validation_error and content_chars < 500:
+                        validation_error = f'生成結果が短すぎます（{content_chars}文字）。Claude生成が途中で止まった可能性があります。もう一度生成してください。'
                     if validation_error:
                         a['status'] = 'error'
                         a['error'] = validation_error
                         a['updated_at'] = datetime.now().isoformat()
+                        a['generation_finished_at'] = a['updated_at']
                         save_articles(current_articles)
                         yield f"data: {json.dumps({'error': validation_error})}\n\n"
                         return
+                    generated_at = datetime.now().isoformat()
+                    new_content_hash = content_hash(clean_content)
+                    changed = new_content_hash != previous_content_hash
                     a['content'] = clean_content
                     a['status'] = 'generated'
                     a['title'] = article_work.get('title', a.get('title', ''))
@@ -2280,12 +2318,18 @@ def generate_article(article_id):
                     a['decoration_id'] = decoration_id or a.get('decoration_id')
                     if ad_definition:
                         a['ad_definition_id'] = ad_definition.get('id')
-                    a['generated_at'] = datetime.now().isoformat()
-                    a['usage'] = build_article_usage(prompt, clean_content, final_message)
+                    a['generated_at'] = generated_at
+                    a['updated_at'] = generated_at
+                    a['content_hash'] = new_content_hash
+                    a['generation_finished_at'] = generated_at
+                    a['last_generation_changed'] = changed
+                    a['last_generation_chars'] = content_chars
+                    usage = build_article_usage(prompt, clean_content, final_message)
+                    append_generation_usage(a, usage, generation_run_id, generated_at, clean_content)
                     apply_score_fields(a)
                     break
             save_articles(current_articles)
-            yield f"data: {json.dumps({'done': True})}\n\n"
+            yield f"data: {json.dumps({'done': True, 'run_id': generation_run_id, 'content_chars': content_chars, 'changed': changed, 'usage': usage})}\n\n"
         except Exception as e:
             current_articles = load_articles()
             for a in current_articles:
@@ -2293,6 +2337,7 @@ def generate_article(article_id):
                     a['status'] = 'error'
                     a['error'] = str(e)
                     a['updated_at'] = datetime.now().isoformat()
+                    a['generation_finished_at'] = a['updated_at']
                     break
             save_articles(current_articles)
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
@@ -2438,14 +2483,19 @@ def batch_generate():
                         prompt += f'\n{block}\n'
 
                 message = client.messages.create(
-                    model="claude-sonnet-4-6",
+                    model=CLAUDE_ARTICLE_MODEL,
                     max_tokens=8192,
                     messages=[{"role": "user", "content": prompt}]
                 )
                 content = sanitize_generated_html(message.content[0].text)
                 validation_error = validate_generated_article(article, article_type, content)
+                content_chars = len(html_to_text(content))
+                if not validation_error and content_chars < 500:
+                    validation_error = f'生成結果が短すぎます（{content_chars}文字）。Claude生成が途中で止まった可能性があります。もう一度生成してください。'
                 if validation_error:
                     raise ValueError(validation_error)
+                generated_at = datetime.now().isoformat()
+                run_id = str(uuid.uuid4())
 
                 current_articles = load_articles()
                 for a in current_articles:
@@ -2458,8 +2508,11 @@ def batch_generate():
                         a['decoration_id'] = decoration_id or a.get('decoration_id')
                         if ad_definition:
                             a['ad_definition_id'] = ad_definition.get('id')
-                        a['generated_at'] = datetime.now().isoformat()
-                        a['usage'] = build_article_usage(prompt, content, message)
+                        a['generated_at'] = generated_at
+                        a['updated_at'] = generated_at
+                        a['content_hash'] = content_hash(content)
+                        usage = build_article_usage(prompt, content, message)
+                        append_generation_usage(a, usage, run_id, generated_at, content)
                         apply_score_fields(a)
                         break
                 save_articles(current_articles)
@@ -2604,7 +2657,12 @@ def repair_article_post(article_id):
                 apply_score_fields(a)
                 break
         save_articles(articles)
-        return jsonify({'success': True, 'wp_url': post_data.get('link', article.get('wp_url', ''))})
+        return jsonify({
+            'success': True,
+            'wp_url': post_data.get('link', article.get('wp_url', '')),
+            'content_chars': len(html_to_text(clean_content)),
+            'content_hash': content_hash(clean_content),
+        })
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
     except requests.exceptions.RequestException as e:

@@ -2537,13 +2537,43 @@ function estimateArticleUsage(article) {
   };
 }
 
+function estimateUsageRecord(article, usage = {}) {
+  const inputTokens = Number(usage.input_tokens) || usageEstimateConfig.fallbackInputTokensPerArticle;
+  const outputTokens = Number(usage.output_tokens) || Math.ceil(stripHtmlText(article.content || '').length / usageEstimateConfig.outputCharsPerToken);
+  const costUsd = Number(usage.cost_usd) || (
+    inputTokens / 1000000 * usageEstimateConfig.inputUsdPerMTok +
+    outputTokens / 1000000 * usageEstimateConfig.outputUsdPerMTok
+  );
+  return {
+    inputTokens,
+    outputTokens,
+    costUsd,
+    costYen: Number(usage.cost_yen) || costUsd * usageEstimateConfig.usdJpy,
+    estimated: usage.estimated !== false,
+  };
+}
+
+function monthlyUsageEvents() {
+  const events = [];
+  allArticles.forEach(article => {
+    const history = Array.isArray(article.usage_history) ? article.usage_history : [];
+    const monthlyHistory = history.filter(u => isThisMonth(u.created_at || article.generated_at || article.created_at));
+    if (monthlyHistory.length) {
+      monthlyHistory.forEach(u => events.push({article, usage: u}));
+      return;
+    }
+    if (article.content && isThisMonth(article.generated_at || article.created_at)) {
+      events.push({article, usage: article.usage || {}, fallback: true});
+    }
+  });
+  return events;
+}
+
 function renderMonthlyUsageEstimate() {
   const el = document.getElementById('dashboard-usage-estimate');
   if (!el) return;
-  const generatedThisMonth = allArticles.filter(a =>
-    a.content && isThisMonth(a.generated_at || a.created_at)
-  );
-  if (!generatedThisMonth.length) {
+  const usageEvents = monthlyUsageEvents();
+  if (!usageEvents.length) {
     el.innerHTML = `
       <div class="intel-empty">
         今月生成された記事はまだありません。<br>
@@ -2551,8 +2581,8 @@ function renderMonthlyUsageEstimate() {
       </div>`;
     return;
   }
-  const totals = generatedThisMonth.reduce((acc, article) => {
-    const usage = estimateArticleUsage(article);
+  const totals = usageEvents.reduce((acc, event) => {
+    const usage = estimateUsageRecord(event.article, event.usage);
     acc.inputTokens += usage.inputTokens;
     acc.outputTokens += usage.outputTokens;
     acc.costYen += usage.costYen;
@@ -2560,9 +2590,10 @@ function renderMonthlyUsageEstimate() {
     if (usage.estimated) acc.estimatedCount += 1;
     return acc;
   }, {inputTokens: 0, outputTokens: 0, costYen: 0, costUsd: 0, estimatedCount: 0});
-  const avgYen = totals.costYen / generatedThisMonth.length;
+  const avgYen = totals.costYen / usageEvents.length;
   const yen = Math.ceil(totals.costYen);
   const monthLabel = new Date().toLocaleDateString('ja-JP', {year: 'numeric', month: 'long'});
+  const articleCount = new Set(usageEvents.map(e => e.article.id)).size;
   el.innerHTML = `
     <div class="usage-summary">
       <div class="usage-total">
@@ -2570,15 +2601,15 @@ function renderMonthlyUsageEstimate() {
           <div class="usage-total-label">${esc(monthLabel)} の概算</div>
           <div class="usage-total-value">約 ${yen.toLocaleString()}円</div>
         </div>
-        <span class="badge badge-generated">${generatedThisMonth.length}件</span>
+        <span class="badge badge-generated">${usageEvents.length}回</span>
       </div>
       <div class="usage-grid">
         <div class="usage-metric">
-          <div class="usage-metric-label">生成記事</div>
-          <div class="usage-metric-value">${generatedThisMonth.length.toLocaleString()}件</div>
+          <div class="usage-metric-label">生成回数</div>
+          <div class="usage-metric-value">${usageEvents.length.toLocaleString()}回</div>
         </div>
         <div class="usage-metric">
-          <div class="usage-metric-label">平均/記事</div>
+          <div class="usage-metric-label">平均/生成</div>
           <div class="usage-metric-value">約 ${Math.ceil(avgYen).toLocaleString()}円</div>
         </div>
         <div class="usage-metric">
@@ -2592,7 +2623,7 @@ function renderMonthlyUsageEstimate() {
       </div>
       <div class="usage-note">
         ${usageEstimateConfig.model} を ${usageEstimateConfig.inputUsdPerMTok} USD/100万入力token・${usageEstimateConfig.outputUsdPerMTok} USD/100万出力token、1 USD=${usageEstimateConfig.usdJpy}円で換算した目安です。<br>
-        新しく生成した記事はAPIの実トークンを保存し、過去記事は本文量から概算します。
+        対象記事 ${articleCount.toLocaleString()}件。再生成も1回ごとに履歴へ積み、今月分の生成コストとして加算します。
       </div>
     </div>`;
 }
@@ -2925,7 +2956,8 @@ async function quickRepair(id) {
     if (data.success) {
       toast('WP更新完了: ' + (data.wp_url || ''), 'success');
       await loadArticles();
-      setArticleLocalMessage(id, 'WP更新完了しました。点数は現在の本文で再計算済みです。');
+      const chars = data.content_chars ? `${Number(data.content_chars).toLocaleString()}文字を` : '';
+      setArticleLocalMessage(id, `WP更新完了しました。${chars}WordPressへ送信済みです。点数は現在の本文で再計算済みです。`);
     } else {
       toast(data.error || '上書き修復に失敗しました', 'error');
       await loadArticles();
@@ -3120,6 +3152,9 @@ async function startGenerate() {
     let generationError = false;
 
     const handleGenerateMessage = async (msg) => {
+      if (msg.status === 'started') {
+        setArticleLocalStatus(articleId, 'generating', `Claude生成を開始しました（Run: ${String(msg.run_id || '').slice(0, 8)}）。`);
+      }
       if (msg.text) {
         output.textContent += msg.text;
         output.scrollTop = output.scrollHeight;
@@ -3128,7 +3163,7 @@ async function startGenerate() {
       }
       if (msg.done) {
         generationCompleted = true;
-        await finalizeGenerateSuccess(articleId);
+        await finalizeGenerateSuccess(articleId, msg);
       }
       if (msg.error) {
         generationError = true;
@@ -3158,8 +3193,11 @@ async function startGenerate() {
       const raw = tail.slice(6).trim();
       if (raw) await handleGenerateMessage(JSON.parse(raw));
     }
-    if (!generationCompleted && !generationError && output.textContent.trim()) {
-      await finalizeGenerateSuccess(articleId);
+    if (!generationCompleted && !generationError) {
+      const message = '生成完了信号を受信できませんでした。保存本文は更新されていない可能性があります。もう一度生成してください。';
+      setArticleLocalStatus(articleId, 'error', message);
+      await loadArticles();
+      toast(message, 'error');
     }
   } catch (e) {
     setArticleLocalStatus(articleId, 'error', e.message);
@@ -3171,20 +3209,25 @@ async function startGenerate() {
   setTimeout(() => progress.style.display = 'none', 1000);
 }
 
-async function finalizeGenerateSuccess(articleId) {
+async function finalizeGenerateSuccess(articleId, result = {}) {
   const fill = document.getElementById('gen-progress-fill');
   const publishBtn = document.getElementById('gen-publish-btn');
   if (fill) fill.style.width = '100%';
   currentGenArticleId = articleId;
   if (publishBtn) publishBtn.disabled = false;
   await loadArticles();
-  setArticleLocalMessage(articleId, '生成完了しました。点数も更新済みです。');
+  const usageYen = result.usage?.cost_yen ? ` / 概算 ${Math.ceil(Number(result.usage.cost_yen)).toLocaleString()}円` : '';
+  const charInfo = result.content_chars ? `${Number(result.content_chars).toLocaleString()}文字` : '本文';
+  const message = result.changed === false
+    ? `生成は完了しましたが、保存済み本文と同一でした（${charInfo}${usageYen}）。`
+    : `生成完了しました（${charInfo}${usageYen}）。点数と今月コストも更新済みです。`;
+  setArticleLocalMessage(articleId, message);
   document.getElementById('gen-article-select').value = articleId;
   const article = allArticles.find(a => a.id === articleId);
   const output = document.getElementById('gen-output');
   if (article?.content && output) output.textContent = article.content;
   updateGeneratePublishButton(articleId);
-  toast(article?.wp_post_id ? '記事生成が完了しました。既存WP投稿を上書き修復できます。' : '記事生成が完了しました。WP下書き投稿できます。', 'success');
+  toast(article?.wp_post_id ? '記事生成が完了しました。既存WP投稿を上書き修復できます。' : '記事生成が完了しました。WP下書き投稿できます。', result.changed === false ? 'error' : 'success');
 }
 
 async function publishGenerated() {
@@ -3209,7 +3252,8 @@ async function publishGenerated() {
     if (data.success) {
       toast((isRepair ? 'WP更新完了: ' : '投稿完了: ') + data.wp_url, 'success');
       await loadArticles();
-      setArticleLocalMessage(currentGenArticleId, isRepair ? 'WP更新完了しました。点数は現在の本文で再計算済みです。' : '投稿完了しました。');
+      const chars = data.content_chars ? `${Number(data.content_chars).toLocaleString()}文字を` : '';
+      setArticleLocalMessage(currentGenArticleId, isRepair ? `WP更新完了しました。${chars}WordPressへ送信済みです。点数は現在の本文で再計算済みです。` : '投稿完了しました。');
       updateGeneratePublishButton(currentGenArticleId);
     } else {
       toast(data.error || (isRepair ? '上書き修復に失敗しました' : '投稿失敗'), 'error');
