@@ -2006,7 +2006,8 @@ def generate_ranking_plan(client, article, quality):
     message = client.messages.create(
         model=CLAUDE_ARTICLE_MODEL,
         max_tokens=6000,
-        messages=[{"role": "user", "content": prompt}]
+        messages=[{"role": "user", "content": prompt}],
+        timeout=60
     )
     text = anthropic_message_text(message)
     return coerce_ranking_plan(article, extract_json_object(text)), build_article_usage(prompt, text, message)
@@ -3389,6 +3390,145 @@ def generate_article(article_id):
         mimetype='text/event-stream',
         headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'}
     )
+
+
+@app.route('/api/generate-direct/<article_id>', methods=['POST'])
+@login_required
+def generate_article_direct(article_id):
+    articles = load_articles()
+    article = next((a for a in articles if a['id'] == article_id), None)
+    if not article:
+        return jsonify({'error': '記事が見つかりません'}), 404
+
+    data = request.json or {}
+    settings = load_settings()
+    api_key = settings.get('claude_api_key') or os.environ.get('ANTHROPIC_API_KEY', '')
+    if not api_key:
+        return jsonify({'error': 'Claude APIキーが設定されていません'}), 400
+
+    article_work = dict(article)
+    for key in ('title', 'keywords', 'category', 'ad_keywords', 'site_id', 'slug'):
+        if key in data:
+            article_work[key] = data.get(key) or ''
+    article_type = normalize_article_type(data.get('article_type') or article_work.get('article_type'), 'ranking')
+    article_work['article_type'] = article_type
+    if article_type != 'ranking':
+        return jsonify({'error': '直接復旧生成は現在ランキング記事のみ対応しています'}), 400
+    if not str(article_work.get('ad_keywords') or '').strip():
+        article_work['ad_keywords'] = infer_ad_keywords_from_title(
+            article_work.get('title', ''),
+            article_work.get('keywords', ''),
+            article_type
+        )
+
+    quality_id = data.get('quality_id') or article.get('quality_id')
+    quality = select_quality_definition(load_quality(), quality_id, article_type)
+    include_amazon = data.get('include_amazon', False)
+    include_rakuten = data.get('include_rakuten', False)
+    decoration_id = data.get('decoration_id')
+    ad_definition = select_ad_definition({**data, 'article_type': article_type}, article_work)
+
+    now = datetime.now().isoformat()
+    for a in articles:
+        if a['id'] == article_id:
+            for key in ('title', 'keywords', 'category', 'ad_keywords', 'site_id', 'slug'):
+                a[key] = article_work.get(key, '')
+            a['article_type'] = article_type
+            if quality_id:
+                a['quality_id'] = quality_id
+            if decoration_id:
+                a['decoration_id'] = decoration_id
+            if ad_definition:
+                a['ad_definition_id'] = ad_definition.get('id')
+            a['status'] = 'generating'
+            a['generation_started_at'] = now
+            a['updated_at'] = now
+            a.pop('error', None)
+            break
+    save_articles(articles)
+
+    try:
+        product_blocks, _ad_instruction = build_ad_product_blocks(
+            article_work,
+            settings,
+            ad_definition,
+            include_amazon=include_amazon,
+            include_rakuten=include_rakuten
+        )
+        previous_content = article.get('content', '')
+        previous_content_hash = content_hash(previous_content)
+        is_regeneration = bool(html_to_text(previous_content).strip())
+        client = anthropic.Anthropic(api_key=api_key)
+        raw_content, usage_parts = generate_structured_ranking_article_sync(
+            client,
+            article_work,
+            quality,
+            product_blocks
+        )
+        clean_content = sanitize_generated_html(raw_content)
+        validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
+        content_chars = len(html_to_text(clean_content))
+        if not validation_error and content_chars < 500:
+            validation_error = f'生成結果が短すぎます（{content_chars}文字）。もう一度生成してください。'
+        if validation_error:
+            raise RuntimeError(validation_error)
+
+        current_articles = load_articles()
+        saved_article = None
+        generated_at = datetime.now().isoformat()
+        similarity = content_similarity(previous_content, clean_content) if is_regeneration else 0
+        changed = content_hash(clean_content) != previous_content_hash
+        usage = combine_article_usages(usage_parts)
+        for a in current_articles:
+            if a['id'] == article_id:
+                a['content'] = clean_content
+                a['status'] = 'generated'
+                a['title'] = article_work.get('title', a.get('title', ''))
+                a['keywords'] = article_work.get('keywords', a.get('keywords', ''))
+                a['category'] = article_work.get('category', a.get('category', ''))
+                a['slug'] = normalize_slug(article_work.get('slug', a.get('slug', '')))
+                a['ad_keywords'] = article_work.get('ad_keywords', a.get('ad_keywords', ''))
+                a['site_id'] = article_work.get('site_id') or a.get('site_id')
+                a['quality_id'] = quality.get('id') if quality else quality_id
+                a['article_type'] = article_type
+                a['decoration_id'] = decoration_id or a.get('decoration_id')
+                if ad_definition:
+                    a['ad_definition_id'] = ad_definition.get('id')
+                a['generated_at'] = generated_at
+                a['updated_at'] = generated_at
+                a['content_hash'] = content_hash(clean_content)
+                a['generation_finished_at'] = generated_at
+                a['last_generation_changed'] = changed
+                a['last_generation_chars'] = content_chars
+                a['last_generation_similarity'] = round(similarity, 4)
+                a.pop('error', None)
+                a.pop('generation_warning', None)
+                a.pop('last_generation_interrupted', None)
+                append_generation_usage(a, usage, str(uuid.uuid4()), generated_at, clean_content)
+                apply_score_fields(a)
+                saved_article = a
+                break
+        save_articles(current_articles)
+        return jsonify({
+            'success': True,
+            'article': saved_article,
+            'content_chars': content_chars,
+            'changed': changed,
+            'similarity': round(similarity, 4),
+            'usage': usage,
+            'direct_fallback': True,
+        })
+    except Exception as e:
+        current_articles = load_articles()
+        for a in current_articles:
+            if a['id'] == article_id:
+                a['status'] = 'error'
+                a['error'] = str(e)
+                a['updated_at'] = datetime.now().isoformat()
+                a['generation_finished_at'] = a['updated_at']
+                break
+        save_articles(current_articles)
+        return jsonify({'error': str(e)}), 500
 
 
 # Batch generate

@@ -3321,7 +3321,39 @@ async function recoverGenerateAfterStreamLoss(articleId, formData, streamedConte
   return true;
 }
 
+async function runDirectGenerateFallback(articleId, formData) {
+  const progressNote = document.getElementById('gen-progress-note');
+  if (progressNote) {
+    progressNote.style.display = 'block';
+    progressNote.textContent = '通信が途切れたため、保存優先モードで生成を再実行しています...';
+  }
+  setArticleLocalStatus(articleId, 'generating', '保存優先モードで生成を再実行しています。');
+  const res = await fetch(`/api/generate-direct/${articleId}`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(formData)
+  });
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`生成APIがJSON以外を返しました（HTTP ${res.status}）。${text.slice(0, 120)}`);
+  }
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || '保存優先モードの生成に失敗しました');
+  }
+  await finalizeGenerateSuccess(articleId, {
+    content_chars: data.content_chars,
+    changed: data.changed,
+    usage: data.usage || null,
+    recovered: true,
+  });
+  setArticleLocalMessage(articleId, '通常ストリームは途切れましたが、保存優先モードで生成を完了しました。');
+  return true;
+}
+
 async function startGenerate() {
+  closeToast();
   let articleId = document.getElementById('gen-article-select').value;
   const qualityId = document.getElementById('gen-quality').value;
   const siteId = document.getElementById('gen-site').value;
@@ -3378,6 +3410,11 @@ async function startGenerate() {
       setArticleLocalStatus(articleId, 'error', message);
       toast('エラー: ' + message, 'error');
       return;
+    }
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('text/event-stream')) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`生成APIがイベントストリーム以外を返しました（HTTP ${res.status}）。${text.slice(0, 120)}`);
     }
 
     const reader = res.body.getReader();
@@ -3455,10 +3492,14 @@ async function startGenerate() {
     if (!generationCompleted && !generationError) {
       const recovered = await recoverGenerateAfterStreamLoss(articleId, generatePayload, output.textContent);
       if (!recovered) {
-        const message = '生成完了信号を受信できませんでした。保存本文は更新されていない可能性があります。もう一度生成してください。';
-        setArticleLocalStatus(articleId, 'error', message);
-        await loadArticles();
-        toast(message, 'error');
+        try {
+          await runDirectGenerateFallback(articleId, generatePayload);
+        } catch (fallbackError) {
+          const message = `生成完了信号を受信できず、保存優先モードも失敗しました: ${fallbackError.message}`;
+          setArticleLocalStatus(articleId, 'error', message);
+          await loadArticles();
+          toast(message, 'error');
+        }
       }
     }
   } catch (e) {
@@ -3466,8 +3507,16 @@ async function startGenerate() {
       ? await recoverGenerateAfterStreamLoss(articleId, generatePayloadForRecovery, output.textContent)
       : false;
     if (!recovered) {
-      setArticleLocalStatus(articleId, 'error', e.message);
-      toast('接続エラー: ' + e.message, 'error');
+      try {
+        if (generatePayloadForRecovery) {
+          await runDirectGenerateFallback(articleId, generatePayloadForRecovery);
+        } else {
+          throw e;
+        }
+      } catch (fallbackError) {
+        setArticleLocalStatus(articleId, 'error', fallbackError.message);
+        toast('接続エラー: ' + fallbackError.message, 'error');
+      }
     }
   }
 
