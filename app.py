@@ -2,6 +2,7 @@ import os
 import json
 import uuid
 import threading
+import queue
 import re
 import csv
 import io
@@ -1843,6 +1844,44 @@ def anthropic_message_text(message):
     return ''.join(parts)
 
 
+def stream_claude_sse(client, prompt, wait_message='Claudeの応答を待っています。'):
+    events = queue.Queue()
+
+    def worker():
+        try:
+            with client.messages.stream(
+                model=CLAUDE_ARTICLE_MODEL,
+                max_tokens=CLAUDE_ARTICLE_MAX_TOKENS,
+                messages=[{"role": "user", "content": prompt}]
+            ) as stream:
+                for text in stream.text_stream:
+                    events.put(('text', text))
+                try:
+                    final_message = stream.get_final_message()
+                except Exception:
+                    final_message = None
+            events.put(('done', final_message))
+        except Exception as e:
+            events.put(('error', e))
+
+    threading.Thread(target=worker, daemon=True).start()
+    content = ''
+    while True:
+        try:
+            kind, value = events.get(timeout=8)
+        except queue.Empty:
+            yield f"data: {json.dumps({'status': 'heartbeat', 'message': wait_message})}\n\n"
+            continue
+        if kind == 'text':
+            content += value
+            yield f"data: {json.dumps({'text': value})}\n\n"
+            continue
+        if kind == 'error':
+            raise value
+        if kind == 'done':
+            return content, value
+
+
 def build_regeneration_instruction(previous_content):
     if not previous_content or not html_to_text(previous_content).strip():
         return ''
@@ -2678,18 +2717,11 @@ def generate_article(article_id):
             )
 
             usage_parts = []
-            with client.messages.stream(
-                model=CLAUDE_ARTICLE_MODEL,
-                max_tokens=CLAUDE_ARTICLE_MAX_TOKENS,
-                messages=[{"role": "user", "content": prompt}]
-            ) as stream:
-                for text in stream.text_stream:
-                    full_content += text
-                    yield f"data: {json.dumps({'text': text})}\n\n"
-                try:
-                    final_message = stream.get_final_message()
-                except Exception:
-                    final_message = None
+            full_content, final_message = yield from stream_claude_sse(
+                client,
+                prompt,
+                'Claude生成中です。長文記事のため応答待ちです。'
+            )
             usage_parts.append(build_article_usage(prompt, full_content, final_message))
 
             clean_content = sanitize_generated_html(full_content)
@@ -2709,19 +2741,12 @@ def generate_article(article_id):
                 continuation_text = ''
                 full_content += '\n'
                 yield f"data: {json.dumps({'text': '\\n'})}\n\n"
-                with client.messages.stream(
-                    model=CLAUDE_ARTICLE_MODEL,
-                    max_tokens=CLAUDE_ARTICLE_MAX_TOKENS,
-                    messages=[{"role": "user", "content": continuation_prompt}]
-                ) as continuation_stream:
-                    for text in continuation_stream.text_stream:
-                        continuation_text += text
-                        full_content += text
-                        yield f"data: {json.dumps({'text': text})}\n\n"
-                    try:
-                        continuation_message = continuation_stream.get_final_message()
-                    except Exception:
-                        continuation_message = None
+                continuation_text, continuation_message = yield from stream_claude_sse(
+                    client,
+                    continuation_prompt,
+                    f'続きを生成中です（{continuation_round}回目）。Claude応答待ちです。'
+                )
+                full_content += continuation_text
                 usage_parts.append(build_article_usage(continuation_prompt, continuation_text, continuation_message))
                 if not html_to_text(continuation_text).strip():
                     break

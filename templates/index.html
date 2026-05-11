@@ -918,6 +918,7 @@ tr.selected td { background: var(--accent-dim); }
             <div class="progress-bar" id="gen-progress" style="display:none">
               <div class="progress-fill" id="gen-progress-fill" style="width:0%"></div>
             </div>
+            <div class="form-help" id="gen-progress-note" style="display:none"></div>
             <div class="generate-push-panel" id="gen-push-panel">
               <div class="generate-push-title">生成完了後の操作</div>
               <div class="generate-push-note" id="gen-push-note">生成済み本文をWordPressへ送信できます。</div>
@@ -3309,8 +3310,13 @@ async function startGenerate() {
 
   const progress = document.getElementById('gen-progress');
   const fill = document.getElementById('gen-progress-fill');
+  const progressNote = document.getElementById('gen-progress-note');
   progress.style.display = 'block';
   fill.style.width = '10%';
+  if (progressNote) {
+    progressNote.style.display = 'block';
+    progressNote.textContent = 'Claude生成を開始しています...';
+  }
 
   let generatePayloadForRecovery = null;
   try {
@@ -3348,14 +3354,20 @@ async function startGenerate() {
     const handleGenerateMessage = async (msg) => {
       if (msg.status === 'started') {
         setArticleLocalStatus(articleId, 'generating', `Claude生成を開始しました（Run: ${String(msg.run_id || '').slice(0, 8)}）。`);
+        if (progressNote) progressNote.textContent = 'Claude生成を開始しました。';
       }
       if (msg.status === 'continuing') {
         setArticleLocalStatus(articleId, 'generating', msg.message || '本文が未完了のため続きを生成しています。');
+        if (progressNote) progressNote.textContent = msg.message || '本文が未完了のため続きを生成しています。';
         fill.style.width = Math.max(Number(fill.style.width.replace('%', '') || 0), 92) + '%';
+      }
+      if (msg.status === 'heartbeat') {
+        if (progressNote) progressNote.textContent = msg.message || 'Claude応答待ちです。処理は継続しています。';
       }
       if (msg.text) {
         output.textContent += msg.text;
         output.scrollTop = output.scrollHeight;
+        if (progressNote) progressNote.textContent = '本文を受信中です...';
         charCount += msg.text.length;
         fill.style.width = Math.min(90, 10 + charCount / 50) + '%';
       }
@@ -3367,6 +3379,7 @@ async function startGenerate() {
         generationError = true;
         setGeneratePublishActionState(true, false);
         setArticleLocalStatus(articleId, 'error', msg.error);
+        if (progressNote) progressNote.textContent = msg.error;
         await loadArticles();
         toast('エラー: ' + msg.error, 'error');
       }
@@ -3416,12 +3429,17 @@ async function startGenerate() {
   btn.disabled = false;
   const refreshedArticle = allArticles.find(a => a.id === articleId);
   btn.textContent = refreshedArticle?.content ? '⚡ 再生成開始' : '⚡ 生成開始';
-  setTimeout(() => progress.style.display = 'none', 1000);
+  setTimeout(() => {
+    progress.style.display = 'none';
+    if (progressNote) progressNote.style.display = 'none';
+  }, 1000);
 }
 
 async function finalizeGenerateSuccess(articleId, result = {}) {
   const fill = document.getElementById('gen-progress-fill');
   if (fill) fill.style.width = '100%';
+  const progressNote = document.getElementById('gen-progress-note');
+  if (progressNote) progressNote.textContent = '生成完了しました。';
   currentGenArticleId = articleId;
   await loadArticles();
   const usageYen = result.usage?.cost_yen ? ` / 概算 ${Math.ceil(Number(result.usage.cost_yen)).toLocaleString()}円` : '';
