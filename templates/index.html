@@ -1400,10 +1400,20 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
       <input type="url" id="quality-reference-url" class="form-control" placeholder="https://example.com/reference-article">
       <div style="font-size:11px;color:var(--muted);margin-top:4px">品質定義ごとに追加で参照したい記事がある場合に使います</div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+      <div class="form-group">
+        <label class="form-label">記事種類</label>
+        <select id="quality-article-type" class="form-control">
+          <option value="">共通</option>
+          <option value="ranking">ランキング記事</option>
+          <option value="brand">商標記事</option>
+          <option value="column">コラム記事</option>
+          <option value="rewrite">SEOリライト</option>
+        </select>
+      </div>
       <div class="form-group">
         <label class="form-label">目標文字数</label>
-        <input type="number" id="quality-target-chars" class="form-control" placeholder="例: 3000" min="1">
+        <input type="number" id="quality-target-chars" class="form-control" placeholder="例: 2500" min="1">
       </div>
       <div class="form-group">
         <label class="form-label">文体</label>
@@ -3685,7 +3695,7 @@ async function startGenerate() {
     const jobData = await jobRes.json().catch(() => ({}));
     if (!jobRes.ok || !jobData.success) throw new Error(jobData.error || '生成ジョブの開始に失敗しました');
 
-    if (progressNote) progressNote.textContent = 'バックグラウンドで分割生成中です。画面を移動しても処理は継続します。';
+    if (progressNote) progressNote.textContent = 'バックグラウンドで記事生成中です。画面を移動しても処理は継続します。';
     await waitForSingleGenerateCompletion(articleId, jobData.job_id);
   } catch (e) {
     const message = e?.message || '生成開始に失敗しました。';
@@ -3708,10 +3718,10 @@ async function waitForSingleGenerateCompletion(articleId, jobId) {
   const started = Date.now();
   const timeoutMs = 30 * 60 * 1000;
   while (Date.now() - started < timeoutMs) {
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    await new Promise(resolve => setTimeout(resolve, 2000));
     await loadArticles();
     const article = allArticles.find(a => a.id === articleId);
-    const job = await loadLatestBatchJob();
+    const job = await loadBatchJob(jobId) || await loadLatestBatchJob();
     if (article?.status === 'generated' && article.content) {
       const usage = article.usage || null;
       await finalizeGenerateSuccess(articleId, {
@@ -3723,7 +3733,14 @@ async function waitForSingleGenerateCompletion(articleId, jobId) {
       return true;
     }
     if (article?.status === 'error') {
-      const message = article.error || '生成に失敗しました。';
+      const message = article.error || job?.last_error || '生成に失敗しました。';
+      if (progressNote) progressNote.textContent = message;
+      if (fill) fill.style.width = '100%';
+      toast(message, 'error');
+      return false;
+    }
+    if (job?.status === 'completed_with_errors' || job?.status === 'failed') {
+      const message = article?.error || job.last_error || '生成ジョブがエラーで終了しました。';
       if (progressNote) progressNote.textContent = message;
       if (fill) fill.style.width = '100%';
       toast(message, 'error');
@@ -3876,7 +3893,7 @@ function startBatchPolling() {
   batchPollTimer = setInterval(async () => {
     await loadArticles();
     await loadLatestBatchJob();
-  }, 10000);
+  }, 5000);
 }
 
 function stopBatchPolling() {
@@ -3888,6 +3905,19 @@ function stopBatchPolling() {
 async function loadLatestBatchJob() {
   try {
     const res = await fetch('/api/batch-jobs/latest');
+    if (!res.ok) return null;
+    const job = await res.json();
+    renderBatchJobStatus(job);
+    return job;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function loadBatchJob(jobId) {
+  if (!jobId) return null;
+  try {
+    const res = await fetch(`/api/batch-jobs/${jobId}`);
     if (!res.ok) return null;
     const job = await res.json();
     renderBatchJobStatus(job);
@@ -4314,7 +4344,7 @@ function renderQuality() {
         ${q.is_default ? '<span class="quality-default">★ デフォルト</span>' : ''}
       </div>
       <div style="font-size:10px;color:var(--accent);margin-bottom:6px">
-        ${q.target_chars ? `${esc(q.target_chars)}文字` : '文字数指定なし'} · ${esc(q.tone || 'ですます調')}
+        ${adTypeLabel(q.article_type || 'common')} · ${q.target_chars ? `${esc(q.target_chars)}文字` : '文字数指定なし'} · ${esc(q.tone || 'ですます調')}
       </div>
       <div class="quality-prompt">${esc(q.prompt)}</div>
       ${q.reference_url ? `<div style="font-size:10px;margin-top:6px"><a href="${esc(q.reference_url)}" target="_blank" style="color:var(--accent)">🔗 参考URL</a></div>` : ''}
@@ -4364,7 +4394,8 @@ function openQualityModal() {
   document.getElementById('quality-edit-id').value = '';
   document.getElementById('quality-name').value = '';
   document.getElementById('quality-reference-url').value = '';
-  document.getElementById('quality-target-chars').value = '';
+  document.getElementById('quality-article-type').value = currentArticleType || '';
+  document.getElementById('quality-target-chars').value = '2500';
   document.getElementById('quality-tone').value = 'ですます調';
   document.getElementById('quality-extra-rules').value = '';
   document.getElementById('quality-prompt').value = '';
@@ -4379,6 +4410,7 @@ function editQuality(id) {
   document.getElementById('quality-edit-id').value = id;
   document.getElementById('quality-name').value = q.name;
   document.getElementById('quality-reference-url').value = q.reference_url || '';
+  document.getElementById('quality-article-type').value = q.article_type || '';
   document.getElementById('quality-target-chars').value = q.target_chars || '';
   document.getElementById('quality-tone').value = q.tone || 'ですます調';
   document.getElementById('quality-extra-rules').value = q.extra_rules || '';
@@ -4397,6 +4429,7 @@ async function saveQuality() {
   const body = {
     name: document.getElementById('quality-name').value,
     reference_url: document.getElementById('quality-reference-url').value,
+    article_type: document.getElementById('quality-article-type').value,
     target_chars: document.getElementById('quality-target-chars').value,
     tone: document.getElementById('quality-tone').value,
     extra_rules: document.getElementById('quality-extra-rules').value,

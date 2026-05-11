@@ -1,4 +1,4 @@
-import os
+﻿import os
 import json
 import uuid
 import threading
@@ -73,7 +73,7 @@ try:
     CLAUDE_SEGMENT_CONTINUATION_MAX_ROUNDS = int(os.environ.get('CLAUDE_SEGMENT_CONTINUATION_MAX_ROUNDS', '2'))
 except ValueError:
     CLAUDE_SEGMENT_CONTINUATION_MAX_ROUNDS = 2
-DEFAULT_ARTICLE_TARGET_CHARS = 5000
+DEFAULT_ARTICLE_TARGET_CHARS = 2500
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -354,7 +354,7 @@ def save_ad_definitions(items):
     save_json(AD_DEFINITIONS_FILE, items)
 
 OLD_DEFAULT_QUALITY_PROMPT = "SEOに最適化された、読みやすく情報量の多い記事を書いてください。見出しを適切に使い、具体例を含めてください。"
-QUALITY_PRESET_VERSION = 4
+QUALITY_PRESET_VERSION = 5
 
 
 def default_quality_presets():
@@ -375,7 +375,7 @@ def default_quality_presets():
 - 読者が判断に迷う箇所にはFAQ、比較表、チェックリスト、注意ボックスを使う
 - 広告やCTAは文脈に合う場所だけに置き、押し売りにしない
 - 本文にAIの説明文、Markdown、Gutenbergコメント、サンプル文を出さない""",
-            "target_chars": "5000",
+            "target_chars": "2500",
             "tone": "ですます調",
             "extra_rules": "Helpful / Reliable / People-first を優先する。読者が読み終えた時点で「何を選ぶべきか」「次に何を確認すべきか」が分かる状態にする。",
             "is_default": True,
@@ -399,7 +399,7 @@ def default_quality_presets():
 - 最後に読者タイプ別の選び方、FAQ、迷った時の判断基準を入れる
 - 比較表はスマホで崩れない列数にし、セル内を短くする
 - 本文にAIの説明文、Markdown、Gutenbergコメント、サンプル文を出さない""",
-            "target_chars": "5000",
+            "target_chars": "2500",
             "tone": "ですます調",
             "extra_rules": "基本構成は、導入 → 結論/おすすめ早見表 → 選定基準 → 比較表 → 1位から順番に個別解説 → 選び方 → FAQ → まとめ。N選の件数不足は不可。",
             "is_default": False,
@@ -421,7 +421,7 @@ def default_quality_presets():
 - 競合・代替商品がある場合は、軽い比較を入れて判断材料を増やす
 - CTAは導入後、メリット説明後、まとめ前など文脈に合う位置だけに置く
 - 本文にAIの説明文、Markdown、Gutenbergコメント、サンプル文を出さない""",
-            "target_chars": "5000",
+            "target_chars": "2500",
             "tone": "ですます調",
             "extra_rules": """基本構成:
 リード文 250〜350文字前後
@@ -455,7 +455,7 @@ H2: まとめ
 - 収益導線は悩み解決の流れに合う場所だけに自然に入れる
 - まとめでは要点を整理し、読者の次の行動を明確にする
 - 本文にAIの説明文、Markdown、Gutenbergコメント、サンプル文を出さない""",
-            "target_chars": "5000",
+            "target_chars": "2500",
             "tone": "ですます調",
             "extra_rules": """基本構成:
 リード文 250〜350文字前後
@@ -495,11 +495,13 @@ def load_quality():
         if should_upgrade:
             preserve_default = existing.get('is_default', preset.get('is_default', False))
             preserve_reference = existing.get('reference_url', preset.get('reference_url', ''))
+            existing_target = str(existing.get('target_chars', '')).strip()
+            target_chars = existing_target if existing_target and existing_target != '5000' else preset.get('target_chars', existing_target)
             existing.update({
                 'name': preset.get('name', existing.get('name', '')),
                 'article_type': preset.get('article_type', existing.get('article_type')),
                 'prompt': preset.get('prompt', existing.get('prompt', '')),
-                'target_chars': preset.get('target_chars', existing.get('target_chars', '')),
+                'target_chars': target_chars,
                 'tone': preset.get('tone', existing.get('tone', 'ですます調')),
                 'extra_rules': preset.get('extra_rules', existing.get('extra_rules', '')),
                 'system_preset_version': preset.get('system_preset_version', version),
@@ -1467,6 +1469,21 @@ def combine_article_usages(usages):
     }
 
 
+def create_claude_message(client, prompt, max_tokens=None, timeout=None):
+    messages_api = getattr(client, 'messages', None)
+    create = getattr(messages_api, 'create', None)
+    if not callable(create):
+        raise RuntimeError('Claude API client is not ready: messages.create is unavailable')
+    kwargs = {
+        'model': CLAUDE_ARTICLE_MODEL,
+        'max_tokens': max_tokens or CLAUDE_ARTICLE_MAX_TOKENS,
+        'messages': [{'role': 'user', 'content': prompt}],
+    }
+    if timeout is not None:
+        kwargs['timeout'] = timeout
+    return create(**kwargs)
+
+
 def append_generation_usage(article, usage, run_id=None, generated_at=None, content=''):
     if not isinstance(usage, dict):
         return
@@ -2393,12 +2410,7 @@ def ranking_plan_prompt(article, quality):
 
 def generate_ranking_plan(client, article, quality):
     prompt = ranking_plan_prompt(article, quality)
-    message = client.messages.create(
-        model=CLAUDE_ARTICLE_MODEL,
-        max_tokens=6000,
-        messages=[{"role": "user", "content": prompt}],
-        timeout=60
-    )
+    message = create_claude_message(client, prompt, max_tokens=6000, timeout=60)
     text = anthropic_message_text(message)
     return coerce_ranking_plan(article, extract_json_object(text)), build_article_usage(prompt, text, message)
 
@@ -2527,7 +2539,11 @@ def generate_structured_ranking_article_sse(client, article, quality, product_bl
 
 
 def should_use_segmented_generation(article_type, quality=None):
-    return effective_target_chars(quality) >= 3000 and normalize_article_type(article_type, 'ranking') in ('ranking', 'brand', 'column')
+    normalized = normalize_article_type(article_type, 'ranking')
+    target = effective_target_chars(quality)
+    if normalized == 'ranking':
+        return target >= 3000
+    return normalized in ('brand', 'column') and target >= 7000
 
 
 def build_segmented_article_steps(article, article_type):
@@ -2731,11 +2747,7 @@ def generate_segmented_article_sync(client, base_prompt, article, article_type, 
         if on_step:
             on_step(index, total, step.get('name', ''))
         segment_prompt = build_segment_prompt(base_prompt, article, article_type, quality, step, index, total, full_content)
-        message = client.messages.create(
-            model=CLAUDE_ARTICLE_MODEL,
-            max_tokens=CLAUDE_ARTICLE_MAX_TOKENS,
-            messages=[{"role": "user", "content": segment_prompt}]
-        )
+        message = create_claude_message(client, segment_prompt)
         text = anthropic_message_text(message)
         usage_parts.append(build_article_usage(segment_prompt, text, message))
         min_chars = segment_minimum_chars(quality, total)
@@ -2755,11 +2767,7 @@ def generate_segmented_article_sync(client, base_prompt, article, article_type, 
                 text,
                 min_chars
             )
-            continuation_message = client.messages.create(
-                model=CLAUDE_ARTICLE_MODEL,
-                max_tokens=CLAUDE_ARTICLE_MAX_TOKENS,
-                messages=[{"role": "user", "content": continuation_prompt}]
-            )
+            continuation_message = create_claude_message(client, continuation_prompt)
             continuation_text = anthropic_message_text(continuation_message)
             usage_parts.append(build_article_usage(continuation_prompt, continuation_text, continuation_message))
             if not html_to_text(continuation_text).strip():
@@ -3415,6 +3423,15 @@ def get_latest_batch_job():
     return jsonify(jobs[0] if jobs else None)
 
 
+@app.route('/api/batch-jobs/<job_id>', methods=['GET'])
+@login_required
+def get_batch_job(job_id):
+    job = next((j for j in load_batch_jobs() if j.get('id') == job_id), None)
+    if not job:
+        return jsonify({'error': 'ジョブが見つかりません'}), 404
+    return jsonify(job)
+
+
 # Import
 @app.route('/api/import', methods=['POST'])
 @login_required
@@ -4055,6 +4072,8 @@ def batch_generate():
             a['generation_started_at'] = now
             a['updated_at'] = now
             a.pop('error', None)
+            a.pop('error_stage', None)
+            a.pop('error_trace', None)
             a.pop('generation_warning', None)
             a.pop('last_generation_interrupted', None)
     save_articles(articles)
@@ -4080,10 +4099,14 @@ def batch_generate():
             article_id = article.get('id')
             attempt_counts[article_id] = attempt_counts.get(article_id, 0) + 1
             attempt_no = attempt_counts[article_id]
+            stage = 'starting'
             try:
+                stage = 'prepare article'
                 retry_suffix = f"（リトライ{attempt_no - 1}/{BATCH_GENERATION_MAX_RETRIES}）" if attempt_no > 1 else ''
                 update_job(current_title=article.get('title', ''), message=f"生成中{retry_suffix}: {article.get('title', '')}")
                 article_type = normalize_article_type(article.get('article_type') or batch_article_type, batch_article_type)
+                if not api_key and article_type != 'ranking':
+                    raise ValueError('Claude APIキーが設定されていません')
                 if not str(article.get('ad_keywords') or '').strip():
                     article['ad_keywords'] = infer_ad_keywords_from_title(
                         article.get('title', ''),
@@ -4098,11 +4121,13 @@ def batch_generate():
                 regeneration_instruction = build_regeneration_instruction(article.get('content', ''))
                 style_reference_url, style_reference_text = style_reference_cache.get(article_type, ('', ''))
                 if article_type not in style_reference_cache:
+                    stage = 'fetch style reference'
                     try:
                         style_reference_url, style_reference_text = fetch_quality_style_reference(article_type, settings)
                     except Exception:
                         style_reference_url, style_reference_text = '', ''
                     style_reference_cache[article_type] = (style_reference_url, style_reference_text)
+                stage = 'build prompt'
                 prompt = f"""以下の情報をもとに、WordPressに投稿する記事を書いてください。
 
 タイトル: {article['title']}
@@ -4138,6 +4163,7 @@ def batch_generate():
                 if rakuten_asp_instruction:
                     prompt += rakuten_asp_instruction
 
+                stage = 'build ad product blocks'
                 ad_definition = select_ad_definition({**data, 'article_type': article_type}, article)
                 product_blocks, ad_instruction = build_ad_product_blocks(
                     article, settings, ad_definition, include_amazon=include_amazon, include_rakuten=include_rakuten
@@ -4156,6 +4182,7 @@ def batch_generate():
                     has_ads=bool(product_blocks or ad_instruction or rakuten_asp_instruction)
                 )
 
+                stage = 'generate content'
                 if article_type == 'ranking' and client:
                     raw_content, usage_parts = generate_segmented_article_sync(
                         client,
@@ -4192,13 +4219,10 @@ def batch_generate():
                         )
                     )
                 else:
-                    message = client.messages.create(
-                        model=CLAUDE_ARTICLE_MODEL,
-                        max_tokens=CLAUDE_ARTICLE_MAX_TOKENS,
-                        messages=[{"role": "user", "content": prompt}]
-                    )
+                    message = create_claude_message(client, prompt)
                     raw_content = anthropic_message_text(message)
                     usage_parts = [build_article_usage(prompt, raw_content, message)]
+                stage = 'enhance and validate content'
                 content = enhance_generated_article_html(raw_content, article, article_type)
                 validation_error = validate_generated_article(article, article_type, content, quality)
                 content_chars = len(html_to_text(content))
@@ -4216,11 +4240,7 @@ def batch_generate():
                         content,
                         validation_error
                     )
-                    continuation_message = client.messages.create(
-                        model=CLAUDE_ARTICLE_MODEL,
-                        max_tokens=CLAUDE_ARTICLE_MAX_TOKENS,
-                        messages=[{"role": "user", "content": continuation_prompt}]
-                    )
+                    continuation_message = create_claude_message(client, continuation_prompt)
                     continuation_text = anthropic_message_text(continuation_message)
                     usage_parts.append(build_article_usage(continuation_prompt, continuation_text, continuation_message))
                     if not html_to_text(continuation_text).strip():
@@ -4236,12 +4256,16 @@ def batch_generate():
                 generated_at = datetime.now().isoformat()
                 run_id = str(uuid.uuid4())
 
+                stage = 'save generated article'
                 current_articles = load_articles()
                 for a in current_articles:
                     if a['id'] == article['id']:
                         a['content'] = content
                         a['status'] = 'generated'
                         a.pop('batch_job_id', None)
+                        a.pop('error', None)
+                        a.pop('error_stage', None)
+                        a.pop('error_trace', None)
                         a.pop('generation_warning', None)
                         a.pop('last_generation_interrupted', None)
                         a['quality_id'] = quality.get('id') if quality else quality_id
@@ -4261,13 +4285,18 @@ def batch_generate():
                 completed += 1
                 update_job(completed=completed, failed=failed, retried=retried, message=f"{completed}/{len(pending)}件生成済み")
             except Exception as e:
+                trace = traceback.format_exc()
+                error_text = str(e) or e.__class__.__name__
+                error_detail = f'{stage}: {error_text}'
                 if attempt_no <= BATCH_GENERATION_MAX_RETRIES:
                     retried += 1
                     current_articles = load_articles()
                     for a in current_articles:
                         if a['id'] == article['id']:
                             a['status'] = 'generating'
-                            a['error'] = f'一時エラーのため自動リトライ待ち: {str(e)}'
+                            a['error'] = f'一時エラーのため自動リトライ待ち: {error_detail}'
+                            a['error_stage'] = stage
+                            a['error_trace'] = trace[-4000:]
                             a['generation_retry_count'] = attempt_no
                             a['updated_at'] = datetime.now().isoformat()
                             break
@@ -4278,7 +4307,10 @@ def batch_generate():
                         failed=failed,
                         retried=retried,
                         current_title=article.get('title', ''),
-                        message=f"一時エラー。後で自動リトライします（{attempt_no}/{BATCH_GENERATION_MAX_RETRIES}）: {article.get('title', '')}"
+                        last_error=error_detail,
+                        last_error_stage=stage,
+                        last_error_trace=trace[-4000:],
+                        message=f"一時エラー。後で自動リトライします（{attempt_no}/{BATCH_GENERATION_MAX_RETRIES}）: {error_detail}"
                     )
                     time.sleep(min(10, 2 * attempt_no))
                     continue
@@ -4286,7 +4318,9 @@ def batch_generate():
                 for a in current_articles:
                     if a['id'] == article['id']:
                         a['status'] = 'error'
-                        a['error'] = str(e)
+                        a['error'] = error_detail
+                        a['error_stage'] = stage
+                        a['error_trace'] = trace[-4000:]
                         a.pop('batch_job_id', None)
                         a['generation_retry_count'] = attempt_no - 1
                         a['updated_at'] = datetime.now().isoformat()
@@ -4294,7 +4328,15 @@ def batch_generate():
                         break
                 save_articles(current_articles)
                 failed += 1
-                update_job(completed=completed, failed=failed, retried=retried, message=f"{completed}件生成済み / {failed}件エラー / リトライ {retried}回")
+                update_job(
+                    completed=completed,
+                    failed=failed,
+                    retried=retried,
+                    last_error=error_detail,
+                    last_error_stage=stage,
+                    last_error_trace=trace[-4000:],
+                    message=f"{completed}件生成済み / {failed}件エラー / リトライ {retried}回: {error_detail}"
+                )
         final_status = 'completed' if failed == 0 else 'completed_with_errors'
         update_job(
             status=final_status,
@@ -5084,6 +5126,7 @@ def get_quality():
 def create_quality():
     data = request.json
     quality_list = load_quality()
+    article_type = normalize_article_type(data.get('article_type'), '') if data.get('article_type') else ''
     q = {
         'id': str(uuid.uuid4()),
         'name': data.get('name', ''),
@@ -5092,8 +5135,13 @@ def create_quality():
         'tone': data.get('tone', 'ですます調'),
         'extra_rules': data.get('extra_rules', ''),
         'prompt': data.get('prompt', ''),
-        'is_default': False,
+        'is_default': bool(data.get('is_default')),
     }
+    if article_type:
+        q['article_type'] = article_type
+    if q['is_default']:
+        for other in quality_list:
+            other['is_default'] = False
     quality_list.append(q)
     save_quality(quality_list)
     return jsonify(q)
@@ -5107,6 +5155,12 @@ def update_quality(quality_id):
         if q['id'] == quality_id:
             q['name'] = data.get('name', q['name'])
             q['reference_url'] = data.get('reference_url', q.get('reference_url', ''))
+            if 'article_type' in data:
+                article_type = normalize_article_type(data.get('article_type'), '') if data.get('article_type') else ''
+                if article_type:
+                    q['article_type'] = article_type
+                else:
+                    q.pop('article_type', None)
             q['target_chars'] = data.get('target_chars', q.get('target_chars', ''))
             q['tone'] = data.get('tone', q.get('tone', 'ですます調'))
             q['extra_rules'] = data.get('extra_rules', q.get('extra_rules', ''))
