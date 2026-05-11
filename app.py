@@ -32,9 +32,10 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-producti
 DATA_DIR_WARNING = ''
 CLAUDE_ARTICLE_MODEL = 'claude-sonnet-4-6'
 try:
-    CLAUDE_ARTICLE_MAX_TOKENS = int(os.environ.get('CLAUDE_ARTICLE_MAX_TOKENS', '16000'))
+    CLAUDE_ARTICLE_MAX_TOKENS = int(os.environ.get('CLAUDE_ARTICLE_MAX_TOKENS', '20000'))
 except ValueError:
-    CLAUDE_ARTICLE_MAX_TOKENS = 16000
+    CLAUDE_ARTICLE_MAX_TOKENS = 20000
+DEFAULT_ARTICLE_TARGET_CHARS = 5000
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -315,7 +316,7 @@ def save_ad_definitions(items):
     save_json(AD_DEFINITIONS_FILE, items)
 
 OLD_DEFAULT_QUALITY_PROMPT = "SEOに最適化された、読みやすく情報量の多い記事を書いてください。見出しを適切に使い、具体例を含めてください。"
-QUALITY_PRESET_VERSION = 3
+QUALITY_PRESET_VERSION = 4
 
 
 def default_quality_presets():
@@ -336,7 +337,7 @@ def default_quality_presets():
 - 読者が判断に迷う箇所にはFAQ、比較表、チェックリスト、注意ボックスを使う
 - 広告やCTAは文脈に合う場所だけに置き、押し売りにしない
 - 本文にAIの説明文、Markdown、Gutenbergコメント、サンプル文を出さない""",
-            "target_chars": "",
+            "target_chars": "5000",
             "tone": "ですます調",
             "extra_rules": "Helpful / Reliable / People-first を優先する。読者が読み終えた時点で「何を選ぶべきか」「次に何を確認すべきか」が分かる状態にする。",
             "is_default": True,
@@ -360,7 +361,7 @@ def default_quality_presets():
 - 最後に読者タイプ別の選び方、FAQ、迷った時の判断基準を入れる
 - 比較表はスマホで崩れない列数にし、セル内を短くする
 - 本文にAIの説明文、Markdown、Gutenbergコメント、サンプル文を出さない""",
-            "target_chars": "",
+            "target_chars": "5000",
             "tone": "ですます調",
             "extra_rules": "基本構成は、導入 → 結論/おすすめ早見表 → 選定基準 → 比較表 → 1位から順番に個別解説 → 選び方 → FAQ → まとめ。N選の件数不足は不可。",
             "is_default": False,
@@ -382,7 +383,7 @@ def default_quality_presets():
 - 競合・代替商品がある場合は、軽い比較を入れて判断材料を増やす
 - CTAは導入後、メリット説明後、まとめ前など文脈に合う位置だけに置く
 - 本文にAIの説明文、Markdown、Gutenbergコメント、サンプル文を出さない""",
-            "target_chars": "",
+            "target_chars": "5000",
             "tone": "ですます調",
             "extra_rules": """基本構成:
 リード文 250〜350文字前後
@@ -416,7 +417,7 @@ H2: まとめ
 - 収益導線は悩み解決の流れに合う場所だけに自然に入れる
 - まとめでは要点を整理し、読者の次の行動を明確にする
 - 本文にAIの説明文、Markdown、Gutenbergコメント、サンプル文を出さない""",
-            "target_chars": "",
+            "target_chars": "5000",
             "tone": "ですます調",
             "extra_rules": """基本構成:
 リード文 250〜350文字前後
@@ -1730,6 +1731,45 @@ def build_ranking_structure_prompt(article, article_type):
 """
 
 
+def parse_target_chars(value):
+    try:
+        target = int(str(value or '').replace(',', '').strip())
+    except (TypeError, ValueError):
+        return DEFAULT_ARTICLE_TARGET_CHARS
+    return target if target > 0 else DEFAULT_ARTICLE_TARGET_CHARS
+
+
+def effective_target_chars(quality=None):
+    return parse_target_chars((quality or {}).get('target_chars'))
+
+
+def minimum_required_content_chars(quality=None):
+    target = effective_target_chars(quality)
+    if target < 3000:
+        return max(500, min(target, int(target * 0.75)))
+    return max(1800, min(target - 500, int(target * 0.65)))
+
+
+def build_article_completion_prompt(quality, article_type, has_decoration=False, has_ads=False):
+    target = effective_target_chars(quality)
+    minimum = minimum_required_content_chars(quality)
+    extras = []
+    if has_decoration:
+        extras.append('- 装飾HTMLは本文を読みやすくする範囲で使い、装飾サンプルの文言やプレースホルダーを残さないでください。')
+    if has_ads:
+        extras.append('- 広告カード・商品リンクHTMLは自然な位置に入れてください。ただし広告HTMLだけで本文量を稼がず、本文解説を十分に書いてください。')
+    extra_text = '\n'.join(extras)
+    return f"""
+
+文字量・完了条件:
+- 記事本文は日本語本文換算で{target}文字前後を目標にしてください。HTMLタグや広告カードのコード量ではなく、読者が読む説明文を十分に書いてください。
+- 最低でも本文換算{minimum}文字以上になるまで、途中で終了しないでください。
+- すべての主要見出しを書き切り、最後に必ず「まとめ」セクションで記事を完結させてください。
+- 途中で出力が長くなりそうな場合は、装飾の量よりも本文の完結、商品解説、比較理由、FAQ、まとめを優先してください。
+{extra_text}
+"""
+
+
 def build_regeneration_instruction(previous_content):
     if not previous_content or not html_to_text(previous_content).strip():
         return ''
@@ -1785,7 +1825,12 @@ def detect_ranking_item_count(content):
     return max(count_ranked_items_from_text(content), count_table_rows_from_html(content))
 
 
-def validate_generated_article(article, article_type, content):
+def validate_generated_article(article, article_type, content, quality=None):
+    content_chars = len(html_to_text(content))
+    min_chars = minimum_required_content_chars(quality)
+    if content_chars < min_chars:
+        return f'生成本文が短すぎます（{content_chars}文字）。目標は{effective_target_chars(quality)}文字前後、最低{min_chars}文字以上です。途中で止まっている可能性が高いため保存しません。'
+
     if normalize_article_type(article_type, 'ranking') != 'ranking':
         return ''
     expected = extract_ranking_count(article)
@@ -1823,13 +1868,13 @@ def build_article_type_prompt(article_type):
 
 def build_quality_prompt(quality):
     if not quality:
-        return ''
+        quality = {}
     parts = []
     base = quality.get('prompt', '')
     if base:
         parts.append(base)
-    if quality.get('target_chars'):
-        parts.append(f"目標文字数: {quality.get('target_chars')}文字を目安にしてください。")
+    target = effective_target_chars(quality)
+    parts.append(f"目標文字数: {target}文字前後を目安にしてください。")
     if quality.get('tone'):
         parts.append(f"文体: {quality.get('tone')}で統一してください。")
     if quality.get('extra_rules'):
@@ -2193,7 +2238,12 @@ def recover_generated_content(article_id):
             if key in data:
                 validation_article[key] = data.get(key) or ''
         validation_article['article_type'] = article_type
-        validation_error = validate_generated_article(validation_article, article_type, clean_content)
+        validation_quality = select_quality_definition(
+            load_quality(),
+            data.get('quality_id') or article.get('quality_id'),
+            article_type
+        )
+        validation_error = validate_generated_article(validation_article, article_type, clean_content, validation_quality)
         if validation_error:
             return jsonify({'success': False, 'error': validation_error}), 400
 
@@ -2547,6 +2597,13 @@ def generate_article(article_id):
                 for block in product_blocks:
                     prompt += f'\n{block}\n'
 
+            prompt += build_article_completion_prompt(
+                quality,
+                article_type,
+                has_decoration=bool(decoration and decoration.get('sample_html')),
+                has_ads=bool(product_blocks or ad_instruction or rakuten_asp_instruction)
+            )
+
             with client.messages.stream(
                 model=CLAUDE_ARTICLE_MODEL,
                 max_tokens=CLAUDE_ARTICLE_MAX_TOKENS,
@@ -2564,7 +2621,7 @@ def generate_article(article_id):
             for a in current_articles:
                 if a['id'] == article_id:
                     clean_content = sanitize_generated_html(full_content)
-                    validation_error = validate_generated_article(article_work, article_type, clean_content)
+                    validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
                     content_chars = len(html_to_text(clean_content))
                     similarity = content_similarity(previous_content, clean_content) if is_regeneration else 0
                     if not validation_error and content_chars < 500:
@@ -2777,13 +2834,20 @@ def batch_generate():
                     for block in product_blocks:
                         prompt += f'\n{block}\n'
 
+                prompt += build_article_completion_prompt(
+                    quality,
+                    article_type,
+                    has_decoration=bool(decoration and decoration.get('sample_html')),
+                    has_ads=bool(product_blocks or ad_instruction or rakuten_asp_instruction)
+                )
+
                 message = client.messages.create(
                     model=CLAUDE_ARTICLE_MODEL,
                     max_tokens=CLAUDE_ARTICLE_MAX_TOKENS,
                     messages=[{"role": "user", "content": prompt}]
                 )
                 content = sanitize_generated_html(message.content[0].text)
-                validation_error = validate_generated_article(article, article_type, content)
+                validation_error = validate_generated_article(article, article_type, content, quality)
                 content_chars = len(html_to_text(content))
                 if not validation_error and content_chars < 500:
                     validation_error = f'生成結果が短すぎます（{content_chars}文字）。Claude生成が途中で止まった可能性があります。もう一度生成してください。'
@@ -2880,7 +2944,8 @@ def update_wordpress_post_from_article(article, settings):
     validation_error = validate_generated_article(
         article,
         article.get('article_type', 'ranking'),
-        clean_content
+        clean_content,
+        select_quality_definition(load_quality(), article.get('quality_id'), article.get('article_type', 'ranking'))
     )
     if validation_error:
         raise ValueError(f'この記事は品質チェックに通っていないため、WordPressへ上書き送信しません: {validation_error}')
@@ -2943,6 +3008,20 @@ def publish_article(article_id):
         return jsonify({'error': '記事コンテンツがありません。先に生成してください。'}), 400
 
     settings = load_settings()
+    quality = select_quality_definition(
+        load_quality(),
+        article.get('quality_id'),
+        article.get('article_type', 'ranking')
+    )
+    validation_error = validate_generated_article(
+        article,
+        article.get('article_type', 'ranking'),
+        article.get('content', ''),
+        quality
+    )
+    if validation_error:
+        return jsonify({'error': f'この記事は品質チェックに通っていないため、WordPressへ投稿しません: {validation_error}'}), 400
+
     wp_url, wp_user, wp_password = get_site_credentials(article, settings)
 
     if not all([wp_url, wp_user, wp_password]):
@@ -3073,6 +3152,7 @@ def batch_publish():
 
     settings = load_settings()
     articles = load_articles()
+    quality_list = load_quality()
     article_lookup = {a['id']: a for a in articles}
     targets = [article_lookup[i] for i in article_ids if i in article_lookup and article_lookup[i].get('content')]
     if post_status == 'publish' and not schedule_enabled and len(targets) > 20:
@@ -3083,6 +3163,24 @@ def batch_publish():
     schedule_start_key = normalize_schedule_date_key(schedule_data.get('start_date'), (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d'))
     schedule_day_counts = {}
     for index, article in enumerate(targets):
+        quality = select_quality_definition(
+            quality_list,
+            article.get('quality_id'),
+            article.get('article_type', 'ranking')
+        )
+        validation_error = validate_generated_article(
+            article,
+            article.get('article_type', 'ranking'),
+            article.get('content', ''),
+            quality
+        )
+        if validation_error:
+            results['error'] += 1
+            results['errors'].append({
+                'title': article['title'],
+                'error': f'品質チェック未通過のため投稿しません: {validation_error}'
+            })
+            continue
         wp_url, wp_user, wp_password = get_site_credentials(article, settings)
         if not all([wp_url, wp_user, wp_password]):
             results['error'] += 1
