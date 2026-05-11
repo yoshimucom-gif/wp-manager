@@ -380,6 +380,39 @@ tr.selected td { background: var(--accent-dim); }
   background: var(--accent);
   transition: width 0.3s;
 }
+.generate-push-panel {
+  display: none;
+  margin-top: 14px;
+  border: 1px solid rgba(26,127,55,0.28);
+  background: rgba(26,127,55,0.06);
+  border-radius: 6px;
+  padding: 14px 16px;
+}
+.generate-push-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.generate-push-note {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+.generate-push-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.btn-push {
+  min-width: 180px;
+  justify-content: center;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 600;
+}
 .batch-layout {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
@@ -884,6 +917,14 @@ tr.selected td { background: var(--accent-dim); }
             <div class="stream-box" id="gen-output">// ここに生成された記事が表示されます...</div>
             <div class="progress-bar" id="gen-progress" style="display:none">
               <div class="progress-fill" id="gen-progress-fill" style="width:0%"></div>
+            </div>
+            <div class="generate-push-panel" id="gen-push-panel">
+              <div class="generate-push-title">生成完了後の操作</div>
+              <div class="generate-push-note" id="gen-push-note">生成済み本文をWordPressへ送信できます。</div>
+              <div class="generate-push-actions">
+                <button class="btn btn-success btn-push" id="gen-push-btn" onclick="publishGenerated()" disabled>WPにPUSH</button>
+                <button class="btn btn-secondary" onclick="showPage('history')">対応履歴で確認</button>
+              </div>
             </div>
           </div>
         </div>
@@ -3131,14 +3172,38 @@ function onArticleSelect() {
 }
 
 function updateGeneratePublishButton(articleId = currentGenArticleId) {
-  const btn = document.getElementById('gen-publish-btn');
-  if (!btn) return;
+  const buttons = ['gen-publish-btn', 'gen-push-btn']
+    .map(id => document.getElementById(id))
+    .filter(Boolean);
+  const panel = document.getElementById('gen-push-panel');
+  const note = document.getElementById('gen-push-note');
+  if (!buttons.length && !panel) return;
   const article = allArticles.find(a => a.id === articleId);
-  btn.disabled = !article?.content;
-  btn.textContent = article?.wp_post_id ? 'WPへ上書き送信' : 'WP下書き投稿';
-  btn.title = article?.wp_post_id
+  const hasContent = !!article?.content;
+  const label = article?.wp_post_id ? 'WPへ上書きPUSH' : 'WPにPUSH（下書き）';
+  const title = article?.wp_post_id
     ? 'Affiros9に保存されている本文を既存WordPress投稿へ送信します'
     : 'WordPressに新規下書き投稿します';
+  buttons.forEach(btn => {
+    btn.disabled = !hasContent;
+    btn.textContent = label;
+    btn.title = title;
+  });
+  if (panel) panel.style.display = hasContent ? 'block' : 'none';
+  if (note) {
+    note.textContent = article?.wp_post_id
+      ? '生成済み本文を既存のWordPress投稿へ上書き送信できます。'
+      : '生成済み本文をWordPressへ下書き投稿できます。';
+  }
+}
+
+function setGeneratePublishActionState(disabled, showPanel = null) {
+  ['gen-publish-btn', 'gen-push-btn']
+    .map(id => document.getElementById(id))
+    .filter(Boolean)
+    .forEach(btn => btn.disabled = disabled);
+  const panel = document.getElementById('gen-push-panel');
+  if (panel && showPanel !== null) panel.style.display = showPanel ? 'block' : 'none';
 }
 
 async function createArticleFromGenerateForm() {
@@ -3236,11 +3301,10 @@ async function startGenerate() {
 
   const output = document.getElementById('gen-output');
   const btn = document.getElementById('gen-btn');
-  const publishBtn = document.getElementById('gen-publish-btn');
   output.textContent = '';
   btn.disabled = true;
   btn.textContent = '⌛ 生成中...';
-  publishBtn.disabled = true;
+  setGeneratePublishActionState(true, false);
   setArticleLocalStatus(articleId, 'generating', '再生成中です。完了後に本文と点数を更新します。');
 
   const progress = document.getElementById('gen-progress');
@@ -3297,7 +3361,7 @@ async function startGenerate() {
       }
       if (msg.error) {
         generationError = true;
-        if (publishBtn) publishBtn.disabled = true;
+        setGeneratePublishActionState(true, false);
         setArticleLocalStatus(articleId, 'error', msg.error);
         await loadArticles();
         toast('エラー: ' + msg.error, 'error');
@@ -3353,10 +3417,8 @@ async function startGenerate() {
 
 async function finalizeGenerateSuccess(articleId, result = {}) {
   const fill = document.getElementById('gen-progress-fill');
-  const publishBtn = document.getElementById('gen-publish-btn');
   if (fill) fill.style.width = '100%';
   currentGenArticleId = articleId;
-  if (publishBtn) publishBtn.disabled = false;
   await loadArticles();
   const usageYen = result.usage?.cost_yen ? ` / 概算 ${Math.ceil(Number(result.usage.cost_yen)).toLocaleString()}円` : '';
   const charInfo = result.content_chars ? `${Number(result.content_chars).toLocaleString()}文字` : '本文';
@@ -3382,6 +3444,7 @@ async function publishGenerated() {
     isRepair ? 'repairing' : 'publishing',
     isRepair ? 'WPへ上書き送信中です。完了後に記事一覧を更新します。' : 'WordPressへ下書き投稿中です。'
   );
+  setGeneratePublishActionState(true, true);
   try {
     const res = isRepair
       ? await fetch(`/api/articles/${currentGenArticleId}/repair-post`, {method:'POST'})
@@ -3405,10 +3468,12 @@ async function publishGenerated() {
     } else {
       toast(data.error || (isRepair ? 'WP上書き送信に失敗しました' : '投稿失敗'), 'error');
       await loadArticles();
+      updateGeneratePublishButton(currentGenArticleId);
     }
   } catch (e) {
     toast((isRepair ? 'WP更新エラー: ' : '投稿エラー: ') + e.message, 'error');
     await loadArticles();
+    updateGeneratePublishButton(currentGenArticleId);
   }
 }
 
