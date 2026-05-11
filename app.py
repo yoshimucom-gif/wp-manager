@@ -73,7 +73,7 @@ try:
     CLAUDE_SEGMENT_CONTINUATION_MAX_ROUNDS = int(os.environ.get('CLAUDE_SEGMENT_CONTINUATION_MAX_ROUNDS', '2'))
 except ValueError:
     CLAUDE_SEGMENT_CONTINUATION_MAX_ROUNDS = 2
-DEFAULT_ARTICLE_TARGET_CHARS = 2500
+DEFAULT_ARTICLE_TARGET_CHARS = 3000
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -354,7 +354,7 @@ def save_ad_definitions(items):
     save_json(AD_DEFINITIONS_FILE, items)
 
 OLD_DEFAULT_QUALITY_PROMPT = "SEOに最適化された、読みやすく情報量の多い記事を書いてください。見出しを適切に使い、具体例を含めてください。"
-QUALITY_PRESET_VERSION = 5
+QUALITY_PRESET_VERSION = 6
 
 
 def default_quality_presets():
@@ -375,7 +375,7 @@ def default_quality_presets():
 - 読者が判断に迷う箇所にはFAQ、比較表、チェックリスト、リストを使う
 - 広告やCTAは文脈に合う場所だけに置き、押し売りにしない
 - 本文にAIの説明文、Markdown、Gutenbergコメント、サンプル文を出さない""",
-            "target_chars": "2500",
+            "target_chars": "3000",
             "tone": "ですます調",
             "extra_rules": "Helpful / Reliable / People-first を優先する。読者が読み終えた時点で「何を選ぶべきか」「次に何を確認すべきか」が分かる状態にする。",
             "is_default": True,
@@ -399,7 +399,7 @@ def default_quality_presets():
 - 最後に読者タイプ別の選び方、FAQ、迷った時の判断基準を入れる
 - 比較表はスマホで崩れない列数にし、セル内を短くする
 - 本文にAIの説明文、Markdown、Gutenbergコメント、サンプル文を出さない""",
-            "target_chars": "2500",
+            "target_chars": "3000",
             "tone": "ですます調",
             "extra_rules": "基本構成は、導入 → 結論/おすすめ早見表 → 選定基準 → 比較表 → 1位から順番に個別解説 → 選び方 → FAQ → まとめ。N選の件数不足は不可。",
             "is_default": False,
@@ -420,8 +420,9 @@ def default_quality_presets():
 - 公式情報で確認すべき項目は断定せず、確認導線を用意する
 - 競合・代替商品がある場合は、軽い比較を入れて判断材料を増やす
 - CTAは導入後、メリット説明後、まとめ前など文脈に合う位置だけに置く
+- よくある質問/FAQセクションは原則作らず、疑問点は注意点・購入方法・まとめの中で解消する
 - 本文にAIの説明文、Markdown、Gutenbergコメント、サンプル文を出さない""",
-            "target_chars": "2500",
+            "target_chars": "3000",
             "tone": "ですます調",
             "extra_rules": """基本構成:
 リード文 250〜350文字前後
@@ -433,7 +434,6 @@ H2: ○○のメリット
 H2: ○○のデメリット・注意点
 H2: ○○がおすすめな人・おすすめしない人
 H2: ○○の購入方法・申込方法
-H2: よくある質問
 H2: まとめ
 まとめでは判断材料を再整理し、自然なCTAを入れる。""",
             "is_default": False,
@@ -455,7 +455,7 @@ H2: まとめ
 - 収益導線は悩み解決の流れに合う場所だけに自然に入れる
 - まとめでは要点を整理し、読者の次の行動を明確にする
 - 本文にAIの説明文、Markdown、Gutenbergコメント、サンプル文を出さない""",
-            "target_chars": "2500",
+            "target_chars": "3000",
             "tone": "ですます調",
             "extra_rules": """基本構成:
 リード文 250〜350文字前後
@@ -496,7 +496,11 @@ def load_quality():
             preserve_default = existing.get('is_default', preset.get('is_default', False))
             preserve_reference = existing.get('reference_url', preset.get('reference_url', ''))
             existing_target = str(existing.get('target_chars', '')).strip()
-            target_chars = existing_target if existing_target and existing_target != '5000' else preset.get('target_chars', existing_target)
+            target_chars = (
+                preset.get('target_chars', existing_target)
+                if existing_target in ('', '2500', '5000')
+                else existing_target
+            )
             existing.update({
                 'name': preset.get('name', existing.get('name', '')),
                 'article_type': preset.get('article_type', existing.get('article_type')),
@@ -2162,19 +2166,29 @@ def claude_continuation_max_tokens(quality=None):
 def build_article_completion_prompt(quality, article_type, has_decoration=False, has_ads=False):
     target = effective_target_chars(quality)
     minimum = minimum_required_content_chars(quality)
+    upper = max(target, int(target * 1.15))
+    normalized_type = normalize_article_type(article_type, 'ranking')
     extras = []
     if has_decoration:
         extras.append('- 装飾は太字、赤字、マーカー、リスト、表だけに絞り、複雑なボックスや独自classは使わないでください。')
     if has_ads:
         extras.append('- 広告カード・商品リンクHTMLは自然な位置に入れてください。ただし広告HTMLだけで本文量を稼がず、本文解説を十分に書いてください。')
+    if normalized_type == 'brand':
+        extras.append('- 商標記事ではFAQ/よくある質問セクションは原則入れず、疑問点は口コミ・注意点・購入方法・まとめの中で自然に解消してください。')
     extra_text = '\n'.join(extras)
+    priority = (
+        '本文の完結、口コミ・評判、メリット・デメリット、向いている人、購入前の注意点、まとめ'
+        if normalized_type == 'brand'
+        else '本文の完結、商品解説、比較理由、FAQ、まとめ'
+    )
     return f"""
 
 文字量・完了条件:
 - 記事本文は日本語本文換算で{target}文字前後を目標にしてください。HTMLタグや広告カードのコード量ではなく、読者が読む説明文を十分に書いてください。
 - 最低でも本文換算{minimum}文字以上になるまで、途中で終了しないでください。
+- 長くても本文換算{upper}文字以内を目安にし、冗長なFAQ・前置き・重複説明で水増ししないでください。
 - すべての主要見出しを書き切り、最後に必ず「まとめ」セクションで記事を完結させてください。
-- 途中で出力が長くなりそうな場合は、装飾の量よりも本文の完結、商品解説、比較理由、FAQ、まとめを優先してください。
+- 途中で出力が長くなりそうな場合は、装飾の量よりも{priority}を優先してください。
 {extra_text}
 """
 
@@ -2204,6 +2218,13 @@ def build_article_continuation_prompt(article, article_type, quality, current_co
     current_chars = len(html_to_text(current_content))
     remaining = max(800, target - current_chars)
     current_tail = str(current_content or '')[-18000:]
+    normalized_type = normalize_article_type(article_type, 'ranking')
+    priority = (
+        '未完了の口コミ・評判、メリット・デメリット、向いている人、購入/申込方法、まとめ'
+        if normalized_type == 'brand'
+        else '未完了のランキング個別解説、選び方、FAQ、まとめ'
+    )
+    no_faq = '- 商標記事ではFAQ/よくある質問見出しを追加しないでください。\n' if normalized_type == 'brand' else ''
     return f"""以下の記事本文は途中で終わっているか、品質チェックに未達です。
 
 タイトル: {article.get('title', '')}
@@ -2219,7 +2240,8 @@ def build_article_continuation_prompt(article, article_type, quality, current_co
 - 既存本文の続きを、WordPress本文HTMLとして出力してください。
 - すでに書かれている文章・見出し・比較表・ランキング項目を繰り返さないでください。
 - 出力は「続きのHTML本文だけ」にしてください。説明文、作業メモ、Markdown、コードフェンスは不要です。
-- 未完了のランキング個別解説、選び方、FAQ、まとめを優先して書き切ってください。
+- {priority}を優先して書き切ってください。
+{no_faq.rstrip()}
 - 最後は必ず「まとめ」セクションで完結させてください。
 - 追加本文は日本語本文換算で最低{remaining}文字を目安にしてください。
 
@@ -2237,6 +2259,13 @@ def build_article_polish_prompt(article, article_type, quality, current_content,
     minimum = minimum_required_content_chars(quality)
     current_chars = len(html_to_text(current_content))
     current_tail = str(current_content or '')[-20000:]
+    normalized_type = normalize_article_type(article_type, 'ranking')
+    default_warning = (
+        '導入、口コミ・評判、判断材料、購入前の注意点、まとめを読みやすく整える'
+        if normalized_type == 'brand'
+        else '導入、見出し、判断材料、FAQ、まとめを読みやすく整える'
+    )
+    no_faq = '- 商標記事ではFAQ/よくある質問見出しを追加しないでください。疑問点は本文内に吸収してください。\n' if normalized_type == 'brand' else ''
     return f"""以下のWordPress本文HTMLを、記事として完成度が高い状態へ整えてください。
 
 タイトル: {article.get('title', '')}
@@ -2247,13 +2276,14 @@ def build_article_polish_prompt(article, article_type, quality, current_content,
 目標本文文字数: {target}文字前後
 最低本文文字数: {minimum}文字以上
 改善理由・不足:
-{warning_text or '導入、見出し、判断材料、FAQ、まとめを読みやすく整える'}
+{warning_text or default_warning}
 
 やること:
 - 既存本文の内容を活かし、WordPress本文HTMLとして全文を出力してください。
 - 文字数が不足している場合は、重複せずに不足分を追加してください。
 - 導入で結論を早めに示し、メリット・デメリット・注意点・向いている人を補強してください。
 - 最後は必ず「まとめ」セクションで完結させてください。
+{no_faq.rstrip()}
 - 商品リンクや広告カードは新規作成しないでください。装飾は太字・赤字・マーカー・リスト・表だけに絞ってください。
 - 説明文、作業メモ、Markdown、コードフェンスは禁止です。
 
@@ -2625,9 +2655,10 @@ def build_segmented_article_steps(article, article_type):
 - 根拠のない断定は避けてください。"""
             },
             {
-                'name': 'FAQ・まとめ',
-                'prompt': """FAQとまとめを書いて記事を完結させてください。
-- FAQは3〜5問。
+                'name': '購入前の注意点・まとめ',
+                'prompt': """購入/申込前の注意点とまとめを書いて記事を完結させてください。
+- FAQ/よくある質問セクションは作らないでください。
+- 読者の疑問は注意点、購入方法、向いている人の整理、まとめの中で自然に解消してください。
 - 最後にH2「まとめ」を入れ、どんな人におすすめかを再整理してください。"""
             },
         ]
@@ -2976,6 +3007,7 @@ def build_article_type_prompt(article_type):
         'brand': """記事種類: 商標記事（レビュー記事）
 - 特定の商品・サービス名で検索する読者に向けたレビュー記事にする
 - 特徴、口コミ・評判、メリット・デメリット、向いている人、購入・申込前の注意点を整理する
+- FAQ/よくある質問セクションは原則作らず、疑問点は本文内で自然に解消する
 - 押し売りではなく、判断材料を丁寧に提示する""",
         'column': """記事種類: コラム記事
 - 読者の悩みや疑問に対して、自然な読み物として理解を深める構成にする
