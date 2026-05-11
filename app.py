@@ -45,6 +45,10 @@ try:
     BATCH_GENERATION_MAX_RETRIES = int(os.environ.get('BATCH_GENERATION_MAX_RETRIES', '2'))
 except ValueError:
     BATCH_GENERATION_MAX_RETRIES = 2
+try:
+    CLAUDE_SEGMENT_CONTINUATION_MAX_ROUNDS = int(os.environ.get('CLAUDE_SEGMENT_CONTINUATION_MAX_ROUNDS', '2'))
+except ValueError:
+    CLAUDE_SEGMENT_CONTINUATION_MAX_ROUNDS = 2
 DEFAULT_ARTICLE_TARGET_CHARS = 5000
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
@@ -1945,7 +1949,7 @@ def build_segmented_article_steps(article, article_type):
 
 def build_segment_prompt(base_prompt, article, article_type, quality, step, index, total, current_content):
     target = effective_target_chars(quality)
-    section_target = max(700, math.ceil(target / max(total, 1)))
+    section_target = segment_target_chars(quality, total)
     previous_tail = str(current_content or '')[-14000:]
     return f"""{base_prompt}
 
@@ -1965,6 +1969,46 @@ def build_segment_prompt(base_prompt, article, article_type, quality, step, inde
 """
 
 
+def segment_target_chars(quality, total):
+    target = effective_target_chars(quality)
+    return max(800, min(1600, math.ceil(target / max(total, 1) * 0.9)))
+
+
+def segment_minimum_chars(quality, total):
+    target = segment_target_chars(quality, total)
+    return max(650, math.ceil(target * 0.75))
+
+
+def build_segment_continuation_prompt(article, article_type, quality, step, index, total, current_content, segment_text, min_chars):
+    segment_chars = len(html_to_text(segment_text))
+    previous_tail = str(current_content or '')[-12000:]
+    segment_tail = str(segment_text or '')[-10000:]
+    return f"""分割生成の今回工程が短すぎます。今回工程の続きを追記してください。
+
+タイトル: {article.get('title', '')}
+記事種別: {article_type}
+工程: {step.get('name')}（{index}/{total}）
+今回工程の現在文字数: {segment_chars}文字
+今回工程の最低文字数: {min_chars}文字以上
+
+やること:
+- 出力は今回工程の「続きのHTML本文だけ」にしてください。
+- 既に書いた内容を繰り返さないでください。
+- ほかの工程へ進みすぎず、今回工程の範囲を深掘りしてください。
+- 商品解説・比較理由・具体例・注意点・FAQなど、読者判断に必要な本文を足してください。
+- Gutenbergコメント、Markdown、作業メモは禁止です。
+
+今回工程の指示:
+{step.get('prompt')}
+
+現在までの記事本文（文脈確認用）:
+{previous_tail}
+
+今回工程で既に書いた本文（この続きだけを書く）:
+{segment_tail}
+"""
+
+
 def generate_segmented_article_sync(client, base_prompt, article, article_type, quality, on_step=None):
     steps = build_segmented_article_steps(article, article_type)
     full_content = ''
@@ -1980,8 +2024,35 @@ def generate_segmented_article_sync(client, base_prompt, article, article_type, 
             messages=[{"role": "user", "content": segment_prompt}]
         )
         text = anthropic_message_text(message)
-        full_content += ('\n' if full_content else '') + text
         usage_parts.append(build_article_usage(segment_prompt, text, message))
+        min_chars = segment_minimum_chars(quality, total)
+        continuation_round = 0
+        while len(html_to_text(text)) < min_chars and continuation_round < CLAUDE_SEGMENT_CONTINUATION_MAX_ROUNDS:
+            continuation_round += 1
+            if on_step:
+                on_step(index, total, f"{step.get('name', '')} の追記 {continuation_round}")
+            continuation_prompt = build_segment_continuation_prompt(
+                article,
+                article_type,
+                quality,
+                step,
+                index,
+                total,
+                full_content,
+                text,
+                min_chars
+            )
+            continuation_message = client.messages.create(
+                model=CLAUDE_ARTICLE_MODEL,
+                max_tokens=CLAUDE_ARTICLE_MAX_TOKENS,
+                messages=[{"role": "user", "content": continuation_prompt}]
+            )
+            continuation_text = anthropic_message_text(continuation_message)
+            usage_parts.append(build_article_usage(continuation_prompt, continuation_text, continuation_message))
+            if not html_to_text(continuation_text).strip():
+                break
+            text += '\n' + continuation_text
+        full_content += ('\n' if full_content else '') + text
     return full_content, usage_parts
 
 
@@ -2002,8 +2073,34 @@ def generate_segmented_article_sse(client, base_prompt, article, article_type, q
             segment_prompt,
             f'分割生成中: {name}（{index}/{total}）。Claude応答待ちです。'
         )
-        full_content += text
         usage_parts.append(build_article_usage(segment_prompt, text, message))
+        min_chars = segment_minimum_chars(quality, total)
+        continuation_round = 0
+        while len(html_to_text(text)) < min_chars and continuation_round < CLAUDE_SEGMENT_CONTINUATION_MAX_ROUNDS:
+            continuation_round += 1
+            yield f"data: {json.dumps({'status': 'segment_continuing', 'round': index, 'total': total, 'segment_retry': continuation_round, 'message': f'{name} の本文が短いため追記しています（{continuation_round}/{CLAUDE_SEGMENT_CONTINUATION_MAX_ROUNDS}）'})}\n\n"
+            continuation_prompt = build_segment_continuation_prompt(
+                article,
+                article_type,
+                quality,
+                step,
+                index,
+                total,
+                full_content,
+                text,
+                min_chars
+            )
+            yield f"data: {json.dumps({'text': '\\n'})}\n\n"
+            continuation_text, continuation_message = yield from stream_claude_sse(
+                client,
+                continuation_prompt,
+                f'{name} の追記を生成中です。Claude応答待ちです。'
+            )
+            usage_parts.append(build_article_usage(continuation_prompt, continuation_text, continuation_message))
+            if not html_to_text(continuation_text).strip():
+                break
+            text += '\n' + continuation_text
+        full_content += text
     return full_content, usage_parts
 
 

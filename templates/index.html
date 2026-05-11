@@ -3366,6 +3366,10 @@ async function startGenerate() {
         if (progressNote) progressNote.textContent = msg.message || '章単位で生成しています。';
         if (msg.total) fill.style.width = Math.min(88, 10 + (Number(msg.round || 1) - 1) / Number(msg.total) * 78) + '%';
       }
+      if (msg.status === 'segment_continuing') {
+        setArticleLocalStatus(articleId, 'generating', msg.message || '章の本文を追記しています。');
+        if (progressNote) progressNote.textContent = msg.message || '章の本文を追記しています。';
+      }
       if (msg.status === 'heartbeat') {
         if (progressNote) progressNote.textContent = msg.message || 'Claude応答待ちです。処理は継続しています。';
       }
