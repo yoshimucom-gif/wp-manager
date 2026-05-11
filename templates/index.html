@@ -3506,7 +3506,7 @@ async function runDirectGenerateFallback(articleId, formData) {
   const contentType = res.headers.get('content-type') || '';
   if (!contentType.includes('application/json')) {
     const text = await res.text().catch(() => '');
-    throw new Error(`生成APIがJSON以外を返しました（HTTP ${res.status}）。${text.slice(0, 120)}`);
+    throw new Error(readableHttpError(res.status, text, '保存優先モード'));
   }
   const data = await res.json();
   if (!res.ok || !data.success) {
@@ -3520,6 +3520,19 @@ async function runDirectGenerateFallback(articleId, formData) {
   });
   setArticleLocalMessage(articleId, '通常ストリームは途切れましたが、保存優先モードで生成を完了しました。');
   return true;
+}
+
+function readableHttpError(status, text = '', label = '生成API') {
+  const raw = String(text || '');
+  const title = raw.match(/<title>([\s\S]*?)<\/title>/i)?.[1]
+    || raw.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1]
+    || raw.match(/<p[^>]*>([\s\S]*?)<\/p>/i)?.[1]
+    || raw.slice(0, 160);
+  const clean = title
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return `${label}でサーバーエラーが発生しました（HTTP ${status}${clean ? `: ${clean}` : ''}）。`;
 }
 
 async function startGenerate() {
@@ -3584,7 +3597,7 @@ async function startGenerate() {
     const contentType = res.headers.get('content-type') || '';
     if (!contentType.includes('text/event-stream')) {
       const text = await res.text().catch(() => '');
-      throw new Error(`生成APIがイベントストリーム以外を返しました（HTTP ${res.status}）。${text.slice(0, 120)}`);
+      throw new Error(readableHttpError(res.status, text, '生成API'));
     }
 
     const reader = res.body.getReader();

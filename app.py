@@ -10,6 +10,7 @@ import math
 import hashlib
 import difflib
 import time
+import traceback
 from datetime import datetime, timedelta
 from pathlib import Path
 from functools import wraps
@@ -18,6 +19,7 @@ from html.parser import HTMLParser
 from urllib.parse import quote_plus, urljoin
 
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, Response, stream_with_context, send_from_directory
+from werkzeug.exceptions import HTTPException
 import anthropic
 import openpyxl
 import requests
@@ -30,6 +32,27 @@ except ImportError:
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(error):
+    if isinstance(error, HTTPException):
+        status_code = error.code or 500
+        message = error.description or error.name
+    else:
+        status_code = 500
+        message = str(error) or error.__class__.__name__
+        app.logger.error('Unhandled exception: %s\n%s', message, traceback.format_exc())
+
+    if request.path.startswith('/api/'):
+        return jsonify({
+            'success': False,
+            'error': message,
+            'error_type': error.__class__.__name__,
+        }), status_code
+    if isinstance(error, HTTPException):
+        return error
+    return '<h1><p>Internal Server Error</p></h1>', 500
 
 DATA_DIR_WARNING = ''
 CLAUDE_ARTICLE_MODEL = 'claude-sonnet-4-6'
