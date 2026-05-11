@@ -342,6 +342,16 @@ tr.selected td { background: var(--accent-dim); }
   color: var(--accent);
 }
 .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+.route-preview {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 16px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.route-preview strong { color: var(--text); }
 
 .form-group { margin-bottom: 16px; }
 .form-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; display: block; }
@@ -1662,6 +1672,30 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
   </div>
 </div>
 
+<!-- Brand Expansion Modal -->
+<div class="modal-overlay" id="brand-expansion-modal">
+  <div class="modal" style="width:780px">
+    <div class="modal-title">// ランキング記事から商標記事へ展開</div>
+    <input type="hidden" id="brand-expansion-source-id">
+    <div class="route-preview" id="brand-expansion-source"></div>
+    <div class="form-group">
+      <label class="form-label">商標記事にする商品候補</label>
+      <textarea id="brand-product-lines" class="form-control" rows="9" placeholder="1行に1商品名を入力"></textarea>
+      <div class="form-help">
+        ランキング記事の表や「1位：商品名」見出しから候補を抽出します。ここでは商標記事の未生成下書きだけ作成し、本文生成は実行しません。
+      </div>
+    </div>
+    <div class="route-preview">
+      作成される下書き: <strong>商標記事</strong> / 親ランキング記事・投稿先サイト・カテゴリーを引き継ぎます。<br>
+      例: <strong>商品名の口コミ・評判レビュー｜メリット・デメリットを解説</strong>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeBrandExpansionModal()">閉じる</button>
+      <button class="btn btn-primary" id="brand-expansion-create-btn" onclick="createBrandDraftsFromRanking()">商標記事下書きを作成</button>
+    </div>
+  </div>
+</div>
+
 <!-- Rewrite Modal -->
 <div class="modal-overlay" id="rewrite-modal">
   <div class="modal" style="width:900px">
@@ -2847,6 +2881,9 @@ function renderArticles(articles) {
     const statusDetail = statusDetailText
       ? `<div style="font-size:10px;color:${statusDetailColor};margin-top:4px">${esc(statusDetailText)}</div>`
       : '';
+    const brandExpansionButton = (a.article_type || 'ranking') === 'ranking' && a.content
+      ? `<button class="btn btn-secondary btn-sm" ${disabled} title="ランキング記事で紹介した商品から商標記事の未生成下書きを作成" onclick="openBrandExpansionModal('${a.id}')">商標記事化</button>`
+      : '';
     return `
     <tr id="row-${a.id}">
       <td><input type="checkbox" class="check-row" value="${a.id}"></td>
@@ -2863,6 +2900,7 @@ function renderArticles(articles) {
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button class="btn btn-secondary btn-sm" ${disabled} title="Affiros9内の記事情報と保存本文を手動編集。Claude生成やWordPress送信は行いません。" onclick="openArticleModal('${a.id}')">本文/設定編集</button>
           <button class="btn btn-primary btn-sm" ${disabled} title="生成画面で広告設定などを確認してから開始" onclick="quickGenerate('${a.id}')">${generateLabel}</button>
+          ${brandExpansionButton}
           ${a.content && !a.wp_post_id ? `<button class="btn btn-success btn-sm" ${disabled} title="WordPressに下書き投稿" onclick="quickPublish('${a.id}')">${publishLabel}</button>` : ''}
           ${a.wp_url ? `<a href="${esc(a.wp_url)}" target="_blank" class="btn btn-secondary btn-sm" title="投稿済み記事を開く">記事を開く</a>` : ''}
         </div>
@@ -3168,6 +3206,138 @@ async function saveArticleModal() {
   toast('保存しました', 'success');
   closeArticleModal();
   loadArticles();
+}
+
+// ---- Ranking to Brand route ----
+function normalizeProductCandidate(value) {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .replace(/^[第\s]*[0-9０-９]+[位\.)）:：、\s-]+/, '')
+    .replace(/（[0-9０-９]+位）|\([0-9０-９]+位\)/g, '')
+    .replace(/^\[[^\]]+\]\s*/, '')
+    .replace(/^【[^】]+】\s*/, '')
+    .trim();
+}
+
+function addProductCandidate(products, value) {
+  const product = normalizeProductCandidate(value);
+  if (!product || product.length < 2 || product.length > 90) return;
+  if (/^(?:商品名|おすすめ商品|こんな人に|理由|特徴|価格|価格目安|向いている人|選び方|まとめ|FAQ|よくある質問|ランキング|比較表|選定基準)$/i.test(product)) return;
+  if (/^(?:Q|A)[\.．:：]/.test(product)) return;
+  if (/候補\s*[0-9０-９]+/.test(product)) return;
+  if (!products.some(p => p.toLowerCase() === product.toLowerCase())) products.push(product);
+}
+
+function extractProductsFromRankingArticle(article) {
+  const products = [];
+  const content = String(article?.content || '');
+  if (!content.trim()) return products;
+  const doc = new DOMParser().parseFromString(`<div>${content}</div>`, 'text/html');
+
+  doc.querySelectorAll('table').forEach(table => {
+    const headerCells = [...table.querySelectorAll('thead th')].map(th => th.textContent.trim());
+    let productIndex = headerCells.findIndex(h => /商品名|商品|サービス名|名称/.test(h));
+    if (productIndex < 0 && headerCells.some(h => /順位|ランク/.test(h))) productIndex = 1;
+    if (productIndex < 0) productIndex = 0;
+    table.querySelectorAll('tbody tr, tr').forEach(row => {
+      if (row.querySelector('th')) return;
+      const cells = [...row.querySelectorAll('td')];
+      if (!cells.length || productIndex >= cells.length) return;
+      addProductCandidate(products, cells[productIndex].textContent);
+    });
+  });
+
+  doc.querySelectorAll('h3').forEach(h => {
+    const text = h.textContent.trim();
+    const ranked = text.match(/^[第\s]*[0-9０-９]+[位\.)）:：、\s-]+(.+)$/);
+    if (ranked) addProductCandidate(products, ranked[1].split(/[｜|]/)[0]);
+  });
+
+  return products.slice(0, 20);
+}
+
+function openBrandExpansionModal(id) {
+  const article = allArticles.find(a => a.id === id);
+  if (!article) return;
+  const products = extractProductsFromRankingArticle(article);
+  document.getElementById('brand-expansion-source-id').value = id;
+  document.getElementById('brand-expansion-source').innerHTML =
+    `<strong>親ランキング記事:</strong> ${esc(article.title)}<br>` +
+    `<strong>投稿先サイト:</strong> ${esc(getSitePlainName(article.site_id) || '未設定')} / ` +
+    `<strong>カテゴリー:</strong> ${esc(article.category || '未設定')}`;
+  document.getElementById('brand-product-lines').value = products.join('\n');
+  document.getElementById('brand-expansion-modal').classList.add('open');
+  if (!products.length) {
+    toast('商品名を自動抽出できませんでした。商品名を1行ずつ入力してください。', 'info');
+  }
+}
+
+function closeBrandExpansionModal() {
+  document.getElementById('brand-expansion-modal').classList.remove('open');
+}
+
+function brandDraftTitle(productName) {
+  return `${productName}の口コミ・評判レビュー｜メリット・デメリットを解説`;
+}
+
+async function createBrandDraftsFromRanking() {
+  const sourceId = document.getElementById('brand-expansion-source-id').value;
+  const source = allArticles.find(a => a.id === sourceId);
+  if (!source) return;
+  const products = [...new Set(document.getElementById('brand-product-lines').value
+    .split(/\r?\n/)
+    .map(normalizeProductCandidate)
+    .filter(Boolean))];
+  if (!products.length) {
+    toast('商標記事にする商品名を入力してください', 'error');
+    return;
+  }
+
+  const createBtn = document.getElementById('brand-expansion-create-btn');
+  createBtn.disabled = true;
+  createBtn.textContent = '作成中...';
+  const brandQualityId = qualityList.find(q => q.article_type === 'brand')?.id
+    || qualityList.find(q => q.id === 'brand-quality')?.id
+    || null;
+  const brandAdDefinitionId = adDefinitionList.find(d => d.enabled !== false && d.article_type === 'brand')?.id
+    || adDefinitionList.find(d => d.enabled !== false && d.article_type === 'common')?.id
+    || null;
+
+  try {
+    let created = 0;
+    for (const product of products) {
+      const payload = {
+        title: brandDraftTitle(product),
+        keywords: product,
+        ad_keywords: product,
+        category: source.category || '',
+        article_type: 'brand',
+        site_id: source.site_id || null,
+        quality_id: brandQualityId,
+        ad_definition_id: brandAdDefinitionId,
+        parent_article_id: source.id,
+        source_product_name: product,
+        memo: `親ランキング記事「${source.title}」から商標記事候補として作成。親記事ID: ${source.id}`
+      };
+      const res = await fetch('/api/articles', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `${product} の下書き作成に失敗しました`);
+      created++;
+    }
+    closeBrandExpansionModal();
+    await loadArticles();
+    showPage('articles');
+    toast(`商標記事の未生成下書きを${created}件作成しました`, 'success');
+  } catch (e) {
+    toast(e.message || '商標記事下書きの作成に失敗しました', 'error');
+  } finally {
+    createBtn.disabled = false;
+    createBtn.textContent = '商標記事下書きを作成';
+  }
 }
 
 // ---- Generate ----

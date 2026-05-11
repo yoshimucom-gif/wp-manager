@@ -2832,6 +2832,8 @@ def create_article():
         'decoration_id': data.get('decoration_id') or None,
         'ad_definition_id': data.get('ad_definition_id') or None,
         'site_id': data.get('site_id') or None,
+        'parent_article_id': data.get('parent_article_id') or None,
+        'source_product_name': data.get('source_product_name') or '',
         'wp_post_id': None,
         'wp_url': None,
     }
@@ -2863,7 +2865,8 @@ def update_article(article_id):
             for key in [
                 'title', 'keywords', 'content', 'article_type', 'ad_keywords',
                 'category', 'priority', 'memo', 'schedule_date', 'quality_id',
-                'decoration_id', 'ad_definition_id', 'scheduled_at'
+                'decoration_id', 'ad_definition_id', 'scheduled_at',
+                'parent_article_id', 'source_product_name'
             ]:
                 if key in data:
                     a[key] = data[key]
