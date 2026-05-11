@@ -11,7 +11,6 @@ import hashlib
 import difflib
 import time
 import traceback
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
 from functools import wraps
@@ -699,7 +698,7 @@ class _LinkExtractor(HTMLParser):
             self._current = None
 
 
-def fetch_url_text(url, max_chars=2000, timeout=3):
+def fetch_url_text(url, max_chars=2500, timeout=5):
     resp = requests.get(url, timeout=timeout, headers={'User-Agent': 'Mozilla/5.0'})
     resp.raise_for_status()
     p = _TextExtractor()
@@ -1861,7 +1860,7 @@ def amazon_search(keywords, access_key, secret_key, partner_tag, item_count=3):
             'x-amz-target': target,
         },
         data=payload,
-        timeout=3
+        timeout=4
     )
     if not resp.ok:
         try:
@@ -1907,7 +1906,7 @@ def rakuten_search(keywords, application_id, affiliate_id='', item_count=3):
     resp = requests.get(
         'https://app.rakuten.co.jp/services/api/IchibaItem/Search/20170706',
         params=params,
-        timeout=3
+        timeout=4
     )
     if not resp.ok:
         raise Exception(f'HTTP {resp.status_code}: {resp.text[:200]}')
@@ -2075,24 +2074,23 @@ def build_ad_product_blocks(article, settings, ad_definition=None, include_amazo
     rakuten_label = (ad_definition or {}).get('rakuten_button_label') or '楽天市場で見る'
 
     amazon_products = []
-    rakuten_products = []
-    tasks = {}
-    ak = settings.get('amazon_access_key', '')
-    sk = settings.get('amazon_secret_key', '')
-    pt = settings.get('amazon_partner_tag', '')
-    ra_id = settings.get('rakuten_application_id', '')
-    ra_aff = settings.get('rakuten_affiliate_id', '')
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        if source in ('amazon', 'both') and all([ak, sk, pt]):
-            tasks['amazon'] = executor.submit(amazon_search, keywords, ak, sk, pt, item_count=item_count)
-        if source in ('rakuten', 'both') and ra_id:
-            tasks['rakuten'] = executor.submit(rakuten_search, keywords, ra_id, ra_aff, item_count=item_count)
-        for provider, future in tasks.items():
+    if source in ('amazon', 'both'):
+        ak = settings.get('amazon_access_key', '')
+        sk = settings.get('amazon_secret_key', '')
+        pt = settings.get('amazon_partner_tag', '')
+        if all([ak, sk, pt]):
             try:
-                if provider == 'amazon':
-                    amazon_products = future.result(timeout=4)
-                else:
-                    rakuten_products = future.result(timeout=4)
+                amazon_products = amazon_search(keywords, ak, sk, pt, item_count=item_count)
+            except Exception:
+                pass
+
+    rakuten_products = []
+    if source in ('rakuten', 'both'):
+        ra_id = settings.get('rakuten_application_id', '')
+        ra_aff = settings.get('rakuten_affiliate_id', '')
+        if ra_id:
+            try:
+                rakuten_products = rakuten_search(keywords, ra_id, ra_aff, item_count=item_count)
             except Exception:
                 pass
 
@@ -2196,13 +2194,9 @@ def minimum_required_content_chars(quality=None):
     return max(1800, min(target - 500, int(target * 0.65)))
 
 
-def is_short_article_generation(quality=None):
-    return effective_target_chars(quality) <= 3500
-
-
 def claude_max_tokens_for_quality(quality=None, floor=2800, ceiling=8000):
     target = effective_target_chars(quality)
-    return max(floor, min(ceiling, int(target * 1.2) + 1000))
+    return max(floor, min(ceiling, int(target * 1.4) + 1200))
 
 
 def claude_segment_max_tokens(quality=None, total=1):
@@ -2211,7 +2205,7 @@ def claude_segment_max_tokens(quality=None, total=1):
 
 
 def claude_continuation_max_tokens(quality=None):
-    return claude_max_tokens_for_quality(quality, floor=1600, ceiling=3800)
+    return claude_max_tokens_for_quality(quality, floor=1800, ceiling=4500)
 
 
 def build_article_completion_prompt(quality, article_type, has_decoration=False, has_ads=False):
@@ -2234,9 +2228,7 @@ def build_article_completion_prompt(quality, article_type, has_decoration=False,
 """
 
 
-def build_quality_structure_html_prompt(quality, limit=None):
-    if limit is None:
-        limit = 3000 if is_short_article_generation(quality) else 6000
+def build_quality_structure_html_prompt(quality, limit=6000):
     html = str((quality or {}).get('structure_html') or '').strip()
     if not html:
         return ''
@@ -3048,8 +3040,7 @@ def fetch_quality_style_reference(article_type, settings, quality=None):
     url = quality_style_reference_url(article_type, settings, quality)
     if not url:
         return '', ''
-    max_chars = 1200 if is_short_article_generation(quality) else 2000
-    return url, fetch_url_text(url, max_chars=max_chars, timeout=3)
+    return url, fetch_url_text(url)
 
 
 def get_site_credentials(article, settings):
@@ -3216,7 +3207,7 @@ def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if not session.get('authenticated'):
-            if request.path.startswith('/api/') or request.is_json or request.headers.get('Accept') == 'text/event-stream':
+            if request.is_json or request.headers.get('Accept') == 'text/event-stream':
                 return jsonify({'error': '認証が必要です'}), 401
             return redirect(url_for('login_page'))
         return f(*args, **kwargs)
@@ -3727,15 +3718,12 @@ def generate_article(article_id):
 - テーマや読者に合わない表現は使わず、今回の記事内容に自然に合わせてください。
 
 参考記事テキスト:
-{style_reference_text[:1200]}'''
+{style_reference_text[:2500]}'''
 
             prompt += build_quality_structure_html_prompt(quality)
 
             if decoration_has_content(decoration):
-                prompt += decoration_reference_prompt(
-                    decoration,
-                    limit=1800 if is_short_article_generation(quality) else 4000
-                )
+                prompt += decoration_reference_prompt(decoration, limit=4000)
 
             if rakuten_asp_instruction:
                 prompt += rakuten_asp_instruction
@@ -4165,7 +4153,6 @@ def batch_generate():
                 style_reference_url, style_reference_text = style_reference_cache.get(article_type, ('', ''))
                 if article_type not in style_reference_cache:
                     stage = 'fetch style reference'
-                    update_job(current_title=article.get('title', ''), message=f"参考URLを確認中: {article.get('title', '')}")
                     try:
                         style_reference_url, style_reference_text = fetch_quality_style_reference(article_type, settings, quality)
                     except Exception:
@@ -4195,22 +4182,18 @@ def batch_generate():
 - テーマや読者に合わない表現は使わず、今回の記事内容に自然に合わせてください。
 
 参考記事テキスト:
-{style_reference_text[:1200]}'''
+{style_reference_text[:2500]}'''
 
                 prompt += build_quality_structure_html_prompt(quality)
 
                 if decoration_has_content(decoration):
-                    prompt += decoration_reference_prompt(
-                        decoration,
-                        limit=1800 if is_short_article_generation(quality) else 4000
-                    )
+                    prompt += decoration_reference_prompt(decoration, limit=4000)
 
                 rakuten_asp_instruction = build_rakuten_asp_instruction(article, settings)
                 if rakuten_asp_instruction:
                     prompt += rakuten_asp_instruction
 
                 stage = 'build ad product blocks'
-                update_job(current_title=article.get('title', ''), message=f"商品APIを確認中: {article.get('title', '')}")
                 ad_definition = select_ad_definition({**data, 'article_type': article_type}, article)
                 product_blocks, ad_instruction = build_ad_product_blocks(
                     article, settings, ad_definition, include_amazon=include_amazon, include_rakuten=include_rakuten
@@ -4230,7 +4213,6 @@ def batch_generate():
                 )
 
                 stage = 'generate content'
-                update_job(current_title=article.get('title', ''), message=f"Claude生成中: {article.get('title', '')}")
                 if article_type == 'ranking' and client and should_use_segmented_generation(article_type, quality):
                     raw_content, usage_parts = generate_segmented_article_sync(
                         client,
