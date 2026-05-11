@@ -3610,6 +3610,7 @@ function renderBatchJobStatus(job) {
   const isRunning = job?.status === 'running' || generatingCount > 0;
   const completed = Number(job?.completed || 0);
   const failed = Number(job?.failed || 0);
+  const retried = Number(job?.retried || 0);
   const total = Number(job?.total || generatingCount);
   const done = Math.min(total, completed + failed);
   const percent = total ? Math.round((done / total) * 100) : 0;
@@ -3619,7 +3620,7 @@ function renderBatchJobStatus(job) {
   if (countEl) countEl.textContent = `${done}/${total}件`;
   if (currentEl) currentEl.textContent = job?.current_title ? `処理中: ${job.current_title}` : '';
   if (isRunning) {
-    el.innerHTML = `一括生成中: ${completed}/${total}件完了${failed ? ` / エラー ${failed}件` : ''}<br>ページを移動しても処理は継続します。戻ってきたら自動で状況を更新します。`;
+    el.innerHTML = `一括生成中: ${completed}/${total}件完了${failed ? ` / エラー ${failed}件` : ''}${retried ? ` / 自動リトライ ${retried}回` : ''}<br>${esc(job?.message || 'ページを移動しても処理は継続します。戻ってきたら自動で状況を更新します。')}`;
     startBatchPolling();
     return;
   }

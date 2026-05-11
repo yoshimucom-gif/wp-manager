@@ -9,6 +9,7 @@ import io
 import math
 import hashlib
 import difflib
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from functools import wraps
@@ -40,6 +41,10 @@ try:
     CLAUDE_ARTICLE_CONTINUATION_MAX_ROUNDS = int(os.environ.get('CLAUDE_ARTICLE_CONTINUATION_MAX_ROUNDS', '4'))
 except ValueError:
     CLAUDE_ARTICLE_CONTINUATION_MAX_ROUNDS = 4
+try:
+    BATCH_GENERATION_MAX_RETRIES = int(os.environ.get('BATCH_GENERATION_MAX_RETRIES', '2'))
+except ValueError:
+    BATCH_GENERATION_MAX_RETRIES = 2
 DEFAULT_ARTICLE_TARGET_CHARS = 5000
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
@@ -3033,6 +3038,8 @@ def batch_generate():
         'total': len(pending),
         'completed': 0,
         'failed': 0,
+        'retried': 0,
+        'max_retries': BATCH_GENERATION_MAX_RETRIES,
         'current_title': '',
         'article_ids': [a['id'] for a in pending],
         'started_at': now,
@@ -3066,9 +3073,17 @@ def batch_generate():
         client = anthropic.Anthropic(api_key=api_key)
         completed = 0
         failed = 0
-        for article in pending:
+        retried = 0
+        attempt_counts = {}
+        queue_articles = list(pending)
+        while queue_articles:
+            article = queue_articles.pop(0)
+            article_id = article.get('id')
+            attempt_counts[article_id] = attempt_counts.get(article_id, 0) + 1
+            attempt_no = attempt_counts[article_id]
             try:
-                update_job(current_title=article.get('title', ''), message=f"生成中: {article.get('title', '')}")
+                retry_suffix = f"（リトライ{attempt_no - 1}/{BATCH_GENERATION_MAX_RETRIES}）" if attempt_no > 1 else ''
+                update_job(current_title=article.get('title', ''), message=f"生成中{retry_suffix}: {article.get('title', '')}")
                 article_type = normalize_article_type(article.get('article_type') or batch_article_type, batch_article_type)
                 if not str(article.get('ad_keywords') or '').strip():
                     article['ad_keywords'] = infer_ad_keywords_from_title(
@@ -3222,26 +3237,51 @@ def batch_generate():
                         break
                 save_articles(current_articles)
                 completed += 1
-                update_job(completed=completed, failed=failed, message=f"{completed}/{len(pending)}件生成済み")
+                update_job(completed=completed, failed=failed, retried=retried, message=f"{completed}/{len(pending)}件生成済み")
             except Exception as e:
+                if attempt_no <= BATCH_GENERATION_MAX_RETRIES:
+                    retried += 1
+                    current_articles = load_articles()
+                    for a in current_articles:
+                        if a['id'] == article['id']:
+                            a['status'] = 'generating'
+                            a['error'] = f'一時エラーのため自動リトライ待ち: {str(e)}'
+                            a['generation_retry_count'] = attempt_no
+                            a['updated_at'] = datetime.now().isoformat()
+                            break
+                    save_articles(current_articles)
+                    queue_articles.append(article)
+                    update_job(
+                        completed=completed,
+                        failed=failed,
+                        retried=retried,
+                        current_title=article.get('title', ''),
+                        message=f"一時エラー。後で自動リトライします（{attempt_no}/{BATCH_GENERATION_MAX_RETRIES}）: {article.get('title', '')}"
+                    )
+                    time.sleep(min(10, 2 * attempt_no))
+                    continue
                 current_articles = load_articles()
                 for a in current_articles:
                     if a['id'] == article['id']:
                         a['status'] = 'error'
                         a['error'] = str(e)
                         a.pop('batch_job_id', None)
+                        a['generation_retry_count'] = attempt_no - 1
+                        a['updated_at'] = datetime.now().isoformat()
+                        a['generation_finished_at'] = a['updated_at']
                         break
                 save_articles(current_articles)
                 failed += 1
-                update_job(completed=completed, failed=failed, message=f"{completed}件生成済み / {failed}件エラー")
+                update_job(completed=completed, failed=failed, retried=retried, message=f"{completed}件生成済み / {failed}件エラー / リトライ {retried}回")
         final_status = 'completed' if failed == 0 else 'completed_with_errors'
         update_job(
             status=final_status,
             current_title='',
             completed=completed,
             failed=failed,
+            retried=retried,
             completed_at=datetime.now().isoformat(),
-            message=f"一括生成完了: 成功 {completed}件 / エラー {failed}件"
+            message=f"一括生成完了: 成功 {completed}件 / エラー {failed}件 / 自動リトライ {retried}回"
         )
 
     thread = threading.Thread(target=run_batch, daemon=True)
