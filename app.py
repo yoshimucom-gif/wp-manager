@@ -1163,6 +1163,14 @@ def enhance_generated_article_html(content, article, article_type):
     return format_block_html(''.join(str(child) for child in root.contents))
 
 
+def safe_enhance_generated_article_html(content, article, article_type):
+    try:
+        return enhance_generated_article_html(content, article, article_type), ''
+    except Exception as e:
+        html = sanitize_generated_html(content)
+        return format_block_html(html), f'HTML整形をスキップしました: {e}'
+
+
 def block_attrs(attrs=None):
     return '' if not attrs else ' ' + json.dumps(attrs, ensure_ascii=False, separators=(',', ':'))
 
@@ -2124,6 +2132,27 @@ def build_ad_product_blocks(article, settings, ad_definition=None, include_amazo
     return product_blocks, prompt
 
 
+def insert_product_blocks_into_content(content, product_blocks, insertion_position='auto'):
+    blocks = [str(block or '').strip() for block in (product_blocks or []) if str(block or '').strip()]
+    if not blocks:
+        return content
+    insert_html = '\n\n' + '\n\n'.join(blocks) + '\n\n'
+    html = str(content or '')
+    position = insertion_position or 'auto'
+    if position == 'after_intro':
+        match = re.search(r'</p\s*>', html, flags=re.I)
+        if match:
+            return html[:match.end()] + insert_html + html[match.end():]
+    if position == 'after_comparison':
+        match = re.search(r'</table\s*>', html, flags=re.I)
+        if match:
+            return html[:match.end()] + insert_html + html[match.end():]
+    summary = re.search(r'<h2\b[^>]*>[^<]*(?:まとめ|結論)[^<]*</h2\s*>', html, flags=re.I)
+    if summary:
+        return html[:summary.start()] + insert_html + html[summary.start():]
+    return html + insert_html
+
+
 def normalize_digits(text):
     return str(text or '').translate(str.maketrans('０１２３４５６７８９', '0123456789'))
 
@@ -2277,6 +2306,41 @@ def build_article_continuation_prompt(article, article_type, quality, current_co
 {article_html_output_rules()}
 
 現在までの本文（この続きだけを書く。重複禁止）:
+{current_tail}
+"""
+
+
+def build_article_polish_prompt(article, article_type, quality, current_content, warning_text=''):
+    target = effective_target_chars(quality)
+    minimum = minimum_required_content_chars(quality)
+    current_chars = len(html_to_text(current_content))
+    current_tail = str(current_content or '')[-20000:]
+    return f"""以下のWordPress本文HTMLを、記事として完成度が高い状態へ整えてください。
+
+タイトル: {article.get('title', '')}
+キーワード: {article.get('keywords', '')}
+カテゴリー: {article.get('category', '')}
+記事種別: {article_type}
+現在の本文文字数: {current_chars}文字
+目標本文文字数: {target}文字前後
+最低本文文字数: {minimum}文字以上
+改善理由・不足:
+{warning_text or '導入、見出し、判断材料、FAQ、まとめを読みやすく整える'}
+
+やること:
+- 既存本文の内容を活かし、WordPress本文HTMLとして全文を出力してください。
+- 文字数が不足している場合は、重複せずに不足分を追加してください。
+- 導入で結論を早めに示し、メリット・デメリット・注意点・向いている人を補強してください。
+- 最後は必ず「まとめ」セクションで完結させてください。
+- 商品リンクや広告カードは新規作成しないでください。装飾HTMLも過剰に増やさないでください。
+- 説明文、作業メモ、Markdown、コードフェンスは禁止です。
+
+{build_article_type_prompt(article_type)}
+{build_ranking_count_prompt(article, article_type)}
+{build_ranking_structure_prompt(article, article_type)}
+{article_html_output_rules()}
+
+現在の本文HTML:
 {current_tail}
 """
 
@@ -3776,7 +3840,7 @@ def generate_article(article_id):
                 )
                 usage_parts.append(build_article_usage(prompt, full_content, final_message))
 
-            clean_content = enhance_generated_article_html(full_content, article_work, article_type)
+            clean_content, enhance_warning = safe_enhance_generated_article_html(full_content, article_work, article_type)
             validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
             content_chars = len(html_to_text(clean_content))
             continuation_round = 0
@@ -3803,7 +3867,9 @@ def generate_article(article_id):
                 usage_parts.append(build_article_usage(continuation_prompt, continuation_text, continuation_message))
                 if not html_to_text(continuation_text).strip():
                     break
-                clean_content = enhance_generated_article_html(full_content, article_work, article_type)
+                clean_content, continuation_enhance_warning = safe_enhance_generated_article_html(full_content, article_work, article_type)
+                if continuation_enhance_warning and not enhance_warning:
+                    enhance_warning = continuation_enhance_warning
                 validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
                 content_chars = len(html_to_text(clean_content))
 
@@ -3811,7 +3877,7 @@ def generate_article(article_id):
             for a in current_articles:
                 if a['id'] == article_id:
                     similarity = content_similarity(previous_content, clean_content) if is_regeneration else 0
-                    generation_warning = ''
+                    generation_warning = enhance_warning or ''
                     if not validation_error and content_chars < 500:
                         validation_error = f'生成結果が短すぎます（{content_chars}文字）。Claude生成が途中で止まった可能性があります。もう一度生成してください。'
                     if not validation_error and is_regeneration and similarity >= 0.985:
@@ -3979,7 +4045,7 @@ def generate_article_direct(article_id):
                 quality,
                 product_blocks
             )
-        clean_content = enhance_generated_article_html(raw_content, article_work, article_type)
+        clean_content, enhance_warning = safe_enhance_generated_article_html(raw_content, article_work, article_type)
         validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
         content_chars = len(html_to_text(clean_content))
         if not validation_error and content_chars < 500:
@@ -4016,7 +4082,10 @@ def generate_article_direct(article_id):
                 a['last_generation_chars'] = content_chars
                 a['last_generation_similarity'] = round(similarity, 4)
                 a.pop('error', None)
-                a.pop('generation_warning', None)
+                if enhance_warning:
+                    a['generation_warning'] = enhance_warning
+                else:
+                    a.pop('generation_warning', None)
                 a.pop('last_generation_interrupted', None)
                 append_generation_usage(a, usage, str(uuid.uuid4()), generated_at, clean_content)
                 apply_score_fields(a)
@@ -4136,6 +4205,8 @@ def batch_generate():
                 retry_suffix = f"（リトライ{attempt_no - 1}/{BATCH_GENERATION_MAX_RETRIES}）" if attempt_no > 1 else ''
                 update_job(current_title=article.get('title', ''), message=f"生成中{retry_suffix}: {article.get('title', '')}")
                 article_type = normalize_article_type(article.get('article_type') or batch_article_type, batch_article_type)
+                use_generation_extras = False
+                pipeline_warnings = []
                 if not api_key and article_type != 'ranking':
                     raise ValueError('Claude APIキーが設定されていません')
                 if not str(article.get('ad_keywords') or '').strip():
@@ -4151,7 +4222,7 @@ def batch_generate():
                 )
                 regeneration_instruction = build_regeneration_instruction(article.get('content', ''))
                 style_reference_url, style_reference_text = style_reference_cache.get(article_type, ('', ''))
-                if article_type not in style_reference_cache:
+                if use_generation_extras and article_type not in style_reference_cache:
                     stage = 'fetch style reference'
                     try:
                         style_reference_url, style_reference_text = fetch_quality_style_reference(article_type, settings, quality)
@@ -4186,18 +4257,20 @@ def batch_generate():
 
                 prompt += build_quality_structure_html_prompt(quality)
 
-                if decoration_has_content(decoration):
+                if use_generation_extras and decoration_has_content(decoration):
                     prompt += decoration_reference_prompt(decoration, limit=4000)
 
                 rakuten_asp_instruction = build_rakuten_asp_instruction(article, settings)
-                if rakuten_asp_instruction:
+                if use_generation_extras and rakuten_asp_instruction:
                     prompt += rakuten_asp_instruction
 
-                stage = 'build ad product blocks'
                 ad_definition = select_ad_definition({**data, 'article_type': article_type}, article)
-                product_blocks, ad_instruction = build_ad_product_blocks(
-                    article, settings, ad_definition, include_amazon=include_amazon, include_rakuten=include_rakuten
-                )
+                product_blocks, ad_instruction = [], ''
+                if use_generation_extras:
+                    stage = 'build ad product blocks'
+                    product_blocks, ad_instruction = build_ad_product_blocks(
+                        article, settings, ad_definition, include_amazon=include_amazon, include_rakuten=include_rakuten
+                    )
                 if ad_instruction:
                     prompt += ad_instruction
                 if product_blocks:
@@ -4208,8 +4281,8 @@ def batch_generate():
                 prompt += build_article_completion_prompt(
                     quality,
                     article_type,
-                    has_decoration=decoration_has_content(decoration),
-                    has_ads=bool(product_blocks or ad_instruction or rakuten_asp_instruction)
+                    has_decoration=False,
+                    has_ads=False
                 )
 
                 stage = 'generate content'
@@ -4253,7 +4326,9 @@ def batch_generate():
                     raw_content = anthropic_message_text(message)
                     usage_parts = [build_article_usage(prompt, raw_content, message)]
                 stage = 'enhance and validate content'
-                content = enhance_generated_article_html(raw_content, article, article_type)
+                content, enhance_warning = safe_enhance_generated_article_html(raw_content, article, article_type)
+                if enhance_warning:
+                    pipeline_warnings.append(enhance_warning)
                 validation_error = validate_generated_article(article, article_type, content, quality)
                 content_chars = len(html_to_text(content))
                 continuation_round = 0
@@ -4276,13 +4351,17 @@ def batch_generate():
                     if not html_to_text(continuation_text).strip():
                         break
                     raw_content += '\n' + continuation_text
-                    content = enhance_generated_article_html(raw_content, article, article_type)
+                    content, enhance_warning = safe_enhance_generated_article_html(raw_content, article, article_type)
+                    if enhance_warning:
+                        pipeline_warnings.append(enhance_warning)
                     validation_error = validate_generated_article(article, article_type, content, quality)
                     content_chars = len(html_to_text(content))
                 if not validation_error and content_chars < 500:
                     validation_error = f'生成結果が短すぎます（{content_chars}文字）。Claude生成が途中で止まった可能性があります。もう一度生成してください。'
                 if validation_error:
-                    raise ValueError(validation_error)
+                    if content_chars < 500:
+                        raise ValueError(validation_error)
+                    pipeline_warnings.append(validation_error)
                 generated_at = datetime.now().isoformat()
                 run_id = str(uuid.uuid4())
 
@@ -4296,7 +4375,10 @@ def batch_generate():
                         a.pop('error', None)
                         a.pop('error_stage', None)
                         a.pop('error_trace', None)
-                        a.pop('generation_warning', None)
+                        if pipeline_warnings:
+                            a['generation_warning'] = ' / '.join(dict.fromkeys(pipeline_warnings))
+                        else:
+                            a.pop('generation_warning', None)
                         a.pop('last_generation_interrupted', None)
                         a['quality_id'] = quality.get('id') if quality else quality_id
                         a['article_type'] = article_type
@@ -4304,6 +4386,7 @@ def batch_generate():
                         a['decoration_id'] = decoration_id or a.get('decoration_id')
                         if ad_definition:
                             a['ad_definition_id'] = ad_definition.get('id')
+                        a['generation_phase'] = 'base_saved'
                         a['generated_at'] = generated_at
                         a['updated_at'] = generated_at
                         a['content_hash'] = content_hash(content)
@@ -4312,6 +4395,77 @@ def batch_generate():
                         apply_score_fields(a)
                         break
                 save_articles(current_articles)
+                stage = 'postprocess article'
+                postprocess_warnings = []
+                try:
+                    post_content = content
+                    if client:
+                        update_job(current_title=article.get('title', ''), message=f"本文保存済み。品質改善中: {article.get('title', '')}")
+                        polish_prompt = build_article_polish_prompt(
+                            article,
+                            article_type,
+                            quality,
+                            post_content,
+                            ' / '.join(pipeline_warnings)
+                        )
+                        polish_message = create_claude_message(
+                            client,
+                            polish_prompt,
+                            max_tokens=claude_max_tokens_for_quality(quality, floor=2400, ceiling=7000)
+                        )
+                        polished_raw = anthropic_message_text(polish_message)
+                        polished_content, enhance_warning = safe_enhance_generated_article_html(polished_raw, article, article_type)
+                        if enhance_warning:
+                            postprocess_warnings.append(enhance_warning)
+                        if len(html_to_text(polished_content)) >= max(500, int(len(html_to_text(post_content)) * 0.75)):
+                            post_content = polished_content
+                            usage_parts.append(build_article_usage(polish_prompt, polished_raw, polish_message))
+                        else:
+                            postprocess_warnings.append('品質改善後の本文が短すぎたため、本文生成直後の内容を維持しました。')
+
+                    update_job(current_title=article.get('title', ''), message=f"本文保存済み。広告・装飾を後処理中: {article.get('title', '')}")
+                    product_blocks, _ad_instruction = build_ad_product_blocks(
+                        article, settings, ad_definition, include_amazon=include_amazon, include_rakuten=include_rakuten
+                    )
+                    post_content = insert_product_blocks_into_content(
+                        post_content,
+                        product_blocks,
+                        (ad_definition or {}).get('insertion_position', 'auto')
+                    )
+                    if post_content != content:
+                        post_content, enhance_warning = safe_enhance_generated_article_html(post_content, article, article_type)
+                        if enhance_warning:
+                            postprocess_warnings.append(enhance_warning)
+                        post_generated_at = datetime.now().isoformat()
+                        current_articles = load_articles()
+                        for a in current_articles:
+                            if a['id'] == article['id']:
+                                a['content'] = post_content
+                                a['generation_phase'] = 'postprocessed'
+                                a['updated_at'] = post_generated_at
+                                a['content_hash'] = content_hash(post_content)
+                                a['last_generation_chars'] = len(html_to_text(post_content))
+                                usage = combine_article_usages(usage_parts)
+                                a['usage'] = usage
+                                warnings = pipeline_warnings + postprocess_warnings
+                                if warnings:
+                                    a['generation_warning'] = ' / '.join(dict.fromkeys(warnings))
+                                else:
+                                    a.pop('generation_warning', None)
+                                apply_score_fields(a)
+                                break
+                        save_articles(current_articles)
+                except Exception as post_error:
+                    postprocess_warnings.append(f'広告・装飾後処理をスキップしました: {post_error}')
+                    current_articles = load_articles()
+                    for a in current_articles:
+                        if a['id'] == article['id']:
+                            warnings = pipeline_warnings + postprocess_warnings
+                            a['generation_warning'] = ' / '.join(dict.fromkeys(warnings))
+                            a['generation_phase'] = 'base_saved_with_postprocess_warning'
+                            a['updated_at'] = datetime.now().isoformat()
+                            break
+                    save_articles(current_articles)
                 completed += 1
                 update_job(completed=completed, failed=failed, retried=retried, message=f"{completed}/{len(pending)}件生成済み")
             except Exception as e:

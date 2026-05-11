@@ -3712,6 +3712,12 @@ async function waitForSingleGenerateCompletion(articleId, jobId) {
     const article = allArticles.find(a => a.id === articleId);
     const job = await loadBatchJob(jobId) || await loadLatestBatchJob();
     if (article?.status === 'generated' && article.content) {
+      if (output) output.textContent = article.content;
+      if (job?.status === 'running' && article.generation_phase === 'base_saved') {
+        if (progressNote) progressNote.textContent = '本文は保存済みです。品質改善と広告・装飾の後処理を続けています。';
+        if (fill) fill.style.width = '75%';
+        continue;
+      }
       const usage = article.usage || null;
       await finalizeGenerateSuccess(articleId, {
         content_chars: article.last_generation_chars || generatedTextLength(article.content),
