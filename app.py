@@ -372,7 +372,7 @@ def default_quality_presets():
 - 他サイトの一般論の要約で終わらせず、比較軸、選び方、判断コメント、失敗回避ポイントを入れる
 - 価格、効果、口コミ、仕様、ランキング根拠など未確認情報は断定しない
 - h2/h3の階層を崩さず、1見出し1テーマで整理する
-- 読者が判断に迷う箇所にはFAQ、比較表、チェックリスト、注意ボックスを使う
+- 読者が判断に迷う箇所にはFAQ、比較表、チェックリスト、リストを使う
 - 広告やCTAは文脈に合う場所だけに置き、押し売りにしない
 - 本文にAIの説明文、Markdown、Gutenbergコメント、サンプル文を出さない""",
             "target_chars": "2500",
@@ -718,7 +718,8 @@ def article_html_output_rules():
 - <style>、<script>、<html>、<body>、<article>、<main>、iframe、form、input、buttonは出力しない
 - tableを使う場合は <table><thead><tbody><tr><th><td> を正しく閉じ、tableの外に他要素が漏れないようにする
 - WordPress/Gutenbergコメント（<!-- wp:... -->、<!-- /wp:... -->）は出力しない
-- 装飾サンプルはCSSクラスや構造の参考にするだけ。サンプル本文、人物画像URL、質問文、回答文、プレースホルダーは流用しない
+- 装飾は <strong>太字</strong>、<span style="color:#d32f2f">赤字</span>、<mark>マーカー</mark>、<ul><li>リスト</li></ul>、<table>表</table> だけを使う
+- 装飾目的の複雑なdiv、独自class、吹き出し、ボックス、カード、GutenbergブロックHTMLは出力しない
 - 比較表は横幅が崩れにくいように列を増やしすぎず、セル内は短くする
 - 1つの<p>は長くしすぎず、原則2〜3文で区切る。長い説明は複数段落に分ける
 - 断定しすぎず、選び方・比較理由・向いている人・注意点を具体的に書く
@@ -754,45 +755,11 @@ def decoration_has_content(decoration):
 
 
 def decoration_reference_prompt(decoration, limit=4000):
-    if isinstance(decoration, dict):
-        sample = str(decoration.get('sample_html') or '').strip()
-        blocks = normalize_decoration_blocks(decoration.get('blocks'))
-    else:
-        sample = str(decoration or '').strip()
-        blocks = []
-    if not sample and not blocks:
-        return ''
-    block_sections = []
-    per_block_limit = 2200
-    for block in blocks[:12]:
-        block_sections.append(f"""[block: {block.get('type')} / {block.get('name')}]
-使用場面: {block.get('usage') or '本文の流れに合う箇所で使用'}
-HTML:
-{block.get('html', '')[:per_block_limit]}""")
-    block_prompt = ''
-    if block_sections:
-        block_prompt = f"""
-
-装飾ブロック定義（用途一致時は優先使用）:
-- FAQを書くときはFAQブロック、要点整理は要点ボックス、注意喚起は注意ボックスなど、用途が一致するブロックを優先してください
-- HTML構造・class名は維持し、本文・質問・回答・商品名などの中身だけを記事テーマに合わせて置き換えてください
-- ブロック定義にない用途では無理に使わず、本文が読みやすくなる範囲で使用してください
-
---- 装飾ブロックここから ---
-{chr(10).join(block_sections)}
---- 装飾ブロックここまで ---"""
     return f"""
-装飾サンプルHTML（参考専用・本文にコピー禁止）:
-- 以下はCSSクラス、ボックス構造、見出し構造、装飾パターンを学ぶための資料です
-- サンプル本文、画像URL、質問文、回答文、プレースホルダー、Gutenbergコメントをそのまま出力しないでください
-- 記事テーマに合わせて中身を必ず置き換え、壊れたHTMLや途中で切れたブロックは出力しないでください
-- 本文内に、要点ボックス・注意点ボックス・FAQ前の補足など、最低2箇所は装飾要素を使ってください
-- 重要文には必要に応じて <mark class="dbp-e-marker" style="background-image:linear-gradient(to bottom,transparent 0%,#FFF387 0%)">...</mark> を使ってください
-{block_prompt}
-
---- 装飾サンプルここから ---
-{sample[:limit]}
---- 装飾サンプルここまで ---"""
+装飾方針:
+- 装飾定義の複雑なHTMLは使わないでください。
+- 使用してよい装飾は <strong>太字</strong>、<span style="color:#d32f2f">赤字</span>、<mark>マーカー</mark>、<ul><li>リスト</li></ul>、<table>表</table> のみです。
+- 吹き出し、ボックス、カード、独自class、Gutenbergコメントは出力しないでください。"""
 
 
 def strip_wp_block_artifacts(html):
@@ -1030,7 +997,7 @@ def split_plain_paragraphs(soup):
 def add_marker_to_first_keyword(soup, keyword):
     if not keyword:
         return
-    if soup.select_one('mark.dbp-e-marker'):
+    if soup.select_one('mark'):
         return
     for p in soup.find_all('p'):
         if p.find(['a', 'img', 'table', 'ul', 'ol', 'div', 'mark']):
@@ -1043,8 +1010,6 @@ def add_marker_to_first_keyword(soup, keyword):
         target = text[index:index + len(keyword)]
         after = text[index + len(keyword):]
         marker = soup.new_tag('mark')
-        marker['class'] = 'dbp-e-marker'
-        marker['style'] = 'background-image:linear-gradient(to bottom,transparent 0%,#FFF387 0%)'
         marker.string = target
         p.clear()
         if before:
@@ -1053,31 +1018,6 @@ def add_marker_to_first_keyword(soup, keyword):
         if after:
             p.append(after)
         return
-
-
-def wrap_first_list_as_frame(soup, keyword):
-    if soup.select_one('.dbp-frame'):
-        return
-    target = None
-    for ul in soup.find_all(['ul', 'ol']):
-        if ul.find_parent(['table']) or ul.find_parent(class_='affiros9-rinker'):
-            continue
-        if len(ul.find_all('li', recursive=False)) >= 2:
-            target = ul
-            break
-    if not target:
-        return
-    frame = soup.new_tag('div')
-    frame['class'] = 'wp-block-dbp-frame l-frame-float is-design-voice is-frame-style-good dbp-frame'
-    title = soup.new_tag('div')
-    title['class'] = 'dbp-frame-title'
-    title.string = f'{keyword}選びで押さえるポイント' if keyword else 'この記事で押さえるポイント'
-    body = soup.new_tag('div')
-    body['class'] = 'dbp-frame-content has-content-gap'
-    target.replace_with(frame)
-    frame.append(title)
-    frame.append(body)
-    body.append(target)
 
 
 def format_block_html(html):
@@ -1118,25 +1058,8 @@ def enhance_generated_article_html_fallback(html, keyword, article_type):
         return ''.join(f'<p{attrs}>{chunk.strip()}</p>' for chunk in chunks)
     html = re.sub(r'<p([^>]*)>([^<]{100,})</p>', paragraph_repl, html, flags=re.I)
 
-    if keyword:
-        marker = '<mark class="dbp-e-marker" style="background-image:linear-gradient(to bottom,transparent 0%,#FFF387 0%)">'
-        if 'dbp-e-marker' not in html and keyword in html:
-            html = html.replace(keyword, f'{marker}{escape(keyword)}</mark>', 1)
-
-    if 'dbp-frame' not in html:
-        frame_title = f'{keyword}選びで押さえるポイント' if keyword else 'この記事で押さえるポイント'
-        def list_repl(match):
-            list_html = match.group(0)
-            if len(re.findall(r'<li\b', list_html, flags=re.I)) < 2:
-                return list_html
-            return (
-                '<div class="wp-block-dbp-frame l-frame-float is-design-voice is-frame-style-good dbp-frame">'
-                f'<div class="dbp-frame-title">{escape(frame_title)}</div>'
-                '<div class="dbp-frame-content has-content-gap">'
-                f'{list_html}'
-                '</div></div>'
-            )
-        html = re.sub(r'<(?:ul|ol)\b[\s\S]*?</(?:ul|ol)>', list_repl, html, count=1, flags=re.I)
+    if keyword and '<mark' not in html and keyword in html:
+        html = html.replace(keyword, f'<mark>{escape(keyword)}</mark>', 1)
     return html
 
 
@@ -1159,7 +1082,6 @@ def enhance_generated_article_html(content, article, article_type):
             heading.string = keyword_heading_text(heading.get_text(' ', strip=True), keyword, article_type)
     split_plain_paragraphs(root)
     add_marker_to_first_keyword(root, keyword)
-    wrap_first_list_as_frame(root, keyword)
     return format_block_html(''.join(str(child) for child in root.contents))
 
 
@@ -1667,7 +1589,7 @@ def score_article_content(title, content, keywords=''):
         score += 9
     else:
         score += 2
-        suggestions.append('比較表・箇条書き・要点ボックスを入れてスキャンしやすくしてください。')
+        suggestions.append('比較表・箇条書きを入れてスキャンしやすくしてください。')
 
     if image_count:
         score += 4
@@ -2242,7 +2164,7 @@ def build_article_completion_prompt(quality, article_type, has_decoration=False,
     minimum = minimum_required_content_chars(quality)
     extras = []
     if has_decoration:
-        extras.append('- 装飾HTMLは本文を読みやすくする範囲で使い、装飾サンプルの文言やプレースホルダーを残さないでください。')
+        extras.append('- 装飾は太字、赤字、マーカー、リスト、表だけに絞り、複雑なボックスや独自classは使わないでください。')
     if has_ads:
         extras.append('- 広告カード・商品リンクHTMLは自然な位置に入れてください。ただし広告HTMLだけで本文量を稼がず、本文解説を十分に書いてください。')
     extra_text = '\n'.join(extras)
@@ -2332,7 +2254,7 @@ def build_article_polish_prompt(article, article_type, quality, current_content,
 - 文字数が不足している場合は、重複せずに不足分を追加してください。
 - 導入で結論を早めに示し、メリット・デメリット・注意点・向いている人を補強してください。
 - 最後は必ず「まとめ」セクションで完結させてください。
-- 商品リンクや広告カードは新規作成しないでください。装飾HTMLも過剰に増やさないでください。
+- 商品リンクや広告カードは新規作成しないでください。装飾は太字・赤字・マーカー・リスト・表だけに絞ってください。
 - 説明文、作業メモ、Markdown、コードフェンスは禁止です。
 
 {build_article_type_prompt(article_type)}
@@ -2528,11 +2450,12 @@ def build_structured_ranking_html(article, plan, product_blocks=None):
     html = []
     html.append(html_p(f'「{subject}をできるだけ失敗なく選びたい」「価格を抑えつつ、使いやすいものを見つけたい」と考えている方は多いのではないでしょうか。{plan["lead_angle"]}'))
     html.append(html_p(f'この記事では、{subject}を選ぶときに確認したい基準を整理しながら、用途や価格とのバランスを見ておすすめ候補を{count}件紹介します。比較表、順位ごとの理由、選び方、FAQまでまとめているので、購入前の判断材料として使えます。'))
-    html.append('<div class="wp-block-dbp-frame l-frame-float is-design-voice is-frame-style-good dbp-frame"><div class="dbp-frame-title">この記事でわかること</div><div class="dbp-frame-content has-content-gap"><ul class="wp-block-list">')
+    html.append('<h2 class="wp-block-heading">この記事でわかること</h2>')
+    html.append('<ul>')
     html.append(html_li(f'{subject}を選ぶときの重要な比較ポイント'))
     html.append(html_li(f'コスパ重視で検討しやすい{count}候補の違い'))
     html.append(html_li('迷ったときにどのタイプを選ぶべきか'))
-    html.append('</ul></div></div>')
+    html.append('</ul>')
 
     html.append(f'<h2 class="wp-block-heading">まず結論：{subject}おすすめ早見表</h2>')
     html.append(html_p('先に全体像を確認できるよう、特徴と向いている人を一覧にしました。詳しい理由は後半の個別解説で確認できます。'))
@@ -2785,7 +2708,7 @@ def build_segment_prompt(base_prompt, article, article_type, quality, step, inde
 - Gutenbergコメント（<!-- wp:... -->）は出力しないでください。
 - h2/h3見出しには、できるだけ狙う主要KW「{main_keyword}」を自然に含めてください。
 - <p>は長くしすぎず、2〜3文ごとに分けてください。長い説明は段落を増やしてください。
-- 重要な結論・注意点・選び方の要点には、ボックス、箇条書き、マーカーなどの装飾を自然に使ってください。
+- 重要な結論・注意点・選び方の要点には、太字、赤字、マーカー、リスト、表だけを自然に使ってください。
 - Amazon・楽天リンクは、共通追加指示で渡された商品カードHTML以外から勝手に作らないでください。
 
 現在までの本文（重複禁止・文脈確認用）:
@@ -3219,9 +3142,9 @@ def get_rewrite_style_prompt(data, settings):
     }
     decoration_map = {
         'none': '装飾は追加せず、基本的なHTMLタグだけを使う',
-        'light': '重要箇所に軽くボックスやリストを入れる',
-        'standard': '見出し、ボックス、リスト、CTAを標準的に整える',
-        'rich': '比較表、注意ボックス、まとめ、CTAなどをしっかり使う',
+        'light': '太字、マーカー、リストを軽く使う',
+        'standard': '太字、赤字、マーカー、リスト、表だけで読みやすく整える',
+        'rich': '太字、赤字、マーカー、リスト、表を使うが、複雑なボックスや独自classは使わない',
     }
 
     prompt = f"""
@@ -3252,9 +3175,7 @@ def get_rewrite_style_prompt(data, settings):
 
     decoration_id = data.get('decoration_id')
     decoration = next((d for d in load_decorations() if d['id'] == decoration_id), None) if decoration_id else None
-    if decoration_has_content(decoration):
-        prompt += decoration_reference_prompt(decoration, limit=5000)
-    elif safe_article_css(settings.get('article_css')):
+    if safe_article_css(settings.get('article_css')):
         prompt += f"""
 
 サイト共通CSS:
@@ -3787,7 +3708,7 @@ def generate_article(article_id):
             prompt += build_quality_structure_html_prompt(quality)
 
             if decoration_has_content(decoration):
-                prompt += decoration_reference_prompt(decoration, limit=4000)
+                prompt += '\n\n装飾方針:\n- 装飾定義の複雑なHTMLは使わず、太字・赤字・マーカー・リスト・表だけで読みやすくしてください。'
 
             if rakuten_asp_instruction:
                 prompt += rakuten_asp_instruction
@@ -4258,7 +4179,7 @@ def batch_generate():
                 prompt += build_quality_structure_html_prompt(quality)
 
                 if use_generation_extras and decoration_has_content(decoration):
-                    prompt += decoration_reference_prompt(decoration, limit=4000)
+                    prompt += '\n\n装飾方針:\n- 装飾定義の複雑なHTMLは使わず、太字・赤字・マーカー・リスト・表だけで読みやすくしてください。'
 
                 rakuten_asp_instruction = build_rakuten_asp_instruction(article, settings)
                 if use_generation_extras and rakuten_asp_instruction:
