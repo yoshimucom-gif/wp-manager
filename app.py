@@ -723,10 +723,62 @@ def article_html_output_rules():
 - Amazon・楽天のリンクは、こちらが渡した商品カードHTML以外では新規作成しない"""
 
 
-def decoration_reference_prompt(sample_html, limit=4000):
-    sample = str(sample_html or '').strip()
-    if not sample:
+def normalize_decoration_blocks(blocks):
+    normalized = []
+    if not isinstance(blocks, list):
+        return normalized
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        block_type = str(block.get('type') or 'custom').strip()[:40] or 'custom'
+        name = str(block.get('name') or '').strip()[:80]
+        usage = str(block.get('usage') or '').strip()[:300]
+        html = str(block.get('html') or '').strip()
+        if not html:
+            continue
+        normalized.append({
+            'type': block_type,
+            'name': name or block_type,
+            'usage': usage,
+            'html': html[:8000],
+        })
+    return normalized
+
+
+def decoration_has_content(decoration):
+    if not decoration:
+        return False
+    return bool(str(decoration.get('sample_html') or '').strip() or normalize_decoration_blocks(decoration.get('blocks')))
+
+
+def decoration_reference_prompt(decoration, limit=4000):
+    if isinstance(decoration, dict):
+        sample = str(decoration.get('sample_html') or '').strip()
+        blocks = normalize_decoration_blocks(decoration.get('blocks'))
+    else:
+        sample = str(decoration or '').strip()
+        blocks = []
+    if not sample and not blocks:
         return ''
+    block_sections = []
+    per_block_limit = 2200
+    for block in blocks[:12]:
+        block_sections.append(f"""[block: {block.get('type')} / {block.get('name')}]
+使用場面: {block.get('usage') or '本文の流れに合う箇所で使用'}
+HTML:
+{block.get('html', '')[:per_block_limit]}""")
+    block_prompt = ''
+    if block_sections:
+        block_prompt = f"""
+
+装飾ブロック定義（用途一致時は優先使用）:
+- FAQを書くときはFAQブロック、要点整理は要点ボックス、注意喚起は注意ボックスなど、用途が一致するブロックを優先してください
+- HTML構造・class名は維持し、本文・質問・回答・商品名などの中身だけを記事テーマに合わせて置き換えてください
+- ブロック定義にない用途では無理に使わず、本文が読みやすくなる範囲で使用してください
+
+--- 装飾ブロックここから ---
+{chr(10).join(block_sections)}
+--- 装飾ブロックここまで ---"""
     return f"""
 装飾サンプルHTML（参考専用・本文にコピー禁止）:
 - 以下はCSSクラス、ボックス構造、見出し構造、装飾パターンを学ぶための資料です
@@ -734,6 +786,7 @@ def decoration_reference_prompt(sample_html, limit=4000):
 - 記事テーマに合わせて中身を必ず置き換え、壊れたHTMLや途中で切れたブロックは出力しないでください
 - 本文内に、要点ボックス・注意点ボックス・FAQ前の補足など、最低2箇所は装飾要素を使ってください
 - 重要文には必要に応じて <mark class="dbp-e-marker" style="background-image:linear-gradient(to bottom,transparent 0%,#FFF387 0%)">...</mark> を使ってください
+{block_prompt}
 
 --- 装飾サンプルここから ---
 {sample[:limit]}
@@ -3086,8 +3139,8 @@ def get_rewrite_style_prompt(data, settings):
 
     decoration_id = data.get('decoration_id')
     decoration = next((d for d in load_decorations() if d['id'] == decoration_id), None) if decoration_id else None
-    if decoration and decoration.get('sample_html'):
-        prompt += decoration_reference_prompt(decoration.get('sample_html'), limit=5000)
+    if decoration_has_content(decoration):
+        prompt += decoration_reference_prompt(decoration, limit=5000)
     elif safe_article_css(settings.get('article_css')):
         prompt += f"""
 
@@ -3618,8 +3671,8 @@ def generate_article(article_id):
 参考記事テキスト:
 {style_reference_text[:5000]}'''
 
-            if decoration and decoration.get('sample_html'):
-                prompt += decoration_reference_prompt(decoration.get('sample_html'), limit=4000)
+            if decoration_has_content(decoration):
+                prompt += decoration_reference_prompt(decoration, limit=4000)
 
             if rakuten_asp_instruction:
                 prompt += rakuten_asp_instruction
@@ -3635,7 +3688,7 @@ def generate_article(article_id):
             prompt += build_article_completion_prompt(
                 quality,
                 article_type,
-                has_decoration=bool(decoration and decoration.get('sample_html')),
+                has_decoration=decoration_has_content(decoration),
                 has_ads=bool(product_blocks or ad_instruction or rakuten_asp_instruction)
             )
 
@@ -4078,8 +4131,8 @@ def batch_generate():
 参考記事テキスト:
 {style_reference_text[:5000]}'''
 
-                if decoration and decoration.get('sample_html'):
-                    prompt += decoration_reference_prompt(decoration.get('sample_html'), limit=4000)
+                if decoration_has_content(decoration):
+                    prompt += decoration_reference_prompt(decoration, limit=4000)
 
                 rakuten_asp_instruction = build_rakuten_asp_instruction(article, settings)
                 if rakuten_asp_instruction:
@@ -4099,7 +4152,7 @@ def batch_generate():
                 prompt += build_article_completion_prompt(
                     quality,
                     article_type,
-                    has_decoration=bool(decoration and decoration.get('sample_html')),
+                    has_decoration=decoration_has_content(decoration),
                     has_ads=bool(product_blocks or ad_instruction or rakuten_asp_instruction)
                 )
 
@@ -4961,6 +5014,7 @@ def create_decoration():
         'article_type': data.get('article_type', 'common'),
         'description': data.get('description', ''),
         'sample_html': data.get('sample_html', ''),
+        'blocks': normalize_decoration_blocks(data.get('blocks')),
         'source_url': data.get('source_url', ''),
     }
     decorations.append(d)
@@ -4978,6 +5032,7 @@ def update_decoration(decoration_id):
             d['article_type'] = data.get('article_type', d.get('article_type', 'common'))
             d['description'] = data.get('description', d.get('description', ''))
             d['sample_html'] = data.get('sample_html', d['sample_html'])
+            d['blocks'] = normalize_decoration_blocks(data.get('blocks', d.get('blocks', [])))
             d['source_url'] = data.get('source_url', d.get('source_url', ''))
             break
     save_decorations(decorations)

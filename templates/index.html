@@ -1439,7 +1439,7 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
 
 <!-- Decoration Modal -->
 <div class="modal-overlay" id="decoration-modal">
-  <div class="modal" style="width:720px">
+  <div class="modal" style="width:860px">
     <div class="modal-title" id="decoration-modal-title">// 装飾定義を追加</div>
     <input type="hidden" id="decoration-edit-id">
     <div class="form-group">
@@ -1480,6 +1480,16 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
     <div class="form-group">
       <label class="form-label">サンプルHTML（記事コンテンツ）</label>
       <textarea id="decoration-sample-html" class="form-control" rows="12" placeholder="WordPressから読み込むか、直接HTMLを貼り付けてください..."></textarea>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:16px;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px">
+        <div>
+          <div style="font-size:11px;color:var(--accent);font-weight:600;">// ブロック別HTML定義</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">FAQ・要点ボックス・注意ボックスなど、用途ごとにHTMLを指定できます。</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="addDecorationBlock()">+ ブロック追加</button>
+      </div>
+      <div id="decoration-blocks" style="display:flex;flex-direction:column;gap:10px"></div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeDecorationModal()">キャンセル</button>
@@ -2064,6 +2074,7 @@ function renderDecorations() {
       ${d.description ? `<div class="quality-prompt">${esc(d.description)}</div>` : ''}
       <div style="font-size:10px;color:var(--muted);margin-top:6px">
         ${d.sample_html ? `HTMLサンプル: ${d.sample_html.length}文字` : '未設定'}
+        ${Array.isArray(d.blocks) && d.blocks.length ? ` · ブロック: ${d.blocks.length}件` : ''}
         ${d.source_url ? ` · <a href="${esc(d.source_url)}" target="_blank" style="color:var(--accent)">ソース↗</a>` : ''}
       </div>
       <div class="quality-actions">
@@ -2109,12 +2120,89 @@ function defaultDecorationId(articleType = currentArticleType) {
   );
 }
 
+function decorationBlockTypeOptions(selected = 'faq') {
+  const types = [
+    ['faq', 'FAQ'],
+    ['point_box', '要点ボックス'],
+    ['warning_box', '注意ボックス'],
+    ['good_box', 'おすすめ/メリット'],
+    ['bad_box', 'デメリット'],
+    ['check_list', 'チェックリスト'],
+    ['comparison_table', '比較表'],
+    ['cta', 'CTA'],
+    ['marker', 'マーカー'],
+    ['custom', 'カスタム'],
+  ];
+  return types.map(([value, label]) => `<option value="${value}" ${value === selected ? 'selected' : ''}>${label}</option>`).join('');
+}
+
+function renderDecorationBlocks(blocks = []) {
+  const wrap = document.getElementById('decoration-blocks');
+  if (!wrap) return;
+  const items = Array.isArray(blocks) ? blocks : [];
+  if (!items.length) {
+    wrap.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:10px;border:1px dashed var(--border);border-radius:6px;background:#fff">まだブロック定義はありません。「+ ブロック追加」からFAQなどのHTMLを登録できます。</div>';
+    return;
+  }
+  wrap.innerHTML = items.map((block, index) => `
+    <div class="decoration-block-row" data-index="${index}" style="border:1px solid var(--border);border-radius:6px;background:#fff;padding:12px">
+      <div style="display:grid;grid-template-columns:150px 1fr auto;gap:8px;align-items:end;margin-bottom:8px">
+        <div>
+          <label class="form-label">ブロック種別</label>
+          <select class="form-control decoration-block-type">${decorationBlockTypeOptions(block.type || 'faq')}</select>
+        </div>
+        <div>
+          <label class="form-label">ブロック名</label>
+          <input type="text" class="form-control decoration-block-name" value="${esc(block.name || '')}" placeholder="例: よくある質問">
+        </div>
+        <button class="btn btn-danger btn-sm" type="button" onclick="removeDecorationBlock(${index})">削除</button>
+      </div>
+      <div class="form-group" style="margin-bottom:8px">
+        <label class="form-label">使用場面</label>
+        <input type="text" class="form-control decoration-block-usage" value="${esc(block.usage || '')}" placeholder="例: FAQセクションを書くときはこのHTML構造を使う">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">HTML</label>
+        <textarea class="form-control decoration-block-html" rows="5" placeholder="このブロックで使うHTMLを貼り付け">${esc(block.html || '')}</textarea>
+      </div>
+    </div>
+  `).join('');
+}
+
+function currentDecorationBlocks() {
+  const rows = [...document.querySelectorAll('.decoration-block-row')];
+  return rows.map(row => ({
+    type: row.querySelector('.decoration-block-type')?.value || 'custom',
+    name: row.querySelector('.decoration-block-name')?.value.trim() || '',
+    usage: row.querySelector('.decoration-block-usage')?.value.trim() || '',
+    html: row.querySelector('.decoration-block-html')?.value.trim() || '',
+  })).filter(block => block.html);
+}
+
+function addDecorationBlock(prefill = null) {
+  const blocks = currentDecorationBlocks();
+  blocks.push(prefill || {
+    type: 'faq',
+    name: 'よくある質問',
+    usage: 'FAQセクションを書くときはこのHTML構造を使う',
+    html: '',
+  });
+  renderDecorationBlocks(blocks);
+}
+
+function removeDecorationBlock(index) {
+  const blocks = currentDecorationBlocks();
+  blocks.splice(index, 1);
+  renderDecorationBlocks(blocks);
+}
+
 function openDecorationModal() {
   document.getElementById('decoration-edit-id').value = '';
   document.getElementById('decoration-name').value = '';
   document.getElementById('decoration-article-type').value = 'common';
   document.getElementById('decoration-description').value = '';
   document.getElementById('decoration-sample-html').value = '';
+  renderDecorationBlocks([]);
   document.getElementById('decoration-fetch-msg').textContent = '';
   document.getElementById('decoration-fetch-post-id').value = '';
   document.getElementById('decoration-modal-title').textContent = '// 装飾定義を追加';
@@ -2130,6 +2218,7 @@ function editDecoration(id) {
   document.getElementById('decoration-article-type').value = d.article_type || 'common';
   document.getElementById('decoration-description').value = d.description || '';
   document.getElementById('decoration-sample-html').value = d.sample_html || '';
+  renderDecorationBlocks(d.blocks || []);
   document.getElementById('decoration-fetch-msg').textContent = d.source_url ? `ソース: ${d.source_url}` : '';
   document.getElementById('decoration-fetch-post-id').value = '';
   document.getElementById('decoration-modal-title').textContent = '// 装飾定義を編集';
@@ -2173,9 +2262,10 @@ async function saveDecoration() {
     article_type: document.getElementById('decoration-article-type').value,
     description: document.getElementById('decoration-description').value,
     sample_html: document.getElementById('decoration-sample-html').value,
+    blocks: currentDecorationBlocks(),
   };
   if (!body.name) { toast('定義名は必須です', 'error'); return; }
-  if (!body.sample_html) { toast('サンプルHTMLを設定してください', 'error'); return; }
+  if (!body.sample_html && !body.blocks.length) { toast('サンプルHTMLまたはブロック別HTMLを設定してください', 'error'); return; }
   if (id) {
     await fetch(`/api/decorations/${id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
   } else {
