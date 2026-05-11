@@ -1208,27 +1208,7 @@ tr.selected td { background: var(--accent-dim); }
       <div class="page" id="page-quality">
         <div class="page-header">
           <div class="page-title">品質定義</div>
-          <div class="page-subtitle">文字数・文体・追加ルールを含む品質プリセットを管理</div>
-        </div>
-        <div class="settings-section" style="max-width:760px">
-          <div class="section-header">// 記事種類別 書き方参考URL</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:12px">
-            内容ではなく、文章構成・権威性・根拠の置き方・説得力の出し方を参考にします。
-          </div>
-          <div class="form-group">
-            <label class="form-label">ランキング記事</label>
-            <input type="url" id="quality-style-ranking-url" class="form-control" placeholder="https://example.com/ranking-reference">
-          </div>
-          <div class="form-group">
-            <label class="form-label">商標記事</label>
-            <input type="url" id="quality-style-brand-url" class="form-control" placeholder="https://example.com/review-reference">
-          </div>
-          <div class="form-group">
-            <label class="form-label">コラム記事</label>
-            <input type="url" id="quality-style-column-url" class="form-control" placeholder="https://example.com/column-reference">
-          </div>
-          <button class="btn btn-primary btn-sm" onclick="saveQualityStyleReferences()">保存</button>
-          <span id="quality-style-msg" style="font-size:11px;margin-left:8px;color:var(--muted)"></span>
+          <div class="page-subtitle">記事種類・文字数・書き方参考URL・追加ルールを含む品質プリセットを管理</div>
         </div>
         <div class="toolbar">
           <button class="btn btn-primary" onclick="openQualityModal()">+ 新規追加</button>
@@ -1396,9 +1376,9 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
       <input type="text" id="quality-name" class="form-control" placeholder="例: SEO特化">
     </div>
     <div class="form-group">
-      <label class="form-label">個別参考URL（任意）</label>
+      <label class="form-label">書き方参考URL（任意）</label>
       <input type="url" id="quality-reference-url" class="form-control" placeholder="https://example.com/reference-article">
-      <div style="font-size:11px;color:var(--muted);margin-top:4px">品質定義ごとに追加で参照したい記事がある場合に使います</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">内容ではなく、文章構成・権威性・根拠の置き方・説得力の出し方だけを参考にします</div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
       <div class="form-group">
@@ -4297,43 +4277,7 @@ async function loadQuality() {
   renderQuality();
   loadQualitySelects();
   updateQualityDefaultsForCurrentContext();
-  await loadQualityStyleReferences();
   scheduleDataSnapshotBackup();
-}
-
-async function loadQualityStyleReferences() {
-  const res = await fetch('/api/quality/style-references');
-  if (!res.ok) return;
-  const refs = await res.json();
-  document.getElementById('quality-style-ranking-url').value = refs.ranking || '';
-  document.getElementById('quality-style-brand-url').value = refs.brand || '';
-  document.getElementById('quality-style-column-url').value = refs.column || '';
-}
-
-async function saveQualityStyleReferences() {
-  const msgEl = document.getElementById('quality-style-msg');
-  msgEl.textContent = '保存中...';
-  msgEl.style.color = 'var(--muted)';
-  const body = {
-    ranking: document.getElementById('quality-style-ranking-url').value,
-    brand: document.getElementById('quality-style-brand-url').value,
-    column: document.getElementById('quality-style-column-url').value,
-  };
-  const res = await fetch('/api/quality/style-references', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify(body)
-  });
-  if (res.ok) {
-    msgEl.textContent = '保存しました';
-    msgEl.style.color = 'var(--success)';
-    toast('書き方参考URLを保存しました', 'success');
-    scheduleDataSnapshotBackup();
-  } else {
-    const data = await res.json().catch(() => ({}));
-    msgEl.textContent = data.error || '保存に失敗しました';
-    msgEl.style.color = 'var(--error)';
-  }
 }
 
 function renderQuality() {
@@ -4347,7 +4291,7 @@ function renderQuality() {
         ${adTypeLabel(q.article_type || 'common')} · ${q.target_chars ? `${esc(q.target_chars)}文字` : '文字数指定なし'} · ${esc(q.tone || 'ですます調')}
       </div>
       <div class="quality-prompt">${esc(q.prompt)}</div>
-      ${q.reference_url ? `<div style="font-size:10px;margin-top:6px"><a href="${esc(q.reference_url)}" target="_blank" style="color:var(--accent)">🔗 参考URL</a></div>` : ''}
+      ${q.reference_url ? `<div style="font-size:10px;margin-top:6px"><a href="${esc(q.reference_url)}" target="_blank" style="color:var(--accent)">🔗 書き方参考URL</a></div>` : ''}
       <div class="quality-actions">
         <button class="btn btn-secondary btn-sm" onclick="editQuality('${q.id}')">✏ 編集</button>
         <button class="btn btn-secondary btn-sm" onclick="setDefaultQuality('${q.id}')">★ デフォルト</button>

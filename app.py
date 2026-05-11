@@ -2989,14 +2989,17 @@ def select_quality_definition(quality_list, quality_id=None, article_type='ranki
     )
 
 
-def quality_style_reference_url(article_type, settings):
+def quality_style_reference_url(article_type, settings, quality=None):
+    quality_url = str((quality or {}).get('reference_url') or '').strip()
+    if quality_url:
+        return quality_url
     refs = settings.get('quality_style_references') or {}
     normalized = normalize_article_type(article_type, 'ranking')
     return (refs.get(normalized) or '').strip()
 
 
-def fetch_quality_style_reference(article_type, settings):
-    url = quality_style_reference_url(article_type, settings)
+def fetch_quality_style_reference(article_type, settings, quality=None):
+    url = quality_style_reference_url(article_type, settings, quality)
     if not url:
         return '', ''
     return url, fetch_url_text(url)
@@ -3621,16 +3624,10 @@ def generate_article(article_id):
         build_ranking_count_prompt(article_work, article_type) +
         build_ranking_structure_prompt(article_work, article_type)
     )
-    reference_text = ''
     style_reference_url = ''
     style_reference_text = ''
-    if quality and quality.get('reference_url'):
-        try:
-            reference_text = fetch_url_text(quality['reference_url'])
-        except Exception:
-            pass
     try:
-        style_reference_url, style_reference_text = fetch_quality_style_reference(article_type, settings)
+        style_reference_url, style_reference_text = fetch_quality_style_reference(article_type, settings, quality)
     except Exception:
         style_reference_text = ''
     include_amazon = data.get('include_amazon', False)
@@ -3674,9 +3671,6 @@ def generate_article(article_id):
 
 {article_html_output_rules()}
 {regeneration_instruction}"""
-
-            if reference_text:
-                prompt += f'\n\n以下の参考記事の内容・構成・論点を参考にして執筆してください（コピーは不可）：\n\n{reference_text}'
 
             if style_reference_text:
                 prompt += f'''\n\n記事品質の書き方参考:
@@ -4034,12 +4028,6 @@ def batch_generate():
         return jsonify({'error': 'Claude APIキーが設定されていません'}), 400
     quality = select_quality_definition(quality_list, quality_id, batch_article_type)
     quality_prompt = build_quality_prompt(quality)
-    reference_text = ''
-    if quality and quality.get('reference_url'):
-        try:
-            reference_text = fetch_url_text(quality['reference_url'])
-        except Exception:
-            pass
     style_reference_cache = {}
     include_amazon = data.get('include_amazon', False)
     include_rakuten = data.get('include_rakuten', False)
@@ -4123,7 +4111,7 @@ def batch_generate():
                 if article_type not in style_reference_cache:
                     stage = 'fetch style reference'
                     try:
-                        style_reference_url, style_reference_text = fetch_quality_style_reference(article_type, settings)
+                        style_reference_url, style_reference_text = fetch_quality_style_reference(article_type, settings, quality)
                     except Exception:
                         style_reference_url, style_reference_text = '', ''
                     style_reference_cache[article_type] = (style_reference_url, style_reference_text)
@@ -4142,9 +4130,6 @@ def batch_generate():
 
 {article_html_output_rules()}
 {regeneration_instruction}"""
-
-                if reference_text:
-                    prompt += f'\n\n以下の参考記事の内容・構成・論点を参考にして執筆してください（コピーは不可）：\n\n{reference_text}'
 
                 if style_reference_text:
                     prompt += f'''\n\n記事品質の書き方参考:
