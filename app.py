@@ -757,7 +757,7 @@ def decoration_has_content(decoration):
 def decoration_reference_prompt(decoration, limit=4000):
     return f"""
 装飾方針:
-- 装飾定義の複雑なHTMLは使わないでください。
+- 複雑なHTMLブロックは使わないでください。
 - 使用してよい装飾は <strong>太字</strong>、<span style="color:#d32f2f">赤字</span>、<mark>マーカー</mark>、<ul><li>リスト</li></ul>、<table>表</table> のみです。
 - 吹き出し、ボックス、カード、独自class、Gutenbergコメントは出力しないでください。"""
 
@@ -3173,8 +3173,6 @@ def get_rewrite_style_prompt(data, settings):
         except ValueError:
             pass
 
-    decoration_id = data.get('decoration_id')
-    decoration = next((d for d in load_decorations() if d['id'] == decoration_id), None) if decoration_id else None
     if safe_article_css(settings.get('article_css')):
         prompt += f"""
 
@@ -3208,7 +3206,6 @@ def login_required(f):
 @app.route('/history')
 @app.route('/articles')
 @app.route('/quality')
-@app.route('/decoration')
 @app.route('/ads')
 @app.route('/sites')
 @app.route('/api-settings')
@@ -3281,7 +3278,6 @@ def create_article():
         'content': data.get('content', ''),
         'created_at': datetime.now().isoformat(),
         'quality_id': data.get('quality_id') or None,
-        'decoration_id': data.get('decoration_id') or None,
         'ad_definition_id': data.get('ad_definition_id') or None,
         'site_id': data.get('site_id') or None,
         'parent_article_id': data.get('parent_article_id') or None,
@@ -3317,7 +3313,7 @@ def update_article(article_id):
             for key in [
                 'title', 'keywords', 'content', 'article_type', 'ad_keywords',
                 'category', 'priority', 'memo', 'schedule_date', 'quality_id',
-                'decoration_id', 'ad_definition_id', 'scheduled_at', 'site_id',
+                'ad_definition_id', 'scheduled_at', 'site_id',
                 'parent_article_id', 'source_product_name'
             ]:
                 if key in data:
@@ -3383,7 +3379,7 @@ def recover_generated_content(article_id):
                 article.get('keywords', ''),
                 article.get('article_type', 'ranking')
             )
-        for key in ('quality_id', 'decoration_id', 'ad_definition_id'):
+        for key in ('quality_id', 'ad_definition_id'):
             if key in data:
                 article[key] = data.get(key) or None
 
@@ -3496,7 +3492,6 @@ def import_excel():
         'article_type': {'type', 'article_type', '記事種類', '記事種別', '種類', '種別'},
         'site': {'site', 'サイト', '投稿先', '投稿先サイト', 'site_id', 'サイトid'},
         'quality': {'quality', '品質', '品質定義', 'quality_id', '品質id'},
-        'decoration': {'decoration', '装飾', '装飾定義', 'decoration_id', '装飾id'},
         'ad_definition': {'ad_definition', '広告定義', '広告', 'ad_definition_id', '広告id'},
         'ad_keywords': {'adkeyword', 'adkeywords', '広告キーワード', '商品キーワード', '広告検索語'},
         'priority': {'priority', '優先度'},
@@ -3529,7 +3524,6 @@ def import_excel():
     site_fallback = request.form.get('site_id') or None
     sites = settings.get('sites', [])
     quality_list = load_quality()
-    decorations = load_decorations()
     ad_definitions = load_ad_definitions()
 
     def cell(row, field):
@@ -3567,7 +3561,6 @@ def import_excel():
             'content': content,
             'created_at': datetime.now().isoformat(),
             'quality_id': resolve_id(cell(row, 'quality'), quality_list),
-            'decoration_id': resolve_id(cell(row, 'decoration'), decorations),
             'ad_definition_id': resolve_id(cell(row, 'ad_definition'), ad_definitions),
             'site_id': resolve_id(cell(row, 'site'), sites) or site_fallback,
             'wp_post_id': None,
@@ -3626,8 +3619,6 @@ def generate_article(article_id):
             a['article_type'] = article_type
             if quality_id:
                 a['quality_id'] = quality_id
-            if data.get('decoration_id'):
-                a['decoration_id'] = data.get('decoration_id')
             if data.get('ad_definition_id'):
                 a['ad_definition_id'] = data.get('ad_definition_id')
             a['status'] = 'generating'
@@ -3655,8 +3646,6 @@ def generate_article(article_id):
         style_reference_text = ''
     include_amazon = data.get('include_amazon', False)
     include_rakuten = data.get('include_rakuten', False)
-    decoration_id = data.get('decoration_id')
-    decoration = next((d for d in load_decorations() if d['id'] == decoration_id), None) if decoration_id else None
     rakuten_asp_instruction = build_rakuten_asp_instruction(article_work, settings)
     ad_definition = select_ad_definition({**data, 'article_type': article_type}, article_work)
     try:
@@ -3707,9 +3696,6 @@ def generate_article(article_id):
 
             prompt += build_quality_structure_html_prompt(quality)
 
-            if decoration_has_content(decoration):
-                prompt += '\n\n装飾方針:\n- 装飾定義の複雑なHTMLは使わず、太字・赤字・マーカー・リスト・表だけで読みやすくしてください。'
-
             if rakuten_asp_instruction:
                 prompt += rakuten_asp_instruction
 
@@ -3724,7 +3710,7 @@ def generate_article(article_id):
             prompt += build_article_completion_prompt(
                 quality,
                 article_type,
-                has_decoration=decoration_has_content(decoration),
+                has_decoration=False,
                 has_ads=bool(product_blocks or ad_instruction or rakuten_asp_instruction)
             )
 
@@ -3830,7 +3816,6 @@ def generate_article(article_id):
                     a['site_id'] = article_work.get('site_id') or a.get('site_id')
                     a['quality_id'] = quality.get('id') if quality else quality_id
                     a['article_type'] = article_type
-                    a['decoration_id'] = decoration_id or a.get('decoration_id')
                     if ad_definition:
                         a['ad_definition_id'] = ad_definition.get('id')
                     a['generated_at'] = generated_at
@@ -3896,7 +3881,6 @@ def generate_article_direct(article_id):
     quality = select_quality_definition(load_quality(), quality_id, article_type)
     include_amazon = data.get('include_amazon', False)
     include_rakuten = data.get('include_rakuten', False)
-    decoration_id = data.get('decoration_id')
     ad_definition = select_ad_definition({**data, 'article_type': article_type}, article_work)
 
     now = datetime.now().isoformat()
@@ -3907,8 +3891,6 @@ def generate_article_direct(article_id):
             a['article_type'] = article_type
             if quality_id:
                 a['quality_id'] = quality_id
-            if decoration_id:
-                a['decoration_id'] = decoration_id
             if ad_definition:
                 a['ad_definition_id'] = ad_definition.get('id')
             a['status'] = 'generating'
@@ -3992,7 +3974,6 @@ def generate_article_direct(article_id):
                 a['site_id'] = article_work.get('site_id') or a.get('site_id')
                 a['quality_id'] = quality.get('id') if quality else quality_id
                 a['article_type'] = article_type
-                a['decoration_id'] = decoration_id or a.get('decoration_id')
                 if ad_definition:
                     a['ad_definition_id'] = ad_definition.get('id')
                 a['generated_at'] = generated_at
@@ -4064,8 +4045,6 @@ def batch_generate():
     style_reference_cache = {}
     include_amazon = data.get('include_amazon', False)
     include_rakuten = data.get('include_rakuten', False)
-    decoration_id = data.get('decoration_id')
-    decoration = next((d for d in load_decorations() if d['id'] == decoration_id), None) if decoration_id else None
     now = datetime.now().isoformat()
     job_id = str(uuid.uuid4())
     job = {
@@ -4177,9 +4156,6 @@ def batch_generate():
 {style_reference_text[:2500]}'''
 
                 prompt += build_quality_structure_html_prompt(quality)
-
-                if use_generation_extras and decoration_has_content(decoration):
-                    prompt += '\n\n装飾方針:\n- 装飾定義の複雑なHTMLは使わず、太字・赤字・マーカー・リスト・表だけで読みやすくしてください。'
 
                 rakuten_asp_instruction = build_rakuten_asp_instruction(article, settings)
                 if use_generation_extras and rakuten_asp_instruction:
@@ -4304,7 +4280,6 @@ def batch_generate():
                         a['quality_id'] = quality.get('id') if quality else quality_id
                         a['article_type'] = article_type
                         a['ad_keywords'] = article.get('ad_keywords', a.get('ad_keywords', ''))
-                        a['decoration_id'] = decoration_id or a.get('decoration_id')
                         if ad_definition:
                             a['ad_definition_id'] = ad_definition.get('id')
                         a['generation_phase'] = 'base_saved'
@@ -5527,7 +5502,7 @@ def update_settings():
         settings['rakuten_asp_prompt'] = data['rakuten_asp_prompt']
     if 'article_css' in data:
         if looks_like_html(data.get('article_css', '')):
-            return jsonify({'success': False, 'error': '記事CSS定義にはHTMLを保存できません。装飾定義のサンプルHTMLに貼り付けてください。'}), 400
+            return jsonify({'success': False, 'error': '記事CSS定義にはHTMLを保存できません。CSSだけを入力してください。'}), 400
         settings['article_css'] = data['article_css']
     save_settings(settings)
     return jsonify({'success': True})

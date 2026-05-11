@@ -676,7 +676,6 @@ tr.selected td { background: var(--accent-dim); }
       <div class="nav-trigger" id="nav-definitions">定義設定</div>
       <div class="nav-menu">
         <div class="nav-link" onclick="showPage('quality')" id="nav-quality">品質定義</div>
-        <div class="nav-link" onclick="showPage('decoration')" id="nav-decoration">装飾定義</div>
         <div class="nav-link" onclick="showPage('ads')" id="nav-ads">広告定義</div>
       </div>
     </div>
@@ -910,12 +909,6 @@ tr.selected td { background: var(--accent-dim); }
               </select>
             </div>
             <div class="form-group">
-              <label class="form-label">装飾定義</label>
-              <select id="gen-decoration" class="form-control">
-                <option value="">-- 装飾定義を選択（任意）--</option>
-              </select>
-            </div>
-            <div class="form-group">
               <label class="form-label">広告定義</label>
               <select id="gen-ad-definition" class="form-control">
                 <option value="">-- 広告定義を選択（任意）--</option>
@@ -968,12 +961,6 @@ tr.selected td { background: var(--accent-dim); }
               <label class="form-label">品質定義</label>
               <select id="batch-quality" class="form-control">
                 <option value="">-- 品質定義を選択 --</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">装飾定義</label>
-              <select id="batch-decoration" class="form-control">
-                <option value="">-- 装飾定義を選択（任意）--</option>
               </select>
             </div>
             <div class="form-group">
@@ -1136,18 +1123,12 @@ tr.selected td { background: var(--accent-dim); }
                 </select>
               </div>
               <div class="form-group">
-                <label class="form-label">装飾レベル</label>
+                <label class="form-label">強調レベル</label>
                 <select id="rewrite-decoration-level" class="form-control">
-                  <option value="standard">標準装飾</option>
-                  <option value="none">装飾なし</option>
-                  <option value="light">軽く装飾</option>
-                  <option value="rich">しっかり装飾</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label class="form-label">装飾定義</label>
-                <select id="rewrite-decoration" class="form-control">
-                  <option value="">-- 装飾定義を選択（任意）--</option>
+                  <option value="standard">標準強調</option>
+                  <option value="none">強調なし</option>
+                  <option value="light">軽く強調</option>
+                  <option value="rich">しっかり強調</option>
                 </select>
               </div>
               <div class="form-group">
@@ -1214,23 +1195,6 @@ tr.selected td { background: var(--accent-dim); }
           <button class="btn btn-primary" onclick="openQualityModal()">+ 新規追加</button>
         </div>
         <div class="quality-grid" id="quality-grid"></div>
-      </div>
-
-      <!-- Decoration Page -->
-      <div class="page" id="page-decoration">
-        <div class="page-header">
-          <div class="page-title">装飾定義</div>
-          <div class="page-subtitle">ランキング・商標・コラム・SEOリライト別の参考記事を管理</div>
-        </div>
-        <div class="toolbar">
-          <button class="btn btn-primary" onclick="openDecorationModal()">+ 新規追加</button>
-        </div>
-        <div class="quality-grid" id="decoration-grid">
-          <div class="empty">
-            <div class="empty-icon">🎨</div>
-            <div>装飾定義がありません。WordPressのサンプル記事から読み込んで追加してください。</div>
-          </div>
-        </div>
       </div>
 
       <!-- Ads Page -->
@@ -1345,7 +1309,7 @@ tr.selected td { background: var(--accent-dim); }
               <textarea id="s-article-css" class="form-control" rows="12" placeholder="/* テーマに合わせてCSSだけを記述 */
 h2 { border-left: 4px solid #e47911; padding-left: 10px; }
 .amazon-btn { background: #ff9900; }"></textarea>
-              <div style="font-size:11px;color:var(--muted);margin-top:4px">HTMLやGutenbergブロックはここに入れず、定義設定 ＞ 装飾定義 ＞ サンプルHTML に貼り付けてください。</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">HTMLやGutenbergブロックはここに入れず、CSSだけを入力してください。</div>
             </div>
           </div>
           <div class="settings-section">
@@ -1432,67 +1396,6 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeQualityModal()">キャンセル</button>
       <button class="btn btn-primary" onclick="saveQuality()">保存</button>
-    </div>
-  </div>
-</div>
-
-<!-- Decoration Modal -->
-<div class="modal-overlay" id="decoration-modal">
-  <div class="modal" style="width:860px">
-    <div class="modal-title" id="decoration-modal-title">// 装飾定義を追加</div>
-    <input type="hidden" id="decoration-edit-id">
-    <div class="form-group">
-      <label class="form-label">定義名</label>
-      <input type="text" id="decoration-name" class="form-control" placeholder="例: レビュー記事スタイル">
-    </div>
-    <div class="form-group">
-      <label class="form-label">記事種類</label>
-      <select id="decoration-article-type" class="form-control">
-        <option value="common">共通</option>
-        <option value="ranking">ランキング記事</option>
-        <option value="brand">商標記事</option>
-        <option value="column">コラム記事</option>
-        <option value="rewrite">SEOリライト</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label class="form-label">説明（任意）</label>
-      <input type="text" id="decoration-description" class="form-control" placeholder="どんな装飾か簡単に説明">
-    </div>
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:16px;margin-bottom:16px;">
-      <div style="font-size:11px;color:var(--accent);font-weight:600;margin-bottom:12px;">// WordPressからサンプル記事を読み込む</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:flex-end">
-        <div>
-          <label class="form-label">サイト</label>
-          <select id="decoration-fetch-site" class="form-control">
-            <option value="">-- サイトを選択 --</option>
-          </select>
-        </div>
-        <div>
-          <label class="form-label">投稿ID</label>
-          <input type="number" id="decoration-fetch-post-id" class="form-control" placeholder="123">
-        </div>
-        <button class="btn btn-secondary" onclick="fetchDecorationSample()" style="white-space:nowrap">📥 読み込む</button>
-      </div>
-      <div id="decoration-fetch-msg" style="font-size:11px;color:var(--muted);margin-top:8px"></div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">サンプルHTML（記事コンテンツ）</label>
-      <textarea id="decoration-sample-html" class="form-control" rows="12" placeholder="WordPressから読み込むか、直接HTMLを貼り付けてください..."></textarea>
-    </div>
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:16px;margin-bottom:16px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px">
-        <div>
-          <div style="font-size:11px;color:var(--accent);font-weight:600;">// ブロック別HTML定義</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:4px">FAQ・要点ボックス・注意ボックスなど、用途ごとにHTMLを指定できます。</div>
-        </div>
-        <button class="btn btn-secondary btn-sm" type="button" onclick="addDecorationBlock()">+ ブロック追加</button>
-      </div>
-      <div id="decoration-blocks" style="display:flex;flex-direction:column;gap:10px"></div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeDecorationModal()">キャンセル</button>
-      <button class="btn btn-primary" onclick="saveDecoration()">保存</button>
     </div>
   </div>
 </div>
@@ -1729,7 +1632,6 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
 let allArticles = [];
 let qualityList = [];
 let siteList = [];
-let decorationList = [];
 let adDefinitionList = [];
 let rewriteList = [];
 let seoNewsList = [];
@@ -1755,7 +1657,6 @@ const pageUrlMap = {
   rewrite: 'rewrite',
   articles: 'history',
   quality: 'quality',
-  decoration: 'decoration',
   ads: 'ads',
   sites: 'sites',
   settings: 'api-settings'
@@ -1805,7 +1706,7 @@ function showPage(name, opts = {}) {
   const nav = document.getElementById('nav-' + name);
   if (nav) nav.classList.add('active');
   if (isArticleType) document.getElementById('nav-create')?.classList.add('active');
-  if (['quality', 'decoration', 'ads'].includes(name)) document.getElementById('nav-definitions')?.classList.add('active');
+  if (['quality', 'ads'].includes(name)) document.getElementById('nav-definitions')?.classList.add('active');
   localStorage.setItem('currentPage', name);
   if (isArticleType) {
     currentArticleType = name;
@@ -1817,7 +1718,6 @@ function showPage(name, opts = {}) {
     if (pageName === 'batch') { loadQualitySelects(); initBatchScheduleDefaults(); loadArticles(); loadLatestBatchJob(); }
     if (pageName === 'rewrite') { loadRewritePage(); }
     if (pageName === 'quality') loadQuality();
-    if (pageName === 'decoration') loadDecorations();
     if (pageName === 'ads') loadAdDefinitions();
     if (pageName === 'sites') loadSites();
     if (pageName === 'settings') loadSettings();
@@ -1851,7 +1751,6 @@ function updateArticleTypeUI() {
 
 function updateDefinitionDefaultsForCurrentContext() {
   updateQualityDefaultsForCurrentContext();
-  updateDecorationSelects();
   updateAdDefinitionSelects();
 }
 
@@ -2048,238 +1947,6 @@ function scheduleDataSnapshotBackup() {
       console.warn('data snapshot backup failed', e);
     }
   }, 1200);
-}
-
-// ---- Decorations ----
-async function loadDecorations() {
-  const res = await fetch('/api/decorations');
-  decorationList = await res.json();
-  renderDecorations();
-  updateDecorationSelects();
-  scheduleDataSnapshotBackup();
-}
-
-function renderDecorations() {
-  const grid = document.getElementById('decoration-grid');
-  if (!decorationList.length) {
-    grid.innerHTML = '<div class="empty"><div class="empty-icon">🎨</div><div>装飾定義がありません。WordPressのサンプル記事から読み込んで追加してください。</div></div>';
-    return;
-  }
-  const typeLabels = {common:'共通', ranking:'ランキング記事', brand:'商標記事', column:'コラム記事', rewrite:'SEOリライト'};
-  grid.innerHTML = decorationList.map(d => `
-    <div class="quality-card">
-      <div class="quality-name">🎨 ${esc(d.name)}</div>
-      <div style="font-size:10px;color:var(--accent);margin-bottom:6px">${typeLabels[d.article_type || 'common'] || '共通'}</div>
-      ${d.description ? `<div class="quality-prompt">${esc(d.description)}</div>` : ''}
-      <div style="font-size:10px;color:var(--muted);margin-top:6px">
-        ${d.sample_html ? `HTMLサンプル: ${d.sample_html.length}文字` : '未設定'}
-        ${Array.isArray(d.blocks) && d.blocks.length ? ` · ブロック: ${d.blocks.length}件` : ''}
-        ${d.source_url ? ` · <a href="${esc(d.source_url)}" target="_blank" style="color:var(--accent)">ソース↗</a>` : ''}
-      </div>
-      <div class="quality-actions">
-        <button class="btn btn-secondary btn-sm" onclick="editDecoration('${d.id}')">✏ 編集</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteDecoration('${d.id}')">🗑</button>
-      </div>
-    </div>
-  `).join('');
-}
-
-function updateDecorationSelects() {
-  const opts = '<option value="">-- 装飾定義を選択（任意）--</option>' +
-    decorationList.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
-  ['gen-decoration', 'batch-decoration', 'rewrite-decoration'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) {
-      const prev = el.value;
-      el.innerHTML = opts;
-      const articleType = id === 'rewrite-decoration'
-        ? 'rewrite'
-        : id === 'batch-decoration'
-          ? (document.getElementById('batch-article-type-filter')?.value || currentArticleType)
-          : currentArticleType;
-      const fallback = defaultDecorationId(articleType);
-      el.value = decorationList.some(d => d.id === prev) ? prev : (fallback || '');
-    }
-  });
-  const fetchSite = document.getElementById('decoration-fetch-site');
-  if (fetchSite) {
-    const siteOpts = '<option value="">-- サイトを選択 --</option>' +
-      siteList.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
-    fetchSite.innerHTML = siteOpts;
-  }
-}
-
-function defaultDecorationId(articleType = currentArticleType) {
-  const enabled = decorationList;
-  return (
-    enabled.find(d => d.article_type === articleType)?.id ||
-    enabled.find(d => d.article_type === 'common')?.id ||
-    enabled[0]?.id ||
-    ''
-  );
-}
-
-function decorationBlockTypeOptions(selected = 'faq') {
-  const types = [
-    ['faq', 'FAQ'],
-    ['point_box', '要点ボックス'],
-    ['warning_box', '注意ボックス'],
-    ['good_box', 'おすすめ/メリット'],
-    ['bad_box', 'デメリット'],
-    ['check_list', 'チェックリスト'],
-    ['comparison_table', '比較表'],
-    ['cta', 'CTA'],
-    ['marker', 'マーカー'],
-    ['custom', 'カスタム'],
-  ];
-  return types.map(([value, label]) => `<option value="${value}" ${value === selected ? 'selected' : ''}>${label}</option>`).join('');
-}
-
-function renderDecorationBlocks(blocks = []) {
-  const wrap = document.getElementById('decoration-blocks');
-  if (!wrap) return;
-  const items = Array.isArray(blocks) ? blocks : [];
-  if (!items.length) {
-    wrap.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:10px;border:1px dashed var(--border);border-radius:6px;background:#fff">まだブロック定義はありません。「+ ブロック追加」からFAQなどのHTMLを登録できます。</div>';
-    return;
-  }
-  wrap.innerHTML = items.map((block, index) => `
-    <div class="decoration-block-row" data-index="${index}" style="border:1px solid var(--border);border-radius:6px;background:#fff;padding:12px">
-      <div style="display:grid;grid-template-columns:150px 1fr auto;gap:8px;align-items:end;margin-bottom:8px">
-        <div>
-          <label class="form-label">ブロック種別</label>
-          <select class="form-control decoration-block-type">${decorationBlockTypeOptions(block.type || 'faq')}</select>
-        </div>
-        <div>
-          <label class="form-label">ブロック名</label>
-          <input type="text" class="form-control decoration-block-name" value="${esc(block.name || '')}" placeholder="例: よくある質問">
-        </div>
-        <button class="btn btn-danger btn-sm" type="button" onclick="removeDecorationBlock(${index})">削除</button>
-      </div>
-      <div class="form-group" style="margin-bottom:8px">
-        <label class="form-label">使用場面</label>
-        <input type="text" class="form-control decoration-block-usage" value="${esc(block.usage || '')}" placeholder="例: FAQセクションを書くときはこのHTML構造を使う">
-      </div>
-      <div class="form-group" style="margin-bottom:0">
-        <label class="form-label">HTML</label>
-        <textarea class="form-control decoration-block-html" rows="5" placeholder="このブロックで使うHTMLを貼り付け">${esc(block.html || '')}</textarea>
-      </div>
-    </div>
-  `).join('');
-}
-
-function currentDecorationBlocks() {
-  const rows = [...document.querySelectorAll('.decoration-block-row')];
-  return rows.map(row => ({
-    type: row.querySelector('.decoration-block-type')?.value || 'custom',
-    name: row.querySelector('.decoration-block-name')?.value.trim() || '',
-    usage: row.querySelector('.decoration-block-usage')?.value.trim() || '',
-    html: row.querySelector('.decoration-block-html')?.value.trim() || '',
-  })).filter(block => block.html);
-}
-
-function addDecorationBlock(prefill = null) {
-  const blocks = currentDecorationBlocks();
-  blocks.push(prefill || {
-    type: 'faq',
-    name: 'よくある質問',
-    usage: 'FAQセクションを書くときはこのHTML構造を使う',
-    html: '',
-  });
-  renderDecorationBlocks(blocks);
-}
-
-function removeDecorationBlock(index) {
-  const blocks = currentDecorationBlocks();
-  blocks.splice(index, 1);
-  renderDecorationBlocks(blocks);
-}
-
-function openDecorationModal() {
-  document.getElementById('decoration-edit-id').value = '';
-  document.getElementById('decoration-name').value = '';
-  document.getElementById('decoration-article-type').value = 'common';
-  document.getElementById('decoration-description').value = '';
-  document.getElementById('decoration-sample-html').value = '';
-  renderDecorationBlocks([]);
-  document.getElementById('decoration-fetch-msg').textContent = '';
-  document.getElementById('decoration-fetch-post-id').value = '';
-  document.getElementById('decoration-modal-title').textContent = '// 装飾定義を追加';
-  updateDecorationSelects();
-  document.getElementById('decoration-modal').classList.add('open');
-}
-
-function editDecoration(id) {
-  const d = decorationList.find(d => d.id === id);
-  if (!d) return;
-  document.getElementById('decoration-edit-id').value = id;
-  document.getElementById('decoration-name').value = d.name;
-  document.getElementById('decoration-article-type').value = d.article_type || 'common';
-  document.getElementById('decoration-description').value = d.description || '';
-  document.getElementById('decoration-sample-html').value = d.sample_html || '';
-  renderDecorationBlocks(d.blocks || []);
-  document.getElementById('decoration-fetch-msg').textContent = d.source_url ? `ソース: ${d.source_url}` : '';
-  document.getElementById('decoration-fetch-post-id').value = '';
-  document.getElementById('decoration-modal-title').textContent = '// 装飾定義を編集';
-  updateDecorationSelects();
-  document.getElementById('decoration-modal').classList.add('open');
-}
-
-function closeDecorationModal() {
-  document.getElementById('decoration-modal').classList.remove('open');
-}
-
-async function fetchDecorationSample() {
-  const siteId = document.getElementById('decoration-fetch-site').value;
-  const postId = document.getElementById('decoration-fetch-post-id').value;
-  const msgEl = document.getElementById('decoration-fetch-msg');
-  if (!siteId || !postId) { msgEl.textContent = 'サイトと投稿IDを入力してください'; msgEl.style.color = 'var(--error)'; return; }
-  msgEl.textContent = '読み込み中...'; msgEl.style.color = 'var(--muted)';
-  const res = await fetch('/api/decorations/fetch', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({site_id: siteId, post_id: parseInt(postId)})
-  });
-  const data = await res.json();
-  if (res.ok) {
-    document.getElementById('decoration-sample-html').value = data.content;
-    if (!document.getElementById('decoration-name').value && data.title) {
-      document.getElementById('decoration-name').value = data.title + ' スタイル';
-    }
-    msgEl.textContent = `✓ 読み込み完了（${data.content.length}文字）${data.link ? ' · ' + data.link : ''}`;
-    msgEl.style.color = 'var(--success)';
-  } else {
-    msgEl.textContent = '✗ ' + (data.error || '読み込み失敗');
-    msgEl.style.color = 'var(--error)';
-  }
-}
-
-async function saveDecoration() {
-  const id = document.getElementById('decoration-edit-id').value;
-  const body = {
-    name: document.getElementById('decoration-name').value,
-    article_type: document.getElementById('decoration-article-type').value,
-    description: document.getElementById('decoration-description').value,
-    sample_html: document.getElementById('decoration-sample-html').value,
-    blocks: currentDecorationBlocks(),
-  };
-  if (!body.name) { toast('定義名は必須です', 'error'); return; }
-  if (!body.sample_html && !body.blocks.length) { toast('サンプルHTMLまたはブロック別HTMLを設定してください', 'error'); return; }
-  if (id) {
-    await fetch(`/api/decorations/${id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
-  } else {
-    await fetch('/api/decorations', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
-  }
-  toast('保存しました', 'success');
-  closeDecorationModal();
-  await loadDecorations();
-}
-
-async function deleteDecoration(id) {
-  if (!confirm('この装飾定義を削除しますか?')) return;
-  await fetch(`/api/decorations/${id}`, {method:'DELETE'});
-  toast('削除しました', 'success');
-  await loadDecorations();
 }
 
 // ---- Ad Definitions ----
@@ -3044,10 +2711,10 @@ function getSelectedIds() {
 
 function downloadSampleCsv() {
   const rows = [
-    ['記事タイトル', 'キーワード', 'カテゴリー', 'スラッグ', '記事種別', '投稿先サイト', '品質定義', '装飾定義', '広告定義', '広告キーワード', '優先度', '執筆予定日', 'メモ', '記事本文'],
-    ['【サンプル1】おすすめ防水バッグ比較ランキング', '防水バッグ おすすめ,防水バッグ 比較', 'アウトドア', 'waterproof-bag-ranking', 'ランキング記事', 'メインブログ', 'ランキング記事品質（SEO強化）', '装飾サンプル', 'ランキング記事｜比較表直後 RINKER', '防水バッグ 30L 完全防水, アウトドア 防水バッグ', '10', '2026-05-15', '広告キーワードはAmazon・楽天の商品検索に使います。SEOキーワードと分けて指定できます。', ''],
-    ['【サンプル2】〇〇防水バッグの口コミレビュー', '〇〇防水バッグ 口コミ,〇〇防水バッグ 評判', 'レビュー', 'sample-waterproof-bag-review', '商標記事', 'メインブログ', '商標記事品質（SEO強化）', '装飾サンプル', '商標記事｜レビューCTA RINKER', '〇〇防水バッグ', '20', '2026-05-16', '商品名や広告キーワードを実案件に置き換えてください。', ''],
-    ['【サンプル3】雨の日の荷物を守る防水グッズの選び方', '防水グッズ 選び方,雨の日 荷物 防水', 'コラム', 'rainy-day-waterproof-goods', 'コラム記事', 'メインブログ', 'コラム記事品質（SEO強化）', '装飾サンプル', 'コラム記事｜まとめ前おすすめ RINKER', '防水スプレー,防水バッグ', '30', '2026-05-17', '記事本文を空にすると未生成として取り込まれます。本文を入れると生成済として取り込まれます。', ''],
+    ['記事タイトル', 'キーワード', 'カテゴリー', 'スラッグ', '記事種別', '投稿先サイト', '品質定義', '広告定義', '広告キーワード', '優先度', '執筆予定日', 'メモ', '記事本文'],
+    ['【サンプル1】おすすめ防水バッグ比較ランキング', '防水バッグ おすすめ,防水バッグ 比較', 'アウトドア', 'waterproof-bag-ranking', 'ランキング記事', 'メインブログ', 'ランキング記事品質（SEO強化）', 'ランキング記事｜比較表直後 RINKER', '防水バッグ 30L 完全防水, アウトドア 防水バッグ', '10', '2026-05-15', '広告キーワードはAmazon・楽天の商品検索に使います。SEOキーワードと分けて指定できます。', ''],
+    ['【サンプル2】〇〇防水バッグの口コミレビュー', '〇〇防水バッグ 口コミ,〇〇防水バッグ 評判', 'レビュー', 'sample-waterproof-bag-review', '商標記事', 'メインブログ', '商標記事品質（SEO強化）', '商標記事｜レビューCTA RINKER', '〇〇防水バッグ', '20', '2026-05-16', '商品名や広告キーワードを実案件に置き換えてください。', ''],
+    ['【サンプル3】雨の日の荷物を守る防水グッズの選び方', '防水グッズ 選び方,雨の日 荷物 防水', 'コラム', 'rainy-day-waterproof-goods', 'コラム記事', 'メインブログ', 'コラム記事品質（SEO強化）', 'コラム記事｜まとめ前おすすめ RINKER', '防水スプレー,防水バッグ', '30', '2026-05-17', '記事本文を空にすると未生成として取り込まれます。本文を入れると生成済として取り込まれます。', ''],
   ];
   const csv = '\uFEFF' + rows
     .map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(','))
@@ -3513,7 +3180,6 @@ async function createArticleFromGenerateForm() {
     slug: document.getElementById('gen-slug').value,
     site_id: document.getElementById('gen-site').value || null,
     quality_id: document.getElementById('gen-quality').value || null,
-    decoration_id: document.getElementById('gen-decoration').value || null,
     ad_definition_id: document.getElementById('gen-ad-definition').value || null,
     article_type: currentArticleType,
   };
@@ -3624,7 +3290,6 @@ async function startGenerate() {
   const btn = document.getElementById('gen-btn');
   const includeAmazon = document.getElementById('gen-include-amazon').checked;
   const includeRakuten = document.getElementById('gen-include-rakuten').checked;
-  const decorationId = document.getElementById('gen-decoration').value;
   const adDefinitionId = document.getElementById('gen-ad-definition').value;
   const title = document.getElementById('gen-title').value;
   const keywords = document.getElementById('gen-keywords').value;
@@ -3640,7 +3305,6 @@ async function startGenerate() {
     slug,
     site_id: siteId,
     article_type: currentArticleType,
-    decoration_id: decorationId,
     ad_definition_id: adDefinitionId
   };
 
@@ -3677,7 +3341,6 @@ async function startGenerate() {
         article_type: currentArticleType,
         include_amazon: includeAmazon,
         include_rakuten: includeRakuten,
-        decoration_id: decorationId,
         ad_definition_id: adDefinitionId
       })
     });
@@ -3714,7 +3377,7 @@ async function waitForSingleGenerateCompletion(articleId, jobId) {
     if (article?.status === 'generated' && article.content) {
       if (output) output.textContent = article.content;
       if (job?.status === 'running' && article.generation_phase === 'base_saved') {
-        if (progressNote) progressNote.textContent = '本文は保存済みです。品質改善と広告・装飾の後処理を続けています。';
+        if (progressNote) progressNote.textContent = '本文は保存済みです。品質改善と広告挿入などの後処理を続けています。';
         if (fill) fill.style.width = '75%';
         continue;
       }
@@ -4010,13 +3673,12 @@ async function startBatchGenerate() {
   const qualityId = document.getElementById('batch-quality').value;
   const includeAmazon = document.getElementById('batch-include-amazon').checked;
   const includeRakuten = document.getElementById('batch-include-rakuten').checked;
-  const decorationId = document.getElementById('batch-decoration').value;
   const adDefinitionId = document.getElementById('batch-ad-definition').value;
   const articleType = document.getElementById('batch-article-type-filter').value || currentArticleType;
   const res = await fetch('/api/batch-generate', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({article_ids: ids, quality_id: qualityId, article_type: articleType, include_amazon: includeAmazon, include_rakuten: includeRakuten, decoration_id: decorationId, ad_definition_id: adDefinitionId})
+    body: JSON.stringify({article_ids: ids, quality_id: qualityId, article_type: articleType, include_amazon: includeAmazon, include_rakuten: includeRakuten, ad_definition_id: adDefinitionId})
   });
   const data = await res.json();
   if (data.success) {
@@ -4063,7 +3725,6 @@ async function startBatchPublish() {
 // ---- Rewrite ----
 async function loadRewritePage() {
   updateSiteSelects();
-  updateDecorationSelects();
   await loadRewriteItems();
 }
 
@@ -4141,7 +3802,6 @@ function rewriteOptions() {
   return {
     structure_mode: document.getElementById('rewrite-structure').value,
     decoration_level: document.getElementById('rewrite-decoration-level').value,
-    decoration_id: document.getElementById('rewrite-decoration').value,
     tone: document.getElementById('rewrite-tone').value,
     target_chars: document.getElementById('rewrite-target-chars').value,
     tolerance: document.getElementById('rewrite-tolerance').value,
@@ -4552,7 +4212,7 @@ async function loadSettings() {
 async function saveSettings() {
   const data = collectSettingsFormData();
   if (looksLikeHtml(data.article_css)) {
-    toast('記事CSS定義にはHTMLを保存できません。装飾定義のサンプルHTMLに貼り付けてください。', 'error');
+    toast('記事CSS定義にはHTMLを保存できません。CSSだけを入力してください。', 'error');
     const msgEl = document.getElementById('settings-msg');
     msgEl.textContent = '✗ CSS欄にHTML/Gutenbergブロックが入っています';
     msgEl.style.color = 'var(--error)';
@@ -4624,7 +4284,7 @@ async function testAmazon() {
 }
 
 // Close modals on overlay click
-['quality-modal','decoration-modal','ad-modal','site-modal','article-modal','rewrite-modal'].forEach(id => {
+['quality-modal','ad-modal','site-modal','article-modal','rewrite-modal'].forEach(id => {
   document.getElementById(id).addEventListener('click', e => {
     if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
   });
@@ -4673,7 +4333,6 @@ window.addEventListener('popstate', () => {
   await ensureDurableData();
   await loadSites();
   await loadQuality();
-  await loadDecorations();
   await loadAdDefinitions();
   await loadArticles();
   await loadDashboardRewriteItems();
