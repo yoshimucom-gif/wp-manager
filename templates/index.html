@@ -294,7 +294,22 @@ tr.selected td { background: var(--accent-dim); }
   display: none;
   max-width: 360px;
   box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  gap: 10px;
+  align-items: flex-start;
 }
+#toast .toast-message { flex: 1; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+#toast .toast-close {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: currentColor;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 0 0 8px;
+  opacity: 0.75;
+}
+#toast .toast-close:hover { opacity: 1; }
 #toast.success { border-color: var(--success); color: var(--success); }
 #toast.error { border-color: var(--error); color: var(--error); }
 #toast.info { border-color: var(--accent); color: var(--accent); }
@@ -1809,13 +1824,34 @@ function updateQualityDefaultsForCurrentContext() {
 
 // ---- Toast ----
 let toastTimer;
+function closeToast() {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  clearTimeout(toastTimer);
+  el.style.display = 'none';
+}
+
 function toast(msg, type = 'info') {
   const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.className = type;
-  el.style.display = 'block';
+  if (!el) return;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.style.display = 'none', 4000);
+  el.innerHTML = '';
+  const message = document.createElement('div');
+  message.className = 'toast-message';
+  message.textContent = msg;
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'toast-close';
+  close.setAttribute('aria-label', '通知を閉じる');
+  close.textContent = '×';
+  close.onclick = closeToast;
+  el.appendChild(message);
+  el.appendChild(close);
+  el.className = type;
+  el.style.display = 'flex';
+  if (type !== 'error') {
+    toastTimer = setTimeout(closeToast, 4000);
+  }
 }
 
 function inferAdKeywordsFromTitle(title, keywords = '', articleType = 'ranking') {
