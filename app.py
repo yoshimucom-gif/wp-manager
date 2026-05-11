@@ -3134,15 +3134,14 @@ def generate_article(article_id):
     settings = load_settings()
     api_key = settings.get('claude_api_key') or os.environ.get('ANTHROPIC_API_KEY', '')
 
-    if not api_key:
-        return jsonify({'error': 'Claude APIキーが設定されていません'}), 400
-
     article_work = dict(article)
     for key in ('title', 'keywords', 'category', 'ad_keywords', 'site_id', 'slug'):
         if key in data:
             article_work[key] = data.get(key) or ''
     article_type = normalize_article_type(data.get('article_type') or article_work.get('article_type'), 'ranking')
     article_work['article_type'] = article_type
+    if not api_key and article_type != 'ranking':
+        return jsonify({'error': 'Claude APIキーが設定されていません'}), 400
     if not str(article_work.get('ad_keywords') or '').strip():
         article_work['ad_keywords'] = infer_ad_keywords_from_title(
             article_work.get('title', ''),
@@ -3222,7 +3221,7 @@ def generate_article(article_id):
         full_content = ''
         try:
             yield f"data: {json.dumps({'status': 'started', 'run_id': generation_run_id})}\n\n"
-            client = anthropic.Anthropic(api_key=api_key)
+            client = anthropic.Anthropic(api_key=api_key) if api_key else None
             prompt = f"""以下の情報をもとに、WordPressに投稿する記事を書いてください。
 
 タイトル: {article_work.get('title', '')}
@@ -3403,8 +3402,6 @@ def generate_article_direct(article_id):
     data = request.json or {}
     settings = load_settings()
     api_key = settings.get('claude_api_key') or os.environ.get('ANTHROPIC_API_KEY', '')
-    if not api_key:
-        return jsonify({'error': 'Claude APIキーが設定されていません'}), 400
 
     article_work = dict(article)
     for key in ('title', 'keywords', 'category', 'ad_keywords', 'site_id', 'slug'):
@@ -3458,7 +3455,7 @@ def generate_article_direct(article_id):
         previous_content = article.get('content', '')
         previous_content_hash = content_hash(previous_content)
         is_regeneration = bool(html_to_text(previous_content).strip())
-        client = anthropic.Anthropic(api_key=api_key)
+        client = anthropic.Anthropic(api_key=api_key) if api_key else None
         raw_content, usage_parts = generate_structured_ranking_article_sync(
             client,
             article_work,
@@ -3550,11 +3547,10 @@ def batch_generate():
     settings = load_settings()
     api_key = settings.get('claude_api_key') or os.environ.get('ANTHROPIC_API_KEY', '')
 
-    if not api_key:
-        return jsonify({'error': 'Claude APIキーが設定されていません'}), 400
-
     quality_list = load_quality()
     batch_article_type = normalize_article_type(data.get('article_type'), 'ranking')
+    if not api_key and batch_article_type != 'ranking':
+        return jsonify({'error': 'Claude APIキーが設定されていません'}), 400
     quality = select_quality_definition(quality_list, quality_id, batch_article_type)
     quality_prompt = build_quality_prompt(quality)
     reference_text = ''
@@ -3609,7 +3605,7 @@ def batch_generate():
         save_batch_jobs(jobs)
 
     def run_batch():
-        client = anthropic.Anthropic(api_key=api_key)
+        client = anthropic.Anthropic(api_key=api_key) if api_key else None
         completed = 0
         failed = 0
         retried = 0
