@@ -2596,9 +2596,23 @@ async function deleteSite(id) {
 }
 
 // ---- Articles ----
+async function parseJsonResponse(res, label = 'API') {
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (_) {
+    throw new Error(readableHttpError(res.status, text, label));
+  }
+  if (!res.ok) {
+    throw new Error(data?.error || `${label}でエラーが発生しました（HTTP ${res.status}）。`);
+  }
+  return data;
+}
+
 async function loadArticles() {
   const res = await fetch('/api/articles');
-  allArticles = await res.json();
+  allArticles = await parseJsonResponse(res, '記事API');
   updateStats();
   updateCategorySelects();
   filterArticles();
@@ -3648,7 +3662,7 @@ async function startGenerate() {
   btn.disabled = true;
   btn.textContent = '⌛ 生成中...';
   setGeneratePublishActionState(true, false);
-  setArticleLocalStatus(articleId, 'generating', 'バックグラウンドで記事生成中です。完了後に本文を表示します。');
+  setArticleLocalStatus(articleId, 'generating', 'ストリーミング生成中です。本文を順次表示します。');
 
   const progress = document.getElementById('gen-progress');
   const fill = document.getElementById('gen-progress-fill');
@@ -3668,24 +3682,61 @@ async function startGenerate() {
     });
     if (!saveRes.ok) throw new Error((await saveRes.json().catch(() => ({}))).error || '記事設定の保存に失敗しました');
 
-    const jobRes = await fetch('/api/batch-generate', {
+    const streamPayload = {
+      ...generatePayload,
+      include_amazon: includeAmazon,
+      include_rakuten: includeRakuten
+    };
+    const res = await fetch(`/api/generate/${articleId}`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        article_ids: [articleId],
-        quality_id: qualityId,
-        article_type: currentArticleType,
-        include_amazon: includeAmazon,
-        include_rakuten: includeRakuten,
-        decoration_id: decorationId,
-        ad_definition_id: adDefinitionId
-      })
+      body: JSON.stringify(streamPayload)
     });
-    const jobData = await jobRes.json().catch(() => ({}));
-    if (!jobRes.ok || !jobData.success) throw new Error(jobData.error || '生成ジョブの開始に失敗しました');
+    if (!res.ok || !res.body) {
+      const text = await res.text().catch(() => '');
+      let data = {};
+      try { data = JSON.parse(text); } catch (_) {}
+      throw new Error(data.error || readableHttpError(res.status, text, '生成API'));
+    }
 
-    if (progressNote) progressNote.textContent = 'バックグラウンドで記事生成中です。画面を移動しても処理は継続します。';
-    await waitForSingleGenerateCompletion(articleId, jobData.job_id);
+    if (progressNote) progressNote.textContent = 'Claude生成中です。本文を順次表示します。';
+    let streamedContent = '';
+    let doneSeen = false;
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let chunkCount = 0;
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, {stream: true});
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (!raw) continue;
+        const msg = JSON.parse(raw);
+        if (msg.status && progressNote) {
+          progressNote.textContent = msg.message || '生成中です。';
+        }
+        if (msg.text) {
+          streamedContent += msg.text;
+          output.textContent = streamedContent;
+          chunkCount += 1;
+          if (fill) fill.style.width = `${Math.min(90, 12 + chunkCount * 2)}%`;
+        }
+        if (msg.error) throw new Error(msg.error);
+        if (msg.done) {
+          doneSeen = true;
+          await finalizeGenerateSuccess(articleId, msg);
+        }
+      }
+    }
+    if (!doneSeen) {
+      const recovered = await recoverGenerateAfterStreamLoss(articleId, streamPayload, streamedContent);
+      if (!recovered) throw new Error('生成完了信号を受信できませんでした。再生成してください。');
+    }
   } catch (e) {
     const message = e?.message || '生成開始に失敗しました。';
     await markGenerateInterrupted(articleId, message);
