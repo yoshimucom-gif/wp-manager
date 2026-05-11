@@ -1948,10 +1948,21 @@ def build_segmented_article_steps(article, article_type):
 
 
 def build_segment_prompt(base_prompt, article, article_type, quality, step, index, total, current_content):
-    target = effective_target_chars(quality)
     section_target = segment_target_chars(quality, total)
     previous_tail = str(current_content or '')[-14000:]
-    return f"""{base_prompt}
+    quality_prompt = build_quality_prompt(quality)
+    return f"""WordPressに投稿する記事本文の一部を書いてください。
+
+タイトル: {article.get('title', '')}
+キーワード: {article.get('keywords', '')}
+カテゴリー: {article.get('category', '')}
+
+品質要件:
+{quality_prompt}
+
+{build_article_type_prompt(article_type)}
+{build_ranking_count_prompt(article, article_type)}
+{article_html_output_rules()}
 
 分割生成モード:
 - 記事全体ではなく、指定された今回の範囲だけを書いてください。
@@ -1959,6 +1970,7 @@ def build_segment_prompt(base_prompt, article, article_type, quality, step, inde
 - 既に書いた内容を繰り返さず、現在までの本文の続きとして自然につなげてください。
 - この分割記事は全{total}工程中の{index}工程目です。
 - 今回の出力目安は日本語本文換算で{section_target}文字以上です。
+- 今回の範囲を書き切るまで途中で止めないでください。
 - Gutenbergコメント（<!-- wp:... -->）は出力しないでください。
 
 現在までの本文（重複禁止・文脈確認用）:
