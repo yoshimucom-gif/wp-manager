@@ -1411,6 +1411,15 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
       <textarea id="quality-extra-rules" class="form-control" rows="3" placeholder="例: 結論を先に書く。箇条書きを多めにする。CTAは最後に1回だけ。"></textarea>
     </div>
     <div class="form-group">
+      <label class="form-label">記事構成HTML（完成版見本・任意）</label>
+      <textarea id="quality-structure-html" class="form-control" rows="8" placeholder="<h2>結論</h2>
+<p>...</p>
+<h2>比較表</h2>
+<table>...</table>
+<h2>よくある質問</h2>"></textarea>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">完成記事のHTMLを貼ると、見出し順・表・CTA配置・HTMLブロック構成だけを参考にします</div>
+    </div>
+    <div class="form-group">
       <label class="form-label">プロンプト</label>
       <textarea id="quality-prompt" class="form-control" rows="8" placeholder="記事生成時の品質要件を記述してください..."></textarea>
     </div>
@@ -4292,6 +4301,7 @@ function renderQuality() {
       </div>
       <div class="quality-prompt">${esc(q.prompt)}</div>
       ${q.reference_url ? `<div style="font-size:10px;margin-top:6px"><a href="${esc(q.reference_url)}" target="_blank" style="color:var(--accent)">🔗 書き方参考URL</a></div>` : ''}
+      ${q.structure_html ? `<div style="font-size:10px;margin-top:6px;color:var(--accent)">HTML構成見本あり</div>` : ''}
       <div class="quality-actions">
         <button class="btn btn-secondary btn-sm" onclick="editQuality('${q.id}')">✏ 編集</button>
         <button class="btn btn-secondary btn-sm" onclick="setDefaultQuality('${q.id}')">★ デフォルト</button>
@@ -4342,6 +4352,7 @@ function openQualityModal() {
   document.getElementById('quality-target-chars').value = '2500';
   document.getElementById('quality-tone').value = 'ですます調';
   document.getElementById('quality-extra-rules').value = '';
+  document.getElementById('quality-structure-html').value = '';
   document.getElementById('quality-prompt').value = '';
   document.getElementById('quality-is-default').checked = false;
   document.getElementById('quality-modal-title').textContent = '// 品質定義を追加';
@@ -4358,6 +4369,7 @@ function editQuality(id) {
   document.getElementById('quality-target-chars').value = q.target_chars || '';
   document.getElementById('quality-tone').value = q.tone || 'ですます調';
   document.getElementById('quality-extra-rules').value = q.extra_rules || '';
+  document.getElementById('quality-structure-html').value = q.structure_html || '';
   document.getElementById('quality-prompt').value = q.prompt;
   document.getElementById('quality-is-default').checked = q.is_default || false;
   document.getElementById('quality-modal-title').textContent = '// 品質定義を編集';
@@ -4377,6 +4389,7 @@ async function saveQuality() {
     target_chars: document.getElementById('quality-target-chars').value,
     tone: document.getElementById('quality-tone').value,
     extra_rules: document.getElementById('quality-extra-rules').value,
+    structure_html: document.getElementById('quality-structure-html').value,
     prompt: document.getElementById('quality-prompt').value,
     is_default: document.getElementById('quality-is-default').checked,
   };

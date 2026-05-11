@@ -2214,6 +2214,25 @@ def build_article_completion_prompt(quality, article_type, has_decoration=False,
 """
 
 
+def build_quality_structure_html_prompt(quality, limit=16000):
+    html = str((quality or {}).get('structure_html') or '').strip()
+    if not html:
+        return ''
+    if len(html) > limit:
+        html = html[:limit] + '\n\n...（構成HTMLが長いため後半を省略）'
+    return f"""
+
+記事構成HTMLの参考:
+- 以下は完成記事のHTML構成見本です。内容、固有名詞、口コミ、価格、リンク、商品名、事実関係は流用しないでください。
+- 見出し階層、ブロック順、比較表の位置、CTA/広告の置き方、FAQやまとめへの流れだけを参考にしてください。
+- 今回の記事テーマに合わない見出しや要素は無理に使わず、自然な構成へ調整してください。
+
+```html
+{html}
+```
+"""
+
+
 def build_article_continuation_prompt(article, article_type, quality, current_content, validation_error):
     target = effective_target_chars(quality)
     minimum = minimum_required_content_chars(quality)
@@ -3682,6 +3701,8 @@ def generate_article(article_id):
 参考記事テキスト:
 {style_reference_text[:5000]}'''
 
+            prompt += build_quality_structure_html_prompt(quality)
+
             if decoration_has_content(decoration):
                 prompt += decoration_reference_prompt(decoration, limit=4000)
 
@@ -3916,6 +3937,7 @@ def generate_article_direct(article_id):
 {build_ranking_structure_prompt(article_work, article_type)}
 
 {article_html_output_rules()}
+{build_quality_structure_html_prompt(quality)}
 {build_article_completion_prompt(quality, article_type, has_ads=bool(product_blocks))}
 """
             if product_blocks:
@@ -4140,6 +4162,8 @@ def batch_generate():
 
 参考記事テキスト:
 {style_reference_text[:5000]}'''
+
+                prompt += build_quality_structure_html_prompt(quality)
 
                 if decoration_has_content(decoration):
                     prompt += decoration_reference_prompt(decoration, limit=4000)
@@ -5119,6 +5143,7 @@ def create_quality():
         'target_chars': data.get('target_chars', ''),
         'tone': data.get('tone', 'ですます調'),
         'extra_rules': data.get('extra_rules', ''),
+        'structure_html': data.get('structure_html', ''),
         'prompt': data.get('prompt', ''),
         'is_default': bool(data.get('is_default')),
     }
@@ -5149,6 +5174,7 @@ def update_quality(quality_id):
             q['target_chars'] = data.get('target_chars', q.get('target_chars', ''))
             q['tone'] = data.get('tone', q.get('tone', 'ですます調'))
             q['extra_rules'] = data.get('extra_rules', q.get('extra_rules', ''))
+            q['structure_html'] = data.get('structure_html', q.get('structure_html', ''))
             q['prompt'] = data.get('prompt', q['prompt'])
             if data.get('is_default'):
                 for other in quality_list:
