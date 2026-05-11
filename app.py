@@ -2094,7 +2094,14 @@ def build_structured_ranking_html(article, plan, product_blocks=None):
 def generate_structured_ranking_article_sync(client, article, quality, product_blocks=None, on_step=None):
     if on_step:
         on_step(1, 2, 'ランキング設計データ')
-    plan, usage = generate_ranking_plan(client, article, quality)
+    try:
+        plan, usage = generate_ranking_plan(client, article, quality)
+    except Exception as e:
+        prompt = ranking_plan_prompt(article, quality)
+        plan = coerce_ranking_plan(article, {})
+        usage = build_article_usage(prompt, '')
+        usage['structured_builder_fallback'] = True
+        usage['plan_error'] = str(e)
     if on_step:
         on_step(2, 2, '固定骨組みHTML')
     content = build_structured_ranking_html(article, plan, product_blocks)
@@ -2104,11 +2111,27 @@ def generate_structured_ranking_article_sync(client, article, quality, product_b
 
 def generate_structured_ranking_article_sse(client, article, quality, product_blocks=None):
     yield f"data: {json.dumps({'status': 'segment', 'round': 1, 'total': 2, 'message': 'ランキング設計データを生成しています（1/2）'})}\n\n"
-    plan, usage = generate_ranking_plan(client, article, quality)
+    prompt = ranking_plan_prompt(article, quality)
+    try:
+        plan_text, message = yield from stream_claude_sse(
+            client,
+            prompt,
+            'ランキング設計データをClaudeから取得中です。処理は継続しています。',
+            emit_text=False
+        )
+        plan = coerce_ranking_plan(article, extract_json_object(plan_text))
+        usage = build_article_usage(prompt, plan_text, message)
+    except Exception as e:
+        yield f"data: {json.dumps({'status': 'segment_fallback', 'round': 1, 'total': 2, 'message': 'ランキング設計データの取得に失敗したため、固定構成で生成を継続します。'})}\n\n"
+        plan = coerce_ranking_plan(article, {})
+        usage = build_article_usage(prompt, '')
+        usage['structured_builder_fallback'] = True
+        usage['plan_error'] = str(e)
     yield f"data: {json.dumps({'status': 'segment', 'round': 2, 'total': 2, 'message': 'Affiros9側でランキングHTMLを組み立てています（2/2）'})}\n\n"
     content = build_structured_ranking_html(article, plan, product_blocks)
     usage['structured_builder'] = True
-    yield f"data: {json.dumps({'text': content})}\n\n"
+    for offset in range(0, len(content), 4000):
+        yield f"data: {json.dumps({'text': content[offset:offset + 4000]})}\n\n"
     return content, [usage]
 
 
@@ -2375,7 +2398,7 @@ def generate_segmented_article_sse(client, base_prompt, article, article_type, q
     return full_content, usage_parts
 
 
-def stream_claude_sse(client, prompt, wait_message='Claudeの応答を待っています。'):
+def stream_claude_sse(client, prompt, wait_message='Claudeの応答を待っています。', emit_text=True):
     events = queue.Queue()
 
     def worker():
@@ -2405,7 +2428,8 @@ def stream_claude_sse(client, prompt, wait_message='Claudeの応答を待って�
             continue
         if kind == 'text':
             content += value
-            yield f"data: {json.dumps({'text': value})}\n\n"
+            if emit_text:
+                yield f"data: {json.dumps({'text': value})}\n\n"
             continue
         if kind == 'error':
             raise value
