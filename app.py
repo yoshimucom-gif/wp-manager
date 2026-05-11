@@ -2172,17 +2172,19 @@ def build_segmented_article_steps(article, article_type):
             'prompt': f"""リード文、この記事でわかること、結論早見表、比較表だけを書いてください。
 - リード文は250〜350文字。
 - 比較表は必ずヘッダーを除いて{count}行にしてください。
+- 日本語本文換算で900〜1200文字を目安にしてください。
 - 比較表のあとにランキング本文へ入らず、ここで止めてください。"""
         }]
-        chunk_size = 3
+        chunk_size = 2
         for start in range(1, count + 1, chunk_size):
             end = min(count, start + chunk_size - 1)
             steps.append({
                 'name': f'ランキング個別解説 {start}〜{end}位',
                 'prompt': f"""ランキング本文のうち、{start}位から{end}位までの個別解説だけを書いてください。
-- 必ず <h3>{start}位：商品名</h3> から順に書いてください。
+- 必ず <h3 class="wp-block-heading">{start}位：商品名</h3> から順に書いてください。
 - {start}〜{end}位の順位番号を欠番・重複なしで入れてください。
-- 各商品の解説は、特徴・おすすめな人・注意点を含めて最低2段落以上。
+- 各商品の解説は、特徴・おすすめな人・注意点・他候補との違いを含めて最低2段落以上。
+- この工程全体で日本語本文換算900〜1200文字を目安にしてください。
 - 比較表やリード文は繰り返さないでください。
 - {end}位を書き終えたら、選び方やFAQへ進まず止めてください。"""
             })
@@ -2191,6 +2193,7 @@ def build_segmented_article_steps(article, article_type):
             'prompt': """選び方、購入前の注意点、FAQ、まとめだけを書いてください。
 - H2「選び方」を入れ、素材・価格・用途・サイズ感など判断軸を整理してください。
 - FAQは3〜5問。
+- 日本語本文換算で900〜1200文字を目安にしてください。
 - 最後に必ずH2「まとめ」を入れ、読者の次の行動まで示して記事を完結させてください。
 - ランキング個別解説は繰り返さないでください。"""
         })
@@ -2253,10 +2256,27 @@ def build_segmented_article_steps(article, article_type):
     ]
 
 
+def build_segment_common_context(base_prompt):
+    if not base_prompt:
+        return ''
+    text = str(base_prompt)
+    limit = 12000
+    if len(text) > limit:
+        head = text[:8000]
+        tail = text[-3000:]
+        text = f"{head}\n\n...（中略）...\n\n{tail}"
+    return f"""
+
+共通追加指示・広告/装飾/参考情報:
+{text}
+"""
+
+
 def build_segment_prompt(base_prompt, article, article_type, quality, step, index, total, current_content):
     section_target = segment_target_chars(quality, total)
     previous_tail = str(current_content or '')[-14000:]
     quality_prompt = build_quality_prompt(quality)
+    common_context = build_segment_common_context(base_prompt)
     return f"""WordPressに投稿する記事本文の一部を書いてください。
 
 タイトル: {article.get('title', '')}
@@ -2268,14 +2288,16 @@ def build_segment_prompt(base_prompt, article, article_type, quality, step, inde
 
 {build_article_type_prompt(article_type)}
 {build_ranking_count_prompt(article, article_type)}
+{build_ranking_structure_prompt(article, article_type)}
 {article_html_output_rules()}
+{common_context}
 
 分割生成モード:
 - 記事全体ではなく、指定された今回の範囲だけを書いてください。
 - 出力はWordPress本文HTMLのみ。説明文、作業メモ、Markdown、コードフェンスは禁止。
 - 既に書いた内容を繰り返さず、現在までの本文の続きとして自然につなげてください。
 - この分割記事は全{total}工程中の{index}工程目です。
-- 今回の出力目安は日本語本文換算で{section_target}文字以上です。
+- 今回の出力目安は日本語本文換算で{section_target}文字前後です。
 - 今回の範囲を書き切るまで途中で止めないでください。
 - Gutenbergコメント（<!-- wp:... -->）は出力しないでください。
 
@@ -2289,12 +2311,12 @@ def build_segment_prompt(base_prompt, article, article_type, quality, step, inde
 
 def segment_target_chars(quality, total):
     target = effective_target_chars(quality)
-    return max(800, min(1600, math.ceil(target / max(total, 1) * 0.9)))
+    return max(900, min(1300, math.ceil(target / max(total, 1))))
 
 
 def segment_minimum_chars(quality, total):
     target = segment_target_chars(quality, total)
-    return max(650, math.ceil(target * 0.75))
+    return max(750, math.ceil(target * 0.78))
 
 
 def build_segment_continuation_prompt(article, article_type, quality, step, index, total, current_content, segment_text, min_chars):
@@ -3298,7 +3320,15 @@ def generate_article(article_id):
             )
 
             usage_parts = []
-            if article_type == 'ranking':
+            if article_type == 'ranking' and client:
+                full_content, usage_parts = yield from generate_segmented_article_sse(
+                    client,
+                    prompt,
+                    article_work,
+                    article_type,
+                    quality
+                )
+            elif article_type == 'ranking':
                 full_content, usage_parts = yield from generate_structured_ranking_article_sse(
                     client,
                     article_work,
@@ -3487,12 +3517,41 @@ def generate_article_direct(article_id):
         previous_content_hash = content_hash(previous_content)
         is_regeneration = bool(html_to_text(previous_content).strip())
         client = anthropic.Anthropic(api_key=api_key) if api_key else None
-        raw_content, usage_parts = generate_structured_ranking_article_sync(
-            client,
-            article_work,
-            quality,
-            product_blocks
-        )
+        if client:
+            base_prompt = f"""以下の情報をもとに、WordPressに投稿する記事を書いてください。
+
+タイトル: {article_work.get('title', '')}
+キーワード: {article_work.get('keywords', '')}
+カテゴリー: {article_work.get('category', '')}
+
+品質要件:
+{build_quality_prompt(quality)}
+
+{build_article_type_prompt(article_type)}
+{build_ranking_count_prompt(article_work, article_type)}
+{build_ranking_structure_prompt(article_work, article_type)}
+
+{article_html_output_rules()}
+{build_article_completion_prompt(quality, article_type, has_ads=bool(product_blocks))}
+"""
+            if product_blocks:
+                base_prompt += '\n\n以下の商品カード（HTML）を記事の適切な箇所に自然に組み込んでください。HTMLはそのまま使用してください：\n'
+                for block in product_blocks:
+                    base_prompt += f'\n{block}\n'
+            raw_content, usage_parts = generate_segmented_article_sync(
+                client,
+                base_prompt,
+                article_work,
+                article_type,
+                quality
+            )
+        else:
+            raw_content, usage_parts = generate_structured_ranking_article_sync(
+                client,
+                article_work,
+                quality,
+                product_blocks
+            )
         clean_content = sanitize_generated_html(raw_content)
         validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
         content_chars = len(html_to_text(clean_content))
@@ -3723,7 +3782,19 @@ def batch_generate():
                     has_ads=bool(product_blocks or ad_instruction or rakuten_asp_instruction)
                 )
 
-                if article_type == 'ranking':
+                if article_type == 'ranking' and client:
+                    raw_content, usage_parts = generate_segmented_article_sync(
+                        client,
+                        prompt,
+                        article,
+                        article_type,
+                        quality,
+                        on_step=lambda step_index, step_total, step_name: update_job(
+                            current_title=article.get('title', ''),
+                            message=f"分割生成中: {article.get('title', '')} / {step_name} ({step_index}/{step_total})"
+                        )
+                    )
+                elif article_type == 'ranking':
                     raw_content, usage_parts = generate_structured_ranking_article_sync(
                         client,
                         article,
