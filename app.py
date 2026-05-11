@@ -698,8 +698,8 @@ class _LinkExtractor(HTMLParser):
             self._current = None
 
 
-def fetch_url_text(url, max_chars=4000):
-    resp = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+def fetch_url_text(url, max_chars=2500, timeout=5):
+    resp = requests.get(url, timeout=timeout, headers={'User-Agent': 'Mozilla/5.0'})
     resp.raise_for_status()
     p = _TextExtractor()
     p.feed(resp.text)
@@ -1860,7 +1860,7 @@ def amazon_search(keywords, access_key, secret_key, partner_tag, item_count=3):
             'x-amz-target': target,
         },
         data=payload,
-        timeout=10
+        timeout=4
     )
     if not resp.ok:
         try:
@@ -1906,7 +1906,7 @@ def rakuten_search(keywords, application_id, affiliate_id='', item_count=3):
     resp = requests.get(
         'https://app.rakuten.co.jp/services/api/IchibaItem/Search/20170706',
         params=params,
-        timeout=10
+        timeout=4
     )
     if not resp.ok:
         raise Exception(f'HTTP {resp.status_code}: {resp.text[:200]}')
@@ -2194,6 +2194,20 @@ def minimum_required_content_chars(quality=None):
     return max(1800, min(target - 500, int(target * 0.65)))
 
 
+def claude_max_tokens_for_quality(quality=None, floor=2800, ceiling=8000):
+    target = effective_target_chars(quality)
+    return max(floor, min(ceiling, int(target * 1.4) + 1200))
+
+
+def claude_segment_max_tokens(quality=None, total=1):
+    segment_target = max(900, math.ceil(effective_target_chars(quality) / max(total, 1)))
+    return max(2400, min(5500, int(segment_target * 1.8) + 1200))
+
+
+def claude_continuation_max_tokens(quality=None):
+    return claude_max_tokens_for_quality(quality, floor=1800, ceiling=4500)
+
+
 def build_article_completion_prompt(quality, article_type, has_decoration=False, has_ads=False):
     target = effective_target_chars(quality)
     minimum = minimum_required_content_chars(quality)
@@ -2214,7 +2228,7 @@ def build_article_completion_prompt(quality, article_type, has_decoration=False,
 """
 
 
-def build_quality_structure_html_prompt(quality, limit=16000):
+def build_quality_structure_html_prompt(quality, limit=6000):
     html = str((quality or {}).get('structure_html') or '').strip()
     if not html:
         return ''
@@ -2429,7 +2443,7 @@ def ranking_plan_prompt(article, quality):
 
 def generate_ranking_plan(client, article, quality):
     prompt = ranking_plan_prompt(article, quality)
-    message = create_claude_message(client, prompt, max_tokens=6000, timeout=60)
+    message = create_claude_message(client, prompt, max_tokens=3500, timeout=45)
     text = anthropic_message_text(message)
     return coerce_ranking_plan(article, extract_json_object(text)), build_article_usage(prompt, text, message)
 
@@ -2539,7 +2553,8 @@ def generate_structured_ranking_article_sse(client, article, quality, product_bl
             client,
             prompt,
             'ランキング設計データをClaudeから取得中です。処理は継続しています。',
-            emit_text=False
+            emit_text=False,
+            max_tokens=3500
         )
         plan = coerce_ranking_plan(article, extract_json_object(plan_text))
         usage = build_article_usage(prompt, plan_text, message)
@@ -2561,7 +2576,7 @@ def should_use_segmented_generation(article_type, quality=None):
     normalized = normalize_article_type(article_type, 'ranking')
     target = effective_target_chars(quality)
     if normalized == 'ranking':
-        return target >= 3000
+        return target >= 6000
     return normalized in ('brand', 'column') and target >= 7000
 
 
@@ -2662,10 +2677,10 @@ def build_segment_common_context(base_prompt):
     if not base_prompt:
         return ''
     text = str(base_prompt)
-    limit = 12000
+    limit = 8000
     if len(text) > limit:
-        head = text[:8000]
-        tail = text[-3000:]
+        head = text[:5500]
+        tail = text[-2000:]
         text = f"{head}\n\n...（中略）...\n\n{tail}"
     return f"""
 
@@ -2762,11 +2777,12 @@ def generate_segmented_article_sync(client, base_prompt, article, article_type, 
     full_content = ''
     usage_parts = []
     total = len(steps)
+    segment_max_tokens = claude_segment_max_tokens(quality, total)
     for index, step in enumerate(steps, 1):
         if on_step:
             on_step(index, total, step.get('name', ''))
         segment_prompt = build_segment_prompt(base_prompt, article, article_type, quality, step, index, total, full_content)
-        message = create_claude_message(client, segment_prompt)
+        message = create_claude_message(client, segment_prompt, max_tokens=segment_max_tokens)
         text = anthropic_message_text(message)
         usage_parts.append(build_article_usage(segment_prompt, text, message))
         min_chars = segment_minimum_chars(quality, total)
@@ -2786,7 +2802,7 @@ def generate_segmented_article_sync(client, base_prompt, article, article_type, 
                 text,
                 min_chars
             )
-            continuation_message = create_claude_message(client, continuation_prompt)
+            continuation_message = create_claude_message(client, continuation_prompt, max_tokens=segment_max_tokens)
             continuation_text = anthropic_message_text(continuation_message)
             usage_parts.append(build_article_usage(continuation_prompt, continuation_text, continuation_message))
             if not html_to_text(continuation_text).strip():
@@ -2801,6 +2817,7 @@ def generate_segmented_article_sse(client, base_prompt, article, article_type, q
     full_content = ''
     usage_parts = []
     total = len(steps)
+    segment_max_tokens = claude_segment_max_tokens(quality, total)
     for index, step in enumerate(steps, 1):
         name = step.get('name', '')
         yield f"data: {json.dumps({'status': 'segment', 'round': index, 'total': total, 'message': f'分割生成中: {name}（{index}/{total}）'})}\n\n"
@@ -2811,7 +2828,8 @@ def generate_segmented_article_sse(client, base_prompt, article, article_type, q
         text, message = yield from stream_claude_sse(
             client,
             segment_prompt,
-            f'分割生成中: {name}（{index}/{total}）。Claude応答待ちです。'
+            f'分割生成中: {name}（{index}/{total}）。Claude応答待ちです。',
+            max_tokens=segment_max_tokens
         )
         usage_parts.append(build_article_usage(segment_prompt, text, message))
         min_chars = segment_minimum_chars(quality, total)
@@ -2834,7 +2852,8 @@ def generate_segmented_article_sse(client, base_prompt, article, article_type, q
             continuation_text, continuation_message = yield from stream_claude_sse(
                 client,
                 continuation_prompt,
-                f'{name} の追記を生成中です。Claude応答待ちです。'
+                f'{name} の追記を生成中です。Claude応答待ちです。',
+                max_tokens=segment_max_tokens
             )
             usage_parts.append(build_article_usage(continuation_prompt, continuation_text, continuation_message))
             if not html_to_text(continuation_text).strip():
@@ -2844,14 +2863,14 @@ def generate_segmented_article_sse(client, base_prompt, article, article_type, q
     return full_content, usage_parts
 
 
-def stream_claude_sse(client, prompt, wait_message='Claudeの応答を待っています。', emit_text=True):
+def stream_claude_sse(client, prompt, wait_message='Claudeの応答を待っています。', emit_text=True, max_tokens=None):
     events = queue.Queue()
 
     def worker():
         try:
             with client.messages.stream(
                 model=CLAUDE_ARTICLE_MODEL,
-                max_tokens=CLAUDE_ARTICLE_MAX_TOKENS,
+                max_tokens=max_tokens or CLAUDE_ARTICLE_MAX_TOKENS,
                 messages=[{"role": "user", "content": prompt}]
             ) as stream:
                 for text in stream.text_stream:
@@ -3699,7 +3718,7 @@ def generate_article(article_id):
 - テーマや読者に合わない表現は使わず、今回の記事内容に自然に合わせてください。
 
 参考記事テキスト:
-{style_reference_text[:5000]}'''
+{style_reference_text[:2500]}'''
 
             prompt += build_quality_structure_html_prompt(quality)
 
@@ -3725,7 +3744,7 @@ def generate_article(article_id):
             )
 
             usage_parts = []
-            if article_type == 'ranking' and client:
+            if article_type == 'ranking' and client and should_use_segmented_generation(article_type, quality):
                 full_content, usage_parts = yield from generate_segmented_article_sse(
                     client,
                     prompt,
@@ -3752,7 +3771,8 @@ def generate_article(article_id):
                 full_content, final_message = yield from stream_claude_sse(
                     client,
                     prompt,
-                    'Claude生成中です。長文記事のため応答待ちです。'
+                    'Claude生成中です。応答待ちです。',
+                    max_tokens=claude_max_tokens_for_quality(quality)
                 )
                 usage_parts.append(build_article_usage(prompt, full_content, final_message))
 
@@ -3776,7 +3796,8 @@ def generate_article(article_id):
                 continuation_text, continuation_message = yield from stream_claude_sse(
                     client,
                     continuation_prompt,
-                    f'続きを生成中です（{continuation_round}回目）。Claude応答待ちです。'
+                    f'続きを生成中です（{continuation_round}回目）。Claude応答待ちです。',
+                    max_tokens=claude_continuation_max_tokens(quality)
                 )
                 full_content += continuation_text
                 usage_parts.append(build_article_usage(continuation_prompt, continuation_text, continuation_message))
@@ -3922,7 +3943,7 @@ def generate_article_direct(article_id):
         previous_content_hash = content_hash(previous_content)
         is_regeneration = bool(html_to_text(previous_content).strip())
         client = anthropic.Anthropic(api_key=api_key) if api_key else None
-        if client:
+        if client and should_use_segmented_generation(article_type, quality):
             base_prompt = f"""以下の情報をもとに、WordPressに投稿する記事を書いてください。
 
 タイトル: {article_work.get('title', '')}
@@ -4161,7 +4182,7 @@ def batch_generate():
 - テーマや読者に合わない表現は使わず、今回の記事内容に自然に合わせてください。
 
 参考記事テキスト:
-{style_reference_text[:5000]}'''
+{style_reference_text[:2500]}'''
 
                 prompt += build_quality_structure_html_prompt(quality)
 
@@ -4192,7 +4213,7 @@ def batch_generate():
                 )
 
                 stage = 'generate content'
-                if article_type == 'ranking' and client:
+                if article_type == 'ranking' and client and should_use_segmented_generation(article_type, quality):
                     raw_content, usage_parts = generate_segmented_article_sync(
                         client,
                         prompt,
@@ -4228,7 +4249,7 @@ def batch_generate():
                         )
                     )
                 else:
-                    message = create_claude_message(client, prompt)
+                    message = create_claude_message(client, prompt, max_tokens=claude_max_tokens_for_quality(quality))
                     raw_content = anthropic_message_text(message)
                     usage_parts = [build_article_usage(prompt, raw_content, message)]
                 stage = 'enhance and validate content'
@@ -4249,7 +4270,7 @@ def batch_generate():
                         content,
                         validation_error
                     )
-                    continuation_message = create_claude_message(client, continuation_prompt)
+                    continuation_message = create_claude_message(client, continuation_prompt, max_tokens=claude_continuation_max_tokens(quality))
                     continuation_text = anthropic_message_text(continuation_message)
                     usage_parts.append(build_article_usage(continuation_prompt, continuation_text, continuation_message))
                     if not html_to_text(continuation_text).strip():
