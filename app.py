@@ -25,10 +25,11 @@ import openpyxl
 import requests
 from requests_aws4auth import AWS4Auth
 try:
-    from bs4 import BeautifulSoup, FeatureNotFound
+    from bs4 import BeautifulSoup, FeatureNotFound, NavigableString
 except ImportError:
     BeautifulSoup = None
     FeatureNotFound = Exception
+    NavigableString = None
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -776,21 +777,94 @@ def balance_common_html_tags(html):
     return fixed
 
 
+COMMERCE_VISIBLE_URL_RE = re.compile(
+    r'https?://(?:www\.amazon\.co\.jp|amazon\.co\.jp|search\.rakuten\.co\.jp|hb\.afl\.rakuten\.co\.jp|[^/\s<>"\']*\.rakuten\.co\.jp|[^/\s<>"\']*\.rakuten\.ne\.jp)[^\s<>"\']*',
+    re.I
+)
+
+
+def commerce_link_label(href):
+    lower = str(href or '').lower()
+    if 'amazon.co.jp' in lower:
+        return 'Amazonで見る'
+    if 'rakuten' in lower:
+        return '楽天市場で見る'
+    return '商品を見る'
+
+
+def has_visible_commerce_url(text):
+    value = str(text or '')
+    lower = value.lower()
+    return bool(
+        COMMERCE_VISIBLE_URL_RE.search(value)
+        or 'tag=' in lower
+        or 'amazon.co.jp' in lower
+        or 'rakuten.co.jp' in lower
+        or 'rakuten.ne.jp' in lower
+        or 'hb.afl.rakuten.co.jp' in lower
+    )
+
+
+def strip_visible_commerce_urls_text(text):
+    return COMMERCE_VISIBLE_URL_RE.sub('', str(text or '')).replace('tag=', '').strip()
+
+
+def strip_visible_commerce_urls_regex(html):
+    parts = re.split(r'(<[^>]+>)', str(html or ''))
+    for index in range(0, len(parts), 2):
+        parts[index] = strip_visible_commerce_urls_text(parts[index])
+    return ''.join(parts)
+
+
 def strip_non_affiliate_commerce_links_regex(html):
     def repl(match):
         href = match.group(1)
         label = match.group(2)
         lower = href.lower()
         if 'amazon.co.jp' in lower and 'tag=' not in lower:
-            return re.sub(r'<[^>]+>', '', label)
+            return commerce_link_label(href)
         if (
             ('rakuten.co.jp' in lower or 'rakuten.ne.jp' in lower)
             and 'hb.afl.rakuten.co.jp' not in lower
             and 'affiliateurl=' not in lower
         ):
-            return re.sub(r'<[^>]+>', '', label)
+            return commerce_link_label(href)
+        if has_visible_commerce_url(label) and '<img' not in label.lower():
+            return re.sub(r'>([\s\S]*?)</a>$', f'>{commerce_link_label(href)}</a>', match.group(0), flags=re.I)
         return match.group(0)
-    return re.sub(r'<a\b[^>]*href=["\']([^"\']+)["\'][^>]*>([\s\S]*?)</a>', repl, html, flags=re.I)
+    html = re.sub(r'<a\b[^>]*href=["\']([^"\']+)["\'][^>]*>([\s\S]*?)</a>', repl, html, flags=re.I)
+    return strip_visible_commerce_urls_regex(html)
+
+
+def clean_visible_commerce_urls(root):
+    if not BeautifulSoup:
+        return
+    for a in root.find_all('a', href=True):
+        href = str(a.get('href') or '')
+        lower = href.lower()
+        if 'amazon.co.jp' in lower and 'tag=' not in lower:
+            a.replace_with(commerce_link_label(href))
+            continue
+        if (
+            ('rakuten.co.jp' in lower or 'rakuten.ne.jp' in lower)
+            and 'hb.afl.rakuten.co.jp' not in lower
+            and 'affiliateurl=' not in lower
+        ):
+            a.replace_with(commerce_link_label(href))
+            continue
+        label_text = a.get_text(' ', strip=True)
+        if label_text and not a.find('img') and has_visible_commerce_url(label_text):
+            a.clear()
+            a.append(commerce_link_label(href))
+    if not NavigableString:
+        return
+    for text_node in list(root.find_all(string=True)):
+        parent = getattr(text_node, 'parent', None)
+        if not parent or parent.name in ('script', 'style', 'a'):
+            continue
+        value = str(text_node)
+        if has_visible_commerce_url(value):
+            text_node.replace_with(NavigableString(strip_visible_commerce_urls_text(value)))
 
 
 def sanitize_generated_html(content):
@@ -812,18 +886,7 @@ def sanitize_generated_html(content):
             for attr in list(tag.attrs):
                 if attr.lower().startswith('on'):
                     del tag.attrs[attr]
-        for a in root.find_all('a', href=True):
-            href = str(a.get('href') or '')
-            lower = href.lower()
-            if 'amazon.co.jp' in lower and 'tag=' not in lower:
-                a.replace_with(a.get_text(strip=True) or 'Amazon')
-                continue
-            if (
-                ('rakuten.co.jp' in lower or 'rakuten.ne.jp' in lower)
-                and 'hb.afl.rakuten.co.jp' not in lower
-                and 'affiliateurl=' not in lower
-            ):
-                a.replace_with(a.get_text(strip=True) or '楽天市場')
+        clean_visible_commerce_urls(root)
         html = ''.join(str(child) for child in root.contents)
     if not BeautifulSoup:
         html = strip_non_affiliate_commerce_links_regex(balance_common_html_tags(html))
