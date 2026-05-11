@@ -2910,7 +2910,7 @@ def update_article(article_id):
             for key in [
                 'title', 'keywords', 'content', 'article_type', 'ad_keywords',
                 'category', 'priority', 'memo', 'schedule_date', 'quality_id',
-                'decoration_id', 'ad_definition_id', 'scheduled_at',
+                'decoration_id', 'ad_definition_id', 'scheduled_at', 'site_id',
                 'parent_article_id', 'source_product_name'
             ]:
                 if key in data:
@@ -3629,7 +3629,8 @@ def batch_generate():
 
     articles = load_articles()
     article_lookup = {a['id']: a for a in articles}
-    pending = [article_lookup[i] for i in requested_ids if i in article_lookup and article_lookup[i].get('status') in ('pending', 'error')]
+    generation_statuses = ('pending', 'error', 'generated', 'published', 'scheduled')
+    pending = [article_lookup[i] for i in requested_ids if i in article_lookup and article_lookup[i].get('status') in generation_statuses]
 
     if not pending:
         return jsonify({'error': '処理対象の記事がありません'}), 400

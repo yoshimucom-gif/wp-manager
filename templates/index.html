@@ -3533,11 +3533,33 @@ async function startGenerate() {
 
   const output = document.getElementById('gen-output');
   const btn = document.getElementById('gen-btn');
+  const includeAmazon = document.getElementById('gen-include-amazon').checked;
+  const includeRakuten = document.getElementById('gen-include-rakuten').checked;
+  const decorationId = document.getElementById('gen-decoration').value;
+  const adDefinitionId = document.getElementById('gen-ad-definition').value;
+  const title = document.getElementById('gen-title').value;
+  const keywords = document.getElementById('gen-keywords').value;
+  const adKeywords = document.getElementById('gen-ad-keywords').value || inferAdKeywordsFromTitle(title, keywords, currentArticleType);
+  const category = document.getElementById('gen-category').value;
+  const slug = document.getElementById('gen-slug').value;
+  const generatePayload = {
+    quality_id: qualityId,
+    title,
+    keywords,
+    ad_keywords: adKeywords,
+    category,
+    slug,
+    site_id: siteId,
+    article_type: currentArticleType,
+    decoration_id: decorationId,
+    ad_definition_id: adDefinitionId
+  };
+
   output.textContent = '';
   btn.disabled = true;
   btn.textContent = '⌛ 生成中...';
   setGeneratePublishActionState(true, false);
-  setArticleLocalStatus(articleId, 'generating', '再生成中です。完了後に本文と点数を更新します。');
+  setArticleLocalStatus(articleId, 'generating', 'バックグラウンドで分割生成中です。完了後に本文を表示します。');
 
   const progress = document.getElementById('gen-progress');
   const fill = document.getElementById('gen-progress-fill');
@@ -3546,129 +3568,38 @@ async function startGenerate() {
   fill.style.width = '10%';
   if (progressNote) {
     progressNote.style.display = 'block';
-    progressNote.textContent = 'Claude生成を開始しています...';
+    progressNote.textContent = '生成ジョブを開始しています...';
   }
 
-  let generatePayloadForRecovery = null;
   try {
-    const includeAmazon = document.getElementById('gen-include-amazon').checked;
-    const includeRakuten = document.getElementById('gen-include-rakuten').checked;
-    const decorationId = document.getElementById('gen-decoration').value;
-    const adDefinitionId = document.getElementById('gen-ad-definition').value;
-    const title = document.getElementById('gen-title').value;
-    const keywords = document.getElementById('gen-keywords').value;
-    const adKeywords = document.getElementById('gen-ad-keywords').value || inferAdKeywordsFromTitle(title, keywords, currentArticleType);
-    const category = document.getElementById('gen-category').value;
-    const slug = document.getElementById('gen-slug').value;
-    const generatePayload = {quality_id: qualityId, title, keywords, ad_keywords: adKeywords, category, slug, site_id: siteId, article_type: currentArticleType, include_amazon: includeAmazon, include_rakuten: includeRakuten, decoration_id: decorationId, ad_definition_id: adDefinitionId};
-    generatePayloadForRecovery = generatePayload;
-    const res = await fetch(`/api/generate/${articleId}`, {
-      method: 'POST',
+    const saveRes = await fetch(`/api/articles/${articleId}`, {
+      method: 'PUT',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify(generatePayload)
     });
-    if (!res.ok || !res.body) {
-      const data = await res.json().catch(() => ({}));
-      const message = data.error || '生成開始に失敗しました';
-      setArticleLocalStatus(articleId, 'error', message);
-      toast('エラー: ' + message, 'error');
-      return;
-    }
-    const contentType = res.headers.get('content-type') || '';
-    if (!contentType.includes('text/event-stream')) {
-      const text = await res.text().catch(() => '');
-      throw new Error(readableHttpError(res.status, text, '生成API'));
-    }
+    if (!saveRes.ok) throw new Error((await saveRes.json().catch(() => ({}))).error || '記事設定の保存に失敗しました');
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let charCount = 0;
-    let generationCompleted = false;
-    let generationError = false;
+    const jobRes = await fetch('/api/batch-generate', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        article_ids: [articleId],
+        quality_id: qualityId,
+        article_type: currentArticleType,
+        include_amazon: includeAmazon,
+        include_rakuten: includeRakuten,
+        decoration_id: decorationId,
+        ad_definition_id: adDefinitionId
+      })
+    });
+    const jobData = await jobRes.json().catch(() => ({}));
+    if (!jobRes.ok || !jobData.success) throw new Error(jobData.error || '生成ジョブの開始に失敗しました');
 
-    const handleGenerateMessage = async (msg) => {
-      if (msg.status === 'started') {
-        setArticleLocalStatus(articleId, 'generating', `Claude生成を開始しました（Run: ${String(msg.run_id || '').slice(0, 8)}）。`);
-        if (progressNote) progressNote.textContent = 'Claude生成を開始しました。';
-      }
-      if (msg.status === 'continuing') {
-        setArticleLocalStatus(articleId, 'generating', msg.message || '本文が未完了のため続きを生成しています。');
-        if (progressNote) progressNote.textContent = msg.message || '本文が未完了のため続きを生成しています。';
-        fill.style.width = Math.max(Number(fill.style.width.replace('%', '') || 0), 92) + '%';
-      }
-      if (msg.status === 'segment') {
-        setArticleLocalStatus(articleId, 'generating', msg.message || '章単位で生成しています。');
-        if (progressNote) progressNote.textContent = msg.message || '章単位で生成しています。';
-        if (msg.total) fill.style.width = Math.min(88, 10 + (Number(msg.round || 1) - 1) / Number(msg.total) * 78) + '%';
-      }
-      if (msg.status === 'segment_continuing') {
-        setArticleLocalStatus(articleId, 'generating', msg.message || '章の本文を追記しています。');
-        if (progressNote) progressNote.textContent = msg.message || '章の本文を追記しています。';
-      }
-      if (msg.status === 'heartbeat') {
-        if (progressNote) progressNote.textContent = msg.message || 'Claude応答待ちです。処理は継続しています。';
-      }
-      if (msg.text) {
-        output.textContent += msg.text;
-        output.scrollTop = output.scrollHeight;
-        if (progressNote) progressNote.textContent = '本文を受信中です...';
-        charCount += msg.text.length;
-        fill.style.width = Math.min(90, 10 + charCount / 50) + '%';
-      }
-      if (msg.done) {
-        generationCompleted = true;
-        await finalizeGenerateSuccess(articleId, msg);
-      }
-      if (msg.error) {
-        generationError = true;
-        setGeneratePublishActionState(true, false);
-        setArticleLocalStatus(articleId, 'error', msg.error);
-        if (progressNote) progressNote.textContent = msg.error;
-        await loadArticles();
-        toast('エラー: ' + msg.error, 'error');
-      }
-    };
-
-    while (true) {
-      const {done, value} = await reader.read();
-      if (done) {
-        buffer += decoder.decode();
-        break;
-      }
-      buffer += decoder.decode(value, {stream: true});
-      const lines = buffer.split('\n');
-      buffer = lines.pop();
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const raw = line.slice(6).trim();
-        if (!raw) continue;
-        const msg = JSON.parse(raw);
-        await handleGenerateMessage(msg);
-      }
-    }
-    const tail = buffer.trim();
-    if (tail.startsWith('data: ')) {
-      const raw = tail.slice(6).trim();
-      if (raw) await handleGenerateMessage(JSON.parse(raw));
-    }
-    if (!generationCompleted && !generationError) {
-      const recovered = await recoverGenerateAfterStreamLoss(articleId, generatePayload, output.textContent);
-      if (!recovered) {
-        await markGenerateInterrupted(
-          articleId,
-          '生成完了前に通信が切れました。完成本文は保存していません。もう一度生成してください。'
-        );
-      }
-    }
+    if (progressNote) progressNote.textContent = 'バックグラウンドで分割生成中です。画面を移動しても処理は継続します。';
+    await waitForSingleGenerateCompletion(articleId, jobData.job_id);
   } catch (e) {
-    const recovered = generatePayloadForRecovery
-      ? await recoverGenerateAfterStreamLoss(articleId, generatePayloadForRecovery, output.textContent)
-      : false;
-    if (!recovered) {
-      const message = e?.message || '生成中に接続エラーが発生しました。完成本文は保存していません。';
-      await markGenerateInterrupted(articleId, message);
-    }
+    const message = e?.message || '生成開始に失敗しました。';
+    await markGenerateInterrupted(articleId, message);
   }
 
   btn.disabled = false;
@@ -3678,6 +3609,46 @@ async function startGenerate() {
     progress.style.display = 'none';
     if (progressNote) progressNote.style.display = 'none';
   }, 1000);
+}
+
+async function waitForSingleGenerateCompletion(articleId, jobId) {
+  const output = document.getElementById('gen-output');
+  const fill = document.getElementById('gen-progress-fill');
+  const progressNote = document.getElementById('gen-progress-note');
+  const started = Date.now();
+  const timeoutMs = 30 * 60 * 1000;
+  while (Date.now() - started < timeoutMs) {
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    await loadArticles();
+    const article = allArticles.find(a => a.id === articleId);
+    const job = await loadLatestBatchJob();
+    if (article?.status === 'generated' && article.content) {
+      const usage = article.usage || null;
+      await finalizeGenerateSuccess(articleId, {
+        content_chars: article.last_generation_chars || generatedTextLength(article.content),
+        changed: article.last_generation_changed,
+        warning: article.generation_warning || '',
+        usage
+      });
+      return true;
+    }
+    if (article?.status === 'error') {
+      const message = article.error || '生成に失敗しました。';
+      if (progressNote) progressNote.textContent = message;
+      if (fill) fill.style.width = '100%';
+      toast(message, 'error');
+      return false;
+    }
+    const total = Number(job?.total || 1);
+    const done = Number(job?.completed || 0) + Number(job?.failed || 0);
+    const basePercent = total ? Math.round((done / total) * 100) : 0;
+    const elapsedPercent = Math.min(85, 15 + Math.floor((Date.now() - started) / 3000));
+    if (fill) fill.style.width = `${Math.max(basePercent, elapsedPercent)}%`;
+    if (progressNote) progressNote.textContent = article?.processing_message || job?.message || '分割生成中です。完了まで待機しています。';
+    if (output && !output.textContent.trim()) output.textContent = '// バックグラウンドで分割生成中です。完了後に本文を表示します。';
+  }
+  await markGenerateInterrupted(articleId, '生成が長時間完了しませんでした。一括処理または対応履歴で状態を確認してください。');
+  return false;
 }
 
 async function finalizeGenerateSuccess(articleId, result = {}) {
