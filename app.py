@@ -717,7 +717,9 @@ def article_html_output_rules():
 - WordPress/Gutenbergコメント（<!-- wp:... -->、<!-- /wp:... -->）は出力しない
 - 装飾サンプルはCSSクラスや構造の参考にするだけ。サンプル本文、人物画像URL、質問文、回答文、プレースホルダーは流用しない
 - 比較表は横幅が崩れにくいように列を増やしすぎず、セル内は短くする
-- 断定しすぎず、選び方・比較理由・向いている人・注意点を具体的に書く"""
+- 1つの<p>は長くしすぎず、原則2〜3文で区切る。長い説明は複数段落に分ける
+- 断定しすぎず、選び方・比較理由・向いている人・注意点を具体的に書く
+- Amazon・楽天のリンクは、こちらが渡した商品カードHTML以外では新規作成しない"""
 
 
 def decoration_reference_prompt(sample_html, limit=4000):
@@ -729,6 +731,8 @@ def decoration_reference_prompt(sample_html, limit=4000):
 - 以下はCSSクラス、ボックス構造、見出し構造、装飾パターンを学ぶための資料です
 - サンプル本文、画像URL、質問文、回答文、プレースホルダー、Gutenbergコメントをそのまま出力しないでください
 - 記事テーマに合わせて中身を必ず置き換え、壊れたHTMLや途中で切れたブロックは出力しないでください
+- 本文内に、要点ボックス・注意点ボックス・FAQ前の補足など、最低2箇所は装飾要素を使ってください
+- 重要文には必要に応じて <mark class="dbp-e-marker" style="background-image:linear-gradient(to bottom,transparent 0%,#FFF387 0%)">...</mark> を使ってください
 
 --- 装飾サンプルここから ---
 {sample[:limit]}
@@ -772,6 +776,23 @@ def balance_common_html_tags(html):
     return fixed
 
 
+def strip_non_affiliate_commerce_links_regex(html):
+    def repl(match):
+        href = match.group(1)
+        label = match.group(2)
+        lower = href.lower()
+        if 'amazon.co.jp' in lower and 'tag=' not in lower:
+            return re.sub(r'<[^>]+>', '', label)
+        if (
+            ('rakuten.co.jp' in lower or 'rakuten.ne.jp' in lower)
+            and 'hb.afl.rakuten.co.jp' not in lower
+            and 'affiliateurl=' not in lower
+        ):
+            return re.sub(r'<[^>]+>', '', label)
+        return match.group(0)
+    return re.sub(r'<a\b[^>]*href=["\']([^"\']+)["\'][^>]*>([\s\S]*?)</a>', repl, html, flags=re.I)
+
+
 def sanitize_generated_html(content):
     html = strip_wp_block_artifacts(strip_generated_noise(content))
     html = re.sub(r'<\s*(script|style|iframe|object|embed|form|input|textarea|button)\b[\s\S]*?<\s*/\s*\1\s*>', '', html, flags=re.I)
@@ -791,10 +812,237 @@ def sanitize_generated_html(content):
             for attr in list(tag.attrs):
                 if attr.lower().startswith('on'):
                     del tag.attrs[attr]
+        for a in root.find_all('a', href=True):
+            href = str(a.get('href') or '')
+            lower = href.lower()
+            if 'amazon.co.jp' in lower and 'tag=' not in lower:
+                a.replace_with(a.get_text(strip=True) or 'Amazon')
+                continue
+            if (
+                ('rakuten.co.jp' in lower or 'rakuten.ne.jp' in lower)
+                and 'hb.afl.rakuten.co.jp' not in lower
+                and 'affiliateurl=' not in lower
+            ):
+                a.replace_with(a.get_text(strip=True) or '楽天市場')
         html = ''.join(str(child) for child in root.contents)
     if not BeautifulSoup:
-        html = balance_common_html_tags(html)
+        html = strip_non_affiliate_commerce_links_regex(balance_common_html_tags(html))
     return strip_wp_block_artifacts(html).strip().strip('`').strip()
+
+
+def primary_article_keyword(article):
+    def usable(value):
+        candidate = re.sub(r'\s+', ' ', str(value or '')).strip()
+        if not (2 <= len(candidate) <= 30):
+            return ''
+        if not re.search(r'[\wぁ-んァ-ヶ一-龠]', candidate):
+            return ''
+        stripped = re.sub(r'[0-9０-９,\.\s円台選個本枚種類社]+', '', candidate)
+        if len(stripped) < 2:
+            return ''
+        return candidate
+
+    inferred = infer_ad_keywords_from_title(
+        article.get('title', ''),
+        article.get('keywords', ''),
+        article.get('article_type', 'ranking')
+    )
+    candidates = [
+        str(article.get('keywords') or '').split(',')[0].split('、')[0].strip(),
+        str(article.get('ad_keywords') or '').split(',')[0].split('、')[0].strip(),
+        str(article.get('category') or '').split(',')[0].split('、')[0].strip(),
+        inferred,
+    ]
+    for candidate in candidates:
+        candidate = usable(candidate)
+        if candidate:
+            return candidate
+    return ''
+
+
+def keyword_heading_text(original, keyword, article_type='ranking'):
+    text = re.sub(r'\s+', ' ', str(original or '')).strip()
+    if not keyword or keyword in text:
+        return text
+    normalized = normalize_article_type(article_type, 'ranking')
+    if text in ('まとめ', '総括'):
+        return f'まとめ｜{keyword}選びで失敗しないために'
+    if text in ('よくある質問', 'FAQ', 'Q&A'):
+        return f'{keyword}のよくある質問'
+    if '選び方' in text:
+        return text.replace('選び方', f'{keyword}の選び方')
+    if normalized == 'ranking' and ('ランキング' in text or '個別解説' in text or 'おすすめ' in text):
+        return f'{keyword}{text}'
+    if re.search(r'(?:第?\s*)?[1-9][0-9]?\s*位', text):
+        return f'{text}｜{keyword}'
+    if len(text) <= 32:
+        return f'{keyword}｜{text}'
+    return text
+
+
+def split_plain_paragraphs(soup):
+    for p in list(soup.find_all('p')):
+        if p.find(['a', 'img', 'table', 'ul', 'ol', 'div']):
+            continue
+        text = p.get_text('', strip=True)
+        if len(text) < 100:
+            continue
+        sentences = [s for s in re.split(r'(?<=[。！？])', text) if s.strip()]
+        if len(sentences) < 2:
+            continue
+        chunks = []
+        current = ''
+        for sentence in sentences:
+            if current and len(current) + len(sentence) > 90:
+                chunks.append(current)
+                current = sentence
+            else:
+                current += sentence
+        if current:
+            chunks.append(current)
+        if len(chunks) < 2:
+            continue
+        for chunk in reversed(chunks):
+            new_p = soup.new_tag('p')
+            new_p.string = chunk.strip()
+            p.insert_after(new_p)
+        p.decompose()
+
+
+def add_marker_to_first_keyword(soup, keyword):
+    if not keyword:
+        return
+    if soup.select_one('mark.dbp-e-marker'):
+        return
+    for p in soup.find_all('p'):
+        if p.find(['a', 'img', 'table', 'ul', 'ol', 'div', 'mark']):
+            continue
+        text = p.get_text('', strip=True)
+        index = text.find(keyword)
+        if index < 0:
+            continue
+        before = text[:index]
+        target = text[index:index + len(keyword)]
+        after = text[index + len(keyword):]
+        marker = soup.new_tag('mark')
+        marker['class'] = 'dbp-e-marker'
+        marker['style'] = 'background-image:linear-gradient(to bottom,transparent 0%,#FFF387 0%)'
+        marker.string = target
+        p.clear()
+        if before:
+            p.append(before)
+        p.append(marker)
+        if after:
+            p.append(after)
+        return
+
+
+def wrap_first_list_as_frame(soup, keyword):
+    if soup.select_one('.dbp-frame'):
+        return
+    target = None
+    for ul in soup.find_all(['ul', 'ol']):
+        if ul.find_parent(['table']) or ul.find_parent(class_='affiros9-rinker'):
+            continue
+        if len(ul.find_all('li', recursive=False)) >= 2:
+            target = ul
+            break
+    if not target:
+        return
+    frame = soup.new_tag('div')
+    frame['class'] = 'wp-block-dbp-frame l-frame-float is-design-voice is-frame-style-good dbp-frame'
+    title = soup.new_tag('div')
+    title['class'] = 'dbp-frame-title'
+    title.string = f'{keyword}選びで押さえるポイント' if keyword else 'この記事で押さえるポイント'
+    body = soup.new_tag('div')
+    body['class'] = 'dbp-frame-content has-content-gap'
+    target.replace_with(frame)
+    frame.append(title)
+    frame.append(body)
+    body.append(target)
+
+
+def format_block_html(html):
+    html = re.sub(r'(</(?:p|h2|h3|h4|ul|ol|table|figure|div)>)\s*(<(?:p|h2|h3|h4|ul|ol|table|figure|div)\b)', r'\1\n\n\2', html, flags=re.I)
+    html = re.sub(r'(</tr>)\s*(<tr\b)', r'\1\n\2', html, flags=re.I)
+    return html.strip()
+
+
+def enhance_generated_article_html_fallback(html, keyword, article_type):
+    if keyword:
+        def heading_repl(match):
+            tag = match.group(1)
+            attrs = match.group(2) or ''
+            inner = re.sub(r'<[^>]+>', '', match.group(3)).strip()
+            return f'<{tag}{attrs}>{escape(keyword_heading_text(inner, keyword, article_type))}</{tag}>'
+        html = re.sub(r'<(h[23])([^>]*)>([\s\S]*?)</\1>', heading_repl, html, flags=re.I)
+
+    def paragraph_repl(match):
+        attrs = match.group(1) or ''
+        inner = match.group(2)
+        if '<' in inner or len(re.sub(r'\s+', '', inner)) < 100:
+            return match.group(0)
+        sentences = [s for s in re.split(r'(?<=[。！？])', inner) if s.strip()]
+        if len(sentences) < 2:
+            return match.group(0)
+        chunks = []
+        current = ''
+        for sentence in sentences:
+            if current and len(current) + len(sentence) > 90:
+                chunks.append(current)
+                current = sentence
+            else:
+                current += sentence
+        if current:
+            chunks.append(current)
+        if len(chunks) < 2:
+            return match.group(0)
+        return ''.join(f'<p{attrs}>{chunk.strip()}</p>' for chunk in chunks)
+    html = re.sub(r'<p([^>]*)>([^<]{100,})</p>', paragraph_repl, html, flags=re.I)
+
+    if keyword:
+        marker = '<mark class="dbp-e-marker" style="background-image:linear-gradient(to bottom,transparent 0%,#FFF387 0%)">'
+        if 'dbp-e-marker' not in html and keyword in html:
+            html = html.replace(keyword, f'{marker}{escape(keyword)}</mark>', 1)
+
+    if 'dbp-frame' not in html:
+        frame_title = f'{keyword}選びで押さえるポイント' if keyword else 'この記事で押さえるポイント'
+        def list_repl(match):
+            list_html = match.group(0)
+            if len(re.findall(r'<li\b', list_html, flags=re.I)) < 2:
+                return list_html
+            return (
+                '<div class="wp-block-dbp-frame l-frame-float is-design-voice is-frame-style-good dbp-frame">'
+                f'<div class="dbp-frame-title">{escape(frame_title)}</div>'
+                '<div class="dbp-frame-content has-content-gap">'
+                f'{list_html}'
+                '</div></div>'
+            )
+        html = re.sub(r'<(?:ul|ol)\b[\s\S]*?</(?:ul|ol)>', list_repl, html, count=1, flags=re.I)
+    return html
+
+
+def enhance_generated_article_html(content, article, article_type):
+    html = sanitize_generated_html(content)
+    keyword = primary_article_keyword({**article, 'article_type': article_type})
+    if not html:
+        return format_block_html(html)
+    if not BeautifulSoup:
+        return format_block_html(enhance_generated_article_html_fallback(html, keyword, article_type))
+    try:
+        soup = BeautifulSoup(f'<div id="affiros9-enhance-root">{html}</div>', 'html5lib')
+    except FeatureNotFound:
+        soup = BeautifulSoup(f'<div id="affiros9-enhance-root">{html}</div>', 'html.parser')
+    root = soup.find(id='affiros9-enhance-root')
+    if not root:
+        return format_block_html(html)
+    if keyword:
+        for heading in root.find_all(['h2', 'h3']):
+            heading.string = keyword_heading_text(heading.get_text(' ', strip=True), keyword, article_type)
+    split_plain_paragraphs(root)
+    add_marker_to_first_keyword(root, keyword)
+    wrap_first_list_as_frame(root, keyword)
+    return format_block_html(''.join(str(child) for child in root.contents))
 
 
 def block_attrs(attrs=None):
@@ -1532,7 +1780,10 @@ def rakuten_search(keywords, application_id, affiliate_id='', item_count=3):
     data = resp.json()
     products = []
     for item in data.get('Items', []):
-        aff_url = item.get('affiliateUrl') or item.get('itemUrl', '')
+        aff_url = item.get('affiliateUrl') or ''
+        if affiliate_id and not aff_url:
+            continue
+        aff_url = aff_url or item.get('itemUrl', '')
         medium_images = item.get('mediumImageUrls', [])
         image = medium_images[0].get('imageUrl', '') if medium_images else ''
         price = item.get('itemPrice')
@@ -1554,7 +1805,7 @@ def build_rinker_html(amazon_p=None, rakuten_p=None, amazon_label='Amazonで見�
     title = escape(primary.get('title', ''))
     img = escape(primary.get('image', ''), quote=True)
     html = (
-        '<div style="border:1px solid #e8e8e8;border-radius:8px;padding:16px 20px;margin:24px 0;'
+        '<div class="affiros9-rinker" style="border:1px solid #e8e8e8;border-radius:8px;padding:16px 20px;margin:24px 0;'
         'background:#fff;box-shadow:0 1px 4px rgba(0,0,0,0.06)">'
         '<div style="display:flex;gap:16px;align-items:flex-start">'
     )
@@ -2277,11 +2528,13 @@ def build_segment_prompt(base_prompt, article, article_type, quality, step, inde
     previous_tail = str(current_content or '')[-14000:]
     quality_prompt = build_quality_prompt(quality)
     common_context = build_segment_common_context(base_prompt)
+    main_keyword = primary_article_keyword({**article, 'article_type': article_type})
     return f"""WordPressに投稿する記事本文の一部を書いてください。
 
 タイトル: {article.get('title', '')}
 キーワード: {article.get('keywords', '')}
 カテゴリー: {article.get('category', '')}
+狙う主要KW: {main_keyword}
 
 品質要件:
 {quality_prompt}
@@ -2300,6 +2553,10 @@ def build_segment_prompt(base_prompt, article, article_type, quality, step, inde
 - 今回の出力目安は日本語本文換算で{section_target}文字前後です。
 - 今回の範囲を書き切るまで途中で止めないでください。
 - Gutenbergコメント（<!-- wp:... -->）は出力しないでください。
+- h2/h3見出しには、できるだけ狙う主要KW「{main_keyword}」を自然に含めてください。
+- <p>は長くしすぎず、2〜3文ごとに分けてください。長い説明は段落を増やしてください。
+- 重要な結論・注意点・選び方の要点には、ボックス、箇条書き、マーカーなどの装飾を自然に使ってください。
+- Amazon・楽天リンクは、共通追加指示で渡された商品カードHTML以外から勝手に作らないでください。
 
 現在までの本文（重複禁止・文脈確認用）:
 {previous_tail}
@@ -3351,7 +3608,7 @@ def generate_article(article_id):
                 )
                 usage_parts.append(build_article_usage(prompt, full_content, final_message))
 
-            clean_content = sanitize_generated_html(full_content)
+            clean_content = enhance_generated_article_html(full_content, article_work, article_type)
             validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
             content_chars = len(html_to_text(clean_content))
             continuation_round = 0
@@ -3377,7 +3634,7 @@ def generate_article(article_id):
                 usage_parts.append(build_article_usage(continuation_prompt, continuation_text, continuation_message))
                 if not html_to_text(continuation_text).strip():
                     break
-                clean_content = sanitize_generated_html(full_content)
+                clean_content = enhance_generated_article_html(full_content, article_work, article_type)
                 validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
                 content_chars = len(html_to_text(clean_content))
 
@@ -3552,7 +3809,7 @@ def generate_article_direct(article_id):
                 quality,
                 product_blocks
             )
-        clean_content = sanitize_generated_html(raw_content)
+        clean_content = enhance_generated_article_html(raw_content, article_work, article_type)
         validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
         content_chars = len(html_to_text(clean_content))
         if not validation_error and content_chars < 500:
@@ -3826,7 +4083,7 @@ def batch_generate():
                     )
                     raw_content = anthropic_message_text(message)
                     usage_parts = [build_article_usage(prompt, raw_content, message)]
-                content = sanitize_generated_html(raw_content)
+                content = enhance_generated_article_html(raw_content, article, article_type)
                 validation_error = validate_generated_article(article, article_type, content, quality)
                 content_chars = len(html_to_text(content))
                 continuation_round = 0
@@ -3853,7 +4110,7 @@ def batch_generate():
                     if not html_to_text(continuation_text).strip():
                         break
                     raw_content += '\n' + continuation_text
-                    content = sanitize_generated_html(raw_content)
+                    content = enhance_generated_article_html(raw_content, article, article_type)
                     validation_error = validate_generated_article(article, article_type, content, quality)
                     content_chars = len(html_to_text(content))
                 if not validation_error and content_chars < 500:
