@@ -35,6 +35,10 @@ try:
     CLAUDE_ARTICLE_MAX_TOKENS = int(os.environ.get('CLAUDE_ARTICLE_MAX_TOKENS', '20000'))
 except ValueError:
     CLAUDE_ARTICLE_MAX_TOKENS = 20000
+try:
+    CLAUDE_ARTICLE_CONTINUATION_MAX_ROUNDS = int(os.environ.get('CLAUDE_ARTICLE_CONTINUATION_MAX_ROUNDS', '4'))
+except ValueError:
+    CLAUDE_ARTICLE_CONTINUATION_MAX_ROUNDS = 4
 DEFAULT_ARTICLE_TARGET_CHARS = 5000
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
@@ -1043,6 +1047,29 @@ def build_article_usage(prompt, content, message=None):
     }
 
 
+def combine_article_usages(usages):
+    valid = [u for u in (usages or []) if isinstance(u, dict)]
+    if not valid:
+        return build_article_usage('', '')
+    input_tokens = sum(int(u.get('input_tokens') or 0) for u in valid)
+    output_tokens = sum(int(u.get('output_tokens') or 0) for u in valid)
+    cost_usd = (input_tokens / 1_000_000 * SONNET_INPUT_USD_PER_MTOK) + (output_tokens / 1_000_000 * SONNET_OUTPUT_USD_PER_MTOK)
+    return {
+        'model': CLAUDE_ARTICLE_MODEL,
+        'input_tokens': int(input_tokens),
+        'output_tokens': int(output_tokens),
+        'cost_usd': round(cost_usd, 6),
+        'cost_yen': round(cost_usd * USAGE_ESTIMATE_USD_JPY, 2),
+        'estimated': any(bool(u.get('estimated')) for u in valid),
+        'calls': len(valid),
+        'pricing': {
+            'input_usd_per_mtok': SONNET_INPUT_USD_PER_MTOK,
+            'output_usd_per_mtok': SONNET_OUTPUT_USD_PER_MTOK,
+            'usd_jpy': USAGE_ESTIMATE_USD_JPY,
+        }
+    }
+
+
 def append_generation_usage(article, usage, run_id=None, generated_at=None, content=''):
     if not isinstance(usage, dict):
         return
@@ -1768,6 +1795,52 @@ def build_article_completion_prompt(quality, article_type, has_decoration=False,
 - 途中で出力が長くなりそうな場合は、装飾の量よりも本文の完結、商品解説、比較理由、FAQ、まとめを優先してください。
 {extra_text}
 """
+
+
+def build_article_continuation_prompt(article, article_type, quality, current_content, validation_error):
+    target = effective_target_chars(quality)
+    minimum = minimum_required_content_chars(quality)
+    current_chars = len(html_to_text(current_content))
+    remaining = max(800, target - current_chars)
+    current_tail = str(current_content or '')[-18000:]
+    return f"""以下の記事本文は途中で終わっているか、品質チェックに未達です。
+
+タイトル: {article.get('title', '')}
+キーワード: {article.get('keywords', '')}
+カテゴリー: {article.get('category', '')}
+記事種別: {article_type}
+現在の本文文字数: {current_chars}文字
+目標本文文字数: {target}文字前後
+最低本文文字数: {minimum}文字以上
+未達理由: {validation_error}
+
+やること:
+- 既存本文の続きを、WordPress本文HTMLとして出力してください。
+- すでに書かれている文章・見出し・比較表・ランキング項目を繰り返さないでください。
+- 出力は「続きのHTML本文だけ」にしてください。説明文、作業メモ、Markdown、コードフェンスは不要です。
+- 未完了のランキング個別解説、選び方、FAQ、まとめを優先して書き切ってください。
+- 最後は必ず「まとめ」セクションで完結させてください。
+- 追加本文は日本語本文換算で最低{remaining}文字を目安にしてください。
+
+{build_ranking_count_prompt(article, article_type)}
+{build_ranking_structure_prompt(article, article_type)}
+{article_html_output_rules()}
+
+現在までの本文（この続きだけを書く。重複禁止）:
+{current_tail}
+"""
+
+
+def anthropic_message_text(message):
+    parts = []
+    for block in getattr(message, 'content', []) or []:
+        if isinstance(block, dict):
+            text = block.get('text') or ''
+        else:
+            text = getattr(block, 'text', '') or ''
+        if text:
+            parts.append(text)
+    return ''.join(parts)
 
 
 def build_regeneration_instruction(previous_content):
@@ -2604,6 +2677,7 @@ def generate_article(article_id):
                 has_ads=bool(product_blocks or ad_instruction or rakuten_asp_instruction)
             )
 
+            usage_parts = []
             with client.messages.stream(
                 model=CLAUDE_ARTICLE_MODEL,
                 max_tokens=CLAUDE_ARTICLE_MAX_TOKENS,
@@ -2616,13 +2690,48 @@ def generate_article(article_id):
                     final_message = stream.get_final_message()
                 except Exception:
                     final_message = None
+            usage_parts.append(build_article_usage(prompt, full_content, final_message))
+
+            clean_content = sanitize_generated_html(full_content)
+            validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
+            content_chars = len(html_to_text(clean_content))
+            continuation_round = 0
+            while validation_error and continuation_round < CLAUDE_ARTICLE_CONTINUATION_MAX_ROUNDS:
+                continuation_round += 1
+                yield f"data: {json.dumps({'status': 'continuing', 'round': continuation_round, 'content_chars': content_chars, 'message': f'本文が短い/未完了のため続きを生成しています（{continuation_round}回目）'})}\n\n"
+                continuation_prompt = build_article_continuation_prompt(
+                    article_work,
+                    article_type,
+                    quality,
+                    clean_content,
+                    validation_error
+                )
+                continuation_text = ''
+                full_content += '\n'
+                yield f"data: {json.dumps({'text': '\\n'})}\n\n"
+                with client.messages.stream(
+                    model=CLAUDE_ARTICLE_MODEL,
+                    max_tokens=CLAUDE_ARTICLE_MAX_TOKENS,
+                    messages=[{"role": "user", "content": continuation_prompt}]
+                ) as continuation_stream:
+                    for text in continuation_stream.text_stream:
+                        continuation_text += text
+                        full_content += text
+                        yield f"data: {json.dumps({'text': text})}\n\n"
+                    try:
+                        continuation_message = continuation_stream.get_final_message()
+                    except Exception:
+                        continuation_message = None
+                usage_parts.append(build_article_usage(continuation_prompt, continuation_text, continuation_message))
+                if not html_to_text(continuation_text).strip():
+                    break
+                clean_content = sanitize_generated_html(full_content)
+                validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
+                content_chars = len(html_to_text(clean_content))
 
             current_articles = load_articles()
             for a in current_articles:
                 if a['id'] == article_id:
-                    clean_content = sanitize_generated_html(full_content)
-                    validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
-                    content_chars = len(html_to_text(clean_content))
                     similarity = content_similarity(previous_content, clean_content) if is_regeneration else 0
                     if not validation_error and content_chars < 500:
                         validation_error = f'生成結果が短すぎます（{content_chars}文字）。Claude生成が途中で止まった可能性があります。もう一度生成してください。'
@@ -2661,7 +2770,7 @@ def generate_article(article_id):
                     a['last_generation_changed'] = changed
                     a['last_generation_chars'] = content_chars
                     a['last_generation_similarity'] = round(similarity, 4)
-                    usage = build_article_usage(prompt, clean_content, final_message)
+                    usage = combine_article_usages(usage_parts)
                     append_generation_usage(a, usage, generation_run_id, generated_at, clean_content)
                     apply_score_fields(a)
                     break
@@ -2846,9 +2955,38 @@ def batch_generate():
                     max_tokens=CLAUDE_ARTICLE_MAX_TOKENS,
                     messages=[{"role": "user", "content": prompt}]
                 )
-                content = sanitize_generated_html(message.content[0].text)
+                raw_content = anthropic_message_text(message)
+                usage_parts = [build_article_usage(prompt, raw_content, message)]
+                content = sanitize_generated_html(raw_content)
                 validation_error = validate_generated_article(article, article_type, content, quality)
                 content_chars = len(html_to_text(content))
+                continuation_round = 0
+                while validation_error and continuation_round < CLAUDE_ARTICLE_CONTINUATION_MAX_ROUNDS:
+                    continuation_round += 1
+                    update_job(
+                        current_title=article.get('title', ''),
+                        message=f"本文が短い/未完了のため続きを生成中: {article.get('title', '')} ({continuation_round}回目)"
+                    )
+                    continuation_prompt = build_article_continuation_prompt(
+                        article,
+                        article_type,
+                        quality,
+                        content,
+                        validation_error
+                    )
+                    continuation_message = client.messages.create(
+                        model=CLAUDE_ARTICLE_MODEL,
+                        max_tokens=CLAUDE_ARTICLE_MAX_TOKENS,
+                        messages=[{"role": "user", "content": continuation_prompt}]
+                    )
+                    continuation_text = anthropic_message_text(continuation_message)
+                    usage_parts.append(build_article_usage(continuation_prompt, continuation_text, continuation_message))
+                    if not html_to_text(continuation_text).strip():
+                        break
+                    raw_content += '\n' + continuation_text
+                    content = sanitize_generated_html(raw_content)
+                    validation_error = validate_generated_article(article, article_type, content, quality)
+                    content_chars = len(html_to_text(content))
                 if not validation_error and content_chars < 500:
                     validation_error = f'生成結果が短すぎます（{content_chars}文字）。Claude生成が途中で止まった可能性があります。もう一度生成してください。'
                 if validation_error:
@@ -2873,7 +3011,7 @@ def batch_generate():
                         a['generated_at'] = generated_at
                         a['updated_at'] = generated_at
                         a['content_hash'] = content_hash(content)
-                        usage = build_article_usage(prompt, content, message)
+                        usage = combine_article_usages(usage_parts)
                         append_generation_usage(a, usage, run_id, generated_at, content)
                         apply_score_fields(a)
                         break

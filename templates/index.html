@@ -3349,6 +3349,10 @@ async function startGenerate() {
       if (msg.status === 'started') {
         setArticleLocalStatus(articleId, 'generating', `Claude生成を開始しました（Run: ${String(msg.run_id || '').slice(0, 8)}）。`);
       }
+      if (msg.status === 'continuing') {
+        setArticleLocalStatus(articleId, 'generating', msg.message || '本文が未完了のため続きを生成しています。');
+        fill.style.width = Math.max(Number(fill.style.width.replace('%', '') || 0), 92) + '%';
+      }
       if (msg.text) {
         output.textContent += msg.text;
         output.scrollTop = output.scrollHeight;
