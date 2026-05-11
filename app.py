@@ -1844,6 +1844,164 @@ def anthropic_message_text(message):
     return ''.join(parts)
 
 
+def should_use_segmented_generation(article_type, quality=None):
+    return effective_target_chars(quality) >= 3000 and normalize_article_type(article_type, 'ranking') in ('ranking', 'brand', 'column')
+
+
+def build_segmented_article_steps(article, article_type):
+    normalized = normalize_article_type(article_type, 'ranking')
+    if normalized == 'ranking':
+        count = extract_ranking_count(article) or 7
+        steps = [{
+            'name': '導入・早見表・比較表',
+            'prompt': f"""リード文、この記事でわかること、結論早見表、比較表だけを書いてください。
+- リード文は250〜350文字。
+- 比較表は必ずヘッダーを除いて{count}行にしてください。
+- 比較表のあとにランキング本文へ入らず、ここで止めてください。"""
+        }]
+        chunk_size = 3
+        for start in range(1, count + 1, chunk_size):
+            end = min(count, start + chunk_size - 1)
+            steps.append({
+                'name': f'ランキング個別解説 {start}〜{end}位',
+                'prompt': f"""ランキング本文のうち、{start}位から{end}位までの個別解説だけを書いてください。
+- 必ず <h3>{start}位：商品名</h3> から順に書いてください。
+- {start}〜{end}位の順位番号を欠番・重複なしで入れてください。
+- 各商品の解説は、特徴・おすすめな人・注意点を含めて最低2段落以上。
+- 比較表やリード文は繰り返さないでください。
+- {end}位を書き終えたら、選び方やFAQへ進まず止めてください。"""
+            })
+        steps.append({
+            'name': '選び方・FAQ・まとめ',
+            'prompt': """選び方、購入前の注意点、FAQ、まとめだけを書いてください。
+- H2「選び方」を入れ、素材・価格・用途・サイズ感など判断軸を整理してください。
+- FAQは3〜5問。
+- 最後に必ずH2「まとめ」を入れ、読者の次の行動まで示して記事を完結させてください。
+- ランキング個別解説は繰り返さないでください。"""
+        })
+        return steps
+
+    if normalized == 'brand':
+        return [
+            {
+                'name': '導入・結論・基本情報',
+                'prompt': """リード文、先に結論、商品/サービスの基本情報を書いてください。
+- リード文は250〜350文字。
+- 読者が最初に知りたい結論を明確にする。
+- 口コミや評判の章にはまだ進まないでください。"""
+            },
+            {
+                'name': '特徴・メリット・デメリット',
+                'prompt': """特徴、メリット、デメリット、向いている人/向いていない人を書いてください。
+- 押し売りではなく、判断材料として書く。
+- 既出の導入や基本情報を繰り返さないでください。"""
+            },
+            {
+                'name': '評判・比較・注意点',
+                'prompt': """口コミ/評判の見方、競合や代替との比較、購入/申込前の注意点を書いてください。
+- 良い面と悪い面の両方を扱う。
+- 根拠のない断定は避けてください。"""
+            },
+            {
+                'name': 'FAQ・まとめ',
+                'prompt': """FAQとまとめを書いて記事を完結させてください。
+- FAQは3〜5問。
+- 最後にH2「まとめ」を入れ、どんな人におすすめかを再整理してください。"""
+            },
+        ]
+
+    return [
+        {
+            'name': '導入・問題提起',
+            'prompt': """リード文、読者の悩み、記事で解決することを書いてください。
+- リード文は250〜350文字。
+- 背景説明に入りすぎず、読者の検索意図を明確にしてください。"""
+        },
+        {
+            'name': '原因・背景・基礎知識',
+            'prompt': """悩みの原因、背景、知っておくべき基礎知識を書いてください。
+- 専門用語は噛み砕いて説明する。
+- 解決策の章にはまだ進みすぎないでください。"""
+        },
+        {
+            'name': '解決策・具体例',
+            'prompt': """具体的な解決策、手順、例、注意点を書いてください。
+- 読者が実行できる粒度にする。
+- 必要ならチェックリストや表を使ってください。"""
+        },
+        {
+            'name': 'FAQ・まとめ',
+            'prompt': """FAQとまとめを書いて記事を完結させてください。
+- FAQは3〜5問。
+- 最後にH2「まとめ」を入れ、次の行動を明確にしてください。"""
+        },
+    ]
+
+
+def build_segment_prompt(base_prompt, article, article_type, quality, step, index, total, current_content):
+    target = effective_target_chars(quality)
+    section_target = max(700, math.ceil(target / max(total, 1)))
+    previous_tail = str(current_content or '')[-14000:]
+    return f"""{base_prompt}
+
+分割生成モード:
+- 記事全体ではなく、指定された今回の範囲だけを書いてください。
+- 出力はWordPress本文HTMLのみ。説明文、作業メモ、Markdown、コードフェンスは禁止。
+- 既に書いた内容を繰り返さず、現在までの本文の続きとして自然につなげてください。
+- この分割記事は全{total}工程中の{index}工程目です。
+- 今回の出力目安は日本語本文換算で{section_target}文字以上です。
+- Gutenbergコメント（<!-- wp:... -->）は出力しないでください。
+
+現在までの本文（重複禁止・文脈確認用）:
+{previous_tail}
+
+今回書く範囲: {step.get('name')}
+{step.get('prompt')}
+"""
+
+
+def generate_segmented_article_sync(client, base_prompt, article, article_type, quality, on_step=None):
+    steps = build_segmented_article_steps(article, article_type)
+    full_content = ''
+    usage_parts = []
+    total = len(steps)
+    for index, step in enumerate(steps, 1):
+        if on_step:
+            on_step(index, total, step.get('name', ''))
+        segment_prompt = build_segment_prompt(base_prompt, article, article_type, quality, step, index, total, full_content)
+        message = client.messages.create(
+            model=CLAUDE_ARTICLE_MODEL,
+            max_tokens=CLAUDE_ARTICLE_MAX_TOKENS,
+            messages=[{"role": "user", "content": segment_prompt}]
+        )
+        text = anthropic_message_text(message)
+        full_content += ('\n' if full_content else '') + text
+        usage_parts.append(build_article_usage(segment_prompt, text, message))
+    return full_content, usage_parts
+
+
+def generate_segmented_article_sse(client, base_prompt, article, article_type, quality):
+    steps = build_segmented_article_steps(article, article_type)
+    full_content = ''
+    usage_parts = []
+    total = len(steps)
+    for index, step in enumerate(steps, 1):
+        name = step.get('name', '')
+        yield f"data: {json.dumps({'status': 'segment', 'round': index, 'total': total, 'message': f'分割生成中: {name}（{index}/{total}）'})}\n\n"
+        if full_content:
+            full_content += '\n'
+            yield f"data: {json.dumps({'text': '\\n'})}\n\n"
+        segment_prompt = build_segment_prompt(base_prompt, article, article_type, quality, step, index, total, full_content)
+        text, message = yield from stream_claude_sse(
+            client,
+            segment_prompt,
+            f'分割生成中: {name}（{index}/{total}）。Claude応答待ちです。'
+        )
+        full_content += text
+        usage_parts.append(build_article_usage(segment_prompt, text, message))
+    return full_content, usage_parts
+
+
 def stream_claude_sse(client, prompt, wait_message='Claudeの応答を待っています。'):
     events = queue.Queue()
 
@@ -2717,12 +2875,21 @@ def generate_article(article_id):
             )
 
             usage_parts = []
-            full_content, final_message = yield from stream_claude_sse(
-                client,
-                prompt,
-                'Claude生成中です。長文記事のため応答待ちです。'
-            )
-            usage_parts.append(build_article_usage(prompt, full_content, final_message))
+            if should_use_segmented_generation(article_type, quality):
+                full_content, usage_parts = yield from generate_segmented_article_sse(
+                    client,
+                    prompt,
+                    article_work,
+                    article_type,
+                    quality
+                )
+            else:
+                full_content, final_message = yield from stream_claude_sse(
+                    client,
+                    prompt,
+                    'Claude生成中です。長文記事のため応答待ちです。'
+                )
+                usage_parts.append(build_article_usage(prompt, full_content, final_message))
 
             clean_content = sanitize_generated_html(full_content)
             validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
@@ -2975,13 +3142,26 @@ def batch_generate():
                     has_ads=bool(product_blocks or ad_instruction or rakuten_asp_instruction)
                 )
 
-                message = client.messages.create(
-                    model=CLAUDE_ARTICLE_MODEL,
-                    max_tokens=CLAUDE_ARTICLE_MAX_TOKENS,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                raw_content = anthropic_message_text(message)
-                usage_parts = [build_article_usage(prompt, raw_content, message)]
+                if should_use_segmented_generation(article_type, quality):
+                    raw_content, usage_parts = generate_segmented_article_sync(
+                        client,
+                        prompt,
+                        article,
+                        article_type,
+                        quality,
+                        on_step=lambda step_index, step_total, step_name: update_job(
+                            current_title=article.get('title', ''),
+                            message=f"分割生成中: {article.get('title', '')} / {step_name} ({step_index}/{step_total})"
+                        )
+                    )
+                else:
+                    message = client.messages.create(
+                        model=CLAUDE_ARTICLE_MODEL,
+                        max_tokens=CLAUDE_ARTICLE_MAX_TOKENS,
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                    raw_content = anthropic_message_text(message)
+                    usage_parts = [build_article_usage(prompt, raw_content, message)]
                 content = sanitize_generated_html(raw_content)
                 validation_error = validate_generated_article(article, article_type, content, quality)
                 content_chars = len(html_to_text(content))
