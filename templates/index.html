@@ -3648,7 +3648,7 @@ async function startGenerate() {
   btn.disabled = true;
   btn.textContent = '⌛ 生成中...';
   setGeneratePublishActionState(true, false);
-  setArticleLocalStatus(articleId, 'generating', 'バックグラウンドで分割生成中です。完了後に本文を表示します。');
+  setArticleLocalStatus(articleId, 'generating', 'バックグラウンドで記事生成中です。完了後に本文を表示します。');
 
   const progress = document.getElementById('gen-progress');
   const fill = document.getElementById('gen-progress-fill');
@@ -3740,8 +3740,8 @@ async function waitForSingleGenerateCompletion(articleId, jobId) {
     const basePercent = total ? Math.round((done / total) * 100) : 0;
     const elapsedPercent = Math.min(85, 15 + Math.floor((Date.now() - started) / 3000));
     if (fill) fill.style.width = `${Math.max(basePercent, elapsedPercent)}%`;
-    if (progressNote) progressNote.textContent = article?.processing_message || job?.message || '分割生成中です。完了まで待機しています。';
-    if (output && !output.textContent.trim()) output.textContent = '// バックグラウンドで分割生成中です。完了後に本文を表示します。';
+    if (progressNote) progressNote.textContent = article?.processing_message || job?.message || '記事生成中です。完了まで待機しています。';
+    if (output && !output.textContent.trim()) output.textContent = '// バックグラウンドで記事生成中です。完了後に本文を表示します。';
   }
   await markGenerateInterrupted(articleId, '生成が長時間完了しませんでした。一括処理または対応履歴で状態を確認してください。');
   return false;
