@@ -3329,10 +3329,11 @@ def generate_article(article_id):
             for a in current_articles:
                 if a['id'] == article_id:
                     similarity = content_similarity(previous_content, clean_content) if is_regeneration else 0
+                    generation_warning = ''
                     if not validation_error and content_chars < 500:
                         validation_error = f'生成結果が短すぎます（{content_chars}文字）。Claude生成が途中で止まった可能性があります。もう一度生成してください。'
                     if not validation_error and is_regeneration and similarity >= 0.985:
-                        validation_error = f'再生成しましたが既存本文とほぼ同じです（類似度 {round(similarity * 100, 1)}%）。保存しませんでした。条件を変えるか、もう一度再生成してください。'
+                        generation_warning = f'再生成結果は既存本文とほぼ同じです（類似度 {round(similarity * 100, 1)}%）。本文は生成済みとして保持しました。'
                     if validation_error:
                         a['status'] = 'error'
                         a['error'] = validation_error
@@ -3346,7 +3347,11 @@ def generate_article(article_id):
                     changed = new_content_hash != previous_content_hash
                     a['content'] = clean_content
                     a['status'] = 'generated'
-                    a.pop('generation_warning', None)
+                    if generation_warning:
+                        a['generation_warning'] = generation_warning
+                    else:
+                        a.pop('generation_warning', None)
+                    a.pop('error', None)
                     a.pop('last_generation_interrupted', None)
                     a['title'] = article_work.get('title', a.get('title', ''))
                     a['keywords'] = article_work.get('keywords', a.get('keywords', ''))
@@ -3371,7 +3376,7 @@ def generate_article(article_id):
                     apply_score_fields(a)
                     break
             save_articles(current_articles)
-            yield f"data: {json.dumps({'done': True, 'run_id': generation_run_id, 'content_chars': content_chars, 'changed': changed, 'similarity': round(similarity, 4), 'usage': usage})}\n\n"
+            yield f"data: {json.dumps({'done': True, 'run_id': generation_run_id, 'content_chars': content_chars, 'changed': changed, 'similarity': round(similarity, 4), 'warning': generation_warning, 'usage': usage})}\n\n"
         except Exception as e:
             current_articles = load_articles()
             for a in current_articles:

@@ -3538,16 +3538,20 @@ async function finalizeGenerateSuccess(articleId, result = {}) {
   await loadArticles();
   const usageYen = result.usage?.cost_yen ? ` / 概算 ${Math.ceil(Number(result.usage.cost_yen)).toLocaleString()}円` : '';
   const charInfo = result.content_chars ? `${Number(result.content_chars).toLocaleString()}文字` : '本文';
-  const message = result.changed === false
+  const article = allArticles.find(a => a.id === articleId);
+  const warningText = result.warning || article?.generation_warning || '';
+  const message = warningText || (result.changed === false
     ? `生成は完了しましたが、保存済み本文と同一でした（${charInfo}${usageYen}）。`
-    : `生成完了しました（${charInfo}${usageYen}）。点数と今月コストも更新済みです。`;
+    : `生成完了しました（${charInfo}${usageYen}）。点数と今月コストも更新済みです。`);
   setArticleLocalMessage(articleId, message);
   document.getElementById('gen-article-select').value = articleId;
-  const article = allArticles.find(a => a.id === articleId);
   const output = document.getElementById('gen-output');
   if (article?.content && output) output.textContent = article.content;
   updateGeneratePublishButton(articleId);
-  toast(article?.wp_post_id ? '記事生成が完了しました。既存WPへ上書き送信できます。' : '記事生成が完了しました。WP下書き投稿できます。', result.changed === false ? 'error' : 'success');
+  toast(
+    warningText || (article?.wp_post_id ? '記事生成が完了しました。既存WPへ上書き送信できます。' : '記事生成が完了しました。WP下書き投稿できます。'),
+    warningText ? 'info' : 'success'
+  );
 }
 
 async function publishGenerated() {
