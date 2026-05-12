@@ -645,7 +645,7 @@ def article_html_output_rules():
 - 比較表は横幅が崩れにくいように列を増やしすぎず、セル内は短くする
 - 1つの<p>は長くしすぎず、原則2〜3文で区切る。長い説明は複数段落に分ける
 - 断定しすぎず、選び方・比較理由・向いている人・注意点を具体的に書く
-- 広告カードやアフィリエイトリンクのHTMLは自分で書かない。代わりに商品見出しの直後に `<!-- AFFI:1 -->` のような **実際の数字** 入りHTMLコメントを1行入れる（番号は別途与えられる商品リストの AFFI 番号）。「AFFI:N」のまま N の文字で出すのは絶対禁止"""
+- 広告カード/アフィリエイトリンク/RINKER風カードHTMLは自分で書かない。Affiros9 側で各商品見出し（<h3>N位：商品名</h3>）の直後に自動で商品カードを挿入するので、本文側ではHTMLマーカーやAFFI番号を書く必要はない"""
 
 
 def strip_wp_block_artifacts(html):
@@ -2338,31 +2338,15 @@ def build_product_context_prompt(products, article_type='ranking'):
         '  1件として最も代表的な AFFI 番号を選んで紹介。同じ商品を「最安値版」「送料無料版」\n'
         '  のように順位を分けて複数掲載しないこと。\n'
         '\n'
-        '**重要 — 商品カード自動挿入のマーカー（厳守）**:\n'
-        '各順位の見出しの直後の行に、必ず以下の正確な形式のHTMLコメントを入れてください:\n'
-        '\n'
-        '    <!-- AFFI:1 -->\n'
-        '\n'
-        '↑ この「1」の部分には必ず**実際の数字（AFFI番号）**を入れる。\n'
-        '「AFFI:N」のまま出力するのは絶対NG。文字「N」ではなく数字に置換すること。\n'
-        '同じ商品については記事内に1回だけ入れる（複数箇所に入れない）。\n'
-        '\n'
-        '出力例（正しい）:\n'
-        '    <h3 class="wp-block-heading">1位：○○ネックウォーマー</h3>\n'
-        '    <!-- AFFI:3 -->\n'
-        '    <p>○○ネックウォーマーは...</p>\n'
-        '\n'
-        '出力例（間違い・絶対やらない）:\n'
-        '    <h3>1位：○○</h3>\n'
-        '    AFFI:N            ← N のままはNG\n'
-        '    AFFI:3            ← HTMLコメント形式じゃないのもNG\n'
-        '    <!-- AFFI:N -->   ← N のままはNG'
+        '**商品カードについて**:\n'
+        '商品見出し（<h3>N位：商品名</h3>）の直後に、Affiros9 側で楽天/Amazonの\n'
+        '商品カード（画像・価格・レビュー・ボタン）を**自動挿入**します。\n'
+        '本文側ではAFFI番号やカードHTMLを書く必要は一切ありません。\n'
+        '商品名は商品リストの正確な名前を使ってください（カード挿入の照合に使われます）。'
         if is_ranking else
         '使い方:\n'
         '- 必要なときだけ自然に商品名や価格帯を引用してください。\n'
-        '- 上記に含まれない実商品名は新たに発明しないでください。\n'
-        '- 商品を紹介した直後に `<!-- AFFI:N -->` を1行入れると自動で商品カードに置換されます。\n'
-        '  N は実際の数字（AFFI番号）に置き換えること。「N」のまま出力するのは禁止。'
+        '- 上記に含まれない実商品名は新たに発明しないでください。'
     )
     return f"\n\n{header}\n" + '\n'.join(rows) + f"\n\n{instruction}\n"
 
@@ -2459,66 +2443,47 @@ def _find_best_product_match(query_name, products, threshold=0.3):
 
 
 def inject_affiliate_cards(html, products):
-    """AFFI:N マーカーを商品カードHTMLに置換する。
+    """全 <h3>N位：商品名</h3> の直後に商品カードを挿入。
 
-    **重要**: Claude は本文と AFFI 番号を正しく対応させられないことがあるため、
-    各 <h3> 直後のマーカーは、まず h3 の商品名で類似度マッチして正しい商品を選ぶ。
-    マッチ失敗時のみ AFFI 番号をフォールバック使用する。
+    Claude のマーカー(AFFI:N) に依存せず、h3 の商品名から類似度マッチで
+    商品を見つけてカードを挿入する。マーカーは入っていれば掃除、なくてもOK。
     """
     if not html:
         return html
     products = products or []
     text = str(html)
 
-    # Pattern 1: <h3>商品名</h3> の直後に来るマーカーは h3 商品名で再マッチ（最優先）
-    h3_marker_pattern = re.compile(
-        r'(<h3[^>]*>([^<]+)</h3>)\s*'
-        r'(?:<p[^>]*>\s*)?(?:<!--\s*)?AFFI:\s*(\d+)\s*(?:-->)?(?:\s*</p>)?',
+    # 全 h3 ランキング見出しを検出して、その直後にカードを挿入
+    h3_rank_pattern = re.compile(
+        r'(<h3[^>]*>)\s*((?:\d+|[０-９]+)\s*位\s*[:：]?\s*[^<]+?)\s*(</h3>)',
         re.IGNORECASE
     )
 
-    def replace_h3_marker(match):
-        h3_full = match.group(1)
-        h3_text = match.group(2)
-        marker_n = int(match.group(3))
-        # 「N位：商品名」「N位:商品名」から商品名を取り出す
-        title_only = re.sub(r'^\s*\d+\s*位\s*[:：]?\s*', '', h3_text).strip()
+    def insert_card_after_h3(match):
+        h3_open = match.group(1)
+        h3_text = match.group(2).strip()
+        h3_close = match.group(3)
+        h3_full = f'{h3_open}{h3_text}{h3_close}'
+        if not products:
+            return h3_full
+        # 「N位：商品名」から商品名部分を抽出
+        title_only = re.sub(r'^\s*[\d０-９]+\s*位\s*[:：]?\s*', '', h3_text).strip()
         # 末尾の括弧書き（対応機種注釈など）を除去
-        title_only = re.sub(r'\s*[（(][^)）]{0,40}[)）]\s*$', '', title_only).strip()
-        # 1. h3商品名で類似度マッチを試みる
+        title_only = re.sub(r'\s*[（(][^)）]{0,80}[)）]\s*$', '', title_only).strip()
         match_idx = _find_best_product_match(title_only, products)
-        if match_idx is None and 1 <= marker_n <= len(products):
-            match_idx = marker_n - 1
         if match_idx is None:
             return h3_full
         card = build_product_card_html(products[match_idx])
         return f'{h3_full}\n{card}' if card else h3_full
 
-    text = h3_marker_pattern.sub(replace_h3_marker, text)
+    text = h3_rank_pattern.sub(insert_card_after_h3, text)
 
-    # Pattern 2: 残りの AFFI マーカー（h3 直後じゃない場所）は番号ベースで置換
-    def replace_by_number(match):
-        for g in match.groups():
-            if g and g.isdigit():
-                idx = int(g)
-                if 1 <= idx <= len(products):
-                    return build_product_card_html(products[idx - 1])
-                return ''
-        return ''
-
-    fallback_patterns = [
-        r'<p[^>]*>\s*<!--\s*AFFI:\s*(\d+)\s*-->\s*</p>',
-        r'<p[^>]*>\s*AFFI:\s*(\d+)\s*</p>',
-        r'<!--\s*AFFI:\s*(\d+)\s*-->',
-        r'(?:^|(?<=>))\s*AFFI:\s*(\d+)\s*(?=<|$)',
-    ]
-    for pat in fallback_patterns:
-        text = re.sub(pat, replace_by_number, text, flags=re.MULTILINE)
-
-    # Cleanup: 壊れたマーカー (リテラル N, 範囲外番号 など) を削除
-    text = re.sub(r'<p[^>]*>\s*(?:<!--\s*)?AFFI:\s*[A-Za-z0-9_]+\s*(?:-->)?\s*</p>', '', text)
-    text = re.sub(r'<!--\s*AFFI:\s*[A-Za-z0-9_]+\s*-->', '', text)
-    text = re.sub(r'(?:^|(?<=>))\s*AFFI:\s*[A-Za-z0-9_]+\s*(?=<|$)', '', text, flags=re.MULTILINE)
+    # Cleanup: Claude が残した AFFI:N マーカーを全部消す（カードはもう挿入済み）
+    text = re.sub(r'<p[^>]*>\s*(?:<!--\s*)?AFFI[:：]?\s*\w+\s*(?:-->)?\s*</p>', '', text)
+    text = re.sub(r'<!--\s*AFFI[:：]?\s*\w+\s*-->', '', text)
+    text = re.sub(r'(?m)^\s*AFFI[:：]?\s*\w+\s*$', '', text)
+    text = re.sub(r'\bAFFI[:：]\s*\w+\b', '', text)
+    text = re.sub(r'(<p[^>]*>)\s*(</p>)', '', text)  # 残った空 p タグ
     return text
 
 
@@ -2692,8 +2657,10 @@ def build_segmented_article_steps(article, article_type):
             'name': '導入・比較表',
             'prompt': f"""リード文、この記事でわかること、比較表だけを書いてください。
 - リード文は短めにまとめる（おおむね200〜300文字）。
-- 「結論早見表」「おすすめ早見表」のような早見表セクションは作らないこと。比較表だけで十分です。
-- 比較表は必ずヘッダーを除いて{count}行にしてください。
+- **早見表（簡易な一覧テーブル）は絶対に作らない**。具体的に禁止するH2例:
+  「結論：◯◯おすすめ早見表」「おすすめ早見表」「◯選 早見表」「結論早見表」等。
+- 比較表（H2は「比較表」「◯◯比較」など）は1つだけ。必ずヘッダーを除いて{count}行。
+- 順位・商品名・特徴・価格などをまとめる表は比較表1つに集約。同じ情報の表を2回作らない。
 - 比較表のあとにランキング本文へ入らず、ここで止めてください。
 - 文字数は次の「今回の出力目安」に従い、長く書きすぎないこと。"""
         }]
@@ -2705,13 +2672,11 @@ def build_segmented_article_steps(article, article_type):
                 'name': f'ランキング個別解説 {start}〜{end}位',
                 'prompt': f"""ランキング本文のうち、{start}位から{end}位までの個別解説だけを書いてください。
 - 必ず <h3 class="wp-block-heading">{start}位：商品名</h3> から順に書いてください。
+  商品名は商品リストの正確な名前を使う（または短縮した代表名）。
 - {start}〜{end}位の順位番号を欠番・重複なしで入れてください。
-- **各商品の見出し（<h3>）の直後の1行に、必ず `<!-- AFFI:1 -->` のような実際の数字付きHTMLコメントを入れる。**
-  番号は前述の商品リストの AFFI 番号を使う。例: 1位の商品が AFFI:3 なら
-  「<h3>1位：商品名</h3>」の次の行に「<!-- AFFI:3 -->」と書く。
-  「AFFI:N」のまま N の文字を残すのは絶対NG。HTMLコメント形式 `<!--` `-->` も必須。
-- **各商品の解説本文（マーカー後の段落）は厳格に300〜400文字に収める**。
-  これを超えるとカードと本文のバランスが崩れるため、冗長な前置き・繰り返しは厳禁。
+- 商品カード（画像・価格・ボタン）は **Affiros9 側で h3 の直後に自動挿入** するので、
+  本文側で AFFI マーカーや商品カードHTMLを書く必要はない。
+- 各商品の解説本文は **厳格に300〜400文字** に収める。冗長な前置き・繰り返しは厳禁。
 - 解説には特徴・おすすめな人・注意点を簡潔に1〜2段落でまとめる。
 - 比較表やリード文は繰り返さないでください。
 - {end}位を書き終えたら、選び方やFAQへ進まず止めてください。
@@ -2720,11 +2685,11 @@ def build_segmented_article_steps(article, article_type):
         steps.append({
             'name': '選び方・FAQ・まとめ',
             'prompt': """選び方、購入前の注意点、FAQ、まとめだけを書いてください。
-- H2「選び方」を入れ、素材・価格・用途・サイズ感など判断軸を整理してください。
-- FAQは3〜5問。質問ごとにH3見出しを使い、その下に回答段落を書いてください。
-- 最後に必ずH2「まとめ」を入れ、読者の次の行動まで示して記事を完結させてください。
+- H2「選び方」を入れ、素材・価格・用途・サイズ感など判断軸を整理してください（200〜300文字程度）。
+- FAQは3〜5問。質問ごとにH3見出しを使い、その下に回答段落（各50〜120文字）を書いてください。
+- **最後に必ずH2「まとめ」を入れて記事を完結させる**。読者の次の行動まで示す（120〜200文字）。
 - ランキング個別解説は繰り返さないでください。
-- 文字数は次の「今回の出力目安」に従い、長く書きすぎないこと。"""
+- **完結性を優先**: 選び方・FAQ・まとめ全てを必ず入れる。文字数目安より「全項目を入れて記事を終わらせる」ことを優先。"""
         })
         return steps
 
@@ -2837,7 +2802,7 @@ def build_segment_prompt(base_prompt, article, article_type, quality, step, inde
 - h2/h3見出しには、できるだけ狙う主要KW「{main_keyword}」を自然に含めてください。
 - <p>は長くしすぎず、2〜3文ごとに分けてください。長い説明は段落を増やしてください。
 - 重要な結論・注意点・選び方の要点には、太字、赤字、マーカー、リスト、表だけを自然に使ってください。
-- 商品カード/RINKER風HTMLは自分で作らない。代わりに各商品の見出し直後に `<!-- AFFI:1 -->` のような実際の数字付きHTMLコメントを1行入れる（Affiros9側で楽天/Amazonの商品カードに自動置換します）。番号は上で提示されたAFFI番号を使う。「AFFI:N」のままN文字で出すのは絶対NG。
+- 商品カード/RINKER風HTMLは自分で作らない。Affiros9 側で各 <h3>N位：商品名</h3> の直後に楽天/Amazonの商品カードを自動挿入するので、本文側ではAFFIマーカーやカードHTMLは不要。
 
 現在までの本文（重複禁止・文脈確認用）:
 {previous_tail}
