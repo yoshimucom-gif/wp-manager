@@ -1069,8 +1069,9 @@ tr.selected td { background: var(--accent-dim); }
             <div class="form-group">
               <label class="form-label">品質定義</label>
               <select id="batch-quality" class="form-control">
-                <option value="">-- 品質定義を選択 --</option>
+                <option value="">自動（記事種類ごとに割り当て）</option>
               </select>
+              <div class="form-help">空欄なら記事種類ごとに対応する品質定義を自動選択。固定したい時だけ選択。</div>
             </div>
             <div class="form-group">
               <label class="form-label">投稿ステータス</label>
@@ -1157,6 +1158,7 @@ tr.selected td { background: var(--accent-dim); }
                   <tr>
                     <th><input type="checkbox" class="check-all" id="batch-check-all" onchange="toggleBatchAll(this)"></th>
                     <th>タイトル</th>
+                    <th>記事種類</th>
                     <th>スラッグ</th>
                     <th>カテゴリー</th>
                     <th>投稿予定</th>
@@ -3614,6 +3616,7 @@ function loadBatchArticles() {
     <tr>
       <td><input type="checkbox" class="check-row" value="${a.id}" ${batchRowSelectable(a, filter) ? 'checked' : 'disabled'}></td>
       <td style="font-size:12px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.title)}</td>
+      <td style="font-size:11px;color:var(--muted);white-space:nowrap">${esc(articleTypeLabel(a.article_type || 'ranking'))}</td>
       <td><input type="text" class="form-control" value="${esc(a.slug || '')}" placeholder="自動" style="font-size:11px;height:28px" onchange="saveBatchField('${a.id}', 'slug', this.value)"></td>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${esc(a.category || '—')}</td>
       <td><input type="date" class="form-control" value="${esc(a.schedule_date || '')}" style="font-size:11px;height:28px" onchange="saveBatchField('${a.id}', 'schedule_date', this.value)"></td>
@@ -3952,19 +3955,20 @@ function renderQuality() {
 }
 
 function loadQualitySelects() {
-  const opts = '<option value="">-- 品質定義を選択 --</option>' +
-    qualityList.map(q => `<option value="${q.id}">${esc(q.name)}</option>`).join('');
+  const defaultOpt = '<option value="">-- 品質定義を選択 --</option>';
+  const batchOpt = '<option value="">自動（記事種類ごとに割り当て）</option>';
+  const qualityOpts = qualityList.map(q => `<option value="${q.id}">${esc(q.name)}</option>`).join('');
   ['quality-filter', 'gen-quality', 'batch-quality', 's-default-quality'].forEach(id => {
     const el = document.getElementById(id);
     if (el) {
       const prev = el.value;
-      el.innerHTML = opts;
+      el.innerHTML = (id === 'batch-quality' ? batchOpt : defaultOpt) + qualityOpts;
       if (id === 'quality-filter') {
         el.value = qualityList.some(q => q.id === prev) ? prev : '';
+      } else if (id === 'batch-quality') {
+        el.value = qualityList.some(q => q.id === prev) ? prev : '';
       } else {
-        const articleType = id === 'batch-quality'
-          ? (document.getElementById('batch-article-type-filter')?.value || currentArticleType)
-          : currentArticleType;
+        const articleType = currentArticleType;
         const fallback = defaultQualityId(articleType);
         el.value = qualityList.some(q => q.id === prev) ? prev : (fallback || '');
       }

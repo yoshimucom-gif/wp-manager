@@ -1235,6 +1235,7 @@ def title_generation_prompt(keywords, count_per_keyword, category=''):
     {{
       "keyword": "対象キーワード",
       "title": "記事タイトル",
+      "slug": "english-slug",
       "article_type": "ranking/brand/column のいずれか",
       "search_intent": "読者の検索意図を短く",
       "reason": "このタイトルにした理由を短く",
@@ -1254,6 +1255,9 @@ def title_generation_prompt(keywords, count_per_keyword, category=''):
 - 広いジャンル名だけなら brand にしない。
 - 釣りタイトル、誇大表現、根拠のない断定は禁止。
 - 文字数は日本語で28〜45字前後を基本にする。
+- slug は英語のみ・小文字・ハイフン区切り（kebab-case）。3〜4単語、最大30文字以内。
+  記事内容を端的に表すSEOフレンドリーな英語に翻訳/要約する（直訳のローマ字化は禁止）。
+  例: 「ネックウォーマーおすすめランキング」→「neck-warmer-ranking」。
 - JSON以外の説明文、Markdown、コードフェンスは禁止。"""
 
 
@@ -1291,9 +1295,11 @@ def coerce_title_ideas(payload, keywords, count_per_keyword):
         matched = keyword_set.get(normalize_title_key(keyword))
         if not matched:
             matched = next((kw for kw in keywords if kw in title), '')
+        raw_slug = re.sub(r'[^a-z0-9-]', '', normalize_slug(str(item.get('slug') or '').lower()))[:30].strip('-')
         idea = {
             'keyword': matched or keyword or (keywords[0] if keywords else ''),
             'title': title[:120],
+            'slug': raw_slug,
             'search_intent': str(item.get('search_intent') or item.get('intent') or '').strip()[:160],
             'reason': str(item.get('reason') or '').strip()[:220],
             'priority': str(item.get('priority') or '中').strip()[:10],
@@ -1336,6 +1342,7 @@ def enrich_title_ideas(ideas, category='', site_id=''):
             'id': str(uuid.uuid4()),
             'keyword': keyword,
             'title': title,
+            'slug': str(idea.get('slug') or '').strip(),
             'search_intent': str(idea.get('search_intent') or '').strip(),
             'reason': str(idea.get('reason') or '').strip(),
             'priority': str(idea.get('priority') or ('高' if score >= 82 else '中')).strip() or '中',
@@ -4069,8 +4076,12 @@ def batch_generate():
     batch_article_type = normalize_article_type(data.get('article_type'), 'ranking')
     if not api_key and batch_article_type != 'ranking':
         return jsonify({'error': 'Claude APIキーが設定されていません'}), 400
-    quality = select_quality_definition(quality_list, quality_id, batch_article_type)
-    quality_prompt = build_quality_prompt(quality)
+    quality_cache = {}
+    def resolve_quality_for(art_type):
+        if art_type not in quality_cache:
+            q = select_quality_definition(quality_list, quality_id, art_type)
+            quality_cache[art_type] = (q, build_quality_prompt(q))
+        return quality_cache[art_type]
     style_reference_cache = {}
     now = datetime.now().isoformat()
     job_id = str(uuid.uuid4())
@@ -4132,6 +4143,7 @@ def batch_generate():
                 retry_suffix = f"（リトライ{attempt_no - 1}/{BATCH_GENERATION_MAX_RETRIES}）" if attempt_no > 1 else ''
                 update_job(current_title=article.get('title', ''), message=f"生成中{retry_suffix}: {article.get('title', '')}")
                 article_type = normalize_article_type(article.get('article_type') or batch_article_type, batch_article_type)
+                quality, quality_prompt = resolve_quality_for(article_type)
                 use_generation_extras = False
                 pipeline_warnings = []
                 if not api_key and article_type != 'ranking':
