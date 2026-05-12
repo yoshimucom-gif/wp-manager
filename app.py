@@ -2219,7 +2219,11 @@ def merge_products_by_similarity(rakuten_items, amazon_items, threshold=0.45):
 
 
 def fetch_product_context(article, settings, limit=15):
-    """楽天/Amazonから商品データを取得し、類似度マージした統合リストを返す。
+    """商品データを取得して統合リストを返す。
+
+    優先順位:
+    1. Amazon PA-API が設定されていれば Amazon のみ使用（CV重視）
+    2. Amazon 設定が無いか検索失敗時のみ 楽天 にフォールバック
 
     Returns: (list[dict], status_string).
     各dictは {'rakuten': {..} or None, 'amazon': {..} or None} 構造。
@@ -2239,25 +2243,31 @@ def fetch_product_context(article, settings, limit=15):
     amazon_secret_key = settings.get('amazon_secret_key') or ''
     amazon_partner_tag = settings.get('amazon_partner_tag') or ''
 
-    if not (rakuten_app_id or (amazon_access_key and amazon_secret_key and amazon_partner_tag)):
+    amazon_configured = bool(amazon_access_key and amazon_secret_key and amazon_partner_tag)
+    rakuten_configured = bool(rakuten_app_id)
+
+    if not (amazon_configured or rakuten_configured):
         return [], 'no_provider'
 
-    rakuten_items = []
-    if rakuten_app_id:
-        try:
-            rakuten_items = rakuten_search(query, rakuten_app_id, rakuten_affiliate_id, limit=limit)
-        except Exception as e:
-            app.logger.warning('Rakuten search failed for "%s": %s', query, e)
-
-    amazon_items = []
-    if amazon_access_key and amazon_secret_key and amazon_partner_tag:
+    # Amazon優先: 設定があれば最初に試す
+    if amazon_configured:
         try:
             amazon_items = amazon_search(query, amazon_access_key, amazon_secret_key, amazon_partner_tag, limit=min(10, limit))
+            if amazon_items:
+                return [{'amazon': item, 'rakuten': None} for item in amazon_items], 'ok'
         except Exception as e:
             app.logger.warning('Amazon search failed for "%s": %s', query, e)
 
-    merged = merge_products_by_similarity(rakuten_items, amazon_items)
-    return merged, 'ok' if merged else 'empty'
+    # フォールバック: Amazon設定無し or 検索結果ゼロの時だけ楽天を使う
+    if rakuten_configured:
+        try:
+            rakuten_items = rakuten_search(query, rakuten_app_id, rakuten_affiliate_id, limit=limit)
+            if rakuten_items:
+                return [{'rakuten': item, 'amazon': None} for item in rakuten_items], 'ok'
+        except Exception as e:
+            app.logger.warning('Rakuten search failed for "%s": %s', query, e)
+
+    return [], 'empty'
 
 
 def _product_display_name(item):

@@ -1329,8 +1329,8 @@ tr.selected td { background: var(--accent-dim); }
             </div>
           </div>
           <div class="settings-section">
-            <div class="section-header">// Amazon PA-API v5（任意）</div>
-            <div class="form-help" style="margin-bottom:8px">Amazonアソシエイト商品検索用。設定すると記事生成時に実商品データを参照できます。</div>
+            <div class="section-header">// Amazon PA-API v5（推奨・優先）</div>
+            <div class="form-help" style="margin-bottom:8px">Amazonアソシエイト商品検索用。<strong>設定するとAmazonが優先で使われます</strong>（CV率重視）。楽天はフォールバックとして使用。</div>
             <div class="form-group">
               <label class="form-label">Access Key ID</label>
               <input type="password" id="s-amazon-access-key" class="form-control" autocomplete="off">
@@ -1345,8 +1345,8 @@ tr.selected td { background: var(--accent-dim); }
             </div>
           </div>
           <div class="settings-section">
-            <div class="section-header">// 楽天市場API（任意）</div>
-            <div class="form-help" style="margin-bottom:8px">楽天ウェブサービスの商品検索用。アフィリエイトIDを併設すると参照リンクが自動でアフィリエイト化されます。</div>
+            <div class="section-header">// 楽天市場API（フォールバック）</div>
+            <div class="form-help" style="margin-bottom:8px">楽天ウェブサービスの商品検索用。Amazonが未設定 or 検索失敗時のフォールバックとして使用。アフィリエイトIDを併設すると参照リンクが自動でアフィリエイト化されます。</div>
             <div class="form-group">
               <label class="form-label">アプリケーションID</label>
               <input type="password" id="s-rakuten-app-id" class="form-control" autocomplete="off">
