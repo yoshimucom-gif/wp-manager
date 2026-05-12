@@ -4963,6 +4963,11 @@ def get_settings():
         'claude_api_key': mask_secret(settings.get('claude_api_key', '')),
         'default_quality_id': settings.get('default_quality_id', 'default'),
         'article_css': settings.get('article_css', ''),
+        'amazon_access_key': mask_secret(settings.get('amazon_access_key', '')),
+        'amazon_secret_key': mask_secret(settings.get('amazon_secret_key', '')),
+        'amazon_partner_tag': settings.get('amazon_partner_tag', ''),
+        'rakuten_app_id': mask_secret(settings.get('rakuten_app_id', '')),
+        'rakuten_affiliate_id': settings.get('rakuten_affiliate_id', ''),
     }
     return jsonify(safe)
 
@@ -4979,6 +4984,14 @@ def update_settings():
         if looks_like_html(data.get('article_css', '')):
             return jsonify({'success': False, 'error': '記事CSS定義にはHTMLを保存できません。CSSだけを入力してください。'}), 400
         settings['article_css'] = data['article_css']
+    for key in ('amazon_access_key', 'amazon_secret_key', 'rakuten_app_id'):
+        if data.get(key) and not is_masked_value(data[key]):
+            settings[key] = data[key].strip()
+        elif data.get(key) == '':
+            settings[key] = ''
+    for key in ('amazon_partner_tag', 'rakuten_affiliate_id'):
+        if key in data:
+            settings[key] = str(data.get(key) or '').strip()
     save_settings(settings)
     return jsonify({'success': True})
 

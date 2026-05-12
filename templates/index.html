@@ -1328,6 +1328,34 @@ tr.selected td { background: var(--accent-dim); }
             </div>
           </div>
           <div class="settings-section">
+            <div class="section-header">// Amazon PA-API v5（任意）</div>
+            <div class="form-help" style="margin-bottom:8px">Amazonアソシエイト商品検索用。設定すると記事生成時に実商品データを参照できます。</div>
+            <div class="form-group">
+              <label class="form-label">Access Key ID</label>
+              <input type="password" id="s-amazon-access-key" class="form-control" autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Secret Access Key</label>
+              <input type="password" id="s-amazon-secret-key" class="form-control" autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Partner Tag（アソシエイトID）</label>
+              <input type="text" id="s-amazon-partner-tag" class="form-control" placeholder="例: yourname-22" autocomplete="off">
+            </div>
+          </div>
+          <div class="settings-section">
+            <div class="section-header">// 楽天市場API（任意）</div>
+            <div class="form-help" style="margin-bottom:8px">楽天ウェブサービスの商品検索用。アフィリエイトIDを併設すると参照リンクが自動でアフィリエイト化されます。</div>
+            <div class="form-group">
+              <label class="form-label">アプリケーションID</label>
+              <input type="password" id="s-rakuten-app-id" class="form-control" autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label class="form-label">アフィリエイトID（任意）</label>
+              <input type="text" id="s-rakuten-affiliate-id" class="form-control" autocomplete="off">
+            </div>
+          </div>
+          <div class="settings-section">
             <div class="section-header">// 記事CSS定義（全サイト共通）</div>
             <div class="form-group">
               <label class="form-label">CSSのみ（投稿時に記事の先頭へ style タグで自動挿入）</label>
@@ -4097,10 +4125,18 @@ const SETTINGS_BACKUP_KEY = 'affiros9.apiSettingsBackup.v1';
 const SETTINGS_BACKUP_FIELDS = [
   'claude_api_key',
   'default_quality_id',
-  'article_css'
+  'article_css',
+  'amazon_access_key',
+  'amazon_secret_key',
+  'amazon_partner_tag',
+  'rakuten_app_id',
+  'rakuten_affiliate_id'
 ];
 const MASKED_SETTING_FIELDS = new Set([
-  'claude_api_key'
+  'claude_api_key',
+  'amazon_access_key',
+  'amazon_secret_key',
+  'rakuten_app_id'
 ]);
 
 function readSettingsBackup() {
@@ -4146,6 +4182,11 @@ function collectSettingsFormData() {
     claude_api_key: document.getElementById('s-claude-key').value,
     default_quality_id: document.getElementById('s-default-quality').value,
     article_css: document.getElementById('s-article-css').value,
+    amazon_access_key: document.getElementById('s-amazon-access-key').value,
+    amazon_secret_key: document.getElementById('s-amazon-secret-key').value,
+    amazon_partner_tag: document.getElementById('s-amazon-partner-tag').value,
+    rakuten_app_id: document.getElementById('s-rakuten-app-id').value,
+    rakuten_affiliate_id: document.getElementById('s-rakuten-affiliate-id').value,
   };
 }
 
@@ -4182,6 +4223,11 @@ async function loadSettings() {
   s = await restoreSettingsFromBrowserBackup(s);
   document.getElementById('s-claude-key').value = s.claude_api_key || '';
   document.getElementById('s-article-css').value = s.article_css || '';
+  document.getElementById('s-amazon-access-key').value = s.amazon_access_key || '';
+  document.getElementById('s-amazon-secret-key').value = s.amazon_secret_key || '';
+  document.getElementById('s-amazon-partner-tag').value = s.amazon_partner_tag || '';
+  document.getElementById('s-rakuten-app-id').value = s.rakuten_app_id || '';
+  document.getElementById('s-rakuten-affiliate-id').value = s.rakuten_affiliate_id || '';
   await loadQuality();
   if (s.default_quality_id) document.getElementById('s-default-quality').value = s.default_quality_id;
   scheduleDataSnapshotBackup();
