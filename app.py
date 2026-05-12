@@ -645,7 +645,7 @@ def article_html_output_rules():
 - 比較表は横幅が崩れにくいように列を増やしすぎず、セル内は短くする
 - 1つの<p>は長くしすぎず、原則2〜3文で区切る。長い説明は複数段落に分ける
 - 断定しすぎず、選び方・比較理由・向いている人・注意点を具体的に書く
-- 広告カード、アフィリエイトリンク、RINKER風の商品カードは出力しない。広告挿入はWordPress側のプラグインに任せる"""
+- 広告カードやアフィリエイトリンクのHTMLは自分で書かない。代わりに `<!-- AFFI:N -->` というコメントを商品見出しの直後に1行入れること（Affiros9側で実際の商品カードHTMLに置換します）"""
 
 
 def strip_wp_block_artifacts(html):
@@ -2179,11 +2179,47 @@ def amazon_search(query, access_key, secret_key, partner_tag, limit=10, timeout=
     return results
 
 
+def _normalize_product_name_for_match(name):
+    text = re.sub(r'[【】\[\]（）()「」『』\s\-_/／・,、。!\?！？]+', '', str(name or '').lower())
+    return text
+
+
+def merge_products_by_similarity(rakuten_items, amazon_items, threshold=0.45):
+    """楽天とAmazonの商品リストを名前類似度でマージ。返り値の各要素には rakuten/amazon キーが入る（無い側はNone）。"""
+    merged = []
+    used_amazon = set()
+    rakuten_keys = [_normalize_product_name_for_match(r.get('name')) for r in rakuten_items]
+    amazon_keys = [_normalize_product_name_for_match(a.get('name')) for a in amazon_items]
+
+    for i, r in enumerate(rakuten_items):
+        best_idx = -1
+        best_score = 0.0
+        for j, a in enumerate(amazon_items):
+            if j in used_amazon:
+                continue
+            if not rakuten_keys[i] or not amazon_keys[j]:
+                continue
+            score = difflib.SequenceMatcher(None, rakuten_keys[i], amazon_keys[j]).ratio()
+            if score > best_score:
+                best_score = score
+                best_idx = j
+        if best_idx >= 0 and best_score >= threshold:
+            used_amazon.add(best_idx)
+            merged.append({'rakuten': r, 'amazon': amazon_items[best_idx]})
+        else:
+            merged.append({'rakuten': r, 'amazon': None})
+
+    for j, a in enumerate(amazon_items):
+        if j not in used_amazon:
+            merged.append({'rakuten': None, 'amazon': a})
+    return merged
+
+
 def fetch_product_context(article, settings, limit=15):
-    """楽天/Amazonから商品データを取得して整形して返す。失敗時は空リスト + 警告メッセージ。
+    """楽天/Amazonから商品データを取得し、類似度マージした統合リストを返す。
 
     Returns: (list[dict], status_string).
-    各dictにはproviderキー（'rakuten' or 'amazon'）と name, price, url, image_url など。
+    各dictは {'rakuten': {..} or None, 'amazon': {..} or None} 構造。
     """
     query = str(
         article.get('ad_keywords')
@@ -2206,83 +2242,159 @@ def fetch_product_context(article, settings, limit=15):
     rakuten_items = []
     if rakuten_app_id:
         try:
-            for item in rakuten_search(query, rakuten_app_id, rakuten_affiliate_id, limit=limit):
-                item['provider'] = 'rakuten'
-                rakuten_items.append(item)
+            rakuten_items = rakuten_search(query, rakuten_app_id, rakuten_affiliate_id, limit=limit)
         except Exception as e:
             app.logger.warning('Rakuten search failed for "%s": %s', query, e)
 
     amazon_items = []
     if amazon_access_key and amazon_secret_key and amazon_partner_tag:
         try:
-            for item in amazon_search(query, amazon_access_key, amazon_secret_key, amazon_partner_tag, limit=min(10, limit)):
-                item['provider'] = 'amazon'
-                amazon_items.append(item)
+            amazon_items = amazon_search(query, amazon_access_key, amazon_secret_key, amazon_partner_tag, limit=min(10, limit))
         except Exception as e:
             app.logger.warning('Amazon search failed for "%s": %s', query, e)
 
-    combined = []
-    max_len = max(len(rakuten_items), len(amazon_items))
-    for i in range(max_len):
-        if i < len(rakuten_items):
-            combined.append(rakuten_items[i])
-        if i < len(amazon_items):
-            combined.append(amazon_items[i])
-    return combined, 'ok' if combined else 'empty'
+    merged = merge_products_by_similarity(rakuten_items, amazon_items)
+    return merged, 'ok' if merged else 'empty'
+
+
+def _product_display_name(item):
+    return (item or {}).get('name', '').strip()
+
+
+def _product_display_price(item):
+    if not item:
+        return ''
+    if item.get('price_display'):
+        return item['price_display']
+    price = item.get('price')
+    if isinstance(price, (int, float)) and price:
+        return f'¥{int(price):,}'
+    return ''
 
 
 def build_product_context_prompt(products, article_type='ranking'):
-    """商品データ（楽天/Amazon両方）をClaudeに渡すためのプロンプトブロックを生成する。"""
+    """マージ済み商品リスト [{rakuten, amazon}, ...] をClaudeに渡すためのプロンプトブロックを生成する。"""
     if not products:
         return ''
     is_ranking = article_type == 'ranking'
     rows = []
     for idx, p in enumerate(products, 1):
-        provider = p.get('provider') or ''
-        provider_tag = {'rakuten': '[楽天]', 'amazon': '[Amazon]'}.get(provider, '')
-        price = p.get('price')
-        if p.get('price_display'):
-            price_text = p['price_display']
-        elif isinstance(price, (int, float)):
-            price_text = f'¥{int(price):,}'
-        else:
-            price_text = str(price) if price else ''
-        review_avg = p.get('review_avg') or 0
-        review_count = p.get('review_count') or 0
-        review_text = (
-            f' / ★{float(review_avg):.1f} ({int(review_count)}件)'
-            if isinstance(review_avg, (int, float)) and review_avg
-            else ''
-        )
-        caption = (p.get('item_caption') or '').strip()
-        shop = p.get('shop_name') or ''
-        extra = f'\n   特徴メモ: {caption[:160]}' if caption else ''
-        shop_line = f'\n   ショップ: {shop[:40]}' if shop else ''
+        rakuten = p.get('rakuten')
+        amazon = p.get('amazon')
+        primary = rakuten or amazon
+        if not primary:
+            continue
+        name = _product_display_name(primary)[:90]
+        availability_parts = []
+        if rakuten:
+            availability_parts.append('楽天')
+        if amazon:
+            availability_parts.append('Amazon')
+        availability = '・'.join(availability_parts)
+        prices = []
+        for src, label in ((rakuten, '楽天'), (amazon, 'Amazon')):
+            disp = _product_display_price(src)
+            if disp:
+                prices.append(f'{label}: {disp}')
+        price_text = ' / '.join(prices)
+        review_parts = []
+        for src in (rakuten, amazon):
+            if not src:
+                continue
+            avg = src.get('review_avg')
+            cnt = src.get('review_count')
+            if isinstance(avg, (int, float)) and avg:
+                review_parts.append(f'★{float(avg):.1f} ({int(cnt or 0)}件)')
+                break
+        caption = (primary.get('item_caption') if rakuten else '') or ''
+        caption_line = f'\n   特徴メモ: {caption[:160]}' if caption else ''
+        review_line = f'\n   レビュー: {", ".join(review_parts)}' if review_parts else ''
         rows.append(
-            f'{idx}. {provider_tag} {p.get("name", "")[:90]}\n'
-            f'   価格: {price_text}{review_text}{shop_line}{extra}'
+            f'AFFI:{idx} | 取扱: {availability}\n'
+            f'   商品名: {name}\n'
+            f'   価格: {price_text}{review_line}{caption_line}'
         )
-    providers_used = sorted({p.get('provider') for p in products if p.get('provider')})
-    provider_label = '・'.join({'rakuten': '楽天市場', 'amazon': 'Amazon'}.get(prov, prov) for prov in providers_used)
-    header = (
-        f'{provider_label} の検索結果から取得した実商品データ（最新）:'
-        if is_ranking else f'記事の参考用 実商品データ（{provider_label}）:'
-    )
+    header = '実商品データ（楽天市場 / Amazon 検索結果をマージ。AFFI番号はカード挿入用の識別子です）:'
     instruction = (
         '使い方:\n'
         '- 上記の実商品から記事のキーワードに合うものだけを選び、ランキングや比較で紹介してください。\n'
-        '- 商品名は上記のものをそのまま使い、「候補1」など架空の名前は禁止。\n'
-        '- 価格・レビュー件数・★平均は上記の数値を引用してください（必要な数値だけでOK）。\n'
-        '- 同じ商品が楽天とAmazon両方にある場合は1件として紹介してください（重複は避ける）。\n'
-        '- 上記に含まれない商品は本文に登場させないでください（事実誤認回避のため）。\n'
-        '- 商品URLは本文に貼らない（後段のプラグインがアフィリエイトリンク化します）。'
+        '- 商品名は上記のものをそのまま使う（架空名や「候補1」は禁止）。\n'
+        '- 価格・レビューは上記の数値を引用してください（必要な数値だけでOK）。\n'
+        '- 上記に含まれない商品は本文に登場させないでください。\n'
+        '- **重要**: 各順位の見出し（例: <h3>1位：商品名</h3>）の直後の行に、必ず\n'
+        '  `<!-- AFFI:N -->` というHTMLコメントを1行で入れてください（N は上記AFFI番号）。\n'
+        '  例: <h3 class="wp-block-heading">1位：○○ネックウォーマー</h3>\n'
+        '       <!-- AFFI:3 -->\n'
+        '  このコメントは後段で楽天/Amazonの商品カードに置換されます。'
         if is_ranking else
         '使い方:\n'
         '- 必要なときだけ自然に商品名や価格帯を引用してください。\n'
-        '- 商品リンクや「ランキング」「○選」は強制しない。\n'
-        '- 上記に含まれない実商品名は新たに発明しないでください。'
+        '- 上記に含まれない実商品名は新たに発明しないでください。\n'
+        '- 商品を紹介した直後に `<!-- AFFI:N -->` （Nは上記番号）を1行入れると、自動で商品カードが挿入されます。'
     )
     return f"\n\n{header}\n" + '\n'.join(rows) + f"\n\n{instruction}\n"
+
+
+def build_product_card_html(product):
+    """マージ済み商品エントリ {rakuten, amazon} から RINKER スタイルの商品カードHTMLを生成。"""
+    if not product:
+        return ''
+    rakuten = product.get('rakuten')
+    amazon = product.get('amazon')
+    primary = rakuten or amazon
+    if not primary:
+        return ''
+    from html import escape as _esc
+    name = _esc(_product_display_name(primary))
+    image_url = primary.get('image_url') or (amazon.get('image_url') if amazon else '') or ''
+    price_parts = []
+    for src, label in ((amazon, 'Amazon'), (rakuten, '楽天')):
+        disp = _product_display_price(src)
+        if disp:
+            price_parts.append(f'<span class="aff-product-price-item">{label} {_esc(disp)}</span>')
+    price_html = '<div class="aff-product-prices">' + ''.join(price_parts) + '</div>' if price_parts else ''
+    review_html = ''
+    for src in (rakuten, amazon):
+        if not src:
+            continue
+        avg = src.get('review_avg')
+        cnt = src.get('review_count')
+        if isinstance(avg, (int, float)) and avg:
+            review_html = f'<div class="aff-product-rating">★{float(avg):.1f} <span class="aff-product-rating-count">({int(cnt or 0)}件)</span></div>'
+            break
+    buttons = []
+    if amazon and amazon.get('url'):
+        buttons.append(f'<a class="aff-btn aff-btn-amazon" href="{_esc(amazon["url"])}" target="_blank" rel="nofollow sponsored noopener">Amazonで見る</a>')
+    if rakuten and rakuten.get('url'):
+        buttons.append(f'<a class="aff-btn aff-btn-rakuten" href="{_esc(rakuten["url"])}" target="_blank" rel="nofollow sponsored noopener">楽天市場で見る</a>')
+    buttons_html = '<div class="aff-product-buttons">' + ''.join(buttons) + '</div>' if buttons else ''
+    image_html = (
+        f'<div class="aff-product-image"><img src="{_esc(image_url)}" alt="{name}" loading="lazy"></div>'
+        if image_url else ''
+    )
+    return (
+        f'<div class="aff-product-card">'
+        f'{image_html}'
+        f'<div class="aff-product-body">'
+        f'<div class="aff-product-name">{name}</div>'
+        f'{review_html}'
+        f'{price_html}'
+        f'{buttons_html}'
+        f'</div>'
+        f'</div>'
+    )
+
+
+def inject_affiliate_cards(html, products):
+    """`<!-- AFFI:N -->` マーカーを実際の商品カードHTMLに置換する。"""
+    if not products or not html:
+        return html
+    def replace(match):
+        idx = int(match.group(1))
+        if 1 <= idx <= len(products):
+            return build_product_card_html(products[idx - 1])
+        return ''
+    return re.sub(r'<!--\s*AFFI:(\d+)\s*-->', replace, str(html))
 
 
 def build_quality_structure_html_prompt(quality, limit=6000):
@@ -3815,6 +3927,7 @@ def generate_article(article_id):
                 )
                 usage_parts.append(build_article_usage(prompt, full_content, final_message))
 
+            full_content = inject_affiliate_cards(full_content, products)
             clean_content, enhance_warning = safe_enhance_generated_article_html(full_content, article_work, article_type)
             validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
             content_chars = len(html_to_text(clean_content))
@@ -4000,6 +4113,7 @@ def generate_article_direct(article_id):
             usage_parts = [build_article_usage(base_prompt, raw_content, message)]
         else:
             raise ValueError('Claude APIキーが設定されていません')
+        raw_content = inject_affiliate_cards(raw_content, products)
         clean_content, enhance_warning = safe_enhance_generated_article_html(raw_content, article_work, article_type)
         validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
         content_chars = len(html_to_text(clean_content))
@@ -4240,6 +4354,8 @@ def batch_generate():
                     message = create_claude_message(client, prompt, max_tokens=claude_max_tokens_for_quality(quality))
                     raw_content = anthropic_message_text(message)
                     usage_parts = [build_article_usage(prompt, raw_content, message)]
+                stage = 'inject affiliate cards'
+                raw_content = inject_affiliate_cards(raw_content, products)
                 stage = 'enhance and validate content'
                 content, enhance_warning = safe_enhance_generated_article_html(raw_content, article, article_type)
                 if enhance_warning:
