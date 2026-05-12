@@ -2171,257 +2171,6 @@ def ranking_subject(article):
     return inferred or article.get('keywords') or article.get('category') or article.get('title') or '商品'
 
 
-def coerce_plan_list(value, limit=None):
-    if isinstance(value, list):
-        items = value
-    elif value:
-        items = [value]
-    else:
-        items = []
-    if limit:
-        items = items[:limit]
-    return items
-
-
-def coerce_ranking_plan(article, raw_plan):
-    count = extract_ranking_count(article) or 7
-    subject = ranking_subject(article)
-    plan = raw_plan if isinstance(raw_plan, dict) else {}
-    defaults = {
-        'criteria': [
-            {'name': '保温性', 'description': '素材や厚みだけでなく、首元に熱を逃がしにくい構造かを確認します。'},
-            {'name': '防風性', 'description': '自転車や屋外作業では、風を通しにくい生地や二重構造が重要です。'},
-            {'name': '肌触り', 'description': '長時間使うものなので、チクチク感や締め付け感の少なさを見ます。'},
-            {'name': '使いやすさ', 'description': '着脱のしやすさ、洗いやすさ、通勤やスポーツへの合わせやすさを評価します。'},
-            {'name': '価格とのバランス', 'description': '安さだけでなく、価格に対して十分な機能があるかを重視します。'},
-        ],
-        'faqs': [
-            {'question': f'{subject}は安いものでも十分使えますか？', 'answer': '用途に合う素材と構造を選べば、低価格帯でも日常使いには十分対応できます。'},
-            {'question': '通勤とスポーツで同じものを使えますか？', 'answer': '使えますが、汗をかく場面では速乾性、通勤では防風性や見た目の自然さを重視すると失敗しにくくなります。'},
-            {'question': '迷ったらどのタイプを選ぶべきですか？', 'answer': '最初の一枚なら、防風性と肌触りのバランスが良い汎用タイプを選ぶのがおすすめです。'},
-        ]
-    }
-    products = []
-    raw_products = coerce_plan_list(plan.get('products'), count)
-    for i in range(count):
-        item = raw_products[i] if i < len(raw_products) and isinstance(raw_products[i], dict) else {}
-        rank = i + 1
-        name = str(item.get('name') or item.get('product_name') or f'{subject} 候補{rank}').strip()
-        products.append({
-            'rank': rank,
-            'name': name,
-            'feature': str(item.get('feature') or item.get('summary') or f'{subject}として使いやすい基本性能を備えた候補です。').strip(),
-            'price_band': str(item.get('price_band') or item.get('price') or '2,000円台目安').strip(),
-            'best_for': str(item.get('best_for') or item.get('recommended_for') or '日常使いで失敗したくない人').strip(),
-            'reason': str(item.get('reason') or item.get('ranking_reason') or '価格と使いやすさのバランスがよく、はじめて選ぶ人でも検討しやすいためです。').strip(),
-            'strengths': str(item.get('strengths') or item.get('merit') or '普段使いしやすく、用途を選びにくい点が魅力です。').strip(),
-            'cautions': str(item.get('cautions') or item.get('caution') or '本格的な極寒環境では、厚みや防風性を追加で確認してください。').strip(),
-            'use_case': str(item.get('use_case') or item.get('scene') or '通勤、買い物、軽い外出など幅広いシーン').strip(),
-            'comparison_note': str(item.get('comparison_note') or item.get('compare') or '上位候補ほど保温性や扱いやすさのバランスを重視しています。').strip(),
-        })
-    criteria = coerce_plan_list(plan.get('criteria'), 5) or defaults['criteria']
-    normalized_criteria = []
-    for item in criteria[:5]:
-        if isinstance(item, dict):
-            normalized_criteria.append({
-                'name': str(item.get('name') or '選定基準').strip(),
-                'description': str(item.get('description') or item.get('detail') or '').strip(),
-            })
-        else:
-            normalized_criteria.append({'name': str(item), 'description': ''})
-    while len(normalized_criteria) < 5:
-        normalized_criteria.append(defaults['criteria'][len(normalized_criteria)])
-    faqs = coerce_plan_list(plan.get('faqs') or plan.get('faq'), 5) or defaults['faqs']
-    normalized_faqs = []
-    for item in faqs[:5]:
-        if isinstance(item, dict):
-            normalized_faqs.append({
-                'question': str(item.get('question') or item.get('q') or 'よくある質問').strip(),
-                'answer': str(item.get('answer') or item.get('a') or '').strip(),
-            })
-        else:
-            normalized_faqs.append({'question': str(item), 'answer': ''})
-    while len(normalized_faqs) < 3:
-        normalized_faqs.append(defaults['faqs'][len(normalized_faqs)])
-    return {
-        'subject': subject,
-        'count': count,
-        'lead_angle': str(plan.get('lead_angle') or plan.get('intro_angle') or f'{subject}を価格だけで選ぶと、暖かさや使いやすさで後悔しやすくなります。').strip(),
-        'products': products,
-        'criteria': normalized_criteria,
-        'faqs': normalized_faqs,
-    }
-
-
-def ranking_plan_prompt(article, quality):
-    count = extract_ranking_count(article) or 7
-    subject = ranking_subject(article)
-    return f"""ランキング記事の設計データをJSONだけで返してください。
-
-タイトル: {article.get('title', '')}
-キーワード: {article.get('keywords', '')}
-カテゴリー: {article.get('category', '')}
-主題: {subject}
-必要件数: {count}
-
-返却形式:
-{{
-  "lead_angle": "読者の悩みと結論の方向性",
-  "criteria": [
-    {{"name": "基準名", "description": "評価する理由"}}
-  ],
-  "products": [
-    {{
-      "rank": 1,
-      "name": "商品名または候補名",
-      "feature": "短い特徴",
-      "price_band": "価格目安",
-      "best_for": "向いている人",
-      "reason": "順位理由",
-      "strengths": "良い点",
-      "cautions": "注意点",
-      "use_case": "おすすめシーン",
-      "comparison_note": "他候補との違い"
-    }}
-  ],
-  "faqs": [
-    {{"question": "質問", "answer": "回答の要点"}}
-  ]
-}}
-
-ルール:
-- products は必ず{count}件。
-- rank は1から{count}まで欠番なし。
-- 事実確認できない断定や架空のレビュー数は入れない。
-- JSON以外の説明文、Markdown、コードフェンスは禁止。"""
-
-
-def generate_ranking_plan(client, article, quality):
-    prompt = ranking_plan_prompt(article, quality)
-    message = create_claude_message(client, prompt, max_tokens=3500, timeout=45)
-    text = anthropic_message_text(message)
-    return coerce_ranking_plan(article, extract_json_object(text)), build_article_usage(prompt, text, message)
-
-
-def html_p(text):
-    return f'<p>{escape(str(text or ""))}</p>'
-
-
-def html_li(text):
-    return f'<li>{escape(str(text or ""))}</li>'
-
-
-def build_structured_ranking_html(article, plan):
-    subject = plan['subject']
-    count = plan['count']
-    products = plan['products']
-    title = article.get('title') or f'{subject}おすすめ{count}選'
-    html = []
-    html.append(html_p(f'「{subject}をできるだけ失敗なく選びたい」「価格を抑えつつ、使いやすいものを見つけたい」と考えている方は多いのではないでしょうか。{plan["lead_angle"]}'))
-    html.append(html_p(f'この記事では、{subject}を選ぶときに確認したい基準を整理しながら、用途や価格とのバランスを見ておすすめ候補を{count}件紹介します。比較表、順位ごとの理由、選び方、FAQまでまとめているので、購入前の判断材料として使えます。'))
-    html.append('<h2 class="wp-block-heading">この記事でわかること</h2>')
-    html.append('<ul>')
-    html.append(html_li(f'{subject}を選ぶときの重要な比較ポイント'))
-    html.append(html_li(f'コスパ重視で検討しやすい{count}候補の違い'))
-    html.append(html_li('迷ったときにどのタイプを選ぶべきか'))
-    html.append('</ul>')
-
-    html.append(f'<h2 class="wp-block-heading">まず結論：{subject}おすすめ早見表</h2>')
-    html.append(html_p('先に全体像を確認できるよう、特徴と向いている人を一覧にしました。詳しい理由は後半の個別解説で確認できます。'))
-    html.append('<table><thead><tr><th>順位</th><th>商品名</th><th>特徴</th><th>価格目安</th><th>向いている人</th></tr></thead><tbody>')
-    for p in products:
-        html.append(
-            '<tr>'
-            f'<td>{p["rank"]}位</td>'
-            f'<td>{escape(p["name"])}</td>'
-            f'<td>{escape(p["feature"])}</td>'
-            f'<td>{escape(p["price_band"])}</td>'
-            f'<td>{escape(p["best_for"])}</td>'
-            '</tr>'
-        )
-    html.append('</tbody></table>')
-
-    html.append(f'<h2 class="wp-block-heading">ランキングの選定基準｜なぜこの{count}つを選んだのか</h2>')
-    html.append(html_p('順位は価格の安さだけではなく、実際に使う場面で差が出やすいポイントを総合的に見て決めています。特に以下の基準を重視しました。'))
-    html.append('<ul class="wp-block-list">')
-    for c in plan['criteria']:
-        html.append(html_li(f'{c["name"]}: {c["description"]}'))
-    html.append('</ul>')
-
-    html.append(f'<h2 class="wp-block-heading">{subject}おすすめ{count}選</h2>')
-    for p in products:
-        html.append(f'<h3 class="wp-block-heading">{p["rank"]}位：{escape(p["name"])}</h3>')
-        html.append(html_p(f'{p["name"]}は、{p["feature"]}という特徴がある候補です。{p["best_for"]}に向いており、{p["use_case"]}で使う場面を想定すると検討しやすい一品です。'))
-        html.append(html_p(f'{p["rank"]}位にした理由は、{p["reason"]}。{p["strengths"]} 価格だけで選ぶのではなく、使うシーンとの相性まで見ると、この候補の良さが分かりやすくなります。'))
-        html.append(html_p(f'一方で、{p["cautions"]} {p["comparison_note"]} 購入前にはサイズ感、素材、洗濯方法、着用シーンを確認しておくと失敗を避けやすくなります。'))
-        html.append('<ul class="wp-block-list">')
-        html.append(html_li(f'おすすめな人: {p["best_for"]}'))
-        html.append(html_li(f'主なシーン: {p["use_case"]}'))
-        html.append(html_li(f'注意点: {p["cautions"]}'))
-        html.append('</ul>')
-
-    html.append(f'<h2 class="wp-block-heading">{subject}の選び方</h2>')
-    html.append(html_p(f'{subject}を選ぶときは、ランキング順位だけでなく、自分の使い方に合うかどうかを見ることが大切です。ここでは失敗しにくい選び方を整理します。'))
-    for c in plan['criteria']:
-        html.append(f'<h3 class="wp-block-heading">{escape(c["name"])}を確認する</h3>')
-        html.append(html_p(f'{c["description"]} 特に毎日使う場合は、短時間の印象だけでなく、着用時間、保管のしやすさ、手入れのしやすさまで含めて考えると選びやすくなります。'))
-
-    html.append('<h2 class="wp-block-heading">よくある質問</h2>')
-    for faq in plan['faqs']:
-        html.append(f'<h3 class="wp-block-heading">Q. {escape(faq["question"])}</h3>')
-        html.append(html_p(f'A. {faq["answer"]} 迷った場合は、価格だけでなく用途、素材、サイズ感を見比べてください。使用シーンが明確になるほど、自分に合う候補を選びやすくなります。'))
-
-    html.append('<h2 class="wp-block-heading">まとめ</h2>')
-    html.append(html_p(f'{title}について、比較表とランキング形式で{count}件を紹介しました。まずは自分が重視するポイントを決め、保温性・使いやすさ・価格とのバランスを見ながら選ぶのがおすすめです。'))
-    html.append(html_p(f'迷ったときは、上位候補から用途に合うものを選ぶと失敗しにくくなります。購入前には最新価格、サイズ、素材、レビュー傾向を確認し、自分の使い方に合う{subject}を選んでください。'))
-    return '\n'.join(html)
-
-
-def generate_structured_ranking_article_sync(client, article, quality, on_step=None):
-    if on_step:
-        on_step(1, 2, 'ランキング設計データ')
-    try:
-        plan, usage = generate_ranking_plan(client, article, quality)
-    except Exception as e:
-        prompt = ranking_plan_prompt(article, quality)
-        plan = coerce_ranking_plan(article, {})
-        usage = build_article_usage(prompt, '')
-        usage['structured_builder_fallback'] = True
-        usage['plan_error'] = str(e)
-    if on_step:
-        on_step(2, 2, '固定骨組みHTML')
-    content = build_structured_ranking_html(article, plan)
-    usage['structured_builder'] = True
-    return content, [usage]
-
-
-def generate_structured_ranking_article_sse(client, article, quality):
-    yield f"data: {json.dumps({'status': 'segment', 'round': 1, 'total': 2, 'message': 'ランキング設計データを生成しています（1/2）'})}\n\n"
-    prompt = ranking_plan_prompt(article, quality)
-    try:
-        plan_text, message = yield from stream_claude_sse(
-            client,
-            prompt,
-            'ランキング設計データをClaudeから取得中です。処理は継続しています。',
-            emit_text=False,
-            max_tokens=3500
-        )
-        plan = coerce_ranking_plan(article, extract_json_object(plan_text))
-        usage = build_article_usage(prompt, plan_text, message)
-    except Exception as e:
-        yield f"data: {json.dumps({'status': 'segment_fallback', 'round': 1, 'total': 2, 'message': 'ランキング設計データの取得に失敗したため、固定構成で生成を継続します。'})}\n\n"
-        plan = coerce_ranking_plan(article, {})
-        usage = build_article_usage(prompt, '')
-        usage['structured_builder_fallback'] = True
-        usage['plan_error'] = str(e)
-    yield f"data: {json.dumps({'status': 'segment', 'round': 2, 'total': 2, 'message': 'Affiros9側でランキングHTMLを組み立てています（2/2）'})}\n\n"
-    content = build_structured_ranking_html(article, plan)
-    usage['structured_builder'] = True
-    for offset in range(0, len(content), 4000):
-        yield f"data: {json.dumps({'text': content[offset:offset + 4000]})}\n\n"
-    return content, [usage]
-
-
 def should_use_segmented_generation(article_type, quality=None):
     normalized = normalize_article_type(article_type, 'ranking')
     target = effective_target_chars(quality)
@@ -3774,21 +3523,7 @@ def generate_article(article_id):
             )
 
             usage_parts = []
-            if article_type == 'ranking' and client and should_use_segmented_generation(article_type, quality):
-                full_content, usage_parts = yield from generate_segmented_article_sse(
-                    client,
-                    prompt,
-                    article_work,
-                    article_type,
-                    quality
-                )
-            elif article_type == 'ranking':
-                full_content, usage_parts = yield from generate_structured_ranking_article_sse(
-                    client,
-                    article_work,
-                    quality
-                )
-            elif should_use_segmented_generation(article_type, quality):
+            if client and should_use_segmented_generation(article_type, quality):
                 full_content, usage_parts = yield from generate_segmented_article_sse(
                     client,
                     prompt,
@@ -3955,8 +3690,7 @@ def generate_article_direct(article_id):
         previous_content_hash = content_hash(previous_content)
         is_regeneration = bool(html_to_text(previous_content).strip())
         client = anthropic.Anthropic(api_key=api_key) if api_key else None
-        if client and should_use_segmented_generation(article_type, quality):
-            base_prompt = f"""以下の情報をもとに、WordPressに投稿する記事を書いてください。
+        base_prompt = f"""以下の情報をもとに、WordPressに投稿する記事を書いてください。
 
 タイトル: {article_work.get('title', '')}
 キーワード: {article_work.get('keywords', '')}
@@ -3973,6 +3707,7 @@ def generate_article_direct(article_id):
 {build_quality_structure_html_prompt(quality)}
 {build_article_completion_prompt(quality, article_type)}
 """
+        if client and should_use_segmented_generation(article_type, quality):
             raw_content, usage_parts = generate_segmented_article_sync(
                 client,
                 base_prompt,
@@ -3980,12 +3715,12 @@ def generate_article_direct(article_id):
                 article_type,
                 quality
             )
+        elif client:
+            message = create_claude_message(client, base_prompt, max_tokens=claude_max_tokens_for_quality(quality))
+            raw_content = anthropic_message_text(message)
+            usage_parts = [build_article_usage(base_prompt, raw_content, message)]
         else:
-            raw_content, usage_parts = generate_structured_ranking_article_sync(
-                client,
-                article_work,
-                quality
-            )
+            raise ValueError('Claude APIキーが設定されていません')
         clean_content, enhance_warning = safe_enhance_generated_article_html(raw_content, article_work, article_type)
         validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
         content_chars = len(html_to_text(clean_content))
@@ -4203,29 +3938,7 @@ def batch_generate():
                 )
 
                 stage = 'generate content'
-                if article_type == 'ranking' and client and should_use_segmented_generation(article_type, quality):
-                    raw_content, usage_parts = generate_segmented_article_sync(
-                        client,
-                        prompt,
-                        article,
-                        article_type,
-                        quality,
-                        on_step=lambda step_index, step_total, step_name: update_job(
-                            current_title=article.get('title', ''),
-                            message=f"分割生成中: {article.get('title', '')} / {step_name} ({step_index}/{step_total})"
-                        )
-                    )
-                elif article_type == 'ranking':
-                    raw_content, usage_parts = generate_structured_ranking_article_sync(
-                        client,
-                        article,
-                        quality,
-                        on_step=lambda step_index, step_total, step_name: update_job(
-                            current_title=article.get('title', ''),
-                            message=f"固定骨組み生成中: {article.get('title', '')} / {step_name} ({step_index}/{step_total})"
-                        )
-                    )
-                elif should_use_segmented_generation(article_type, quality):
+                if client and should_use_segmented_generation(article_type, quality):
                     raw_content, usage_parts = generate_segmented_article_sync(
                         client,
                         prompt,
