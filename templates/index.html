@@ -2930,10 +2930,43 @@ async function generateTitleIdeas() {
   try {
     const res = await fetch('/api/title-ideas/generate', {
       method: 'POST',
-      headers: {'Content-Type':'application/json'},
+      headers: {'Content-Type':'application/json', 'Accept':'text/event-stream'},
       body: JSON.stringify(payload)
     });
-    const data = await readTitleIdeaJson(res, 'タイトル案API');
+    if (!res.ok || !res.body) {
+      const text = await res.text().catch(()=>'');
+      let parsed = {};
+      try { parsed = text ? JSON.parse(text) : {}; } catch (_) {}
+      throw new Error(parsed.error || readableHttpError(res.status, text, 'タイトル案API'));
+    }
+
+    let data = null;
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, {stream: true});
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        const raw = line.slice(line.indexOf(':') + 1).trim();
+        if (!raw) continue;
+        let evt;
+        try { evt = JSON.parse(raw); } catch (_) { continue; }
+        if (evt && evt.type === 'status') {
+          if (msg && typeof evt.message === 'string') msg.textContent = evt.message;
+          continue;
+        }
+        data = evt;
+      }
+    }
+    if (!data) {
+      throw new Error('タイトル案APIから結果が返りませんでした');
+    }
+
     if (!data.success || !data.ai_used || !Array.isArray(data.ideas) || data.ideas.length === 0) {
       titleIdeaList = [];
       renderTitleIdeas();

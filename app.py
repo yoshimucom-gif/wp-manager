@@ -56,12 +56,13 @@ def handle_unexpected_error(error):
 
 DATA_DIR_WARNING = ''
 CLAUDE_ARTICLE_MODEL = 'claude-sonnet-4-6'
-CLAUDE_TITLE_IDEA_MODEL = os.environ.get('CLAUDE_TITLE_IDEA_MODEL', CLAUDE_ARTICLE_MODEL)
+CLAUDE_TITLE_IDEA_DEFAULT_MODEL = 'claude-haiku-4-5-20251001'
+CLAUDE_TITLE_IDEA_MODEL = os.environ.get('CLAUDE_TITLE_IDEA_MODEL', CLAUDE_TITLE_IDEA_DEFAULT_MODEL)
 CLAUDE_TITLE_IDEA_FALLBACK_MODELS = [
     model.strip()
     for model in os.environ.get(
         'CLAUDE_TITLE_IDEA_FALLBACK_MODELS',
-        f'{CLAUDE_ARTICLE_MODEL},claude-haiku-4-5-20251001,claude-haiku-4-5,claude-3-5-haiku-20241022,claude-3-5-haiku-latest,claude-sonnet-4-5-20250929,claude-sonnet-4-20250514'
+        f'claude-haiku-4-5,{CLAUDE_ARTICLE_MODEL},claude-3-5-haiku-20241022,claude-3-5-haiku-latest,claude-sonnet-4-5-20250929,claude-sonnet-4-20250514'
     ).split(',')
     if model.strip()
 ]
@@ -69,6 +70,7 @@ try:
     TITLE_IDEA_AI_TIMEOUT_SECONDS = int(os.environ.get('TITLE_IDEA_AI_TIMEOUT_SECONDS', '20'))
 except ValueError:
     TITLE_IDEA_AI_TIMEOUT_SECONDS = 20
+TITLE_IDEA_PER_KEYWORD_RETRY = os.environ.get('TITLE_IDEA_PER_KEYWORD_RETRY', '0') == '1'
 try:
     CLAUDE_ARTICLE_MAX_TOKENS = int(os.environ.get('CLAUDE_ARTICLE_MAX_TOKENS', '20000'))
 except ValueError:
@@ -1507,7 +1509,7 @@ def generate_claude_title_ideas_resilient(api_key, keywords, count_per_keyword, 
         first_error = compact_ai_error(e)
         retry_notes.append(f'一括生成失敗: {first_error}')
         app.logger.warning('Claude title idea batch generation failed: %s', e)
-        if non_retryable_ai_error(e) or len(keywords) <= 1:
+        if not TITLE_IDEA_PER_KEYWORD_RETRY or non_retryable_ai_error(e) or len(keywords) <= 1:
             raise RuntimeError(first_error)
 
     ideas = []
@@ -3094,18 +3096,22 @@ def logout():
 @app.route('/api/title-ideas/generate', methods=['POST'])
 @login_required
 def generate_title_ideas():
-    keywords = []
     try:
-        try:
-            data = request.get_json(silent=True) or {}
-        except Exception:
-            data = {}
-        keywords = split_title_keywords(data.get('keywords', ''))
+        data = request.get_json(silent=True) or {}
+    except Exception:
+        data = {}
+    keywords = split_title_keywords(data.get('keywords', ''))
+    count_per_keyword = clamp_int(data.get('count_per_keyword'), 3, 1, 5)
+    category = str(data.get('category') or '').strip()
+    site_id = data.get('site_id') or ''
+
+    def sse(obj):
+        return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
+
+    def stream():
         if not keywords:
-            return jsonify(title_ideas_failure_payload('キーワードを1行以上入力してください', keywords))
-        count_per_keyword = clamp_int(data.get('count_per_keyword'), 3, 1, 5)
-        category = str(data.get('category') or '').strip()
-        site_id = data.get('site_id') or ''
+            yield sse(title_ideas_failure_payload('キーワードを1行以上入力してください', keywords))
+            return
 
         try:
             settings = load_settings()
@@ -3113,55 +3119,87 @@ def generate_title_ideas():
             app.logger.warning('Title idea settings load failed: %s', e)
             settings = {}
 
-        expected_count = len(keywords) * count_per_keyword
-        provider_errors = []
-
         claude_key = settings.get('claude_api_key')
         if not claude_key:
-            return jsonify(title_ideas_failure_payload(
+            yield sse(title_ideas_failure_payload(
                 'タイトル案生成にはClaude APIキーが必要です。テンプレ生成には切り替えません。',
                 keywords,
             ))
+            return
 
+        result_queue = queue.Queue()
+        expected_count = len(keywords) * count_per_keyword
+
+        def worker():
+            try:
+                ideas, retry_notes, model_used = generate_claude_title_ideas_resilient(
+                    claude_key, keywords, count_per_keyword, category,
+                )
+                enriched = enrich_title_ideas(ideas, category=category, site_id=site_id)
+                payload = {
+                    'success': True,
+                    'ai_used': True,
+                    'source': 'claude',
+                    'model': model_used,
+                    'keywords': keywords,
+                    'ideas': enriched,
+                }
+                warnings = []
+                if retry_notes:
+                    warnings.append('一括生成に失敗したため、Claudeでキーワード単位に再試行しました。')
+                if len(enriched) < expected_count:
+                    warnings.append(f'AI返却が{len(enriched)}/{expected_count}件でした。足りない分はテンプレ補完していません。')
+                if warnings:
+                    payload['warning'] = ' '.join(warnings)
+                if retry_notes:
+                    payload['provider_warnings'] = retry_notes[-3:]
+                result_queue.put(('ok', payload))
+            except Exception as e:
+                app.logger.warning('Claude title idea generation failed: %s', e)
+                result_queue.put(('err', compact_ai_error(e)))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+        yield sse({'type': 'status', 'message': 'Claudeでタイトル案を生成中...'})
+
+        heartbeat_interval = 3
+        hard_timeout = 90
+        elapsed = 0
+        while True:
+            try:
+                kind, payload = result_queue.get(timeout=heartbeat_interval)
+            except queue.Empty:
+                elapsed += heartbeat_interval
+                if elapsed >= hard_timeout:
+                    yield sse(title_ideas_failure_payload(
+                        f'タイトル案生成が{hard_timeout}秒以内に完了しませんでした。キーワード数を減らすか、しばらく時間を置いて再試行してください。',
+                        keywords,
+                    ))
+                    return
+                yield f": keepalive {elapsed}s\n\n"
+                continue
+            if kind == 'ok':
+                yield sse(payload)
+            else:
+                yield sse(title_ideas_failure_payload(
+                    'ClaudeでのAIタイトル案生成に失敗しました。テンプレ生成には切り替えていません。APIキー・残高・モデル状態を確認してください。',
+                    keywords,
+                    [payload],
+                ))
+            return
+
+    def safe_stream():
         try:
-            ideas, retry_notes, model_used = generate_claude_title_ideas_resilient(
-                claude_key,
-                keywords,
-                count_per_keyword,
-                category,
-            )
-            enriched = enrich_title_ideas(ideas, category=category, site_id=site_id)
-            payload = {
-                'success': True,
-                'ai_used': True,
-                'source': 'claude',
-                'model': model_used,
-                'keywords': keywords,
-                'ideas': enriched,
-            }
-            warnings = []
-            if retry_notes:
-                warnings.append('一括生成に失敗したため、Claudeでキーワード単位に再試行しました。')
-            if len(enriched) < expected_count:
-                warnings.append(f'AI返却が{len(enriched)}/{expected_count}件でした。足りない分はテンプレ補完していません。')
-            if warnings:
-                payload['warning'] = ' '.join(warnings)
-            if retry_notes:
-                payload['provider_warnings'] = retry_notes[-3:]
-            return jsonify(payload)
+            yield from stream()
         except Exception as e:
-            provider_errors.append(f'Claude: {compact_ai_error(e)}')
-            app.logger.warning('Claude title idea generation failed: %s', e)
+            app.logger.error('Title ideas route hard-failed: %s\n%s', e, traceback.format_exc())
+            yield f"data: {json.dumps(title_ideas_failure_payload('タイトル案APIの内部処理で失敗しました。テンプレ生成には切り替えていません。', keywords, [compact_ai_error(e)]), ensure_ascii=False)}\n\n"
 
-        error = 'ClaudeでのAIタイトル案生成に失敗しました。テンプレ生成には切り替えていません。APIキー・残高・モデル状態を確認してください。'
-        return jsonify(title_ideas_failure_payload(error, keywords, provider_errors[-3:]))
-    except Exception as e:
-        app.logger.error('Title ideas route hard-failed: %s\n%s', e, traceback.format_exc())
-        return jsonify(title_ideas_failure_payload(
-            'タイトル案APIの内部処理で失敗しました。テンプレ生成には切り替えていません。',
-            keywords,
-            [compact_ai_error(e)],
-        ))
+    return Response(
+        stream_with_context(safe_stream()),
+        mimetype='text/event-stream',
+        headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
+    )
 
 
 @app.route('/api/title-ideas/save', methods=['POST'])
