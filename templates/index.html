@@ -1310,7 +1310,7 @@ tr.selected td { background: var(--accent-dim); }
       <div class="page" id="page-settings">
         <div class="page-header">
           <div class="page-title">API設定</div>
-          <div class="page-subtitle">Claude API・Gemini API・デフォルト設定</div>
+          <div class="page-subtitle">Claude API・デフォルト設定</div>
         </div>
         <div style="max-width:520px">
           <div class="settings-section">
@@ -1318,14 +1318,6 @@ tr.selected td { background: var(--accent-dim); }
             <div class="form-group">
               <label class="form-label">APIキー</label>
               <input type="password" id="s-claude-key" class="form-control" placeholder="sk-ant-...">
-            </div>
-          </div>
-          <div class="settings-section">
-            <div class="section-header">// Gemini API 設定（タイトル案用）</div>
-            <div class="form-group">
-              <label class="form-label">APIキー</label>
-              <input type="password" id="s-gemini-key" class="form-control" placeholder="AIza...">
-              <div style="font-size:11px;color:var(--muted);margin-top:4px">タイトル案はGeminiを優先し、未設定または失敗時のみClaudeを試します。</div>
             </div>
           </div>
           <div class="settings-section">
@@ -2933,7 +2925,7 @@ async function generateTitleIdeas() {
   btn.textContent = '生成中...';
   if (msg) {
     msg.style.color = 'var(--muted)';
-    msg.textContent = 'AIでタイトル案を生成しています。Gemini設定ありならGemini、なければClaudeを使います。';
+    msg.textContent = 'Claudeでタイトル案を生成しています。失敗時はテンプレに切り替えず、Claudeで分割再試行します。';
   }
   try {
     const res = await fetch('/api/title-ideas/generate', {
@@ -2945,7 +2937,8 @@ async function generateTitleIdeas() {
     if (!data.success || !data.ai_used || !Array.isArray(data.ideas) || data.ideas.length === 0) {
       titleIdeaList = [];
       renderTitleIdeas();
-      const reason = data.error || 'AIタイトル案生成に失敗しました。テンプレ生成には切り替えていません。';
+      const details = Array.isArray(data.provider_errors) && data.provider_errors.length ? ` 詳細: ${data.provider_errors.join(' / ')}` : '';
+      const reason = (data.error || 'ClaudeでのAIタイトル案生成に失敗しました。テンプレ生成には切り替えていません。') + details;
       if (msg) {
         msg.style.color = 'var(--error)';
         msg.textContent = reason;
@@ -2955,9 +2948,10 @@ async function generateTitleIdeas() {
     }
     titleIdeaList = data.ideas;
     renderTitleIdeas();
-    const sourceLabel = data.source === 'gemini' ? 'Gemini生成' : data.source === 'claude' ? 'Claude生成' : 'AI生成';
+    const sourceLabel = data.source === 'claude' ? 'Claude生成' : 'AI生成';
     if (msg) msg.style.color = 'var(--muted)';
-    if (msg) msg.textContent = `${sourceLabel}: ${titleIdeaList.length}件のタイトル案を作成しました。${data.warning ? ` ${data.warning}` : ''}`;
+    const warningDetails = Array.isArray(data.provider_warnings) && data.provider_warnings.length ? ` 詳細: ${data.provider_warnings.join(' / ')}` : '';
+    if (msg) msg.textContent = `${sourceLabel}: ${titleIdeaList.length}件のタイトル案を作成しました。${data.warning ? ` ${data.warning}` : ''}${warningDetails}`;
     toast(`${titleIdeaList.length}件のタイトル案を作成しました`, 'success');
   } catch (e) {
     titleIdeaList = [];
@@ -4019,13 +4013,11 @@ async function deleteQuality(id) {
 const SETTINGS_BACKUP_KEY = 'affiros9.apiSettingsBackup.v1';
 const SETTINGS_BACKUP_FIELDS = [
   'claude_api_key',
-  'gemini_api_key',
   'default_quality_id',
   'article_css'
 ];
 const MASKED_SETTING_FIELDS = new Set([
-  'claude_api_key',
-  'gemini_api_key'
+  'claude_api_key'
 ]);
 
 function readSettingsBackup() {
@@ -4069,7 +4061,6 @@ function settingHasValue(value) {
 function collectSettingsFormData() {
   return {
     claude_api_key: document.getElementById('s-claude-key').value,
-    gemini_api_key: document.getElementById('s-gemini-key').value,
     default_quality_id: document.getElementById('s-default-quality').value,
     article_css: document.getElementById('s-article-css').value,
   };
@@ -4107,7 +4098,6 @@ async function loadSettings() {
   let s = await res.json();
   s = await restoreSettingsFromBrowserBackup(s);
   document.getElementById('s-claude-key').value = s.claude_api_key || '';
-  document.getElementById('s-gemini-key').value = s.gemini_api_key || '';
   document.getElementById('s-article-css').value = s.article_css || '';
   await loadQuality();
   if (s.default_quality_id) document.getElementById('s-default-quality').value = s.default_quality_id;

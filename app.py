@@ -57,11 +57,10 @@ def handle_unexpected_error(error):
 DATA_DIR_WARNING = ''
 CLAUDE_ARTICLE_MODEL = 'claude-sonnet-4-6'
 CLAUDE_TITLE_IDEA_MODEL = os.environ.get('CLAUDE_TITLE_IDEA_MODEL', 'claude-3-5-haiku-latest')
-GEMINI_TITLE_IDEA_MODEL = os.environ.get('GEMINI_TITLE_IDEA_MODEL', 'gemini-2.5-flash')
 try:
-    TITLE_IDEA_AI_TIMEOUT_SECONDS = int(os.environ.get('TITLE_IDEA_AI_TIMEOUT_SECONDS', '12'))
+    TITLE_IDEA_AI_TIMEOUT_SECONDS = int(os.environ.get('TITLE_IDEA_AI_TIMEOUT_SECONDS', '20'))
 except ValueError:
-    TITLE_IDEA_AI_TIMEOUT_SECONDS = 12
+    TITLE_IDEA_AI_TIMEOUT_SECONDS = 20
 try:
     CLAUDE_ARTICLE_MAX_TOKENS = int(os.environ.get('CLAUDE_ARTICLE_MAX_TOKENS', '20000'))
 except ValueError:
@@ -411,7 +410,6 @@ def first_env(*names):
 def apply_settings_env_fallbacks(settings):
     fallback_map = {
         'claude_api_key': ('ANTHROPIC_API_KEY', 'CLAUDE_API_KEY'),
-        'gemini_api_key': ('GEMINI_API_KEY', 'GOOGLE_API_KEY'),
     }
     for setting_key, env_names in fallback_map.items():
         if not settings.get(setting_key):
@@ -455,7 +453,7 @@ def has_user_data(snapshot):
         if q.get('id') != 'default' or q.get('name') != '標準品質'
     ]
     setting_keys = (
-        'sites', 'claude_api_key', 'gemini_api_key', 'article_css'
+        'sites', 'claude_api_key', 'article_css'
     )
     return any([
         bool(snapshot.get('articles')),
@@ -478,7 +476,6 @@ def load_settings():
     settings = load_json(SETTINGS_FILE, {
         "sites": [],
         "claude_api_key": "",
-        "gemini_api_key": "",
         "default_quality_id": "default",
         "article_css": "",
         "quality_style_references": {
@@ -1241,52 +1238,6 @@ def title_generation_prompt(keywords, count_per_keyword, category=''):
 - JSON以外の説明文、Markdown、コードフェンスは禁止。"""
 
 
-def gemini_generate_text(api_key, prompt, max_tokens=2500, timeout=None, model=None):
-    api_key = str(api_key or '').strip()
-    if not api_key:
-        raise RuntimeError('Gemini API key is missing')
-    endpoint = f'https://generativelanguage.googleapis.com/v1beta/models/{model or GEMINI_TITLE_IDEA_MODEL}:generateContent'
-    payload = {
-        'contents': [{
-            'role': 'user',
-            'parts': [{'text': prompt}],
-        }],
-        'generationConfig': {
-            'temperature': 0.8,
-            'topP': 0.95,
-            'maxOutputTokens': max_tokens,
-            'responseMimeType': 'application/json',
-        },
-    }
-    response = requests.post(
-        endpoint,
-        headers={
-            'Content-Type': 'application/json',
-            'x-goog-api-key': api_key,
-        },
-        json=payload,
-        timeout=timeout or TITLE_IDEA_AI_TIMEOUT_SECONDS,
-    )
-    if not response.ok:
-        message = response.text[:500]
-        try:
-            error_payload = response.json()
-            message = (
-                (error_payload.get('error') or {}).get('message')
-                or message
-            )
-        except Exception:
-            pass
-        raise RuntimeError(f'Gemini API error ({response.status_code}): {message}')
-    data = response.json()
-    parts = (((data.get('candidates') or [{}])[0].get('content') or {}).get('parts') or [])
-    text = ''.join(str(part.get('text') or '') for part in parts if isinstance(part, dict)).strip()
-    if not text:
-        finish_reason = (data.get('candidates') or [{}])[0].get('finishReason')
-        raise RuntimeError(f'Gemini returned empty text{f" ({finish_reason})" if finish_reason else ""}')
-    return text
-
-
 def extract_title_ideas_payload(text):
     data = extract_json_object(text)
     if data:
@@ -1483,6 +1434,67 @@ def create_claude_message(client, prompt, max_tokens=None, timeout=None, model=N
     if timeout is not None:
         kwargs['timeout'] = timeout
     return create(**kwargs)
+
+
+def compact_ai_error(error, limit=260):
+    text = re.sub(r'\s+', ' ', str(error or error.__class__.__name__)).strip()
+    text = re.sub(r'sk-ant-[A-Za-z0-9_\-]+', 'sk-ant-***', text)
+    return text[:limit]
+
+
+def non_retryable_ai_error(error):
+    text = str(error or '').lower()
+    return bool(re.search(r'401|403|authentication|unauthorized|permission|api key|invalid key|credit|quota|billing|balance', text))
+
+
+def title_idea_max_tokens(keyword_count, count_per_keyword):
+    return min(3000, max(800, keyword_count * count_per_keyword * 160))
+
+
+def generate_claude_title_ideas_once(api_key, keywords, count_per_keyword, category):
+    prompt = title_generation_prompt(keywords, count_per_keyword, category)
+    client = anthropic.Anthropic(api_key=api_key)
+    message = create_claude_message(
+        client,
+        prompt,
+        max_tokens=title_idea_max_tokens(len(keywords), count_per_keyword),
+        timeout=TITLE_IDEA_AI_TIMEOUT_SECONDS,
+        model=CLAUDE_TITLE_IDEA_MODEL,
+    )
+    text = anthropic_message_text(message)
+    ideas = coerce_title_ideas(extract_title_ideas_payload(text), keywords, count_per_keyword)
+    if not ideas:
+        raise ValueError('Claude returned no usable title ideas')
+    return ideas
+
+
+def generate_claude_title_ideas_resilient(api_key, keywords, count_per_keyword, category):
+    retry_notes = []
+    try:
+        return generate_claude_title_ideas_once(api_key, keywords, count_per_keyword, category), retry_notes
+    except Exception as e:
+        first_error = compact_ai_error(e)
+        retry_notes.append(f'一括生成失敗: {first_error}')
+        app.logger.warning('Claude title idea batch generation failed: %s', e)
+        if non_retryable_ai_error(e) or len(keywords) <= 1:
+            raise RuntimeError(first_error)
+
+    ideas = []
+    failed_keywords = []
+    for keyword in keywords:
+        try:
+            ideas.extend(generate_claude_title_ideas_once(api_key, [keyword], count_per_keyword, category))
+        except Exception as e:
+            failed_keywords.append(f'{keyword}: {compact_ai_error(e, 120)}')
+            app.logger.warning('Claude title idea keyword retry failed for %s: %s', keyword, e)
+            if non_retryable_ai_error(e):
+                break
+
+    if ideas:
+        if failed_keywords:
+            retry_notes.append('一部キーワード失敗: ' + ' / '.join(failed_keywords[:5]))
+        return ideas, retry_notes
+    raise RuntimeError(' / '.join(retry_notes + failed_keywords) or 'Claude title idea generation failed')
 
 
 def append_generation_usage(article, usage, run_id=None, generated_at=None, content=''):
@@ -3059,83 +3071,51 @@ def generate_title_ideas():
         app.logger.warning('Title idea settings load failed: %s', e)
         settings = {}
 
-    prompt = title_generation_prompt(keywords, count_per_keyword, category)
     expected_count = len(keywords) * count_per_keyword
-    max_tokens = min(3000, max(900, expected_count * 140))
     provider_errors = []
 
-    gemini_key = settings.get('gemini_api_key')
-    if gemini_key:
-        try:
-            text = gemini_generate_text(
-                gemini_key,
-                prompt,
-                max_tokens=max_tokens,
-                timeout=TITLE_IDEA_AI_TIMEOUT_SECONDS,
-                model=GEMINI_TITLE_IDEA_MODEL,
-            )
-            ideas = coerce_title_ideas(
-                extract_title_ideas_payload(text),
-                keywords,
-                count_per_keyword,
-            )
-            if not ideas:
-                raise ValueError('Gemini returned no usable title ideas')
-            enriched = enrich_title_ideas(ideas, category=category, site_id=site_id)
-            payload = {
-                'success': True,
-                'ai_used': True,
-                'source': 'gemini',
-                'model': GEMINI_TITLE_IDEA_MODEL,
-                'keywords': keywords,
-                'ideas': enriched,
-            }
-            if len(enriched) < expected_count:
-                payload['warning'] = f'AI返却が{len(enriched)}/{expected_count}件でした。足りない分はテンプレ補完していません。'
-            return jsonify(payload)
-        except Exception as e:
-            provider_errors.append(f'Gemini: {e}')
-            app.logger.warning('Gemini title idea generation failed: %s', e)
-
     claude_key = settings.get('claude_api_key')
-    if claude_key:
-        try:
-            client = anthropic.Anthropic(api_key=claude_key)
-            message = create_claude_message(
-                client,
-                prompt,
-                max_tokens=max_tokens,
-                timeout=TITLE_IDEA_AI_TIMEOUT_SECONDS,
-                model=CLAUDE_TITLE_IDEA_MODEL,
-            )
-            text = anthropic_message_text(message)
-            ideas = coerce_title_ideas(
-                extract_title_ideas_payload(text),
-                keywords,
-                count_per_keyword,
-            )
-            if not ideas:
-                raise ValueError('Claude returned no usable title ideas')
-            enriched = enrich_title_ideas(ideas, category=category, site_id=site_id)
-            payload = {
-                'success': True,
-                'ai_used': True,
-                'source': 'claude',
-                'model': CLAUDE_TITLE_IDEA_MODEL,
-                'keywords': keywords,
-                'ideas': enriched,
-            }
-            if len(enriched) < expected_count:
-                payload['warning'] = f'AI返却が{len(enriched)}/{expected_count}件でした。足りない分はテンプレ補完していません。'
-            return jsonify(payload)
-        except Exception as e:
-            provider_errors.append(f'Claude: {e}')
-            app.logger.warning('Claude title idea generation failed: %s', e)
+    if not claude_key:
+        return jsonify({
+            'success': False,
+            'ai_used': False,
+            'source': 'none',
+            'keywords': keywords,
+            'ideas': [],
+            'error': 'タイトル案生成にはClaude APIキーが必要です。テンプレ生成には切り替えません。',
+        })
 
-    if not gemini_key and not claude_key:
-        error = 'タイトル案生成にはGemini APIキーまたはClaude APIキーが必要です。テンプレ生成には切り替えません。'
-    else:
-        error = 'AIタイトル案生成に失敗しました。テンプレ生成には切り替えていません。APIキー・残高・モデル状態を確認してください。'
+    try:
+        ideas, retry_notes = generate_claude_title_ideas_resilient(
+            claude_key,
+            keywords,
+            count_per_keyword,
+            category,
+        )
+        enriched = enrich_title_ideas(ideas, category=category, site_id=site_id)
+        payload = {
+            'success': True,
+            'ai_used': True,
+            'source': 'claude',
+            'model': CLAUDE_TITLE_IDEA_MODEL,
+            'keywords': keywords,
+            'ideas': enriched,
+        }
+        warnings = []
+        if retry_notes:
+            warnings.append('一括生成に失敗したため、Claudeでキーワード単位に再試行しました。')
+        if len(enriched) < expected_count:
+            warnings.append(f'AI返却が{len(enriched)}/{expected_count}件でした。足りない分はテンプレ補完していません。')
+        if warnings:
+            payload['warning'] = ' '.join(warnings)
+        if retry_notes:
+            payload['provider_warnings'] = retry_notes[-3:]
+        return jsonify(payload)
+    except Exception as e:
+        provider_errors.append(f'Claude: {compact_ai_error(e)}')
+        app.logger.warning('Claude title idea generation failed: %s', e)
+
+    error = 'ClaudeでのAIタイトル案生成に失敗しました。テンプレ生成には切り替えていません。APIキー・残高・モデル状態を確認してください。'
     return jsonify({
         'success': False,
         'ai_used': False,
@@ -5121,7 +5101,6 @@ def get_settings():
     settings = load_settings()
     safe = {
         'claude_api_key': mask_secret(settings.get('claude_api_key', '')),
-        'gemini_api_key': mask_secret(settings.get('gemini_api_key', '')),
         'default_quality_id': settings.get('default_quality_id', 'default'),
         'article_css': settings.get('article_css', ''),
     }
@@ -5136,8 +5115,6 @@ def update_settings():
         settings['default_quality_id'] = data['default_quality_id']
     if data.get('claude_api_key') and not is_masked_value(data['claude_api_key']):
         settings['claude_api_key'] = data['claude_api_key']
-    if data.get('gemini_api_key') and not is_masked_value(data['gemini_api_key']):
-        settings['gemini_api_key'] = data['gemini_api_key']
     if 'article_css' in data:
         if looks_like_html(data.get('article_css', '')):
             return jsonify({'success': False, 'error': '記事CSS定義にはHTMLを保存できません。CSSだけを入力してください。'}), 400
