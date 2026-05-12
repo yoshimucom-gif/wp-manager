@@ -56,12 +56,12 @@ def handle_unexpected_error(error):
 
 DATA_DIR_WARNING = ''
 CLAUDE_ARTICLE_MODEL = 'claude-sonnet-4-6'
-CLAUDE_TITLE_IDEA_MODEL = os.environ.get('CLAUDE_TITLE_IDEA_MODEL', 'claude-3-5-haiku-20241022')
+CLAUDE_TITLE_IDEA_MODEL = os.environ.get('CLAUDE_TITLE_IDEA_MODEL', CLAUDE_ARTICLE_MODEL)
 CLAUDE_TITLE_IDEA_FALLBACK_MODELS = [
     model.strip()
     for model in os.environ.get(
         'CLAUDE_TITLE_IDEA_FALLBACK_MODELS',
-        'claude-3-5-haiku-20241022,claude-3-5-haiku-latest,claude-3-haiku-20240307'
+        f'{CLAUDE_ARTICLE_MODEL},claude-haiku-4-5-20251001,claude-haiku-4-5,claude-3-5-haiku-20241022,claude-3-5-haiku-latest,claude-sonnet-4-5-20250929,claude-sonnet-4-20250514'
     ).split(',')
     if model.strip()
 ]
