@@ -2401,21 +2401,73 @@ def build_product_card_html(product):
     )
 
 
+def _find_best_product_match(query_name, products, threshold=0.3):
+    """商品名（h3見出しテキスト等）から最も類似度の高い商品インデックスを返す。"""
+    if not query_name or not products:
+        return None
+    query_norm = _normalize_product_name_for_match(query_name)
+    if not query_norm:
+        return None
+    best_score = 0.0
+    best_idx = None
+    for idx, p in enumerate(products):
+        primary = p.get('rakuten') or p.get('amazon')
+        if not primary:
+            continue
+        pname = _normalize_product_name_for_match(primary.get('name'))
+        if not pname:
+            continue
+        # 部分一致ボーナス: クエリの主要トークンが商品名に含まれていれば加点
+        score = difflib.SequenceMatcher(None, query_norm, pname).ratio()
+        # 短いクエリが商品名に含まれていれば追加スコア
+        if query_norm in pname or pname[:len(query_norm)] == query_norm:
+            score = max(score, 0.7)
+        if score > best_score:
+            best_score = score
+            best_idx = idx
+    return best_idx if (best_idx is not None and best_score >= threshold) else None
+
+
 def inject_affiliate_cards(html, products):
     """AFFI:N マーカーを商品カードHTMLに置換する。
 
-    Claude が様々な形で出してくるので寛容に対応:
-    - <!-- AFFI:1 -->                  (本来の形)
-    - <p><!-- AFFI:1 --></p>           (pタグでラップされた)
-    - <p>AFFI:1</p>                    (コメント忘れ)
-    - AFFI:1 が単独行                  (素の文字)
-    最後に壊れた marker（AFFI:N など）を掃除する。
+    **重要**: Claude は本文と AFFI 番号を正しく対応させられないことがあるため、
+    各 <h3> 直後のマーカーは、まず h3 の商品名で類似度マッチして正しい商品を選ぶ。
+    マッチ失敗時のみ AFFI 番号をフォールバック使用する。
     """
     if not html:
         return html
     products = products or []
+    text = str(html)
 
-    def replace_match(match):
+    # Pattern 1: <h3>商品名</h3> の直後に来るマーカーは h3 商品名で再マッチ（最優先）
+    h3_marker_pattern = re.compile(
+        r'(<h3[^>]*>([^<]+)</h3>)\s*'
+        r'(?:<p[^>]*>\s*)?(?:<!--\s*)?AFFI:\s*(\d+)\s*(?:-->)?(?:\s*</p>)?',
+        re.IGNORECASE
+    )
+
+    def replace_h3_marker(match):
+        h3_full = match.group(1)
+        h3_text = match.group(2)
+        marker_n = int(match.group(3))
+        # 「N位：商品名」「N位:商品名」から商品名を取り出す
+        title_only = re.sub(r'^\s*\d+\s*位\s*[:：]?\s*', '', h3_text).strip()
+        # 末尾の括弧書き（対応機種注釈など）を除去
+        title_only = re.sub(r'\s*[（(][^)）]{0,40}[)）]\s*$', '', title_only).strip()
+        # 1. h3商品名で類似度マッチを試みる
+        match_idx = _find_best_product_match(title_only, products)
+        if match_idx is None and 1 <= marker_n <= len(products):
+            match_idx = marker_n - 1
+        if match_idx is None:
+            return h3_full
+        card = build_product_card_html(products[match_idx])
+        return f'{h3_full}\n{card}' if card else h3_full
+
+    text = h3_marker_pattern.sub(replace_h3_marker, text)
+
+    # Pattern 2: 残りの AFFI マーカー（h3 直後じゃない場所）は番号ベースで置換
+    def replace_by_number(match):
         for g in match.groups():
             if g and g.isdigit():
                 idx = int(g)
@@ -2424,16 +2476,16 @@ def inject_affiliate_cards(html, products):
                 return ''
         return ''
 
-    text = str(html)
-    patterns = [
+    fallback_patterns = [
         r'<p[^>]*>\s*<!--\s*AFFI:\s*(\d+)\s*-->\s*</p>',
         r'<p[^>]*>\s*AFFI:\s*(\d+)\s*</p>',
         r'<!--\s*AFFI:\s*(\d+)\s*-->',
         r'(?:^|(?<=>))\s*AFFI:\s*(\d+)\s*(?=<|$)',
     ]
-    for pat in patterns:
-        text = re.sub(pat, replace_match, text, flags=re.MULTILINE)
+    for pat in fallback_patterns:
+        text = re.sub(pat, replace_by_number, text, flags=re.MULTILINE)
 
+    # Cleanup: 壊れたマーカー (リテラル N, 範囲外番号 など) を削除
     text = re.sub(r'<p[^>]*>\s*(?:<!--\s*)?AFFI:\s*[A-Za-z0-9_]+\s*(?:-->)?\s*</p>', '', text)
     text = re.sub(r'<!--\s*AFFI:\s*[A-Za-z0-9_]+\s*-->', '', text)
     text = re.sub(r'(?:^|(?<=>))\s*AFFI:\s*[A-Za-z0-9_]+\s*(?=<|$)', '', text, flags=re.MULTILINE)
@@ -2609,10 +2661,10 @@ def build_segmented_article_steps(article, article_type):
         steps = [{
             'name': '導入・早見表・比較表',
             'prompt': f"""リード文、この記事でわかること、結論早見表、比較表だけを書いてください。
-- リード文は250〜350文字。
+- リード文は短めにまとめる（おおむね200〜300文字）。
 - 比較表は必ずヘッダーを除いて{count}行にしてください。
-- 日本語本文換算で900〜1200文字を目安にしてください。
-- 比較表のあとにランキング本文へ入らず、ここで止めてください。"""
+- 比較表のあとにランキング本文へ入らず、ここで止めてください。
+- 文字数は次の「今回の出力目安」に従い、長く書きすぎないこと。"""
         }]
         chunk_size = 2
         for start in range(1, count + 1, chunk_size):
@@ -2626,9 +2678,9 @@ def build_segmented_article_steps(article, article_type):
   番号は前述の商品リストの AFFI 番号を使う。例: 1位の商品が AFFI:3 なら
   「<h3>1位：商品名</h3>」の次の行に「<!-- AFFI:3 -->」と書く。
   「AFFI:N」のまま N の文字を残すのは絶対NG。HTMLコメント形式 `<!--` `-->` も必須。
-- 各商品の解説は、特徴・おすすめな人・注意点・他候補との違いを含めて最低2段落以上。
-- この工程全体で日本語本文換算900〜1200文字を目安にしてください。
+- 各商品の解説は、特徴・おすすめな人・注意点を含めて簡潔に。
 - 比較表やリード文は繰り返さないでください。
+- 文字数は次の「今回の出力目安」に従う。商品ごとの解説は冗長にせず、必要十分にまとめる。
 - {end}位を書き終えたら、選び方やFAQへ進まず止めてください。"""
             })
         steps.append({
@@ -2636,9 +2688,9 @@ def build_segmented_article_steps(article, article_type):
             'prompt': """選び方、購入前の注意点、FAQ、まとめだけを書いてください。
 - H2「選び方」を入れ、素材・価格・用途・サイズ感など判断軸を整理してください。
 - FAQは3〜5問。質問ごとにH3見出しを使い、その下に回答段落を書いてください。
-- 日本語本文換算で900〜1200文字を目安にしてください。
 - 最後に必ずH2「まとめ」を入れ、読者の次の行動まで示して記事を完結させてください。
-- ランキング個別解説は繰り返さないでください。"""
+- ランキング個別解説は繰り返さないでください。
+- 文字数は次の「今回の出力目安」に従い、長く書きすぎないこと。"""
         })
         return steps
 
@@ -2744,7 +2796,8 @@ def build_segment_prompt(base_prompt, article, article_type, quality, step, inde
 - 出力はWordPress本文HTMLのみ。説明文、作業メモ、Markdown、コードフェンスは禁止。
 - 既に書いた内容を繰り返さず、現在までの本文の続きとして自然につなげてください。
 - この分割記事は全{total}工程中の{index}工程目です。
-- 今回の出力目安は日本語本文換算で{section_target}文字前後です。
+- **記事全体の目標文字数は約{effective_target_chars(quality)}文字**。今回の工程はそのうちの一部です。
+- **今回の出力目安は日本語本文換算で{section_target}文字前後**。これより大幅に長く書かないこと。
 - 今回の範囲を書き切るまで途中で止めないでください。
 - Gutenbergコメント（<!-- wp:... -->）は出力しないでください。
 - h2/h3見出しには、できるだけ狙う主要KW「{main_keyword}」を自然に含めてください。
@@ -2762,7 +2815,12 @@ def build_segment_prompt(base_prompt, article, article_type, quality, step, inde
 
 def segment_target_chars(quality, total):
     target = effective_target_chars(quality)
-    return max(900, min(1300, math.ceil(target / max(total, 1))))
+    per_segment = math.ceil(target / max(total, 1))
+    # target に応じて min/max を動的に。
+    # target が小さい時に min 900 で押し上げて全体文字数を超過する問題を抑える。
+    floor = 500 if target <= 3500 else (700 if target <= 6000 else 900)
+    ceiling = 900 if target <= 3500 else (1200 if target <= 6000 else 1500)
+    return max(floor, min(ceiling, per_segment))
 
 
 def segment_minimum_chars(quality, total):
