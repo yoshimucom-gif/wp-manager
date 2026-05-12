@@ -2415,12 +2415,31 @@ def build_product_card_html(product):
     )
 
 
-def _find_best_product_match(query_name, products, threshold=0.3):
-    """商品名（h3見出しテキスト等）から最も類似度の高い商品インデックスを返す。"""
+def _tokenize_product_name(name):
+    """商品名から検索用トークン（日本語+英数字）を抽出。"""
+    text = str(name or '').lower()
+    # 漢字連続 / ひらがな連続 / カタカナ連続 / 英数字連続 をトークンとして抽出
+    tokens = re.findall(
+        r'[a-z0-9]+|[一-鿿]+|[゠-ヿ]+|[぀-ゟ]+',
+        text
+    )
+    # 2文字以上のトークンに絞る（ノイズ除去）
+    return [t for t in tokens if len(t) >= 2]
+
+
+def _find_best_product_match(query_name, products, threshold=0.5):
+    """商品名（h3見出しテキスト等）から最も類似度の高い商品インデックスを返す。
+
+    Claude の短い商品名 vs Amazon の長い商品名でも安定するよう、
+    トークン重複率（クエリ側基準）で評価する。
+    """
     if not query_name or not products:
         return None
     query_norm = _normalize_product_name_for_match(query_name)
     if not query_norm:
+        return None
+    query_tokens = _tokenize_product_name(query_name)
+    if not query_tokens:
         return None
     best_score = 0.0
     best_idx = None
@@ -2428,18 +2447,34 @@ def _find_best_product_match(query_name, products, threshold=0.3):
         primary = p.get('rakuten') or p.get('amazon')
         if not primary:
             continue
-        pname = _normalize_product_name_for_match(primary.get('name'))
-        if not pname:
+        pname_norm = _normalize_product_name_for_match(primary.get('name'))
+        if not pname_norm:
             continue
-        # 部分一致ボーナス: クエリの主要トークンが商品名に含まれていれば加点
-        score = difflib.SequenceMatcher(None, query_norm, pname).ratio()
-        # 短いクエリが商品名に含まれていれば追加スコア
-        if query_norm in pname or pname[:len(query_norm)] == query_norm:
-            score = max(score, 0.7)
+        # クエリ側のトークンが商品名にいくつ含まれるか（substring判定）
+        matched = sum(1 for t in query_tokens if t.lower() in pname_norm)
+        score = matched / len(query_tokens)
+        # 完全包含なら満点扱い
+        if query_norm in pname_norm:
+            score = max(score, 0.95)
         if score > best_score:
             best_score = score
             best_idx = idx
     return best_idx if (best_idx is not None and best_score >= threshold) else None
+
+
+def strip_summary_table_sections(html):
+    """「早見表」を含むH2セクション（H2 + 内容）を削除する。
+
+    比較表と内容が重複しがちなので、Claude が出力しても物理削除する。
+    """
+    if not html:
+        return html
+    # 「早見表」を含むH2から、次のH2の直前まで（または末尾）を削除
+    pattern = re.compile(
+        r'<h2[^>]*>[^<]*?早見表[^<]*?</h2>[\s\S]*?(?=<h2)',
+        re.IGNORECASE
+    )
+    return pattern.sub('', html)
 
 
 def inject_affiliate_cards(html, products):
@@ -2447,11 +2482,12 @@ def inject_affiliate_cards(html, products):
 
     Claude のマーカー(AFFI:N) に依存せず、h3 の商品名から類似度マッチで
     商品を見つけてカードを挿入する。マーカーは入っていれば掃除、なくてもOK。
+    早見表セクションは強制削除（比較表と重複するため）。
     """
     if not html:
         return html
     products = products or []
-    text = str(html)
+    text = strip_summary_table_sections(str(html))
 
     # 全 h3 ランキング見出しを検出して、その直後にカードを挿入
     h3_rank_pattern = re.compile(
