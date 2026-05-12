@@ -222,7 +222,7 @@ def save_rewrites(items):
     save_json(REWRITE_FILE, items)
 
 OLD_DEFAULT_QUALITY_PROMPT = "SEOに最適化された、読みやすく情報量の多い記事を書いてください。見出しを適切に使い、具体例を含めてください。"
-QUALITY_PRESET_VERSION = 7
+QUALITY_PRESET_VERSION = 8
 
 
 def default_quality_presets():
@@ -285,7 +285,6 @@ def default_quality_presets():
 - 冒頭で結論を出し、「おすすめできる人」「おすすめしない人」を早めに提示する
 - 口コミ・評判は良い点だけでなく悪い点・注意点も整理する
 - 特徴、料金/価格、メリット、デメリット、使い方/購入方法、解約/返品/注意事項を必要に応じて入れる
-- メリットとデメリット・注意点は、H2の中にH3小見出しを2〜3個入れて具体的に分解する
 - 公式情報で確認すべき項目は断定せず、確認導線を用意する
 - 競合・代替商品がある場合は、軽い比較を入れて判断材料を増やす
 - CTAは導入後、メリット説明後、まとめ前など文脈に合う位置だけに置く
@@ -300,11 +299,7 @@ H2: ○○の口コミ・評判
 H3: 良い口コミ・評判
 H3: 悪い口コミ・注意点
 H2: ○○のメリット
-H3: メリット1：○○
-H3: メリット2：○○
 H2: ○○のデメリット・注意点
-H3: デメリット1：○○
-H3: デメリット2：○○
 H2: ○○がおすすめな人・おすすめしない人
 H2: ○○の購入方法・申込方法
 H2: まとめ
@@ -353,13 +348,6 @@ def load_quality():
     quality = load_json(QUALITY_FILE, presets)
     existing_ids = {q.get('id') for q in quality}
     changed = False
-
-    def fill_missing(existing, key, value):
-        nonlocal changed
-        if key not in existing or existing.get(key) in (None, ''):
-            existing[key] = value
-            changed = True
-
     for preset in presets:
         if preset['id'] not in existing_ids:
             quality.append(preset)
@@ -368,22 +356,34 @@ def load_quality():
         existing = next((q for q in quality if q.get('id') == preset['id']), None)
         if not existing:
             continue
-        fill_missing(existing, 'name', preset.get('name', ''))
-        if preset.get('article_type'):
-            fill_missing(existing, 'article_type', preset.get('article_type'))
-        fill_missing(existing, 'target_chars', preset.get('target_chars', str(DEFAULT_ARTICLE_TARGET_CHARS)))
-        fill_missing(existing, 'tone', preset.get('tone', 'ですます調'))
-        fill_missing(existing, 'extra_rules', preset.get('extra_rules', ''))
-        fill_missing(existing, 'prompt', preset.get('prompt', ''))
-        fill_missing(existing, 'is_default', preset.get('is_default', False))
-        if existing.get('prompt') == OLD_DEFAULT_QUALITY_PROMPT:
-            existing['prompt'] = preset.get('prompt', existing.get('prompt', ''))
-            changed = True
-        if int(existing.get('system_preset_version') or 0) < preset.get('system_preset_version', 0):
-            existing['system_preset_version'] = preset.get('system_preset_version')
-            changed = True
-        if existing.get('article_type') is None:
-            existing.pop('article_type', None)
+        version = int(existing.get('system_preset_version') or 0)
+        should_upgrade = version < preset.get('system_preset_version', 0)
+        if preset['id'] == 'default' and existing.get('prompt') == OLD_DEFAULT_QUALITY_PROMPT:
+            should_upgrade = True
+        if should_upgrade:
+            preserve_default = existing.get('is_default', preset.get('is_default', False))
+            preserve_reference = existing.get('reference_url', preset.get('reference_url', ''))
+            preserve_structure = existing.get('structure_html', preset.get('structure_html', ''))
+            existing_target = str(existing.get('target_chars', '')).strip()
+            target_chars = (
+                preset.get('target_chars', existing_target)
+                if existing_target in ('', '2500', '5000')
+                else existing_target
+            )
+            existing.update({
+                'name': preset.get('name', existing.get('name', '')),
+                'article_type': preset.get('article_type', existing.get('article_type')),
+                'prompt': preset.get('prompt', existing.get('prompt', '')),
+                'target_chars': target_chars,
+                'tone': preset.get('tone', existing.get('tone', 'ですます調')),
+                'extra_rules': preset.get('extra_rules', existing.get('extra_rules', '')),
+                'system_preset_version': preset.get('system_preset_version', version),
+                'is_default': preserve_default,
+                'reference_url': preserve_reference,
+                'structure_html': preserve_structure,
+            })
+            if existing.get('article_type') is None:
+                existing.pop('article_type', None)
             changed = True
     if changed:
         save_json(QUALITY_FILE, quality)
