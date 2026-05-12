@@ -73,13 +73,13 @@ except ValueError:
     TITLE_IDEA_AI_TIMEOUT_SECONDS = 20
 TITLE_IDEA_PER_KEYWORD_RETRY = os.environ.get('TITLE_IDEA_PER_KEYWORD_RETRY', '0') == '1'
 try:
-    TITLE_IDEA_BATCH_SIZE = max(1, int(os.environ.get('TITLE_IDEA_BATCH_SIZE', '5')))
+    TITLE_IDEA_BATCH_SIZE = max(1, int(os.environ.get('TITLE_IDEA_BATCH_SIZE', '3')))
 except ValueError:
-    TITLE_IDEA_BATCH_SIZE = 5
+    TITLE_IDEA_BATCH_SIZE = 3
 try:
-    TITLE_IDEA_PARALLEL_BATCHES = max(1, int(os.environ.get('TITLE_IDEA_PARALLEL_BATCHES', '3')))
+    TITLE_IDEA_PARALLEL_BATCHES = max(1, int(os.environ.get('TITLE_IDEA_PARALLEL_BATCHES', '5')))
 except ValueError:
-    TITLE_IDEA_PARALLEL_BATCHES = 3
+    TITLE_IDEA_PARALLEL_BATCHES = 5
 try:
     CLAUDE_ARTICLE_MAX_TOKENS = int(os.environ.get('CLAUDE_ARTICLE_MAX_TOKENS', '20000'))
 except ValueError:
@@ -3168,6 +3168,21 @@ def generate_title_ideas():
                             app.logger.warning('Title idea batch %d/%d failed: %s', idx, len(batches), e)
                         if len(batches) > 1:
                             result_queue.put(('progress', f'Claudeでタイトル案を生成中 ({completed}/{len(batches)}バッチ完了 / 取得済 {len(all_ideas)}件)'))
+                        if all_ideas:
+                            try:
+                                partial_enriched = enrich_title_ideas(list(all_ideas), category=category, site_id=site_id)
+                                result_queue.put(('partial', {
+                                    'success': True,
+                                    'ai_used': True,
+                                    'source': 'claude',
+                                    'model': model_used,
+                                    'keywords': keywords,
+                                    'ideas': partial_enriched,
+                                    'partial': True,
+                                    'progress': {'completed': completed, 'total': len(batches)},
+                                }))
+                            except Exception as e:
+                                app.logger.warning('Partial enrich failed: %s', e)
                 if not all_ideas:
                     error_text = ' / '.join(batch_errors) if batch_errors else (compact_ai_error(last_error) if last_error else 'タイトル案を取得できませんでした')
                     result_queue.put(('err', error_text))
@@ -3200,8 +3215,8 @@ def generate_title_ideas():
         initial_msg = f'Claudeでタイトル案を生成中... ({len(keywords)}KW / {len(batches)}バッチ)' if len(batches) > 1 else 'Claudeでタイトル案を生成中...'
         yield sse({'type': 'status', 'message': initial_msg})
 
-        heartbeat_interval = 3
-        idle_timeout = 60
+        heartbeat_interval = 2
+        idle_timeout = 22
         idle_elapsed = 0
         while True:
             try:
@@ -3219,6 +3234,9 @@ def generate_title_ideas():
             idle_elapsed = 0
             if kind == 'progress':
                 yield sse({'type': 'status', 'message': payload})
+                continue
+            if kind == 'partial':
+                yield sse({'type': 'partial', **payload})
                 continue
             if kind == 'ok':
                 yield sse(payload)

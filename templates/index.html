@@ -2941,6 +2941,7 @@ async function generateTitleIdeas() {
     }
 
     let data = null;
+    let partialData = null;
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -2960,8 +2961,20 @@ async function generateTitleIdeas() {
           if (msg && typeof evt.message === 'string') msg.textContent = evt.message;
           continue;
         }
+        if (evt && evt.type === 'partial') {
+          partialData = evt;
+          if (msg && Array.isArray(evt.ideas)) {
+            const prog = evt.progress || {};
+            msg.textContent = `生成中... (${prog.completed||'?'}/${prog.total||'?'}バッチ完了 / ${evt.ideas.length}件取得)`;
+          }
+          continue;
+        }
         data = evt;
       }
+    }
+    if (!data && partialData) {
+      data = {...partialData, warning: '接続タイムアウトのため途中までの結果を表示しています。残りキーワードは別途再実行してください。'};
+      delete data.type;
     }
     if (!data) {
       throw new Error('タイトル案APIから結果が返りませんでした');
