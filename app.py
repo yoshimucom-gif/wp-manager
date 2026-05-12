@@ -573,6 +573,59 @@ def fetch_url_text(url, max_chars=2500, timeout=5):
     return p.text()[:max_chars]
 
 
+RAKUTEN_SEARCH_ENDPOINT = 'https://app.rakuten.co.jp/services/api/IchibaItem/Search/20220601'
+
+
+def rakuten_search(query, app_id, affiliate_id=None, limit=20, timeout=8):
+    """楽天市場 商品検索 API を叩いて整形済みリストを返す。
+
+    Returns: list[dict] with keys: name, price, url, image_url, shop_name,
+             review_count, review_avg, item_caption.
+    Raises: ValueError on missing config, requests.HTTPError on API failure.
+    """
+    if not str(query or '').strip():
+        return []
+    if not str(app_id or '').strip():
+        raise ValueError('楽天アプリケーションIDが未設定です')
+    params = {
+        'applicationId': app_id,
+        'keyword': query.strip(),
+        'hits': max(1, min(30, int(limit) if str(limit).isdigit() else 20)),
+        'format': 'json',
+        'imageFlag': 1,
+        'availability': 1,
+    }
+    if affiliate_id:
+        params['affiliateId'] = affiliate_id
+    resp = requests.get(RAKUTEN_SEARCH_ENDPOINT, params=params, timeout=timeout)
+    resp.raise_for_status()
+    payload = resp.json()
+    results = []
+    for entry in payload.get('Items', []) or []:
+        item = entry.get('Item') if isinstance(entry, dict) else None
+        if not isinstance(item, dict):
+            continue
+        image_url = ''
+        for image_entry in (item.get('mediumImageUrls') or item.get('smallImageUrls') or []):
+            if isinstance(image_entry, dict):
+                image_url = image_entry.get('imageUrl') or ''
+            elif isinstance(image_entry, str):
+                image_url = image_entry
+            if image_url:
+                break
+        results.append({
+            'name': str(item.get('itemName') or '').strip(),
+            'price': item.get('itemPrice'),
+            'url': str(item.get('affiliateUrl') or item.get('itemUrl') or '').strip(),
+            'image_url': re.sub(r'\?_ex=\d+x\d+$', '', image_url),
+            'shop_name': str(item.get('shopName') or '').strip(),
+            'review_count': item.get('reviewCount') or 0,
+            'review_avg': item.get('reviewAverage') or 0,
+            'item_caption': str(item.get('itemCaption') or '').strip()[:240],
+        })
+    return results
+
+
 def html_to_text(html):
     parser = _TextExtractor()
     parser.feed(html or '')
@@ -2018,6 +2071,71 @@ def build_article_completion_prompt(quality, article_type, has_decoration=False)
 - 途中で出力が長くなりそうな場合は、装飾の量よりも{priority}を優先してください。
 {extra_text}
 """
+
+
+def fetch_product_context(article, settings, limit=15):
+    """楽天/Amazonから商品データを取得して整形して返す。失敗時は空リスト + 警告メッセージ。"""
+    query = str(
+        article.get('ad_keywords')
+        or article.get('keywords')
+        or article.get('title')
+        or ''
+    ).strip()
+    if not query:
+        return [], 'no_query'
+    rakuten_app_id = settings.get('rakuten_app_id') or ''
+    if not rakuten_app_id:
+        return [], 'no_provider'
+    affiliate_id = settings.get('rakuten_affiliate_id') or ''
+    try:
+        items = rakuten_search(query, rakuten_app_id, affiliate_id, limit=limit)
+    except Exception as e:
+        app.logger.warning('Rakuten search failed for "%s": %s', query, e)
+        return [], f'rakuten_error: {str(e)[:120]}'
+    return items, 'ok' if items else 'empty'
+
+
+def build_product_context_prompt(products, article_type='ranking'):
+    """商品データをClaudeに渡すためのプロンプトブロックを生成する。"""
+    if not products:
+        return ''
+    is_ranking = article_type == 'ranking'
+    rows = []
+    for idx, p in enumerate(products, 1):
+        price = p.get('price')
+        price_text = f'¥{int(price):,}' if isinstance(price, (int, float)) else (str(price) if price else '')
+        review_avg = p.get('review_avg') or 0
+        review_count = p.get('review_count') or 0
+        review_text = (
+            f' / ★{float(review_avg):.1f} ({int(review_count)}件)'
+            if isinstance(review_avg, (int, float)) and review_avg
+            else ''
+        )
+        caption = (p.get('item_caption') or '').strip()
+        rows.append(
+            f'{idx}. {p.get("name", "")[:90]}\n'
+            f'   価格: {price_text}{review_text}\n'
+            f'   ショップ: {p.get("shop_name", "")[:40]}\n'
+            f'   特徴メモ: {caption[:160]}'
+        )
+    header = (
+        '楽天市場の検索結果から取得した実商品データ（最新）:'
+        if is_ranking else '記事の参考用 実商品データ（楽天市場）:'
+    )
+    instruction = (
+        '使い方:\n'
+        '- 上記の実商品から記事のキーワードに合うものだけを選び、ランキングや比較で紹介してください。\n'
+        '- 商品名は上記のものをそのまま使い、「候補1」など架空の名前は禁止。\n'
+        '- 価格・レビュー件数・★平均は上記の数値を引用してください（必要な数値だけでOK）。\n'
+        '- 上記に含まれない商品は本文に登場させないでください（事実誤認回避のため）。\n'
+        '- 商品URLは本文に貼らない（後段のプラグインがアフィリエイトリンク化します）。'
+        if is_ranking else
+        '使い方:\n'
+        '- 必要なときだけ自然に商品名や価格帯を引用してください。\n'
+        '- 商品リンクや「ランキング」「○選」は強制しない。\n'
+        '- 上記に含まれない実商品名は新たに発明しないでください。'
+    )
+    return f"\n\n{header}\n" + '\n'.join(rows) + f"\n\n{instruction}\n"
 
 
 def build_quality_structure_html_prompt(quality, limit=6000):
@@ -3488,6 +3606,14 @@ def generate_article(article_id):
         full_content = ''
         try:
             yield f"data: {json.dumps({'status': 'started', 'run_id': generation_run_id})}\n\n"
+            yield f"data: {json.dumps({'status': 'fetching_products', 'message': '楽天市場で実商品データを取得しています'})}\n\n"
+            products, product_status = fetch_product_context(article_work, settings, limit=15)
+            if products:
+                yield f"data: {json.dumps({'status': 'products_loaded', 'count': len(products), 'message': f'実商品 {len(products)}件 を取得しました'})}\n\n"
+            elif product_status == 'no_provider':
+                yield f"data: {json.dumps({'status': 'products_skipped', 'message': '楽天APIキー未設定のため、実商品データなしで生成します'})}\n\n"
+            else:
+                yield f"data: {json.dumps({'status': 'products_skipped', 'message': f'楽天検索結果が空でした（{product_status}）。実商品データなしで生成します'})}\n\n"
             client = anthropic.Anthropic(api_key=api_key) if api_key else None
             prompt = f"""以下の情報をもとに、WordPressに投稿する記事を書いてください。
 
@@ -3503,6 +3629,8 @@ def generate_article(article_id):
 
 {article_html_output_rules()}
 {regeneration_instruction}"""
+
+            prompt += build_product_context_prompt(products, article_type)
 
             if style_reference_text:
                 prompt += f'''\n\n記事品質の書き方参考:
@@ -3690,6 +3818,7 @@ def generate_article_direct(article_id):
         previous_content_hash = content_hash(previous_content)
         is_regeneration = bool(html_to_text(previous_content).strip())
         client = anthropic.Anthropic(api_key=api_key) if api_key else None
+        products, _ = fetch_product_context(article_work, settings, limit=15)
         base_prompt = f"""以下の情報をもとに、WordPressに投稿する記事を書いてください。
 
 タイトル: {article_work.get('title', '')}
@@ -3704,6 +3833,7 @@ def generate_article_direct(article_id):
 {build_ranking_structure_prompt(article_work, article_type)}
 
 {article_html_output_rules()}
+{build_product_context_prompt(products, article_type)}
 {build_quality_structure_html_prompt(quality)}
 {build_article_completion_prompt(quality, article_type)}
 """
@@ -3903,6 +4033,9 @@ def batch_generate():
                     except Exception:
                         style_reference_url, style_reference_text = '', ''
                     style_reference_cache[article_type] = (style_reference_url, style_reference_text)
+                stage = 'fetch products'
+                update_job(current_title=article.get('title', ''), message=f"楽天で実商品データ取得中: {article.get('title', '')}")
+                products, _ = fetch_product_context(article, settings, limit=15)
                 stage = 'build prompt'
                 prompt = f"""以下の情報をもとに、WordPressに投稿する記事を書いてください。
 
@@ -3918,6 +4051,8 @@ def batch_generate():
 
 {article_html_output_rules()}
 {regeneration_instruction}"""
+
+                prompt += build_product_context_prompt(products, article_type)
 
                 if style_reference_text:
                     prompt += f'''\n\n記事品質の書き方参考:
@@ -4994,6 +5129,29 @@ def update_settings():
             settings[key] = str(data.get(key) or '').strip()
     save_settings(settings)
     return jsonify({'success': True})
+
+
+@app.route('/api/products/search', methods=['POST'])
+@login_required
+def search_products():
+    """商品検索（楽天）テスト用エンドポイント。設定済みのAPIで検索して結果を返す。"""
+    data = request.json or {}
+    query = str(data.get('query') or '').strip()
+    if not query:
+        return jsonify({'error': '検索キーワードを入力してください'}), 400
+    limit = data.get('limit') or 10
+    settings = load_settings()
+    rakuten_app_id = settings.get('rakuten_app_id') or ''
+    rakuten_affiliate_id = settings.get('rakuten_affiliate_id') or ''
+    if not rakuten_app_id:
+        return jsonify({'error': '楽天アプリケーションIDが未設定です。API設定で登録してください。'}), 400
+    try:
+        items = rakuten_search(query, rakuten_app_id, rakuten_affiliate_id, limit=limit)
+    except requests.HTTPError as e:
+        return jsonify({'error': f'楽天APIエラー: {e.response.status_code if e.response else "不明"}'}), 502
+    except Exception as e:
+        return jsonify({'error': f'楽天検索に失敗しました: {str(e)[:200]}'}), 500
+    return jsonify({'success': True, 'query': query, 'count': len(items), 'items': items})
 
 
 if __name__ == '__main__':
