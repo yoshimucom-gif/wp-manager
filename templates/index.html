@@ -468,6 +468,59 @@ tr.selected td { background: var(--accent-dim); }
 .batch-progress .progress-bar { height: 6px; margin: 8px 0 6px; }
 .batch-progress-meta { display:flex; justify-content:space-between; gap:10px; color:var(--muted); font-size:11px; }
 
+.title-ideas-layout {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.title-ideas-side {
+  position: sticky;
+  top: 64px;
+}
+.title-ideas-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.title-idea-title {
+  min-width: 320px;
+}
+.title-idea-meta {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+  margin-top: 5px;
+}
+.title-idea-duplicate {
+  color: var(--danger);
+  font-size: 10px;
+  margin-top: 4px;
+}
+.title-idea-score {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 24px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #eef6ff;
+  color: var(--accent);
+  border: 1px solid rgba(44,167,238,0.25);
+}
+.title-idea-score.low {
+  background: #fff7ed;
+  color: var(--warning);
+  border-color: rgba(217,119,6,0.25);
+}
+.title-idea-score.high {
+  background: #ecfdf3;
+  color: var(--success);
+  border-color: rgba(26,127,55,0.25);
+}
+
 .quality-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .quality-card {
   background: var(--surface);
@@ -522,7 +575,7 @@ tr.selected td { background: var(--accent-dim); }
   border-radius: 6px;
   background: #fff;
   display: grid;
-  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  grid-template-columns: repeat(7, minmax(110px, 1fr));
   min-height: 168px;
   overflow: hidden;
 }
@@ -634,6 +687,8 @@ tr.selected td { background: var(--accent-dim); }
   .batch-layout { grid-template-columns: 1fr; }
   .batch-side { position: static; max-height: none; overflow: visible; }
   .batch-main { max-height: none; overflow: visible; }
+  .title-ideas-layout { grid-template-columns: 1fr; }
+  .title-ideas-side { position: static; }
 }
 @media (max-width: 720px) {
   .content { padding: 18px 14px; }
@@ -662,6 +717,9 @@ tr.selected td { background: var(--accent-dim); }
         <div class="nav-link" onclick="showPage('brand')" id="nav-brand">商標記事</div>
         <div class="nav-link" onclick="showPage('column')" id="nav-column">コラム記事</div>
       </div>
+    </div>
+    <div class="nav-item" onclick="showPage('title-ideas')" id="nav-title-ideas">
+      タイトル生成
     </div>
     <div class="nav-item" onclick="showPage('batch')" id="nav-batch">
       一括処理
@@ -711,6 +769,10 @@ tr.selected td { background: var(--accent-dim); }
             <div class="module-tile" onclick="showPage('column')">
               <div class="module-title">コラム記事</div>
               <div class="module-art">▤◔</div>
+            </div>
+            <div class="module-tile" onclick="showPage('title-ideas')">
+              <div class="module-title">タイトル生成</div>
+              <div class="module-art">T▣</div>
             </div>
             <div class="module-tile" onclick="showPage('batch')">
               <div class="module-title">一括処理</div>
@@ -921,6 +983,91 @@ tr.selected td { background: var(--accent-dim); }
                 <button class="btn btn-success btn-push" id="gen-push-btn" onclick="publishGenerated()" disabled>WPにPUSH</button>
                 <button class="btn btn-secondary" onclick="showPage('history')">対応履歴で確認</button>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Title Ideas Page -->
+      <div class="page" id="page-title-ideas">
+        <div class="page-header">
+          <div class="page-title">タイトル一括生成</div>
+          <div class="page-subtitle">キーワード群から記事タイトル案を作成し、採用した案だけ記事データへ保存</div>
+        </div>
+        <div class="title-ideas-layout">
+          <div class="title-ideas-side">
+            <div class="settings-section">
+              <div class="section-header">// 生成条件</div>
+              <div class="form-group">
+                <label class="form-label">キーワード（1行1件）</label>
+                <textarea id="title-keywords" class="form-control" rows="10" placeholder="例:
+ネックウォーマー おすすめ
+電熱ベスト 口コミ
+防寒手袋 比較"></textarea>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <div class="form-group">
+                  <label class="form-label">記事種類</label>
+                  <select id="title-article-type" class="form-control" onchange="updateTitleIdeaDefaults()">
+                    <option value="ranking">ランキング記事</option>
+                    <option value="brand">商標記事</option>
+                    <option value="column">コラム記事</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">案数/キーワード</label>
+                  <input type="number" id="title-count" class="form-control" value="3" min="1" max="5">
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">投稿先サイト</label>
+                <select id="title-site" class="form-control">
+                  <option value="">-- サイトを選択 --</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">カテゴリー</label>
+                <input type="text" id="title-category" class="form-control" placeholder="例: 防寒グッズ">
+              </div>
+              <div class="form-group">
+                <label class="form-label">品質定義</label>
+                <select id="title-quality" class="form-control">
+                  <option value="">-- 品質定義を選択 --</option>
+                </select>
+              </div>
+              <div class="title-ideas-actions">
+                <button class="btn btn-primary" id="title-generate-btn" onclick="generateTitleIdeas()">タイトル案を生成</button>
+                <button class="btn btn-success" id="title-save-btn" onclick="saveSelectedTitleIdeas()" disabled>選択を記事データ化</button>
+                <button class="btn btn-secondary btn-sm" onclick="fillTitleIdeaSample()">サンプル投入</button>
+              </div>
+              <div id="title-ideas-msg" style="margin-top:12px;font-size:12px;color:var(--muted)"></div>
+            </div>
+          </div>
+          <div>
+            <div class="toolbar">
+              <button class="btn btn-secondary btn-sm" onclick="toggleTitleIdeaChecks(true)">全選択</button>
+              <button class="btn btn-secondary btn-sm" onclick="toggleTitleIdeaChecks(false)">全解除</button>
+              <button class="btn btn-secondary btn-sm" onclick="removeDuplicateTitleIdeas()">重複案を外す</button>
+              <div style="flex:1"></div>
+              <span id="title-ideas-count" style="font-size:12px;color:var(--muted)">0件</span>
+            </div>
+            <div class="table-wrap">
+              <table style="min-width:980px">
+                <thead>
+                  <tr>
+                    <th><input type="checkbox" id="title-check-all" onchange="toggleTitleIdeaChecks(this.checked)"></th>
+                    <th>キーワード</th>
+                    <th>タイトル案</th>
+                    <th>優先度</th>
+                    <th>スコア</th>
+                  </tr>
+                </thead>
+                <tbody id="title-ideas-body"></tbody>
+              </table>
+            </div>
+            <div id="title-ideas-empty" class="empty">
+              <div class="empty-icon">T</div>
+              <div>キーワードを入力してタイトル案を生成してください。</div>
             </div>
           </div>
         </div>
@@ -1420,6 +1567,7 @@ let qualityList = [];
 let siteList = [];
 let rewriteList = [];
 let seoNewsList = [];
+let titleIdeaList = [];
 let siteCategoryCache = {};
 const usageEstimateConfig = {
   model: 'claude-sonnet-4-6',
@@ -1438,6 +1586,7 @@ const pageUrlMap = {
   ranking: 'ranking',
   brand: 'brand',
   column: 'column',
+  'title-ideas': 'title-ideas',
   batch: 'batch',
   rewrite: 'rewrite',
   articles: 'history',
@@ -1515,6 +1664,7 @@ function showPage(name, opts = {}) {
   if (!opts.skipLoad) {
     if (pageName === 'articles') loadArticles();
     if (pageName === 'generate') { loadQualitySelects(); updateSiteSelects(); populateGenSelect(); }
+    if (pageName === 'title-ideas') { loadQualitySelects(); updateSiteSelects(); updateTitleIdeaDefaults(); renderTitleIdeas(); }
     if (pageName === 'batch') { loadQualitySelects(); initBatchScheduleDefaults(); loadArticles(); loadLatestBatchJob(); }
     if (pageName === 'rewrite') { loadRewritePage(); }
     if (pageName === 'quality') loadQuality();
@@ -1725,6 +1875,8 @@ function updateSiteSelects() {
   if (modalEl) modalEl.innerHTML = modalOpts;
   const genEl = document.getElementById('gen-site');
   if (genEl) { const v = genEl.value; genEl.innerHTML = modalOpts; genEl.value = v; }
+  const titleEl = document.getElementById('title-site');
+  if (titleEl) { const v = titleEl.value; titleEl.innerHTML = modalOpts; titleEl.value = v; }
   const rewriteEl = document.getElementById('rewrite-site');
   if (rewriteEl) {
     const v = rewriteEl.value;
@@ -2667,6 +2819,180 @@ async function createBrandDraftsFromRanking() {
   }
 }
 
+// ---- Title Ideas ----
+function updateTitleIdeaDefaults() {
+  const type = document.getElementById('title-article-type')?.value || currentArticleType;
+  const quality = document.getElementById('title-quality');
+  if (quality) quality.value = defaultQualityId(type) || quality.value;
+}
+
+function fillTitleIdeaSample() {
+  document.getElementById('title-keywords').value = [
+    'ネックウォーマー おすすめ',
+    '電熱ベスト 口コミ',
+    '防寒手袋 比較',
+    '着る毛布 洗える'
+  ].join('\n');
+  if (!document.getElementById('title-category').value) {
+    document.getElementById('title-category').value = '防寒グッズ';
+  }
+}
+
+function titleIdeaScoreClass(score) {
+  const s = Number(score || 0);
+  if (s >= 82) return 'high';
+  if (s < 65) return 'low';
+  return '';
+}
+
+function updateTitleIdea(index, field, value) {
+  if (!titleIdeaList[index]) return;
+  titleIdeaList[index][field] = value;
+}
+
+function renderTitleIdeas() {
+  const body = document.getElementById('title-ideas-body');
+  const empty = document.getElementById('title-ideas-empty');
+  const count = document.getElementById('title-ideas-count');
+  const saveBtn = document.getElementById('title-save-btn');
+  if (!body) return;
+  if (count) count.textContent = `${titleIdeaList.length}件`;
+  if (saveBtn) saveBtn.disabled = !titleIdeaList.length;
+  if (!titleIdeaList.length) {
+    body.innerHTML = '';
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+  body.innerHTML = titleIdeaList.map((idea, i) => {
+    const checked = idea.duplicate ? '' : 'checked';
+    const duplicate = idea.duplicate ? '<div class="title-idea-duplicate">既存タイトルと重複しています</div>' : '';
+    return `
+      <tr>
+        <td><input type="checkbox" class="title-idea-check" data-index="${i}" ${checked}></td>
+        <td style="font-size:12px;max-width:190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(idea.keyword)}">${esc(idea.keyword || '—')}</td>
+        <td class="title-idea-title">
+          <input type="text" class="form-control" value="${esc(idea.title)}" onchange="updateTitleIdea(${i}, 'title', this.value)" style="font-size:12px;height:32px">
+          <div class="title-idea-meta">
+            ${idea.search_intent ? `検索意図: ${esc(idea.search_intent)}<br>` : ''}
+            ${idea.reason ? `理由: ${esc(idea.reason)}` : ''}
+          </div>
+          ${duplicate}
+        </td>
+        <td style="white-space:nowrap">
+          <select class="form-control" onchange="updateTitleIdea(${i}, 'priority', this.value)" style="font-size:11px;height:30px">
+            ${['高', '中', '低'].map(v => `<option value="${v}" ${idea.priority === v ? 'selected' : ''}>${v}</option>`).join('')}
+          </select>
+        </td>
+        <td><span class="title-idea-score ${titleIdeaScoreClass(idea.score)}">${esc(idea.score || '—')}</span></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function toggleTitleIdeaChecks(checked) {
+  document.querySelectorAll('.title-idea-check').forEach(c => c.checked = checked);
+  const all = document.getElementById('title-check-all');
+  if (all) all.checked = checked;
+}
+
+function removeDuplicateTitleIdeas() {
+  document.querySelectorAll('.title-idea-check').forEach(c => {
+    const idea = titleIdeaList[Number(c.dataset.index)];
+    if (idea?.duplicate) c.checked = false;
+  });
+}
+
+function selectedTitleIdeas() {
+  return [...document.querySelectorAll('.title-idea-check:checked')]
+    .map(c => titleIdeaList[Number(c.dataset.index)])
+    .filter(Boolean)
+    .map(idea => ({
+      ...idea,
+      article_type: document.getElementById('title-article-type').value || idea.article_type,
+      category: document.getElementById('title-category').value || idea.category || '',
+      site_id: document.getElementById('title-site').value || idea.site_id || null,
+      quality_id: document.getElementById('title-quality').value || idea.quality_id || null,
+    }));
+}
+
+async function generateTitleIdeas() {
+  const btn = document.getElementById('title-generate-btn');
+  const msg = document.getElementById('title-ideas-msg');
+  const payload = {
+    keywords: document.getElementById('title-keywords').value,
+    article_type: document.getElementById('title-article-type').value,
+    count_per_keyword: document.getElementById('title-count').value,
+    site_id: document.getElementById('title-site').value || null,
+    category: document.getElementById('title-category').value,
+    quality_id: document.getElementById('title-quality').value || null,
+  };
+  if (!payload.keywords.trim()) {
+    toast('キーワードを1行以上入力してください', 'error');
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = '生成中...';
+  if (msg) msg.textContent = 'タイトル案を生成しています。本文生成より軽い処理です。';
+  try {
+    const res = await fetch('/api/title-ideas/generate', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'タイトル生成に失敗しました');
+    titleIdeaList = data.ideas || [];
+    renderTitleIdeas();
+    const sourceLabel = data.source === 'claude' ? 'Claude生成' : 'テンプレート生成';
+    if (msg) msg.textContent = `${sourceLabel}: ${titleIdeaList.length}件のタイトル案を作成しました。`;
+    toast(`${titleIdeaList.length}件のタイトル案を作成しました`, 'success');
+  } catch (e) {
+    toast(e.message || 'タイトル生成に失敗しました', 'error');
+    if (msg) msg.textContent = e.message || 'タイトル生成に失敗しました';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'タイトル案を生成';
+  }
+}
+
+async function saveSelectedTitleIdeas() {
+  const ideas = selectedTitleIdeas();
+  if (!ideas.length) {
+    toast('保存するタイトル案を選択してください', 'error');
+    return;
+  }
+  const btn = document.getElementById('title-save-btn');
+  const msg = document.getElementById('title-ideas-msg');
+  btn.disabled = true;
+  btn.textContent = '保存中...';
+  try {
+    const res = await fetch('/api/title-ideas/save', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        ideas,
+        article_type: document.getElementById('title-article-type').value,
+        category: document.getElementById('title-category').value,
+        site_id: document.getElementById('title-site').value || null,
+        quality_id: document.getElementById('title-quality').value || null,
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '記事データ化に失敗しました');
+    if (msg) msg.textContent = `記事データ化: ${data.created}件 / 重複スキップ: ${data.skipped || 0}件`;
+    toast(`${data.created}件を記事データに保存しました`, 'success');
+    await loadArticles();
+    showPage('articles');
+  } catch (e) {
+    toast(e.message || '記事データ化に失敗しました', 'error');
+    if (msg) msg.textContent = e.message || '記事データ化に失敗しました';
+  } finally {
+    btn.disabled = !titleIdeaList.length;
+    btn.textContent = '選択を記事データ化';
+  }
+}
+
 // ---- Generate ----
 function populateGenSelect() {
   const sel = document.getElementById('gen-article-select');
@@ -3568,7 +3894,7 @@ function renderQuality() {
 function loadQualitySelects() {
   const opts = '<option value="">-- 品質定義を選択 --</option>' +
     qualityList.map(q => `<option value="${q.id}">${esc(q.name)}</option>`).join('');
-  ['quality-filter', 'gen-quality', 'batch-quality', 's-default-quality'].forEach(id => {
+  ['quality-filter', 'gen-quality', 'batch-quality', 'title-quality', 's-default-quality'].forEach(id => {
     const el = document.getElementById(id);
     if (el) {
       const prev = el.value;
@@ -3578,7 +3904,9 @@ function loadQualitySelects() {
       } else {
         const articleType = id === 'batch-quality'
           ? (document.getElementById('batch-article-type-filter')?.value || currentArticleType)
-          : currentArticleType;
+          : id === 'title-quality'
+            ? (document.getElementById('title-article-type')?.value || currentArticleType)
+            : currentArticleType;
         const fallback = defaultQualityId(articleType);
         el.value = qualityList.some(q => q.id === prev) ? prev : (fallback || '');
       }
