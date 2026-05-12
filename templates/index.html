@@ -1136,6 +1136,7 @@ tr.selected td { background: var(--accent-dim); }
               <button class="btn btn-primary" onclick="startBatchGenerate()">⚡ 一括生成開始</button>
               <button class="btn btn-success" onclick="startBatchPublish()">🚀 一括WP投稿</button>
               <button class="btn btn-secondary btn-sm" onclick="loadBatchArticles()">↻ 状態更新</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteBatchSelected()">🗑 選択を削除</button>
             </div>
             <div id="batch-msg" style="margin-top:12px;font-size:12px;color:var(--muted)"></div>
             <div id="batch-progress" class="batch-progress" style="display:none">
@@ -2494,6 +2495,15 @@ async function deleteSelected() {
   await fetch('/api/articles/bulk-delete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids})});
   toast(`${ids.length}件削除しました`, 'success');
   loadArticles();
+}
+
+async function deleteBatchSelected() {
+  const ids = getBatchSelectedIds();
+  if (!ids.length) { toast('記事を選択してください', 'error'); return; }
+  if (!confirm(`選択した${ids.length}件を削除します。元に戻せません。実行しますか?`)) return;
+  await fetch('/api/articles/bulk-delete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids})});
+  toast(`${ids.length}件削除しました`, 'success');
+  await loadArticles();
 }
 
 function generateSelected() {
