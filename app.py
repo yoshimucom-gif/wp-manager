@@ -9,6 +9,7 @@ import csv
 import io
 import math
 import hashlib
+import hmac
 import difflib
 import time
 import traceback
@@ -2073,8 +2074,117 @@ def build_article_completion_prompt(quality, article_type, has_decoration=False)
 """
 
 
+AMAZON_PAAPI_HOST = 'webservices.amazon.co.jp'
+AMAZON_PAAPI_PATH = '/paapi5/searchitems'
+AMAZON_PAAPI_REGION = 'us-west-2'
+AMAZON_PAAPI_SERVICE = 'ProductAdvertisingAPI'
+AMAZON_PAAPI_TARGET = 'com.amazon.paapi5.v1.ProductAdvertisingAPIv1.SearchItems'
+
+
+def amazon_search(query, access_key, secret_key, partner_tag, limit=10, timeout=10):
+    """Amazon PA-API v5 SearchItems を SigV4 署名付きで叩く。
+
+    Returns: list[dict] with keys: name, price, url, image_url, asin,
+             review_count, review_avg.
+    Raises: ValueError on missing config, requests.HTTPError on API failure.
+    """
+    if not str(query or '').strip():
+        return []
+    if not (access_key and secret_key and partner_tag):
+        raise ValueError('Amazon PA-API の設定が不完全です（Access Key / Secret / Partner Tag が必要）')
+
+    body = json.dumps({
+        'Keywords': query.strip(),
+        'Resources': [
+            'Images.Primary.Medium',
+            'ItemInfo.Title',
+            'Offers.Listings.Price',
+            'CustomerReviews.StarRating',
+            'CustomerReviews.Count',
+        ],
+        'PartnerTag': partner_tag,
+        'PartnerType': 'Associates',
+        'Marketplace': 'www.amazon.co.jp',
+        'ItemCount': max(1, min(10, int(limit) if str(limit).isdigit() else 10)),
+    }, separators=(',', ':'))
+    body_bytes = body.encode('utf-8')
+    body_hash = hashlib.sha256(body_bytes).hexdigest()
+
+    now = datetime.utcnow()
+    amz_date = now.strftime('%Y%m%dT%H%M%SZ')
+    date_stamp = now.strftime('%Y%m%d')
+
+    canonical_headers = (
+        f'content-encoding:amz-1.0\n'
+        f'host:{AMAZON_PAAPI_HOST}\n'
+        f'x-amz-date:{amz_date}\n'
+        f'x-amz-target:{AMAZON_PAAPI_TARGET}\n'
+    )
+    signed_headers = 'content-encoding;host;x-amz-date;x-amz-target'
+    canonical_request = f'POST\n{AMAZON_PAAPI_PATH}\n\n{canonical_headers}\n{signed_headers}\n{body_hash}'
+
+    credential_scope = f'{date_stamp}/{AMAZON_PAAPI_REGION}/{AMAZON_PAAPI_SERVICE}/aws4_request'
+    string_to_sign = (
+        f'AWS4-HMAC-SHA256\n{amz_date}\n{credential_scope}\n'
+        f'{hashlib.sha256(canonical_request.encode("utf-8")).hexdigest()}'
+    )
+
+    def hmac_sha256(key, msg):
+        return hmac.new(key, msg.encode('utf-8'), hashlib.sha256).digest()
+
+    k_date = hmac_sha256(('AWS4' + secret_key).encode('utf-8'), date_stamp)
+    k_region = hmac_sha256(k_date, AMAZON_PAAPI_REGION)
+    k_service = hmac_sha256(k_region, AMAZON_PAAPI_SERVICE)
+    k_signing = hmac_sha256(k_service, 'aws4_request')
+    signature = hmac.new(k_signing, string_to_sign.encode('utf-8'), hashlib.sha256).hexdigest()
+
+    headers = {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'Content-Encoding': 'amz-1.0',
+        'Host': AMAZON_PAAPI_HOST,
+        'X-Amz-Date': amz_date,
+        'X-Amz-Target': AMAZON_PAAPI_TARGET,
+        'Authorization': (
+            f'AWS4-HMAC-SHA256 Credential={access_key}/{credential_scope}, '
+            f'SignedHeaders={signed_headers}, Signature={signature}'
+        ),
+    }
+
+    resp = requests.post(f'https://{AMAZON_PAAPI_HOST}{AMAZON_PAAPI_PATH}', data=body_bytes, headers=headers, timeout=timeout)
+    resp.raise_for_status()
+    payload = resp.json()
+
+    results = []
+    for item in (payload.get('SearchResult') or {}).get('Items') or []:
+        title = ((item.get('ItemInfo') or {}).get('Title') or {}).get('DisplayValue') or ''
+        listings = ((item.get('Offers') or {}).get('Listings') or [])
+        price_amount = None
+        price_display = ''
+        if listings:
+            price_obj = (listings[0] or {}).get('Price') or {}
+            price_amount = price_obj.get('Amount')
+            price_display = price_obj.get('DisplayAmount') or ''
+        image_url = (((item.get('Images') or {}).get('Primary') or {}).get('Medium') or {}).get('URL', '')
+        reviews = item.get('CustomerReviews') or {}
+        results.append({
+            'name': title.strip(),
+            'price': price_amount,
+            'price_display': price_display,
+            'url': item.get('DetailPageURL') or '',
+            'image_url': image_url,
+            'asin': item.get('ASIN') or '',
+            'review_count': (reviews.get('Count') or {}).get('Value') if isinstance(reviews.get('Count'), dict) else reviews.get('Count') or 0,
+            'review_avg': (reviews.get('StarRating') or {}).get('Value') or 0,
+        })
+    return results
+
+
 def fetch_product_context(article, settings, limit=15):
-    """楽天/Amazonから商品データを取得して整形して返す。失敗時は空リスト + 警告メッセージ。"""
+    """楽天/Amazonから商品データを取得して整形して返す。失敗時は空リスト + 警告メッセージ。
+
+    Returns: (list[dict], status_string).
+    各dictにはproviderキー（'rakuten' or 'amazon'）と name, price, url, image_url など。
+    """
     query = str(
         article.get('ad_keywords')
         or article.get('keywords')
@@ -2083,27 +2193,60 @@ def fetch_product_context(article, settings, limit=15):
     ).strip()
     if not query:
         return [], 'no_query'
+
     rakuten_app_id = settings.get('rakuten_app_id') or ''
-    if not rakuten_app_id:
+    rakuten_affiliate_id = settings.get('rakuten_affiliate_id') or ''
+    amazon_access_key = settings.get('amazon_access_key') or ''
+    amazon_secret_key = settings.get('amazon_secret_key') or ''
+    amazon_partner_tag = settings.get('amazon_partner_tag') or ''
+
+    if not (rakuten_app_id or (amazon_access_key and amazon_secret_key and amazon_partner_tag)):
         return [], 'no_provider'
-    affiliate_id = settings.get('rakuten_affiliate_id') or ''
-    try:
-        items = rakuten_search(query, rakuten_app_id, affiliate_id, limit=limit)
-    except Exception as e:
-        app.logger.warning('Rakuten search failed for "%s": %s', query, e)
-        return [], f'rakuten_error: {str(e)[:120]}'
-    return items, 'ok' if items else 'empty'
+
+    rakuten_items = []
+    if rakuten_app_id:
+        try:
+            for item in rakuten_search(query, rakuten_app_id, rakuten_affiliate_id, limit=limit):
+                item['provider'] = 'rakuten'
+                rakuten_items.append(item)
+        except Exception as e:
+            app.logger.warning('Rakuten search failed for "%s": %s', query, e)
+
+    amazon_items = []
+    if amazon_access_key and amazon_secret_key and amazon_partner_tag:
+        try:
+            for item in amazon_search(query, amazon_access_key, amazon_secret_key, amazon_partner_tag, limit=min(10, limit)):
+                item['provider'] = 'amazon'
+                amazon_items.append(item)
+        except Exception as e:
+            app.logger.warning('Amazon search failed for "%s": %s', query, e)
+
+    combined = []
+    max_len = max(len(rakuten_items), len(amazon_items))
+    for i in range(max_len):
+        if i < len(rakuten_items):
+            combined.append(rakuten_items[i])
+        if i < len(amazon_items):
+            combined.append(amazon_items[i])
+    return combined, 'ok' if combined else 'empty'
 
 
 def build_product_context_prompt(products, article_type='ranking'):
-    """商品データをClaudeに渡すためのプロンプトブロックを生成する。"""
+    """商品データ（楽天/Amazon両方）をClaudeに渡すためのプロンプトブロックを生成する。"""
     if not products:
         return ''
     is_ranking = article_type == 'ranking'
     rows = []
     for idx, p in enumerate(products, 1):
+        provider = p.get('provider') or ''
+        provider_tag = {'rakuten': '[楽天]', 'amazon': '[Amazon]'}.get(provider, '')
         price = p.get('price')
-        price_text = f'¥{int(price):,}' if isinstance(price, (int, float)) else (str(price) if price else '')
+        if p.get('price_display'):
+            price_text = p['price_display']
+        elif isinstance(price, (int, float)):
+            price_text = f'¥{int(price):,}'
+        else:
+            price_text = str(price) if price else ''
         review_avg = p.get('review_avg') or 0
         review_count = p.get('review_count') or 0
         review_text = (
@@ -2112,21 +2255,25 @@ def build_product_context_prompt(products, article_type='ranking'):
             else ''
         )
         caption = (p.get('item_caption') or '').strip()
+        shop = p.get('shop_name') or ''
+        extra = f'\n   特徴メモ: {caption[:160]}' if caption else ''
+        shop_line = f'\n   ショップ: {shop[:40]}' if shop else ''
         rows.append(
-            f'{idx}. {p.get("name", "")[:90]}\n'
-            f'   価格: {price_text}{review_text}\n'
-            f'   ショップ: {p.get("shop_name", "")[:40]}\n'
-            f'   特徴メモ: {caption[:160]}'
+            f'{idx}. {provider_tag} {p.get("name", "")[:90]}\n'
+            f'   価格: {price_text}{review_text}{shop_line}{extra}'
         )
+    providers_used = sorted({p.get('provider') for p in products if p.get('provider')})
+    provider_label = '・'.join({'rakuten': '楽天市場', 'amazon': 'Amazon'}.get(prov, prov) for prov in providers_used)
     header = (
-        '楽天市場の検索結果から取得した実商品データ（最新）:'
-        if is_ranking else '記事の参考用 実商品データ（楽天市場）:'
+        f'{provider_label} の検索結果から取得した実商品データ（最新）:'
+        if is_ranking else f'記事の参考用 実商品データ（{provider_label}）:'
     )
     instruction = (
         '使い方:\n'
         '- 上記の実商品から記事のキーワードに合うものだけを選び、ランキングや比較で紹介してください。\n'
         '- 商品名は上記のものをそのまま使い、「候補1」など架空の名前は禁止。\n'
         '- 価格・レビュー件数・★平均は上記の数値を引用してください（必要な数値だけでOK）。\n'
+        '- 同じ商品が楽天とAmazon両方にある場合は1件として紹介してください（重複は避ける）。\n'
         '- 上記に含まれない商品は本文に登場させないでください（事実誤認回避のため）。\n'
         '- 商品URLは本文に貼らない（後段のプラグインがアフィリエイトリンク化します）。'
         if is_ranking else
@@ -5170,24 +5317,36 @@ def update_settings():
 @app.route('/api/products/search', methods=['POST'])
 @login_required
 def search_products():
-    """商品検索（楽天）テスト用エンドポイント。設定済みのAPIで検索して結果を返す。"""
+    """商品検索（楽天 + Amazon）テスト用エンドポイント。プロバイダ別に結果を返す。"""
     data = request.json or {}
     query = str(data.get('query') or '').strip()
     if not query:
         return jsonify({'error': '検索キーワードを入力してください'}), 400
     limit = data.get('limit') or 10
+    provider = (data.get('provider') or 'both').lower()
     settings = load_settings()
-    rakuten_app_id = settings.get('rakuten_app_id') or ''
-    rakuten_affiliate_id = settings.get('rakuten_affiliate_id') or ''
-    if not rakuten_app_id:
-        return jsonify({'error': '楽天アプリケーションIDが未設定です。API設定で登録してください。'}), 400
-    try:
-        items = rakuten_search(query, rakuten_app_id, rakuten_affiliate_id, limit=limit)
-    except requests.HTTPError as e:
-        return jsonify({'error': f'楽天APIエラー: {e.response.status_code if e.response else "不明"}'}), 502
-    except Exception as e:
-        return jsonify({'error': f'楽天検索に失敗しました: {str(e)[:200]}'}), 500
-    return jsonify({'success': True, 'query': query, 'count': len(items), 'items': items})
+    result = {'success': True, 'query': query, 'rakuten': [], 'amazon': [], 'errors': {}}
+    if provider in ('rakuten', 'both'):
+        rakuten_app_id = settings.get('rakuten_app_id') or ''
+        if rakuten_app_id:
+            try:
+                result['rakuten'] = rakuten_search(query, rakuten_app_id, settings.get('rakuten_affiliate_id') or '', limit=limit)
+            except Exception as e:
+                result['errors']['rakuten'] = str(e)[:200]
+        elif provider == 'rakuten':
+            return jsonify({'error': '楽天アプリケーションIDが未設定です'}), 400
+    if provider in ('amazon', 'both'):
+        amazon_access_key = settings.get('amazon_access_key') or ''
+        amazon_secret_key = settings.get('amazon_secret_key') or ''
+        amazon_partner_tag = settings.get('amazon_partner_tag') or ''
+        if amazon_access_key and amazon_secret_key and amazon_partner_tag:
+            try:
+                result['amazon'] = amazon_search(query, amazon_access_key, amazon_secret_key, amazon_partner_tag, limit=min(10, limit))
+            except Exception as e:
+                result['errors']['amazon'] = str(e)[:200]
+        elif provider == 'amazon':
+            return jsonify({'error': 'Amazon PA-API の設定が不完全です'}), 400
+    return jsonify(result)
 
 
 if __name__ == '__main__':
