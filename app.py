@@ -56,6 +56,11 @@ def handle_unexpected_error(error):
 
 DATA_DIR_WARNING = ''
 CLAUDE_ARTICLE_MODEL = 'claude-sonnet-4-6'
+CLAUDE_TITLE_IDEA_MODEL = os.environ.get('CLAUDE_TITLE_IDEA_MODEL', 'claude-3-5-haiku-latest')
+try:
+    TITLE_IDEA_AI_TIMEOUT_SECONDS = int(os.environ.get('TITLE_IDEA_AI_TIMEOUT_SECONDS', '8'))
+except ValueError:
+    TITLE_IDEA_AI_TIMEOUT_SECONDS = 8
 try:
     CLAUDE_ARTICLE_MAX_TOKENS = int(os.environ.get('CLAUDE_ARTICLE_MAX_TOKENS', '20000'))
 except ValueError:
@@ -1498,13 +1503,13 @@ def combine_article_usages(usages):
     }
 
 
-def create_claude_message(client, prompt, max_tokens=None, timeout=None):
+def create_claude_message(client, prompt, max_tokens=None, timeout=None, model=None):
     messages_api = getattr(client, 'messages', None)
     create = getattr(messages_api, 'create', None)
     if not callable(create):
         raise RuntimeError('Claude API client is not ready: messages.create is unavailable')
     kwargs = {
-        'model': CLAUDE_ARTICLE_MODEL,
+        'model': model or CLAUDE_ARTICLE_MODEL,
         'max_tokens': max_tokens or CLAUDE_ARTICLE_MAX_TOKENS,
         'messages': [{'role': 'user', 'content': prompt}],
     }
@@ -3074,7 +3079,47 @@ def generate_title_ideas():
     count_per_keyword = clamp_int(data.get('count_per_keyword'), 3, 1, 5)
     category = str(data.get('category') or '').strip()
     site_id = data.get('site_id') or ''
-    return jsonify(fallback_title_ideas_response(keywords, count_per_keyword, category, site_id))
+
+    try:
+        settings = load_settings()
+        api_key = settings.get('claude_api_key')
+    except Exception as e:
+        app.logger.warning('Title idea settings load failed: %s', e)
+        api_key = ''
+
+    if not api_key:
+        return jsonify(fallback_title_ideas_response(keywords, count_per_keyword, category, site_id))
+
+    try:
+        prompt = title_generation_prompt(keywords, count_per_keyword, category)
+        client = anthropic.Anthropic(api_key=api_key)
+        max_tokens = min(3500, max(900, len(keywords) * count_per_keyword * 80))
+        message = create_claude_message(
+            client,
+            prompt,
+            max_tokens=max_tokens,
+            timeout=TITLE_IDEA_AI_TIMEOUT_SECONDS,
+            model=CLAUDE_TITLE_IDEA_MODEL,
+        )
+        text = anthropic_message_text(message)
+        ideas = coerce_title_ideas(extract_title_ideas_payload(text), keywords, count_per_keyword)
+        if not ideas:
+            raise ValueError('AI returned no usable title ideas')
+        return jsonify({
+            'success': True,
+            'source': 'claude',
+            'keywords': keywords,
+            'ideas': enrich_title_ideas(ideas, category=category, site_id=site_id),
+        })
+    except Exception as e:
+        app.logger.warning('Title idea AI fell back to rules: %s', e)
+        return jsonify(fallback_title_ideas_response(
+            keywords,
+            count_per_keyword,
+            category,
+            site_id,
+            warning='AI提案が時間内に完了しなかったため、ルール生成に切り替えました。',
+        ))
 
 
 @app.route('/api/title-ideas/save', methods=['POST'])

@@ -2934,7 +2934,7 @@ async function generateTitleIdeas() {
     titleIdeaList = data.ideas || [];
     renderTitleIdeas();
     const sourceLabel = data.source === 'claude' ? 'Claude生成' : 'ルール生成';
-    if (msg) msg.textContent = `${sourceLabel}: ${titleIdeaList.length}件のタイトル案を作成しました。`;
+    if (msg) msg.textContent = `${sourceLabel}: ${titleIdeaList.length}件のタイトル案を作成しました。${data.warning ? ` ${data.warning}` : ''}`;
     toast(`${titleIdeaList.length}件のタイトル案を作成しました`, 'success');
   } catch (e) {
     toast(e.message || 'タイトル案生成に失敗しました', 'error');
