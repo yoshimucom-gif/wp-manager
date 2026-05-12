@@ -2321,16 +2321,32 @@ def build_product_context_prompt(products, article_type='ranking'):
         '- 商品名は上記のものをそのまま使う（架空名や「候補1」は禁止）。\n'
         '- 価格・レビューは上記の数値を引用してください（必要な数値だけでOK）。\n'
         '- 上記に含まれない商品は本文に登場させないでください。\n'
-        '- **重要**: 各順位の見出し（例: <h3>1位：商品名</h3>）の直後の行に、必ず\n'
-        '  `<!-- AFFI:N -->` というHTMLコメントを1行で入れてください（N は上記AFFI番号）。\n'
-        '  例: <h3 class="wp-block-heading">1位：○○ネックウォーマー</h3>\n'
-        '       <!-- AFFI:3 -->\n'
-        '  このコメントは後段で楽天/Amazonの商品カードに置換されます。'
+        '\n'
+        '**重要 — 商品カード自動挿入のマーカー（厳守）**:\n'
+        '各順位の見出しの直後の行に、必ず以下の正確な形式のHTMLコメントを入れてください:\n'
+        '\n'
+        '    <!-- AFFI:1 -->\n'
+        '\n'
+        '↑ この「1」の部分には必ず**実際の数字（AFFI番号）**を入れる。\n'
+        '「AFFI:N」のまま出力するのは絶対NG。文字「N」ではなく数字に置換すること。\n'
+        '同じ商品については記事内に1回だけ入れる（複数箇所に入れない）。\n'
+        '\n'
+        '出力例（正しい）:\n'
+        '    <h3 class="wp-block-heading">1位：○○ネックウォーマー</h3>\n'
+        '    <!-- AFFI:3 -->\n'
+        '    <p>○○ネックウォーマーは...</p>\n'
+        '\n'
+        '出力例（間違い・絶対やらない）:\n'
+        '    <h3>1位：○○</h3>\n'
+        '    AFFI:N            ← N のままはNG\n'
+        '    AFFI:3            ← HTMLコメント形式じゃないのもNG\n'
+        '    <!-- AFFI:N -->   ← N のままはNG'
         if is_ranking else
         '使い方:\n'
         '- 必要なときだけ自然に商品名や価格帯を引用してください。\n'
         '- 上記に含まれない実商品名は新たに発明しないでください。\n'
-        '- 商品を紹介した直後に `<!-- AFFI:N -->` （Nは上記番号）を1行入れると、自動で商品カードが挿入されます。'
+        '- 商品を紹介した直後に `<!-- AFFI:N -->` を1行入れると自動で商品カードに置換されます。\n'
+        '  N は実際の数字（AFFI番号）に置き換えること。「N」のまま出力するのは禁止。'
     )
     return f"\n\n{header}\n" + '\n'.join(rows) + f"\n\n{instruction}\n"
 
@@ -2386,15 +2402,42 @@ def build_product_card_html(product):
 
 
 def inject_affiliate_cards(html, products):
-    """`<!-- AFFI:N -->` マーカーを実際の商品カードHTMLに置換する。"""
-    if not products or not html:
+    """AFFI:N マーカーを商品カードHTMLに置換する。
+
+    Claude が様々な形で出してくるので寛容に対応:
+    - <!-- AFFI:1 -->                  (本来の形)
+    - <p><!-- AFFI:1 --></p>           (pタグでラップされた)
+    - <p>AFFI:1</p>                    (コメント忘れ)
+    - AFFI:1 が単独行                  (素の文字)
+    最後に壊れた marker（AFFI:N など）を掃除する。
+    """
+    if not html:
         return html
-    def replace(match):
-        idx = int(match.group(1))
-        if 1 <= idx <= len(products):
-            return build_product_card_html(products[idx - 1])
+    products = products or []
+
+    def replace_match(match):
+        for g in match.groups():
+            if g and g.isdigit():
+                idx = int(g)
+                if 1 <= idx <= len(products):
+                    return build_product_card_html(products[idx - 1])
+                return ''
         return ''
-    return re.sub(r'<!--\s*AFFI:(\d+)\s*-->', replace, str(html))
+
+    text = str(html)
+    patterns = [
+        r'<p[^>]*>\s*<!--\s*AFFI:\s*(\d+)\s*-->\s*</p>',
+        r'<p[^>]*>\s*AFFI:\s*(\d+)\s*</p>',
+        r'<!--\s*AFFI:\s*(\d+)\s*-->',
+        r'(?:^|(?<=>))\s*AFFI:\s*(\d+)\s*(?=<|$)',
+    ]
+    for pat in patterns:
+        text = re.sub(pat, replace_match, text, flags=re.MULTILINE)
+
+    text = re.sub(r'<p[^>]*>\s*(?:<!--\s*)?AFFI:\s*[A-Za-z0-9_]+\s*(?:-->)?\s*</p>', '', text)
+    text = re.sub(r'<!--\s*AFFI:\s*[A-Za-z0-9_]+\s*-->', '', text)
+    text = re.sub(r'(?:^|(?<=>))\s*AFFI:\s*[A-Za-z0-9_]+\s*(?=<|$)', '', text, flags=re.MULTILINE)
+    return text
 
 
 def build_quality_structure_html_prompt(quality, limit=6000):
