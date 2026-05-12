@@ -16,14 +16,13 @@ from pathlib import Path
 from functools import wraps
 from html import escape, unescape
 from html.parser import HTMLParser
-from urllib.parse import quote_plus, urljoin
+from urllib.parse import urljoin
 
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, Response, stream_with_context, send_from_directory
 from werkzeug.exceptions import HTTPException
 import anthropic
 import openpyxl
 import requests
-from requests_aws4auth import AWS4Auth
 try:
     from bs4 import BeautifulSoup, FeatureNotFound, NavigableString
 except ImportError:
@@ -120,7 +119,6 @@ QUALITY_FILE = DATA_DIR / 'quality.json'
 DECORATIONS_FILE = DATA_DIR / 'decorations.json'
 SETTINGS_FILE = DATA_DIR / 'settings.json'
 REWRITE_FILE = DATA_DIR / 'rewrite_items.json'
-AD_DEFINITIONS_FILE = DATA_DIR / 'ad_definitions.json'
 BATCH_JOBS_FILE = DATA_DIR / 'batch_jobs.json'
 
 
@@ -224,137 +222,8 @@ def load_rewrites():
 def save_rewrites(items):
     save_json(REWRITE_FILE, items)
 
-def default_ad_definitions():
-    now = datetime.now().isoformat()
-    return [
-        {
-            'id': 'preset-ranking-comparison-rinker',
-            'name': 'ランキング記事｜比較表直後 RINKER',
-            'article_type': 'ranking',
-            'source': 'both',
-            'keyword_mode': 'ad_keywords',
-            'search_keywords': '',
-            'item_count': 5,
-            'layout': 'rinker',
-            'insertion_position': 'after_comparison',
-            'amazon_button_label': 'Amazonで見る',
-            'rakuten_button_label': '楽天市場で見る',
-            'prompt': 'ランキング表や比較表の直後に、紹介商品と対応するカードを自然に配置。順位ごとの本文を邪魔しないよう、連続配置しすぎない。',
-            'priority': 20,
-            'enabled': True,
-            'created_at': now,
-            'updated_at': now,
-        },
-        {
-            'id': 'preset-brand-review-rinker',
-            'name': '商標記事｜レビューCTA RINKER',
-            'article_type': 'brand',
-            'source': 'both',
-            'keyword_mode': 'ad_keywords',
-            'search_keywords': '',
-            'item_count': 2,
-            'layout': 'rinker',
-            'insertion_position': 'after_intro',
-            'amazon_button_label': 'Amazonで見る',
-            'rakuten_button_label': '楽天市場で見る',
-            'prompt': '商品レビューの導入後、またはメリット・デメリット説明後に配置。公式リンクや結論CTAと競合しない位置に置く。',
-            'priority': 30,
-            'enabled': True,
-            'created_at': now,
-            'updated_at': now,
-        },
-        {
-            'id': 'preset-column-recommendation-rinker',
-            'name': 'コラム記事｜まとめ前おすすめ RINKER',
-            'article_type': 'column',
-            'source': 'both',
-            'keyword_mode': 'article_keywords',
-            'search_keywords': '',
-            'item_count': 3,
-            'layout': 'rinker',
-            'insertion_position': 'before_summary',
-            'amazon_button_label': 'Amazonで見る',
-            'rakuten_button_label': '楽天市場で見る',
-            'prompt': '悩み解決や選び方の説明が終わった後、まとめ前に関連商品を提案。記事内容と関係が薄い商品は避ける。',
-            'priority': 55,
-            'enabled': True,
-            'created_at': now,
-            'updated_at': now,
-        },
-        {
-            'id': 'preset-rewrite-revenue-rinker',
-            'name': 'SEOリライト｜収益導線補強 RINKER',
-            'article_type': 'rewrite',
-            'source': 'both',
-            'keyword_mode': 'ad_keywords',
-            'search_keywords': '',
-            'item_count': 2,
-            'layout': 'rinker',
-            'insertion_position': 'auto',
-            'amazon_button_label': 'Amazonで見る',
-            'rakuten_button_label': '楽天市場で見る',
-            'prompt': '既存記事の流れを崩さず、購入・比較意図がある見出し付近にだけ追加。情報記事では押し売り感を出さない。',
-            'priority': 40,
-            'enabled': True,
-            'created_at': now,
-            'updated_at': now,
-        },
-        {
-            'id': 'preset-common-amazon-only',
-            'name': '共通｜Amazonのみ補助CTA',
-            'article_type': 'common',
-            'source': 'amazon',
-            'keyword_mode': 'ad_keywords',
-            'search_keywords': '',
-            'item_count': 2,
-            'layout': 'rinker',
-            'insertion_position': 'before_summary',
-            'amazon_button_label': 'Amazonで見る',
-            'rakuten_button_label': '楽天市場で見る',
-            'prompt': 'Amazonでの購入意図が強い記事で使用。価格や在庫の断定は避け、比較・確認の導線として配置。',
-            'priority': 80,
-            'enabled': True,
-            'created_at': now,
-            'updated_at': now,
-        },
-        {
-            'id': 'preset-common-rakuten-only',
-            'name': '共通｜楽天のみ補助CTA',
-            'article_type': 'common',
-            'source': 'rakuten',
-            'keyword_mode': 'ad_keywords',
-            'search_keywords': '',
-            'item_count': 2,
-            'layout': 'rinker',
-            'insertion_position': 'before_summary',
-            'amazon_button_label': 'Amazonで見る',
-            'rakuten_button_label': '楽天市場で見る',
-            'prompt': '楽天市場との相性が高い商品記事で使用。ポイント訴求は控えめにし、商品確認の導線として配置。',
-            'priority': 85,
-            'enabled': True,
-            'created_at': now,
-            'updated_at': now,
-        },
-    ]
-
-def load_ad_definitions():
-    items = load_json(AD_DEFINITIONS_FILE, None)
-    if items:
-        return items
-    settings = load_settings()
-    if settings.get('ad_presets_seeded'):
-        return items or []
-    presets = default_ad_definitions()
-    save_ad_definitions(presets)
-    settings['ad_presets_seeded'] = True
-    save_settings(settings)
-    return presets
-
-def save_ad_definitions(items):
-    save_json(AD_DEFINITIONS_FILE, items)
-
 OLD_DEFAULT_QUALITY_PROMPT = "SEOに最適化された、読みやすく情報量の多い記事を書いてください。見出しを適切に使い、具体例を含めてください。"
-QUALITY_PRESET_VERSION = 6
+QUALITY_PRESET_VERSION = 7
 
 
 def default_quality_presets():
@@ -417,6 +286,7 @@ def default_quality_presets():
 - 冒頭で結論を出し、「おすすめできる人」「おすすめしない人」を早めに提示する
 - 口コミ・評判は良い点だけでなく悪い点・注意点も整理する
 - 特徴、料金/価格、メリット、デメリット、使い方/購入方法、解約/返品/注意事項を必要に応じて入れる
+- メリットとデメリット・注意点は、H2の中にH3小見出しを2〜3個入れて具体的に分解する
 - 公式情報で確認すべき項目は断定せず、確認導線を用意する
 - 競合・代替商品がある場合は、軽い比較を入れて判断材料を増やす
 - CTAは導入後、メリット説明後、まとめ前など文脈に合う位置だけに置く
@@ -431,7 +301,11 @@ H2: ○○の口コミ・評判
 H3: 良い口コミ・評判
 H3: 悪い口コミ・注意点
 H2: ○○のメリット
+H3: メリット1：○○
+H3: メリット2：○○
 H2: ○○のデメリット・注意点
+H3: デメリット1：○○
+H3: デメリット2：○○
 H2: ○○がおすすめな人・おすすめしない人
 H2: ○○の購入方法・申込方法
 H2: まとめ
@@ -538,11 +412,6 @@ def first_env(*names):
 def apply_settings_env_fallbacks(settings):
     fallback_map = {
         'claude_api_key': ('ANTHROPIC_API_KEY', 'CLAUDE_API_KEY'),
-        'amazon_access_key': ('AMAZON_ACCESS_KEY_ID', 'AMAZON_ACCESS_KEY'),
-        'amazon_secret_key': ('AMAZON_SECRET_ACCESS_KEY', 'AMAZON_SECRET_KEY'),
-        'amazon_partner_tag': ('AMAZON_PARTNER_TAG',),
-        'rakuten_application_id': ('RAKUTEN_APPLICATION_ID',),
-        'rakuten_affiliate_id': ('RAKUTEN_AFFILIATE_ID',),
     }
     for setting_key, env_names in fallback_map.items():
         if not settings.get(setting_key):
@@ -577,7 +446,6 @@ def build_data_snapshot():
         'quality': load_quality(),
         'decorations': load_decorations(),
         'rewrite_items': load_rewrites(),
-        'ad_definitions': load_ad_definitions(),
     }
 
 def has_user_data(snapshot):
@@ -588,16 +456,12 @@ def has_user_data(snapshot):
         if q.get('id') != 'default' or q.get('name') != '標準品質'
     ]
     setting_keys = (
-        'sites', 'claude_api_key', 'amazon_access_key', 'amazon_secret_key',
-        'amazon_partner_tag', 'rakuten_application_id', 'rakuten_affiliate_id',
-        'rakuten_asp_enabled', 'rakuten_asp_name', 'rakuten_asp_link_template',
-        'rakuten_asp_prompt', 'article_css'
+        'sites', 'claude_api_key', 'article_css'
     )
     return any([
         bool(snapshot.get('articles')),
         bool(snapshot.get('decorations')),
         bool(snapshot.get('rewrite_items')),
-        bool(snapshot.get('ad_definitions')),
         bool(non_default_quality),
         any(bool(settings.get(k)) for k in setting_keys),
         any(bool(v) for v in (settings.get('quality_style_references') or {}).values()),
@@ -614,26 +478,12 @@ def restore_data_snapshot(snapshot):
         save_decorations(snapshot['decorations'])
     if isinstance(snapshot.get('rewrite_items'), list):
         save_rewrites(snapshot['rewrite_items'])
-    if isinstance(snapshot.get('ad_definitions'), list):
-        save_ad_definitions(snapshot['ad_definitions'])
-
 def load_settings():
     settings = load_json(SETTINGS_FILE, {
         "sites": [],
         "claude_api_key": "",
         "default_quality_id": "default",
-        "amazon_access_key": "",
-        "amazon_secret_key": "",
-        "amazon_partner_tag": "",
-        "rakuten_application_id": "",
-        "rakuten_affiliate_id": "",
-        "rakuten_asp_enabled": False,
-        "rakuten_asp_name": "",
-        "rakuten_asp_link_template": "",
-        "rakuten_asp_link_text": "楽天市場で詳細を見る",
-        "rakuten_asp_prompt": "",
         "article_css": "",
-        "ad_presets_seeded": False,
         "quality_style_references": {
             "ranking": "",
             "brand": "",
@@ -722,12 +572,13 @@ def article_html_output_rules():
 - <style>、<script>、<html>、<body>、<article>、<main>、iframe、form、input、buttonは出力しない
 - tableを使う場合は <table><thead><tbody><tr><th><td> を正しく閉じ、tableの外に他要素が漏れないようにする
 - WordPress/Gutenbergコメント（<!-- wp:... -->、<!-- /wp:... -->）は出力しない
+- H2は主要セクション、H3はH2内の小項目に使う。メリット、デメリット・注意点、よくある質問を作る場合は、H2の直下に各項目・各質問を <h3 class="wp-block-heading">...</h3> で分ける
 - 装飾は <strong>太字</strong>、<span style="color:#d32f2f">赤字</span>、<mark>マーカー</mark>、<ul><li>リスト</li></ul>、<table>表</table> だけを使う
 - 装飾目的の複雑なdiv、独自class、吹き出し、ボックス、カード、GutenbergブロックHTMLは出力しない
 - 比較表は横幅が崩れにくいように列を増やしすぎず、セル内は短くする
 - 1つの<p>は長くしすぎず、原則2〜3文で区切る。長い説明は複数段落に分ける
 - 断定しすぎず、選び方・比較理由・向いている人・注意点を具体的に書く
-- Amazon・楽天のリンクは、こちらが渡した商品カードHTML以外では新規作成しない"""
+- 広告カード、アフィリエイトリンク、RINKER風の商品カードは出力しない。広告挿入はWordPress側のプラグインに任せる"""
 
 
 def normalize_decoration_blocks(blocks):
@@ -1598,7 +1449,7 @@ def score_article_content(title, content, keywords=''):
     if image_count:
         score += 4
     else:
-        suggestions.append('画像や商品カードがない場合は、視覚的な理解補助を追加すると改善できます。')
+        suggestions.append('必要に応じて表やリストを使い、読みやすく整理すると改善できます。')
 
     if link_count >= 2:
         score += 5
@@ -1762,323 +1613,6 @@ def fetch_seo_news(limit=5):
     return items or SEO_NEWS_FALLBACK[:limit]
 
 
-def amazon_search(keywords, access_key, secret_key, partner_tag, item_count=3):
-    host = 'webservices.amazon.co.jp'
-    path = '/paapi5/searchitems'
-    target = 'com.amazon.paapi5.v1.ProductAdvertisingAPIv1.SearchItems'
-
-    payload = json.dumps({
-        'Keywords': keywords,
-        'Resources': [
-            'Images.Primary.Medium',
-            'ItemInfo.Title',
-            'Offers.Listings.Price',
-            'CustomerReviews.Count',
-            'CustomerReviews.StarRating',
-        ],
-        'SearchIndex': 'All',
-        'ItemCount': item_count,
-        'PartnerTag': partner_tag,
-        'PartnerType': 'Associates',
-        'Marketplace': 'www.amazon.co.jp',
-        'LanguagesOfPreference': ['ja_JP'],
-    })
-
-    auth = AWS4Auth(access_key, secret_key, 'us-west-2', 'ProductAdvertisingAPI')
-    resp = requests.post(
-        f'https://{host}{path}',
-        auth=auth,
-        headers={
-            'content-encoding': 'amz-1.0',
-            'content-type': 'application/json; charset=utf-8',
-            'x-amz-target': target,
-        },
-        data=payload,
-        timeout=4
-    )
-    if not resp.ok:
-        try:
-            err_body = resp.json()
-        except Exception:
-            err_body = resp.text
-        raise Exception(f'HTTP {resp.status_code}: {err_body}')
-    data = resp.json()
-
-    products = []
-    for item in data.get('SearchResult', {}).get('Items', []):
-        asin = item.get('ASIN', '')
-        title = item.get('ItemInfo', {}).get('Title', {}).get('DisplayValue', '')
-        image = item.get('Images', {}).get('Primary', {}).get('Medium', {}).get('URL', '')
-        price = ''
-        listings = item.get('Offers', {}).get('Listings', [])
-        if listings:
-            price = listings[0].get('Price', {}).get('DisplayAmount', '')
-        rating = item.get('CustomerReviews', {}).get('StarRating', {}).get('Value')
-        review_count = item.get('CustomerReviews', {}).get('Count')
-        products.append({
-            'asin': asin,
-            'title': title,
-            'image': image,
-            'price': price,
-            'rating': rating,
-            'review_count': review_count,
-            'url': f'https://www.amazon.co.jp/dp/{asin}?tag={partner_tag}',
-        })
-    return products
-
-
-def rakuten_search(keywords, application_id, affiliate_id='', item_count=3):
-    params = {
-        'applicationId': application_id,
-        'keyword': keywords,
-        'hits': item_count,
-        'format': 'json',
-        'imageFlag': 1,
-    }
-    if affiliate_id:
-        params['affiliateId'] = affiliate_id
-    resp = requests.get(
-        'https://app.rakuten.co.jp/services/api/IchibaItem/Search/20170706',
-        params=params,
-        timeout=4
-    )
-    if not resp.ok:
-        raise Exception(f'HTTP {resp.status_code}: {resp.text[:200]}')
-    data = resp.json()
-    products = []
-    for item in data.get('Items', []):
-        aff_url = item.get('affiliateUrl') or ''
-        if affiliate_id and not aff_url:
-            continue
-        aff_url = aff_url or item.get('itemUrl', '')
-        medium_images = item.get('mediumImageUrls', [])
-        image = medium_images[0].get('imageUrl', '') if medium_images else ''
-        price = item.get('itemPrice')
-        products.append({
-            'title': item.get('itemName', ''),
-            'price': f'¥{price:,}' if price else '',
-            'image': image,
-            'url': aff_url,
-            'rating': item.get('reviewAverage'),
-            'review_count': item.get('reviewCount'),
-        })
-    return products
-
-
-def build_rinker_html(amazon_p=None, rakuten_p=None, amazon_label='Amazonで見る', rakuten_label='楽天市場で見る'):
-    primary = amazon_p or rakuten_p
-    if not primary:
-        return ''
-    title = escape(primary.get('title', ''))
-    img = escape(primary.get('image', ''), quote=True)
-    html = (
-        '<div class="affiros9-rinker" style="border:1px solid #e8e8e8;border-radius:8px;padding:16px 20px;margin:24px 0;'
-        'background:#fff;box-shadow:0 1px 4px rgba(0,0,0,0.06)">'
-        '<div style="display:flex;gap:16px;align-items:flex-start">'
-    )
-    if img:
-        primary_url = escape(primary["url"], quote=True)
-        html += (
-            f'<a href="{primary_url}" target="_blank" rel="nofollow sponsored" style="flex-shrink:0">'
-            f'<img src="{img}" alt="" style="width:110px;height:110px;object-fit:contain"></a>'
-        )
-    html += f'<div style="flex:1;min-width:0"><p style="margin:0 0 10px;font-weight:bold;font-size:14px;line-height:1.5">{title}</p>'
-    prices = []
-    if amazon_p and amazon_p.get('price'):
-        prices.append(f'Amazon: <strong style="color:#B12704">{escape(str(amazon_p["price"]))}</strong>')
-    if rakuten_p and rakuten_p.get('price'):
-        prices.append(f'楽天: <strong style="color:#bf0000">{escape(str(rakuten_p["price"]))}</strong>')
-    if prices:
-        html += f'<p style="margin:0 0 12px;font-size:12px;color:#666">{" &nbsp;|&nbsp; ".join(prices)}</p>'
-    html += '<div style="display:flex;gap:8px;flex-wrap:wrap">'
-    if amazon_p:
-        amazon_url = escape(amazon_p["url"], quote=True)
-        safe_amazon_label = escape(amazon_label)
-        html += (
-            f'<a href="{amazon_url}" target="_blank" rel="nofollow sponsored" '
-            f'style="display:inline-block;background:#ff9900;color:#111;padding:8px 18px;'
-            f'text-decoration:none;border-radius:4px;font-weight:bold;font-size:13px;white-space:nowrap">'
-            f'{safe_amazon_label}</a>'
-        )
-    if rakuten_p:
-        rakuten_url = escape(rakuten_p["url"], quote=True)
-        safe_rakuten_label = escape(rakuten_label)
-        html += (
-            f'<a href="{rakuten_url}" target="_blank" rel="nofollow sponsored" '
-            f'style="display:inline-block;background:#bf0000;color:#fff;padding:8px 18px;'
-            f'text-decoration:none;border-radius:4px;font-weight:bold;font-size:13px;white-space:nowrap">'
-            f'{safe_rakuten_label}</a>'
-        )
-    html += '</div></div></div></div>'
-    return html
-
-
-def build_rakuten_asp_instruction(article, settings):
-    if not settings.get('rakuten_asp_enabled'):
-        return ''
-    template = settings.get('rakuten_asp_link_template', '').strip()
-    if not template:
-        return ''
-
-    title = article.get('title', '')
-    keywords = article.get('keywords', '')
-    primary_keyword = keywords.split(',')[0].strip() if keywords else title
-    replacements = {
-        '{title}': title,
-        '{keyword}': primary_keyword,
-        '{keywords}': keywords,
-        '{encoded_title}': quote_plus(title),
-        '{encoded_keyword}': quote_plus(primary_keyword),
-        '{encoded_keywords}': quote_plus(keywords),
-    }
-    link_url = template
-    for key, value in replacements.items():
-        link_url = link_url.replace(key, value)
-
-    link_text = settings.get('rakuten_asp_link_text') or '楽天市場で詳細を見る'
-    safe_link_url = escape(link_url, quote=True)
-    safe_link_text = escape(link_text, quote=True)
-    asp_name = settings.get('rakuten_asp_name') or '楽天アフィリエイトASP'
-    extra_prompt = settings.get('rakuten_asp_prompt', '').strip()
-    instruction = f"""
-
-楽天ASPリンク挿入:
-- ASP名: {asp_name}
-- 記事内の自然な購入導線として、以下のリンクを1〜3箇所に挿入してください。
-- リンクは文脈に合う場所だけに入れ、不自然な連続配置は避けてください。
-- HTMLは以下の形式を使ってください:
-  <a href="{safe_link_url}" target="_blank" rel="nofollow sponsored noopener">{safe_link_text}</a>"""
-    if extra_prompt:
-        instruction += f"\n- 追加ルール: {extra_prompt}"
-    return instruction
-
-
-def select_ad_definition(data, article):
-    definitions = load_ad_definitions()
-    ad_definition_id = data.get('ad_definition_id') or article.get('ad_definition_id')
-    if ad_definition_id:
-        return next((d for d in definitions if d.get('id') == ad_definition_id), None)
-
-    if not data.get('auto_ad_definition'):
-        return None
-
-    article_type = normalize_article_type(data.get('article_type') or article.get('article_type'), 'ranking')
-    candidates = [
-        d for d in definitions
-        if d.get('enabled', True) and d.get('article_type', 'common') in ('common', article_type)
-    ]
-    candidates.sort(key=lambda d: clamp_int(d.get('priority'), 50, 1, 999))
-    return candidates[0] if candidates else None
-
-
-def ad_search_keywords(article, ad_definition):
-    mode = (ad_definition or {}).get('keyword_mode', 'article_keywords')
-    inferred = infer_ad_keywords_from_title(
-        article.get('title', ''),
-        article.get('keywords', ''),
-        article.get('article_type', 'ranking')
-    )
-    if mode == 'custom':
-        return (ad_definition or {}).get('search_keywords', '').strip()
-    if mode == 'title':
-        return inferred or article.get('title', '').strip()
-    if mode == 'ad_keywords':
-        return article.get('ad_keywords', '').strip() or inferred or (ad_definition or {}).get('search_keywords', '').strip()
-    return article.get('ad_keywords', '').strip() or inferred or article.get('keywords', '').strip() or article.get('title', '').strip()
-
-
-def build_ad_product_blocks(article, settings, ad_definition=None, include_amazon=False, include_rakuten=False):
-    source = (ad_definition or {}).get('source')
-    if not source:
-        if include_amazon and include_rakuten:
-            source = 'both'
-        elif include_amazon:
-            source = 'amazon'
-        elif include_rakuten:
-            source = 'rakuten'
-        else:
-            return [], ''
-
-    keywords = ad_search_keywords(article, ad_definition or {})
-    if not keywords:
-        return [], ''
-
-    item_count = clamp_int((ad_definition or {}).get('item_count'), 3, 1, 10)
-    amazon_label = (ad_definition or {}).get('amazon_button_label') or 'Amazonで見る'
-    rakuten_label = (ad_definition or {}).get('rakuten_button_label') or '楽天市場で見る'
-
-    amazon_products = []
-    if source in ('amazon', 'both'):
-        ak = settings.get('amazon_access_key', '')
-        sk = settings.get('amazon_secret_key', '')
-        pt = settings.get('amazon_partner_tag', '')
-        if all([ak, sk, pt]):
-            try:
-                amazon_products = amazon_search(keywords, ak, sk, pt, item_count=item_count)
-            except Exception:
-                pass
-
-    rakuten_products = []
-    if source in ('rakuten', 'both'):
-        ra_id = settings.get('rakuten_application_id', '')
-        ra_aff = settings.get('rakuten_affiliate_id', '')
-        if ra_id:
-            try:
-                rakuten_products = rakuten_search(keywords, ra_id, ra_aff, item_count=item_count)
-            except Exception:
-                pass
-
-    product_blocks = []
-    for i in range(max(len(amazon_products), len(rakuten_products))):
-        a_p = amazon_products[i] if i < len(amazon_products) else None
-        r_p = rakuten_products[i] if i < len(rakuten_products) else None
-        product_blocks.append(build_rinker_html(a_p, r_p, amazon_label, rakuten_label))
-
-    if not product_blocks:
-        return [], ''
-
-    position_map = {
-        'auto': '記事の流れに合わせて自然な箇所',
-        'after_intro': '導入文の直後',
-        'before_summary': 'まとめ見出しの直前',
-        'after_comparison': '比較・ランキング・レビュー説明の直後',
-    }
-    ad_name = (ad_definition or {}).get('name') or '手動広告挿入'
-    position = position_map.get((ad_definition or {}).get('insertion_position', 'auto'), '記事の流れに合わせて自然な箇所')
-    extra_rules = (ad_definition or {}).get('prompt', '').strip()
-    prompt = f"""
-
-広告挿入ルール:
-- 広告定義: {ad_name}
-- 検索キーワード: {keywords}
-- 商品カードはHTMLを崩さず、{position}に自然に挿入してください。
-- 広告リンクには rel="nofollow sponsored" が含まれています。"""
-    if extra_rules:
-        prompt += f"\n- 追加ルール: {extra_rules}"
-    return product_blocks, prompt
-
-
-def insert_product_blocks_into_content(content, product_blocks, insertion_position='auto'):
-    blocks = [str(block or '').strip() for block in (product_blocks or []) if str(block or '').strip()]
-    if not blocks:
-        return content
-    insert_html = '\n\n' + '\n\n'.join(blocks) + '\n\n'
-    html = str(content or '')
-    position = insertion_position or 'auto'
-    if position == 'after_intro':
-        match = re.search(r'</p\s*>', html, flags=re.I)
-        if match:
-            return html[:match.end()] + insert_html + html[match.end():]
-    if position == 'after_comparison':
-        match = re.search(r'</table\s*>', html, flags=re.I)
-        if match:
-            return html[:match.end()] + insert_html + html[match.end():]
-    summary = re.search(r'<h2\b[^>]*>[^<]*(?:まとめ|結論)[^<]*</h2\s*>', html, flags=re.I)
-    if summary:
-        return html[:summary.start()] + insert_html + html[summary.start():]
-    return html + insert_html
-
-
 def normalize_digits(text):
     return str(text or '').translate(str.maketrans('０１２３４５６７８９', '0123456789'))
 
@@ -2163,7 +1697,7 @@ def claude_continuation_max_tokens(quality=None):
     return claude_max_tokens_for_quality(quality, floor=1800, ceiling=4500)
 
 
-def build_article_completion_prompt(quality, article_type, has_decoration=False, has_ads=False):
+def build_article_completion_prompt(quality, article_type, has_decoration=False):
     target = effective_target_chars(quality)
     minimum = minimum_required_content_chars(quality)
     upper = max(target, int(target * 1.15))
@@ -2171,10 +1705,11 @@ def build_article_completion_prompt(quality, article_type, has_decoration=False,
     extras = []
     if has_decoration:
         extras.append('- 装飾は太字、赤字、マーカー、リスト、表だけに絞り、複雑なボックスや独自classは使わないでください。')
-    if has_ads:
-        extras.append('- 広告カード・商品リンクHTMLは自然な位置に入れてください。ただし広告HTMLだけで本文量を稼がず、本文解説を十分に書いてください。')
     if normalized_type == 'brand':
         extras.append('- 商標記事ではFAQ/よくある質問セクションは原則入れず、疑問点は口コミ・注意点・購入方法・まとめの中で自然に解消してください。')
+        extras.append('- 商標記事のメリット、デメリット・注意点はH2だけで終わらせず、H3小見出しを2〜3個使って項目ごとに分けてください。')
+    else:
+        extras.append('- よくある質問を入れる場合は、H2「よくある質問」の直下に質問ごとのH3を置き、その下に回答段落を書いてください。')
     extra_text = '\n'.join(extras)
     priority = (
         '本文の完結、口コミ・評判、メリット・デメリット、向いている人、購入前の注意点、まとめ'
@@ -2184,7 +1719,7 @@ def build_article_completion_prompt(quality, article_type, has_decoration=False,
     return f"""
 
 文字量・完了条件:
-- 記事本文は日本語本文換算で{target}文字前後を目標にしてください。HTMLタグや広告カードのコード量ではなく、読者が読む説明文を十分に書いてください。
+- 記事本文は日本語本文換算で{target}文字前後を目標にしてください。HTMLタグや装飾量ではなく、読者が読む説明文を十分に書いてください。
 - 最低でも本文換算{minimum}文字以上になるまで、途中で終了しないでください。
 - 長くても本文換算{upper}文字以内を目安にし、冗長なFAQ・前置き・重複説明で水増ししないでください。
 - すべての主要見出しを書き切り、最後に必ず「まとめ」セクションで記事を完結させてください。
@@ -2203,7 +1738,7 @@ def build_quality_structure_html_prompt(quality, limit=6000):
 
 記事構成HTMLの参考:
 - 以下は完成記事のHTML構成見本です。内容、固有名詞、口コミ、価格、リンク、商品名、事実関係は流用しないでください。
-- 見出し階層、ブロック順、比較表の位置、CTA/広告の置き方、FAQやまとめへの流れだけを参考にしてください。
+- 見出し階層、ブロック順、比較表の位置、FAQやまとめへの流れだけを参考にしてください。
 - 今回の記事テーマに合わない見出しや要素は無理に使わず、自然な構成へ調整してください。
 
 ```html
@@ -2225,6 +1760,11 @@ def build_article_continuation_prompt(article, article_type, quality, current_co
         else '未完了のランキング個別解説、選び方、FAQ、まとめ'
     )
     no_faq = '- 商標記事ではFAQ/よくある質問見出しを追加しないでください。\n' if normalized_type == 'brand' else ''
+    heading_rule = (
+        '- メリット、デメリット・注意点の続きではH3小見出しを使い、項目ごとに本文を分けてください。'
+        if normalized_type == 'brand'
+        else '- FAQを書く場合は質問ごとにH3見出しを使ってください。'
+    )
     return f"""以下の記事本文は途中で終わっているか、品質チェックに未達です。
 
 タイトル: {article.get('title', '')}
@@ -2242,6 +1782,7 @@ def build_article_continuation_prompt(article, article_type, quality, current_co
 - 出力は「続きのHTML本文だけ」にしてください。説明文、作業メモ、Markdown、コードフェンスは不要です。
 - {priority}を優先して書き切ってください。
 {no_faq.rstrip()}
+- {heading_rule}
 - 最後は必ず「まとめ」セクションで完結させてください。
 - 追加本文は日本語本文換算で最低{remaining}文字を目安にしてください。
 
@@ -2266,6 +1807,11 @@ def build_article_polish_prompt(article, article_type, quality, current_content,
         else '導入、見出し、判断材料、FAQ、まとめを読みやすく整える'
     )
     no_faq = '- 商標記事ではFAQ/よくある質問見出しを追加しないでください。疑問点は本文内に吸収してください。\n' if normalized_type == 'brand' else ''
+    heading_rule = (
+        '- メリット、デメリット・注意点はH2だけで終わらせず、H3小見出しを2〜3個使って項目ごとに整理してください。'
+        if normalized_type == 'brand'
+        else '- よくある質問を入れる場合は、質問ごとにH3見出しを使ってください。'
+    )
     return f"""以下のWordPress本文HTMLを、記事として完成度が高い状態へ整えてください。
 
 タイトル: {article.get('title', '')}
@@ -2284,6 +1830,7 @@ def build_article_polish_prompt(article, article_type, quality, current_content,
 - 導入で結論を早めに示し、メリット・デメリット・注意点・向いている人を補強してください。
 - 最後は必ず「まとめ」セクションで完結させてください。
 {no_faq.rstrip()}
+- {heading_rule}
 - 商品リンクや広告カードは新規作成しないでください。装飾は太字・赤字・マーカー・リスト・表だけに絞ってください。
 - 説明文、作業メモ、Markdown、コードフェンスは禁止です。
 
@@ -2472,7 +2019,7 @@ def html_li(text):
     return f'<li>{escape(str(text or ""))}</li>'
 
 
-def build_structured_ranking_html(article, plan, product_blocks=None):
+def build_structured_ranking_html(article, plan):
     subject = plan['subject']
     count = plan['count']
     products = plan['products']
@@ -2509,12 +2056,6 @@ def build_structured_ranking_html(article, plan, product_blocks=None):
         html.append(html_li(f'{c["name"]}: {c["description"]}'))
     html.append('</ul>')
 
-    if product_blocks:
-        html.append('<h2 class="wp-block-heading">購入前にチェックしたい関連商品</h2>')
-        html.append(html_p('記事内容に関連する商品候補もあわせて確認できます。価格や在庫は変わるため、購入前にリンク先で最新情報を確認してください。'))
-        for block in product_blocks[:3]:
-            html.append(str(block))
-
     html.append(f'<h2 class="wp-block-heading">{subject}おすすめ{count}選</h2>')
     for p in products:
         html.append(f'<h3 class="wp-block-heading">{p["rank"]}位：{escape(p["name"])}</h3>')
@@ -2544,7 +2085,7 @@ def build_structured_ranking_html(article, plan, product_blocks=None):
     return '\n'.join(html)
 
 
-def generate_structured_ranking_article_sync(client, article, quality, product_blocks=None, on_step=None):
+def generate_structured_ranking_article_sync(client, article, quality, on_step=None):
     if on_step:
         on_step(1, 2, 'ランキング設計データ')
     try:
@@ -2557,12 +2098,12 @@ def generate_structured_ranking_article_sync(client, article, quality, product_b
         usage['plan_error'] = str(e)
     if on_step:
         on_step(2, 2, '固定骨組みHTML')
-    content = build_structured_ranking_html(article, plan, product_blocks)
+    content = build_structured_ranking_html(article, plan)
     usage['structured_builder'] = True
     return content, [usage]
 
 
-def generate_structured_ranking_article_sse(client, article, quality, product_blocks=None):
+def generate_structured_ranking_article_sse(client, article, quality):
     yield f"data: {json.dumps({'status': 'segment', 'round': 1, 'total': 2, 'message': 'ランキング設計データを生成しています（1/2）'})}\n\n"
     prompt = ranking_plan_prompt(article, quality)
     try:
@@ -2582,7 +2123,7 @@ def generate_structured_ranking_article_sse(client, article, quality, product_bl
         usage['structured_builder_fallback'] = True
         usage['plan_error'] = str(e)
     yield f"data: {json.dumps({'status': 'segment', 'round': 2, 'total': 2, 'message': 'Affiros9側でランキングHTMLを組み立てています（2/2）'})}\n\n"
-    content = build_structured_ranking_html(article, plan, product_blocks)
+    content = build_structured_ranking_html(article, plan)
     usage['structured_builder'] = True
     for offset in range(0, len(content), 4000):
         yield f"data: {json.dumps({'text': content[offset:offset + 4000]})}\n\n"
@@ -2626,7 +2167,7 @@ def build_segmented_article_steps(article, article_type):
             'name': '選び方・FAQ・まとめ',
             'prompt': """選び方、購入前の注意点、FAQ、まとめだけを書いてください。
 - H2「選び方」を入れ、素材・価格・用途・サイズ感など判断軸を整理してください。
-- FAQは3〜5問。
+- FAQは3〜5問。質問ごとにH3見出しを使い、その下に回答段落を書いてください。
 - 日本語本文換算で900〜1200文字を目安にしてください。
 - 最後に必ずH2「まとめ」を入れ、読者の次の行動まで示して記事を完結させてください。
 - ランキング個別解説は繰り返さないでください。"""
@@ -2645,6 +2186,7 @@ def build_segmented_article_steps(article, article_type):
             {
                 'name': '特徴・メリット・デメリット',
                 'prompt': """特徴、メリット、デメリット、向いている人/向いていない人を書いてください。
+- H2「メリット」とH2「デメリット・注意点」を作る場合は、それぞれの中にH3小見出しを2〜3個入れて項目別に説明してください。
 - 押し売りではなく、判断材料として書く。
 - 既出の導入や基本情報を繰り返さないでください。"""
             },
@@ -2685,7 +2227,7 @@ def build_segmented_article_steps(article, article_type):
         {
             'name': 'FAQ・まとめ',
             'prompt': """FAQとまとめを書いて記事を完結させてください。
-- FAQは3〜5問。
+- FAQは3〜5問。質問ごとにH3見出しを使い、その下に回答段落を書いてください。
 - 最後にH2「まとめ」を入れ、次の行動を明確にしてください。"""
         },
     ]
@@ -2740,7 +2282,7 @@ def build_segment_prompt(base_prompt, article, article_type, quality, step, inde
 - h2/h3見出しには、できるだけ狙う主要KW「{main_keyword}」を自然に含めてください。
 - <p>は長くしすぎず、2〜3文ごとに分けてください。長い説明は段落を増やしてください。
 - 重要な結論・注意点・選び方の要点には、太字、赤字、マーカー、リスト、表だけを自然に使ってください。
-- Amazon・楽天リンクは、共通追加指示で渡された商品カードHTML以外から勝手に作らないでください。
+- 広告カード、アフィリエイトリンク、RINKER風の商品カードは作らないでください。広告挿入はWordPress側のプラグインに任せます。
 
 現在までの本文（重複禁止・文脈確認用）:
 {previous_tail}
@@ -3007,6 +2549,7 @@ def build_article_type_prompt(article_type):
         'brand': """記事種類: 商標記事（レビュー記事）
 - 特定の商品・サービス名で検索する読者に向けたレビュー記事にする
 - 特徴、口コミ・評判、メリット・デメリット、向いている人、購入・申込前の注意点を整理する
+- メリットとデメリット・注意点はH2の下にH3小見出しを置き、項目ごとに本文を分ける
 - FAQ/よくある質問セクションは原則作らず、疑問点は本文内で自然に解消する
 - 押し売りではなく、判断材料を丁寧に提示する""",
         'column': """記事種類: コラム記事
@@ -3310,7 +2853,6 @@ def create_article():
         'content': data.get('content', ''),
         'created_at': datetime.now().isoformat(),
         'quality_id': data.get('quality_id') or None,
-        'ad_definition_id': data.get('ad_definition_id') or None,
         'site_id': data.get('site_id') or None,
         'parent_article_id': data.get('parent_article_id') or None,
         'source_product_name': data.get('source_product_name') or '',
@@ -3345,7 +2887,7 @@ def update_article(article_id):
             for key in [
                 'title', 'keywords', 'content', 'article_type', 'ad_keywords',
                 'category', 'priority', 'memo', 'schedule_date', 'quality_id',
-                'ad_definition_id', 'scheduled_at', 'site_id',
+                'scheduled_at', 'site_id',
                 'parent_article_id', 'source_product_name'
             ]:
                 if key in data:
@@ -3411,7 +2953,7 @@ def recover_generated_content(article_id):
                 article.get('keywords', ''),
                 article.get('article_type', 'ranking')
             )
-        for key in ('quality_id', 'ad_definition_id'):
+        for key in ('quality_id',):
             if key in data:
                 article[key] = data.get(key) or None
 
@@ -3524,7 +3066,6 @@ def import_excel():
         'article_type': {'type', 'article_type', '記事種類', '記事種別', '種類', '種別'},
         'site': {'site', 'サイト', '投稿先', '投稿先サイト', 'site_id', 'サイトid'},
         'quality': {'quality', '品質', '品質定義', 'quality_id', '品質id'},
-        'ad_definition': {'ad_definition', '広告定義', '広告', 'ad_definition_id', '広告id'},
         'ad_keywords': {'adkeyword', 'adkeywords', '広告キーワード', '商品キーワード', '広告検索語'},
         'priority': {'priority', '優先度'},
         'schedule_date': {'schedule', 'schedule_date', '予定日', '公開予定日', '執筆予定日'},
@@ -3556,7 +3097,6 @@ def import_excel():
     site_fallback = request.form.get('site_id') or None
     sites = settings.get('sites', [])
     quality_list = load_quality()
-    ad_definitions = load_ad_definitions()
 
     def cell(row, field):
         idx = header_map.get(field)
@@ -3593,7 +3133,6 @@ def import_excel():
             'content': content,
             'created_at': datetime.now().isoformat(),
             'quality_id': resolve_id(cell(row, 'quality'), quality_list),
-            'ad_definition_id': resolve_id(cell(row, 'ad_definition'), ad_definitions),
             'site_id': resolve_id(cell(row, 'site'), sites) or site_fallback,
             'wp_post_id': None,
             'wp_url': None,
@@ -3651,8 +3190,6 @@ def generate_article(article_id):
             a['article_type'] = article_type
             if quality_id:
                 a['quality_id'] = quality_id
-            if data.get('ad_definition_id'):
-                a['ad_definition_id'] = data.get('ad_definition_id')
             a['status'] = 'generating'
             a['generation_run_id'] = generation_run_id
             a['generation_started_at'] = now
@@ -3676,26 +3213,6 @@ def generate_article(article_id):
         style_reference_url, style_reference_text = fetch_quality_style_reference(article_type, settings, quality)
     except Exception:
         style_reference_text = ''
-    include_amazon = data.get('include_amazon', False)
-    include_rakuten = data.get('include_rakuten', False)
-    rakuten_asp_instruction = build_rakuten_asp_instruction(article_work, settings)
-    ad_definition = select_ad_definition({**data, 'article_type': article_type}, article_work)
-    try:
-        product_blocks, ad_instruction = build_ad_product_blocks(
-            article_work, settings, ad_definition, include_amazon=include_amazon, include_rakuten=include_rakuten
-        )
-    except Exception as e:
-        current_articles = load_articles()
-        for a in current_articles:
-            if a['id'] == article_id:
-                a['status'] = 'error'
-                a['error'] = str(e)
-                a['updated_at'] = datetime.now().isoformat()
-                a['generation_finished_at'] = a['updated_at']
-                break
-        save_articles(current_articles)
-        return jsonify({'error': str(e)}), 500
-
     def generate():
         full_content = ''
         try:
@@ -3728,22 +3245,10 @@ def generate_article(article_id):
 
             prompt += build_quality_structure_html_prompt(quality)
 
-            if rakuten_asp_instruction:
-                prompt += rakuten_asp_instruction
-
-            if ad_instruction:
-                prompt += ad_instruction
-
-            if product_blocks:
-                prompt += '\n\n以下の商品カード（HTML）を記事の適切な箇所に自然に組み込んでください。HTMLはそのまま使用してください：\n'
-                for block in product_blocks:
-                    prompt += f'\n{block}\n'
-
             prompt += build_article_completion_prompt(
                 quality,
                 article_type,
-                has_decoration=False,
-                has_ads=bool(product_blocks or ad_instruction or rakuten_asp_instruction)
+                has_decoration=False
             )
 
             usage_parts = []
@@ -3759,8 +3264,7 @@ def generate_article(article_id):
                 full_content, usage_parts = yield from generate_structured_ranking_article_sse(
                     client,
                     article_work,
-                    quality,
-                    product_blocks
+                    quality
                 )
             elif should_use_segmented_generation(article_type, quality):
                 full_content, usage_parts = yield from generate_segmented_article_sse(
@@ -3848,8 +3352,6 @@ def generate_article(article_id):
                     a['site_id'] = article_work.get('site_id') or a.get('site_id')
                     a['quality_id'] = quality.get('id') if quality else quality_id
                     a['article_type'] = article_type
-                    if ad_definition:
-                        a['ad_definition_id'] = ad_definition.get('id')
                     a['generated_at'] = generated_at
                     a['updated_at'] = generated_at
                     a['content_hash'] = new_content_hash
@@ -3911,10 +3413,6 @@ def generate_article_direct(article_id):
 
     quality_id = data.get('quality_id') or article.get('quality_id')
     quality = select_quality_definition(load_quality(), quality_id, article_type)
-    include_amazon = data.get('include_amazon', False)
-    include_rakuten = data.get('include_rakuten', False)
-    ad_definition = select_ad_definition({**data, 'article_type': article_type}, article_work)
-
     now = datetime.now().isoformat()
     for a in articles:
         if a['id'] == article_id:
@@ -3923,8 +3421,6 @@ def generate_article_direct(article_id):
             a['article_type'] = article_type
             if quality_id:
                 a['quality_id'] = quality_id
-            if ad_definition:
-                a['ad_definition_id'] = ad_definition.get('id')
             a['status'] = 'generating'
             a['generation_started_at'] = now
             a['updated_at'] = now
@@ -3933,13 +3429,6 @@ def generate_article_direct(article_id):
     save_articles(articles)
 
     try:
-        product_blocks, _ad_instruction = build_ad_product_blocks(
-            article_work,
-            settings,
-            ad_definition,
-            include_amazon=include_amazon,
-            include_rakuten=include_rakuten
-        )
         previous_content = article.get('content', '')
         previous_content_hash = content_hash(previous_content)
         is_regeneration = bool(html_to_text(previous_content).strip())
@@ -3960,12 +3449,8 @@ def generate_article_direct(article_id):
 
 {article_html_output_rules()}
 {build_quality_structure_html_prompt(quality)}
-{build_article_completion_prompt(quality, article_type, has_ads=bool(product_blocks))}
+{build_article_completion_prompt(quality, article_type)}
 """
-            if product_blocks:
-                base_prompt += '\n\n以下の商品カード（HTML）を記事の適切な箇所に自然に組み込んでください。HTMLはそのまま使用してください：\n'
-                for block in product_blocks:
-                    base_prompt += f'\n{block}\n'
             raw_content, usage_parts = generate_segmented_article_sync(
                 client,
                 base_prompt,
@@ -3977,8 +3462,7 @@ def generate_article_direct(article_id):
             raw_content, usage_parts = generate_structured_ranking_article_sync(
                 client,
                 article_work,
-                quality,
-                product_blocks
+                quality
             )
         clean_content, enhance_warning = safe_enhance_generated_article_html(raw_content, article_work, article_type)
         validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
@@ -4006,8 +3490,6 @@ def generate_article_direct(article_id):
                 a['site_id'] = article_work.get('site_id') or a.get('site_id')
                 a['quality_id'] = quality.get('id') if quality else quality_id
                 a['article_type'] = article_type
-                if ad_definition:
-                    a['ad_definition_id'] = ad_definition.get('id')
                 a['generated_at'] = generated_at
                 a['updated_at'] = generated_at
                 a['content_hash'] = content_hash(clean_content)
@@ -4075,8 +3557,6 @@ def batch_generate():
     quality = select_quality_definition(quality_list, quality_id, batch_article_type)
     quality_prompt = build_quality_prompt(quality)
     style_reference_cache = {}
-    include_amazon = data.get('include_amazon', False)
-    include_rakuten = data.get('include_rakuten', False)
     now = datetime.now().isoformat()
     job_id = str(uuid.uuid4())
     job = {
@@ -4189,29 +3669,10 @@ def batch_generate():
 
                 prompt += build_quality_structure_html_prompt(quality)
 
-                rakuten_asp_instruction = build_rakuten_asp_instruction(article, settings)
-                if use_generation_extras and rakuten_asp_instruction:
-                    prompt += rakuten_asp_instruction
-
-                ad_definition = select_ad_definition({**data, 'article_type': article_type}, article)
-                product_blocks, ad_instruction = [], ''
-                if use_generation_extras:
-                    stage = 'build ad product blocks'
-                    product_blocks, ad_instruction = build_ad_product_blocks(
-                        article, settings, ad_definition, include_amazon=include_amazon, include_rakuten=include_rakuten
-                    )
-                if ad_instruction:
-                    prompt += ad_instruction
-                if product_blocks:
-                    prompt += '\n\n以下の商品カード（HTML）を記事の適切な箇所に自然に組み込んでください。HTMLはそのまま使用してください：\n'
-                    for block in product_blocks:
-                        prompt += f'\n{block}\n'
-
                 prompt += build_article_completion_prompt(
                     quality,
                     article_type,
-                    has_decoration=False,
-                    has_ads=False
+                    has_decoration=False
                 )
 
                 stage = 'generate content'
@@ -4232,7 +3693,6 @@ def batch_generate():
                         client,
                         article,
                         quality,
-                        product_blocks,
                         on_step=lambda step_index, step_total, step_name: update_job(
                             current_title=article.get('title', ''),
                             message=f"固定骨組み生成中: {article.get('title', '')} / {step_name} ({step_index}/{step_total})"
@@ -4312,8 +3772,6 @@ def batch_generate():
                         a['quality_id'] = quality.get('id') if quality else quality_id
                         a['article_type'] = article_type
                         a['ad_keywords'] = article.get('ad_keywords', a.get('ad_keywords', ''))
-                        if ad_definition:
-                            a['ad_definition_id'] = ad_definition.get('id')
                         a['generation_phase'] = 'base_saved'
                         a['generated_at'] = generated_at
                         a['updated_at'] = generated_at
@@ -4351,15 +3809,7 @@ def batch_generate():
                         else:
                             postprocess_warnings.append('品質改善後の本文が短すぎたため、本文生成直後の内容を維持しました。')
 
-                    update_job(current_title=article.get('title', ''), message=f"本文保存済み。広告・装飾を後処理中: {article.get('title', '')}")
-                    product_blocks, _ad_instruction = build_ad_product_blocks(
-                        article, settings, ad_definition, include_amazon=include_amazon, include_rakuten=include_rakuten
-                    )
-                    post_content = insert_product_blocks_into_content(
-                        post_content,
-                        product_blocks,
-                        (ad_definition or {}).get('insertion_position', 'auto')
-                    )
+                    update_job(current_title=article.get('title', ''), message=f"本文保存済み。本文HTMLを整えています: {article.get('title', '')}")
                     if post_content != content:
                         post_content, enhance_warning = safe_enhance_generated_article_html(post_content, article, article_type)
                         if enhance_warning:
@@ -4384,7 +3834,7 @@ def batch_generate():
                                 break
                         save_articles(current_articles)
                 except Exception as post_error:
-                    postprocess_warnings.append(f'広告・装飾後処理をスキップしました: {post_error}')
+                    postprocess_warnings.append(f'本文後処理をスキップしました: {post_error}')
                     current_articles = load_articles()
                     for a in current_articles:
                         if a['id'] == article['id']:
@@ -5064,93 +4514,6 @@ def get_seo_news():
         })
 
 
-# Ad definitions
-@app.route('/api/ad-definitions', methods=['GET'])
-@login_required
-def get_ad_definitions():
-    return jsonify(load_ad_definitions())
-
-
-@app.route('/api/ad-definitions', methods=['POST'])
-@login_required
-def create_ad_definition():
-    data = request.json or {}
-    definitions = load_ad_definitions()
-    item = {
-        'id': str(uuid.uuid4()),
-        'name': data.get('name', ''),
-        'article_type': data.get('article_type', 'common'),
-        'source': data.get('source', 'both'),
-        'keyword_mode': data.get('keyword_mode', 'article_keywords'),
-        'search_keywords': data.get('search_keywords', ''),
-        'item_count': clamp_int(data.get('item_count'), 3, 1, 10),
-        'layout': data.get('layout', 'rinker'),
-        'insertion_position': data.get('insertion_position', 'auto'),
-        'amazon_button_label': data.get('amazon_button_label', 'Amazonで見る'),
-        'rakuten_button_label': data.get('rakuten_button_label', '楽天市場で見る'),
-        'prompt': data.get('prompt', ''),
-        'priority': clamp_int(data.get('priority'), 50, 1, 999),
-        'enabled': bool(data.get('enabled', True)),
-        'created_at': datetime.now().isoformat(),
-        'updated_at': datetime.now().isoformat(),
-    }
-    definitions.append(item)
-    save_ad_definitions(definitions)
-    return jsonify(item)
-
-
-@app.route('/api/ad-definitions/<ad_definition_id>', methods=['PUT'])
-@login_required
-def update_ad_definition(ad_definition_id):
-    data = request.json or {}
-    definitions = load_ad_definitions()
-    for item in definitions:
-        if item['id'] == ad_definition_id:
-            for key in [
-                'name', 'article_type', 'source', 'keyword_mode', 'search_keywords',
-                'layout', 'insertion_position', 'amazon_button_label',
-                'rakuten_button_label', 'prompt'
-            ]:
-                if key in data:
-                    item[key] = data[key]
-            if 'item_count' in data:
-                item['item_count'] = clamp_int(data.get('item_count'), item.get('item_count', 3), 1, 10)
-            if 'priority' in data:
-                item['priority'] = clamp_int(data.get('priority'), item.get('priority', 50), 1, 999)
-            if 'enabled' in data:
-                item['enabled'] = bool(data.get('enabled'))
-            item['updated_at'] = datetime.now().isoformat()
-            break
-    save_ad_definitions(definitions)
-    return jsonify({'success': True})
-
-
-@app.route('/api/ad-definitions/<ad_definition_id>', methods=['DELETE'])
-@login_required
-def delete_ad_definition(ad_definition_id):
-    definitions = [d for d in load_ad_definitions() if d['id'] != ad_definition_id]
-    save_ad_definitions(definitions)
-    return jsonify({'success': True})
-
-
-@app.route('/api/ad-definitions/<ad_definition_id>/preview', methods=['POST'])
-@login_required
-def preview_ad_definition(ad_definition_id):
-    definitions = load_ad_definitions()
-    ad_definition = next((d for d in definitions if d['id'] == ad_definition_id), None)
-    if not ad_definition:
-        return jsonify({'error': '広告定義が見つかりません'}), 404
-    data = request.json or {}
-    article = {
-        'title': data.get('title', ''),
-        'keywords': data.get('keywords', ''),
-        'ad_keywords': data.get('ad_keywords', ''),
-    }
-    settings = load_settings()
-    blocks, instruction = build_ad_product_blocks(article, settings, ad_definition)
-    return jsonify({'html': '\n'.join(blocks), 'count': len(blocks), 'instruction': instruction})
-
-
 # Decorations
 @app.route('/api/decorations', methods=['GET'])
 @login_required
@@ -5428,60 +4791,6 @@ def restore_data_snapshot_api():
 
 
 # Settings
-@app.route('/api/amazon/search', methods=['POST'])
-@login_required
-def api_amazon_search():
-    data = request.json or {}
-    keywords = data.get('keywords', '')
-    if not keywords:
-        return jsonify({'error': 'キーワードが必要です'}), 400
-    settings = load_settings()
-    requested_access_key = (data.get('amazon_access_key') or '').strip()
-    requested_secret_key = (data.get('amazon_secret_key') or '').strip()
-    requested_partner_tag = (data.get('amazon_partner_tag') or '').strip()
-    access_key = settings.get('amazon_access_key', '')
-    secret_key = settings.get('amazon_secret_key', '')
-    partner_tag = settings.get('amazon_partner_tag', '')
-    if requested_access_key and not is_masked_value(requested_access_key):
-        access_key = requested_access_key
-    if requested_secret_key and not is_masked_value(requested_secret_key):
-        secret_key = requested_secret_key
-    if requested_partner_tag:
-        partner_tag = requested_partner_tag
-    if not all([access_key, secret_key, partner_tag]):
-        return jsonify({'error': 'Amazon API設定が不完全です'}), 400
-    try:
-        products = amazon_search(keywords, access_key, secret_key, partner_tag, item_count=data.get('item_count', 3))
-        return jsonify(products)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/rakuten/search', methods=['POST'])
-@login_required
-def api_rakuten_search():
-    data = request.json or {}
-    keywords = data.get('keywords', '')
-    if not keywords:
-        return jsonify({'error': 'キーワードが必要です'}), 400
-    settings = load_settings()
-    requested_app_id = (data.get('rakuten_application_id') or '').strip()
-    requested_aff_id = (data.get('rakuten_affiliate_id') or '').strip()
-    app_id = settings.get('rakuten_application_id', '')
-    aff_id = settings.get('rakuten_affiliate_id', '')
-    if requested_app_id and not is_masked_value(requested_app_id):
-        app_id = requested_app_id
-    if requested_aff_id:
-        aff_id = requested_aff_id
-    if not app_id:
-        return jsonify({'error': '楽天APIのアプリケーションIDが設定されていません'}), 400
-    try:
-        products = rakuten_search(keywords, app_id, aff_id, item_count=data.get('item_count', 3))
-        return jsonify(products)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
 @app.route('/api/settings', methods=['GET'])
 @login_required
 def get_settings():
@@ -5489,16 +4798,6 @@ def get_settings():
     safe = {
         'claude_api_key': mask_secret(settings.get('claude_api_key', '')),
         'default_quality_id': settings.get('default_quality_id', 'default'),
-        'amazon_access_key': mask_secret(settings.get('amazon_access_key', '')),
-        'amazon_secret_key': mask_secret(settings.get('amazon_secret_key', ''), visible_prefix=0),
-        'amazon_partner_tag': settings.get('amazon_partner_tag', ''),
-        'rakuten_application_id': mask_secret(settings.get('rakuten_application_id', '')),
-        'rakuten_affiliate_id': settings.get('rakuten_affiliate_id', ''),
-        'rakuten_asp_enabled': settings.get('rakuten_asp_enabled', False),
-        'rakuten_asp_name': settings.get('rakuten_asp_name', ''),
-        'rakuten_asp_link_template': settings.get('rakuten_asp_link_template', ''),
-        'rakuten_asp_link_text': settings.get('rakuten_asp_link_text', '楽天市場で詳細を見る'),
-        'rakuten_asp_prompt': settings.get('rakuten_asp_prompt', ''),
         'article_css': settings.get('article_css', ''),
     }
     return jsonify(safe)
@@ -5512,26 +4811,6 @@ def update_settings():
         settings['default_quality_id'] = data['default_quality_id']
     if data.get('claude_api_key') and not is_masked_value(data['claude_api_key']):
         settings['claude_api_key'] = data['claude_api_key']
-    if data.get('amazon_access_key') and not is_masked_value(data['amazon_access_key']):
-        settings['amazon_access_key'] = data['amazon_access_key']
-    if data.get('amazon_secret_key') and not is_masked_value(data['amazon_secret_key']):
-        settings['amazon_secret_key'] = data['amazon_secret_key']
-    if 'amazon_partner_tag' in data:
-        settings['amazon_partner_tag'] = data['amazon_partner_tag']
-    if data.get('rakuten_application_id') and not is_masked_value(data['rakuten_application_id']):
-        settings['rakuten_application_id'] = data['rakuten_application_id']
-    if 'rakuten_affiliate_id' in data:
-        settings['rakuten_affiliate_id'] = data['rakuten_affiliate_id']
-    if 'rakuten_asp_enabled' in data:
-        settings['rakuten_asp_enabled'] = bool(data['rakuten_asp_enabled'])
-    if 'rakuten_asp_name' in data:
-        settings['rakuten_asp_name'] = data['rakuten_asp_name']
-    if 'rakuten_asp_link_template' in data:
-        settings['rakuten_asp_link_template'] = data['rakuten_asp_link_template']
-    if 'rakuten_asp_link_text' in data:
-        settings['rakuten_asp_link_text'] = data['rakuten_asp_link_text']
-    if 'rakuten_asp_prompt' in data:
-        settings['rakuten_asp_prompt'] = data['rakuten_asp_prompt']
     if 'article_css' in data:
         if looks_like_html(data.get('article_css', '')):
             return jsonify({'success': False, 'error': '記事CSS定義にはHTMLを保存できません。CSSだけを入力してください。'}), 400

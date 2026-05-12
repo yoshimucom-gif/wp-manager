@@ -676,7 +676,6 @@ tr.selected td { background: var(--accent-dim); }
       <div class="nav-trigger" id="nav-definitions">定義設定</div>
       <div class="nav-menu">
         <div class="nav-link" onclick="showPage('quality')" id="nav-quality">品質定義</div>
-        <div class="nav-link" onclick="showPage('ads')" id="nav-ads">広告定義</div>
       </div>
     </div>
     <div class="nav-item" onclick="showPage('sites')" id="nav-sites">
@@ -888,11 +887,6 @@ tr.selected td { background: var(--accent-dim); }
               <input type="text" id="gen-keywords" class="form-control" placeholder="キーワード（カンマ区切り）">
             </div>
             <div class="form-group">
-              <label class="form-label">広告キーワード / 商品検索キーワード</label>
-              <input type="text" id="gen-ad-keywords" class="form-control" placeholder="例: ネックウォーマー 極暖 メンズ, コロンビア ネックウォーマー">
-              <div style="font-size:11px;color:var(--muted);margin-top:4px">Amazon・楽天APIで商品を探すためのキーワードです。SEOキーワードと分けて記事ごとに指定できます。</div>
-            </div>
-            <div class="form-group">
               <label class="form-label">カテゴリー</label>
               <input type="text" id="gen-category" class="form-control" list="gen-category-options" placeholder="投稿先サイトを選ぶと既存カテゴリー候補が出ます">
               <datalist id="gen-category-options"></datalist>
@@ -907,23 +901,6 @@ tr.selected td { background: var(--accent-dim); }
               <select id="gen-quality" class="form-control">
                 <option value="">-- 品質定義を選択 --</option>
               </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">広告定義</label>
-              <select id="gen-ad-definition" class="form-control">
-                <option value="">-- 広告定義を選択（任意）--</option>
-              </select>
-              <div style="font-size:11px;color:var(--muted);margin-top:4px">未選択の場合は下のAmazon/楽天チェックを使います</div>
-            </div>
-            <div class="form-group">
-              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted);margin-bottom:6px">
-                <input type="checkbox" id="gen-include-amazon" style="accent-color:var(--accent)">
-                Amazon商品を自動挿入
-              </label>
-              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted)">
-                <input type="checkbox" id="gen-include-rakuten" style="accent-color:var(--accent)">
-                楽天市場商品を自動挿入（RINKERスタイル）
-              </label>
             </div>
             <div class="toolbar" style="margin-bottom:0">
               <button class="btn btn-primary" id="gen-btn" onclick="startGenerate()">⚡ 生成開始</button>
@@ -961,12 +938,6 @@ tr.selected td { background: var(--accent-dim); }
               <label class="form-label">品質定義</label>
               <select id="batch-quality" class="form-control">
                 <option value="">-- 品質定義を選択 --</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">広告定義</label>
-              <select id="batch-ad-definition" class="form-control">
-                <option value="">-- 広告定義を選択（任意）--</option>
               </select>
             </div>
             <div class="form-group">
@@ -1022,16 +993,6 @@ tr.selected td { background: var(--accent-dim); }
                 <option value="">全カテゴリー</option>
               </select>
             </div>
-            <div class="form-group">
-              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted);margin-bottom:6px">
-                <input type="checkbox" id="batch-include-amazon" style="accent-color:var(--accent)">
-                Amazon商品を自動挿入
-              </label>
-              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted)">
-                <input type="checkbox" id="batch-include-rakuten" style="accent-color:var(--accent)">
-                楽天市場商品を自動挿入（RINKERスタイル）
-              </label>
-            </div>
             <div class="toolbar" style="flex-direction:column;align-items:stretch;gap:8px;margin-bottom:0">
               <label class="btn btn-secondary" style="cursor:pointer">
                 <span>CSV/Excelインポート</span>
@@ -1065,7 +1026,6 @@ tr.selected td { background: var(--accent-dim); }
                     <th><input type="checkbox" class="check-all" id="batch-check-all" onchange="toggleBatchAll(this)"></th>
                     <th>タイトル</th>
                     <th>スラッグ</th>
-                    <th>広告キーワード</th>
                     <th>カテゴリー</th>
                     <th>投稿予定</th>
                     <th>スコア</th>
@@ -1197,23 +1157,6 @@ tr.selected td { background: var(--accent-dim); }
         <div class="quality-grid" id="quality-grid"></div>
       </div>
 
-      <!-- Ads Page -->
-      <div class="page" id="page-ads">
-        <div class="page-header">
-          <div class="page-title">広告定義</div>
-          <div class="page-subtitle">記事種類ごとのAmazon・楽天商品取得とRINKER風カード挿入ルールを管理</div>
-        </div>
-        <div class="toolbar">
-          <button class="btn btn-primary" onclick="openAdModal()">+ 新規追加</button>
-        </div>
-        <div class="quality-grid" id="ad-grid">
-          <div class="empty">
-            <div class="empty-icon">AD</div>
-            <div>広告定義がありません。記事種類ごとの商品取得ルールを追加してください。</div>
-          </div>
-        </div>
-      </div>
-
       <!-- Sites Page -->
       <div class="page" id="page-sites">
         <div class="page-header">
@@ -1235,7 +1178,7 @@ tr.selected td { background: var(--accent-dim); }
       <div class="page" id="page-settings">
         <div class="page-header">
           <div class="page-title">API設定</div>
-          <div class="page-subtitle">Claude API・Amazon PA-API・楽天市場API・楽天ASP・デフォルト設定</div>
+          <div class="page-subtitle">Claude API・デフォルト設定</div>
         </div>
         <div style="max-width:520px">
           <div class="settings-section">
@@ -1246,69 +1189,12 @@ tr.selected td { background: var(--accent-dim); }
             </div>
           </div>
           <div class="settings-section">
-            <div class="section-header">// Amazon PA-API 設定（共通）</div>
-            <div class="form-group">
-              <label class="form-label">Access Key ID</label>
-              <input type="text" id="s-amz-access-key" class="form-control" placeholder="AKIAIOSFODNN7EXAMPLE">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Secret Access Key</label>
-              <input type="password" id="s-amz-secret-key" class="form-control" placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Partner Tag（アソシエイトID）</label>
-              <input type="text" id="s-amz-partner-tag" class="form-control" placeholder="yourname-22">
-            </div>
-            <button class="btn btn-secondary btn-sm" onclick="testAmazon()">🔍 接続テスト</button>
-            <span id="amazon-test-msg" style="font-size:11px;margin-left:8px;color:var(--muted)"></span>
-          </div>
-          <div class="settings-section">
-            <div class="section-header">// 楽天市場 API 設定</div>
-            <div class="form-group">
-              <label class="form-label">アプリケーションID</label>
-              <input type="text" id="s-rkt-app-id" class="form-control" placeholder="1234567890">
-            </div>
-            <div class="form-group">
-              <label class="form-label">アフィリエイトID（任意）</label>
-              <input type="text" id="s-rkt-aff-id" class="form-control" placeholder="xxxxxxxxxxxx.xx.xx">
-              <div style="font-size:11px;color:var(--muted);margin-top:4px">設定するとアフィリエイトリンクになります</div>
-            </div>
-            <button class="btn btn-secondary btn-sm" onclick="testRakuten()">🔍 接続テスト</button>
-            <span id="rakuten-test-msg" style="font-size:11px;margin-left:8px;color:var(--muted)"></span>
-          </div>
-          <div class="settings-section">
-            <div class="section-header">// 楽天ASPリンク連携</div>
-            <div class="form-group">
-              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted)">
-                <input type="checkbox" id="s-rkt-asp-enabled" style="accent-color:var(--accent)">
-                記事生成時に楽天ASPリンクを自動挿入する
-              </label>
-            </div>
-            <div class="form-group">
-              <label class="form-label">ASP名</label>
-              <input type="text" id="s-rkt-asp-name" class="form-control" placeholder="例: もしもアフィリエイト / 楽天アフィリエイト">
-            </div>
-            <div class="form-group">
-              <label class="form-label">リンクURLテンプレート</label>
-              <input type="url" id="s-rkt-asp-template" class="form-control" placeholder="https://example.com/link?keyword={encoded_keyword}">
-              <div style="font-size:11px;color:var(--muted);margin-top:4px">使用可能: {title}, {keyword}, {keywords}, {encoded_title}, {encoded_keyword}, {encoded_keywords}</div>
-            </div>
-            <div class="form-group">
-              <label class="form-label">リンクテキスト</label>
-              <input type="text" id="s-rkt-asp-text" class="form-control" placeholder="楽天市場で詳細を見る">
-            </div>
-            <div class="form-group">
-              <label class="form-label">挿入ルール（任意）</label>
-              <textarea id="s-rkt-asp-prompt" class="form-control" rows="4" placeholder="例: 商品紹介の直後とまとめ前に自然に挿入。押し売り表現は避ける。"></textarea>
-            </div>
-          </div>
-          <div class="settings-section">
             <div class="section-header">// 記事CSS定義（全サイト共通）</div>
             <div class="form-group">
               <label class="form-label">CSSのみ（投稿時に記事の先頭へ style タグで自動挿入）</label>
               <textarea id="s-article-css" class="form-control" rows="12" placeholder="/* テーマに合わせてCSSだけを記述 */
 h2 { border-left: 4px solid #e47911; padding-left: 10px; }
-.amazon-btn { background: #ff9900; }"></textarea>
+table { width: 100%; border-collapse: collapse; }"></textarea>
               <div style="font-size:11px;color:var(--muted);margin-top:4px">HTMLやGutenbergブロックはここに入れず、CSSだけを入力してください。</div>
             </div>
           </div>
@@ -1400,94 +1286,6 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
   </div>
 </div>
 
-<!-- Ad Definition Modal -->
-<div class="modal-overlay" id="ad-modal">
-  <div class="modal" style="width:760px">
-    <div class="modal-title" id="ad-modal-title">// 広告定義を追加</div>
-    <input type="hidden" id="ad-edit-id">
-    <div class="form-group">
-      <label class="form-label">定義名</label>
-      <input type="text" id="ad-name" class="form-control" placeholder="例: ランキング記事用 RINKERカード">
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="form-group">
-        <label class="form-label">記事種類</label>
-        <select id="ad-article-type" class="form-control">
-          <option value="common">共通</option>
-          <option value="ranking">ランキング記事</option>
-          <option value="brand">商標記事</option>
-          <option value="column">コラム記事</option>
-          <option value="rewrite">SEOリライト</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">取得元</label>
-        <select id="ad-source" class="form-control">
-          <option value="both">Amazon + 楽天</option>
-          <option value="amazon">Amazonのみ</option>
-          <option value="rakuten">楽天のみ</option>
-        </select>
-      </div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="form-group">
-        <label class="form-label">検索語の作り方</label>
-        <select id="ad-keyword-mode" class="form-control">
-          <option value="article_keywords">記事キーワードを使う</option>
-          <option value="ad_keywords">記事の広告キーワードを優先</option>
-          <option value="title">タイトルを使う</option>
-          <option value="custom">固定検索語を使う</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">商品カード数</label>
-        <input type="number" id="ad-item-count" class="form-control" value="3" min="1" max="10">
-      </div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">固定検索語（任意）</label>
-      <input type="text" id="ad-search-keywords" class="form-control" placeholder="固定検索語を使う場合のみ入力">
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="form-group">
-        <label class="form-label">挿入位置</label>
-        <select id="ad-insertion-position" class="form-control">
-          <option value="auto">自動</option>
-          <option value="after_intro">導入文の直後</option>
-          <option value="after_comparison">比較・レビュー説明の直後</option>
-          <option value="before_summary">まとめ前</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">優先度</label>
-        <input type="number" id="ad-priority" class="form-control" value="50" min="1" max="999">
-      </div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="form-group">
-        <label class="form-label">Amazonボタン文言</label>
-        <input type="text" id="ad-amazon-label" class="form-control" value="Amazonで見る">
-      </div>
-      <div class="form-group">
-        <label class="form-label">楽天ボタン文言</label>
-        <input type="text" id="ad-rakuten-label" class="form-control" value="楽天市場で見る">
-      </div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">追加ルール（任意）</label>
-      <textarea id="ad-prompt" class="form-control" rows="4" placeholder="例: 押し売りせず、比較表の直後に自然に配置。商標記事では公式リンクの前に置く。"></textarea>
-    </div>
-    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted)">
-      <input type="checkbox" id="ad-enabled" style="accent-color:var(--accent)" checked>
-      有効にする
-    </label>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeAdModal()">キャンセル</button>
-      <button class="btn btn-primary" onclick="saveAdDefinition()">保存</button>
-    </div>
-  </div>
-</div>
-
 <!-- Site Modal -->
 <div class="modal-overlay" id="site-modal">
   <div class="modal" style="width:480px">
@@ -1530,19 +1328,13 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
       <label class="form-label">キーワード</label>
       <input type="text" id="modal-keywords" class="form-control">
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="form-group">
-        <label class="form-label">記事種類</label>
-        <select id="modal-article-type" class="form-control">
-          <option value="ranking">ランキング記事</option>
-          <option value="brand">商標記事</option>
-          <option value="column">コラム記事</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">広告キーワード</label>
-        <input type="text" id="modal-ad-keywords" class="form-control" placeholder="商品検索に使う語句">
-      </div>
+    <div class="form-group">
+      <label class="form-label">記事種類</label>
+      <select id="modal-article-type" class="form-control">
+        <option value="ranking">ランキング記事</option>
+        <option value="brand">商標記事</option>
+        <option value="column">コラム記事</option>
+      </select>
     </div>
     <div class="form-group">
       <label class="form-label">カテゴリー</label>
@@ -1559,12 +1351,6 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
         <label class="form-label">投稿予定日</label>
         <input type="date" id="modal-schedule-date" class="form-control">
       </div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">広告定義</label>
-      <select id="modal-ad-definition-id" class="form-control">
-        <option value="">-- 広告定義を選択（任意）--</option>
-      </select>
     </div>
     <div class="form-group">
       <label class="form-label">投稿先サイト</label>
@@ -1632,7 +1418,6 @@ h2 { border-left: 4px solid #e47911; padding-left: 10px; }
 let allArticles = [];
 let qualityList = [];
 let siteList = [];
-let adDefinitionList = [];
 let rewriteList = [];
 let seoNewsList = [];
 let siteCategoryCache = {};
@@ -1657,7 +1442,6 @@ const pageUrlMap = {
   rewrite: 'rewrite',
   articles: 'history',
   quality: 'quality',
-  ads: 'ads',
   sites: 'sites',
   settings: 'api-settings'
 };
@@ -1696,17 +1480,23 @@ const articleTypeConfig = {
 };
 
 // ---- Navigation ----
+function normalizePageName(name) {
+  if (name === 'generate') return 'ranking';
+  if (articleTypeConfig[name]) return name;
+  return document.getElementById('page-' + name) ? name : 'ranking';
+}
+
 function showPage(name, opts = {}) {
-  if (name === 'generate') name = 'ranking';
+  name = normalizePageName(name);
   const isArticleType = !!articleTypeConfig[name];
   const pageName = isArticleType ? 'generate' : name;
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item,.nav-trigger,.nav-link').forEach(n => n.classList.remove('active'));
-  document.getElementById('page-' + pageName).classList.add('active');
+  document.getElementById('page-' + pageName)?.classList.add('active');
   const nav = document.getElementById('nav-' + name);
   if (nav) nav.classList.add('active');
   if (isArticleType) document.getElementById('nav-create')?.classList.add('active');
-  if (['quality', 'ads'].includes(name)) document.getElementById('nav-definitions')?.classList.add('active');
+  if (['quality'].includes(name)) document.getElementById('nav-definitions')?.classList.add('active');
   localStorage.setItem('currentPage', name);
   if (isArticleType) {
     currentArticleType = name;
@@ -1718,7 +1508,6 @@ function showPage(name, opts = {}) {
     if (pageName === 'batch') { loadQualitySelects(); initBatchScheduleDefaults(); loadArticles(); loadLatestBatchJob(); }
     if (pageName === 'rewrite') { loadRewritePage(); }
     if (pageName === 'quality') loadQuality();
-    if (pageName === 'ads') loadAdDefinitions();
     if (pageName === 'sites') loadSites();
     if (pageName === 'settings') loadSettings();
   }
@@ -1746,12 +1535,10 @@ function updateArticleTypeUI() {
   document.getElementById('gen-page-subtitle').textContent = cfg.subtitle;
   document.getElementById('gen-article-type-label').value = cfg.label;
   updateDefinitionDefaultsForCurrentContext();
-  fillAdKeywordsFromTitle('gen-title', 'gen-keywords', 'gen-ad-keywords', currentArticleType);
 }
 
 function updateDefinitionDefaultsForCurrentContext() {
   updateQualityDefaultsForCurrentContext();
-  updateAdDefinitionSelects();
 }
 
 function updateQualityDefaultsForCurrentContext() {
@@ -1794,56 +1581,6 @@ function toast(msg, type = 'info') {
   if (type !== 'error') {
     toastTimer = setTimeout(closeToast, 4000);
   }
-}
-
-function inferAdKeywordsFromTitle(title, keywords = '', articleType = 'ranking') {
-  const cleanCandidate = (value) => {
-    let text = String(value || '').trim();
-    text = text.split(/[｜|]/)[0] || '';
-    text = text
-      .replace(/【[^】]{0,40}】/g, ' ')
-      .replace(/\[[^\]]{0,40}\]/g, ' ')
-      .replace(/（[^）]{0,40}）/g, ' ')
-      .replace(/\([^)]{0,40}\)/g, ' ')
-      .replace(/[「」『』“”"'`]/g, ' ')
-      .replace(/[0-9０-９][0-9０-９,，.．]*\s*円台?(?:で買える|以下|以内|前後)?/g, ' ')
-      .replace(/[0-9０-９]+\s*(?:選|社|個|本|枚|種類|台)\s*.*$/g, ' ');
-    const prefix = /^(?:最新版|最新|徹底|安い|格安|高コスパ|コスパ|おすすめ|人気|厳選|初心者向け|保存版|完全版|比較)\s*/;
-    let previous = '';
-    while (previous !== text) {
-      previous = text;
-      text = text.replace(prefix, '');
-    }
-    const suffix = /(?:の)?(?:おすすめ|比較|ランキング|口コミ|評判|レビュー|選び方|使い方|料金|価格|効果|メリット|デメリット|とは|まとめ|向け|ランキング形式).*$/;
-    const match = text.match(new RegExp('(.+?)' + suffix.source));
-    if (match && match[1].trim().length >= 2) text = match[1];
-    else text = text.replace(suffix, '');
-    return text
-      .replace(/(?:で買える|で購入できる|買える|購入できる|探している|欲しい|選ぶべき)/g, ' ')
-      .replace(/[!?！？、。:：;；/／・\-―–—]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 80);
-  };
-  const candidate = cleanCandidate(title);
-  if (candidate.length >= 2) return candidate;
-  const firstKeyword = String(keywords || '').split(/[,、\n]/)[0].trim();
-  const keywordCandidate = cleanCandidate(firstKeyword);
-  return keywordCandidate.length >= 2 ? keywordCandidate : firstKeyword.slice(0, 80);
-}
-
-function fillAdKeywordsFromTitle(titleId, keywordsId, targetId, articleType = currentArticleType, force = false) {
-  const titleEl = document.getElementById(titleId);
-  const keywordsEl = document.getElementById(keywordsId);
-  const targetEl = document.getElementById(targetId);
-  if (!titleEl || !targetEl) return;
-  const inferred = inferAdKeywordsFromTitle(titleEl.value, keywordsEl?.value || '', articleType);
-  const current = targetEl.value.trim();
-  const previousAuto = targetEl.dataset.autoValue || '';
-  if (!inferred) return;
-  if (!force && current && current !== previousAuto) return;
-  targetEl.value = inferred;
-  targetEl.dataset.autoValue = inferred;
 }
 
 // ---- Data durability ----
@@ -1947,154 +1684,6 @@ function scheduleDataSnapshotBackup() {
       console.warn('data snapshot backup failed', e);
     }
   }, 1200);
-}
-
-// ---- Ad Definitions ----
-async function loadAdDefinitions() {
-  const res = await fetch('/api/ad-definitions');
-  adDefinitionList = await res.json();
-  renderAdDefinitions();
-  updateAdDefinitionSelects();
-  scheduleDataSnapshotBackup();
-}
-
-function adTypeLabel(type) {
-  return {common:'共通', ranking:'ランキング記事', brand:'商標記事', column:'コラム記事', rewrite:'SEOリライト'}[type || 'common'] || '共通';
-}
-
-function adSourceLabel(source) {
-  return {both:'Amazon + 楽天', amazon:'Amazon', rakuten:'楽天'}[source || 'both'] || 'Amazon + 楽天';
-}
-
-function renderAdDefinitions() {
-  const grid = document.getElementById('ad-grid');
-  if (!grid) return;
-  if (!adDefinitionList.length) {
-    grid.innerHTML = '<div class="empty"><div class="empty-icon">AD</div><div>広告定義がありません。記事種類ごとの商品取得ルールを追加してください。</div></div>';
-    return;
-  }
-  grid.innerHTML = adDefinitionList.map(d => `
-    <div class="quality-card">
-      <div class="quality-name">AD ${esc(d.name)} ${d.enabled ? '' : '<span class="quality-default">停止中</span>'}</div>
-      <div style="font-size:10px;color:var(--accent);margin-bottom:6px">${adTypeLabel(d.article_type)} · ${adSourceLabel(d.source)} · ${d.item_count || 3}件</div>
-      <div class="quality-prompt">
-        検索語: ${esc(d.keyword_mode || 'article_keywords')}${d.search_keywords ? ` / ${esc(d.search_keywords)}` : ''}<br>
-        挿入位置: ${esc(d.insertion_position || 'auto')} / 優先度: ${esc(d.priority || 50)}
-      </div>
-      ${d.prompt ? `<div class="meta-line">${esc(d.prompt)}</div>` : ''}
-      <div class="quality-actions">
-        <button class="btn btn-secondary btn-sm" onclick="editAdDefinition('${d.id}')">✏ 編集</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteAdDefinition('${d.id}')">🗑</button>
-      </div>
-    </div>
-  `).join('');
-}
-
-function updateAdDefinitionSelects() {
-  const opts = '<option value="">-- 広告定義を選択（任意）--</option>' +
-    adDefinitionList.filter(d => d.enabled !== false).map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
-  ['gen-ad-definition', 'batch-ad-definition', 'modal-ad-definition-id'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) {
-      const prev = el.value;
-      el.innerHTML = opts;
-      const articleType = id === 'batch-ad-definition'
-        ? (document.getElementById('batch-article-type-filter')?.value || currentArticleType)
-        : id === 'modal-ad-definition-id'
-          ? (document.getElementById('modal-article-type')?.value || currentArticleType)
-          : currentArticleType;
-      const fallback = defaultAdDefinitionId(articleType);
-      el.value = adDefinitionList.some(d => d.id === prev) ? prev : (fallback || '');
-    }
-  });
-}
-
-function defaultAdDefinitionId(articleType = currentArticleType) {
-  const enabled = adDefinitionList
-    .filter(d => d.enabled !== false)
-    .sort((a, b) => (Number(a.priority || 50) - Number(b.priority || 50)));
-  return (
-    enabled.find(d => d.article_type === articleType)?.id ||
-    enabled.find(d => d.article_type === 'common')?.id ||
-    enabled[0]?.id ||
-    ''
-  );
-}
-
-function openAdModal() {
-  document.getElementById('ad-edit-id').value = '';
-  document.getElementById('ad-name').value = '';
-  document.getElementById('ad-article-type').value = 'common';
-  document.getElementById('ad-source').value = 'both';
-  document.getElementById('ad-keyword-mode').value = 'article_keywords';
-  document.getElementById('ad-search-keywords').value = '';
-  document.getElementById('ad-item-count').value = 3;
-  document.getElementById('ad-insertion-position').value = 'auto';
-  document.getElementById('ad-priority').value = 50;
-  document.getElementById('ad-amazon-label').value = 'Amazonで見る';
-  document.getElementById('ad-rakuten-label').value = '楽天市場で見る';
-  document.getElementById('ad-prompt').value = '';
-  document.getElementById('ad-enabled').checked = true;
-  document.getElementById('ad-modal-title').textContent = '// 広告定義を追加';
-  document.getElementById('ad-modal').classList.add('open');
-}
-
-function editAdDefinition(id) {
-  const d = adDefinitionList.find(d => d.id === id);
-  if (!d) return;
-  document.getElementById('ad-edit-id').value = id;
-  document.getElementById('ad-name').value = d.name || '';
-  document.getElementById('ad-article-type').value = d.article_type || 'common';
-  document.getElementById('ad-source').value = d.source || 'both';
-  document.getElementById('ad-keyword-mode').value = d.keyword_mode || 'article_keywords';
-  document.getElementById('ad-search-keywords').value = d.search_keywords || '';
-  document.getElementById('ad-item-count').value = d.item_count || 3;
-  document.getElementById('ad-insertion-position').value = d.insertion_position || 'auto';
-  document.getElementById('ad-priority').value = d.priority || 50;
-  document.getElementById('ad-amazon-label').value = d.amazon_button_label || 'Amazonで見る';
-  document.getElementById('ad-rakuten-label').value = d.rakuten_button_label || '楽天市場で見る';
-  document.getElementById('ad-prompt').value = d.prompt || '';
-  document.getElementById('ad-enabled').checked = d.enabled !== false;
-  document.getElementById('ad-modal-title').textContent = '// 広告定義を編集';
-  document.getElementById('ad-modal').classList.add('open');
-}
-
-function closeAdModal() {
-  document.getElementById('ad-modal').classList.remove('open');
-}
-
-async function saveAdDefinition() {
-  const id = document.getElementById('ad-edit-id').value;
-  const body = {
-    name: document.getElementById('ad-name').value,
-    article_type: document.getElementById('ad-article-type').value,
-    source: document.getElementById('ad-source').value,
-    keyword_mode: document.getElementById('ad-keyword-mode').value,
-    search_keywords: document.getElementById('ad-search-keywords').value,
-    item_count: parseInt(document.getElementById('ad-item-count').value || '3', 10),
-    insertion_position: document.getElementById('ad-insertion-position').value,
-    priority: parseInt(document.getElementById('ad-priority').value || '50', 10),
-    amazon_button_label: document.getElementById('ad-amazon-label').value,
-    rakuten_button_label: document.getElementById('ad-rakuten-label').value,
-    prompt: document.getElementById('ad-prompt').value,
-    enabled: document.getElementById('ad-enabled').checked,
-  };
-  if (!body.name) { toast('定義名は必須です', 'error'); return; }
-  if (id) {
-    await fetch(`/api/ad-definitions/${id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
-  } else {
-    await fetch('/api/ad-definitions', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
-  }
-  toast('保存しました', 'success');
-  closeAdModal();
-  await loadAdDefinitions();
-}
-
-async function deleteAdDefinition(id) {
-  if (!confirm('この広告定義を削除しますか?')) return;
-  await fetch(`/api/ad-definitions/${id}`, {method:'DELETE'});
-  toast('削除しました', 'success');
-  await loadAdDefinitions();
 }
 
 // ---- Sites ----
@@ -2711,10 +2300,10 @@ function getSelectedIds() {
 
 function downloadSampleCsv() {
   const rows = [
-    ['記事タイトル', 'キーワード', 'カテゴリー', 'スラッグ', '記事種別', '投稿先サイト', '品質定義', '広告定義', '広告キーワード', '優先度', '執筆予定日', 'メモ', '記事本文'],
-    ['【サンプル1】おすすめ防水バッグ比較ランキング', '防水バッグ おすすめ,防水バッグ 比較', 'アウトドア', 'waterproof-bag-ranking', 'ランキング記事', 'メインブログ', 'ランキング記事品質（SEO強化）', 'ランキング記事｜比較表直後 RINKER', '防水バッグ 30L 完全防水, アウトドア 防水バッグ', '10', '2026-05-15', '広告キーワードはAmazon・楽天の商品検索に使います。SEOキーワードと分けて指定できます。', ''],
-    ['【サンプル2】〇〇防水バッグの口コミレビュー', '〇〇防水バッグ 口コミ,〇〇防水バッグ 評判', 'レビュー', 'sample-waterproof-bag-review', '商標記事', 'メインブログ', '商標記事品質（SEO強化）', '商標記事｜レビューCTA RINKER', '〇〇防水バッグ', '20', '2026-05-16', '商品名や広告キーワードを実案件に置き換えてください。', ''],
-    ['【サンプル3】雨の日の荷物を守る防水グッズの選び方', '防水グッズ 選び方,雨の日 荷物 防水', 'コラム', 'rainy-day-waterproof-goods', 'コラム記事', 'メインブログ', 'コラム記事品質（SEO強化）', 'コラム記事｜まとめ前おすすめ RINKER', '防水スプレー,防水バッグ', '30', '2026-05-17', '記事本文を空にすると未生成として取り込まれます。本文を入れると生成済として取り込まれます。', ''],
+    ['記事タイトル', 'キーワード', 'カテゴリー', 'スラッグ', '記事種別', '投稿先サイト', '品質定義', '優先度', '執筆予定日', 'メモ', '記事本文'],
+    ['【サンプル1】おすすめ防水バッグ比較ランキング', '防水バッグ おすすめ,防水バッグ 比較', 'アウトドア', 'waterproof-bag-ranking', 'ランキング記事', 'メインブログ', 'ランキング記事品質（SEO強化）', '10', '2026-05-15', '商品名や比較軸を実案件に置き換えてください。', ''],
+    ['【サンプル2】〇〇防水バッグの口コミレビュー', '〇〇防水バッグ 口コミ,〇〇防水バッグ 評判', 'レビュー', 'sample-waterproof-bag-review', '商標記事', 'メインブログ', '商標記事品質（SEO強化）', '20', '2026-05-16', '商品名を実案件に置き換えてください。', ''],
+    ['【サンプル3】雨の日の荷物を守る防水グッズの選び方', '防水グッズ 選び方,雨の日 荷物 防水', 'コラム', 'rainy-day-waterproof-goods', 'コラム記事', 'メインブログ', 'コラム記事品質（SEO強化）', '30', '2026-05-17', '記事本文を空にすると未生成として取り込まれます。本文を入れると生成済として取り込まれます。', ''],
   ];
   const csv = '\uFEFF' + rows
     .map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(','))
@@ -2910,18 +2499,12 @@ async function openArticleModal(id) {
   document.getElementById('modal-title').value = article.title;
   document.getElementById('modal-keywords').value = article.keywords;
   document.getElementById('modal-article-type').value = article.article_type || 'ranking';
-  const inferredAdKeywords = inferAdKeywordsFromTitle(article.title, article.keywords, article.article_type || 'ranking');
-  const modalAdKeywords = document.getElementById('modal-ad-keywords');
-  modalAdKeywords.value = article.ad_keywords || inferredAdKeywords;
-  modalAdKeywords.dataset.autoValue = article.ad_keywords ? '' : inferredAdKeywords;
   document.getElementById('modal-category').value = article.category || '';
   document.getElementById('modal-slug').value = article.slug || '';
   document.getElementById('modal-schedule-date').value = article.schedule_date || '';
   document.getElementById('modal-content').value = article.content || '';
   updateSiteSelects();
-  updateAdDefinitionSelects();
   document.getElementById('modal-site-id').value = article.site_id || '';
-  document.getElementById('modal-ad-definition-id').value = article.ad_definition_id || '';
   onModalSiteChange();
   document.getElementById('article-modal').classList.add('open');
 }
@@ -2941,15 +2524,9 @@ async function saveArticleModal() {
         title: document.getElementById('modal-title').value,
         keywords: document.getElementById('modal-keywords').value,
         article_type: document.getElementById('modal-article-type').value,
-        ad_keywords: document.getElementById('modal-ad-keywords').value || inferAdKeywordsFromTitle(
-          document.getElementById('modal-title').value,
-          document.getElementById('modal-keywords').value,
-          document.getElementById('modal-article-type').value
-        ),
         category: document.getElementById('modal-category').value,
         slug: document.getElementById('modal-slug').value,
         schedule_date: document.getElementById('modal-schedule-date').value,
-        ad_definition_id: document.getElementById('modal-ad-definition-id').value || null,
         content: document.getElementById('modal-content').value,
       })
     }),
@@ -3055,9 +2632,6 @@ async function createBrandDraftsFromRanking() {
   const brandQualityId = qualityList.find(q => q.article_type === 'brand')?.id
     || qualityList.find(q => q.id === 'brand-quality')?.id
     || null;
-  const brandAdDefinitionId = adDefinitionList.find(d => d.enabled !== false && d.article_type === 'brand')?.id
-    || adDefinitionList.find(d => d.enabled !== false && d.article_type === 'common')?.id
-    || null;
 
   try {
     let created = 0;
@@ -3065,12 +2639,10 @@ async function createBrandDraftsFromRanking() {
       const payload = {
         title: brandDraftTitle(product),
         keywords: product,
-        ad_keywords: product,
         category: source.category || '',
         article_type: 'brand',
         site_id: source.site_id || null,
         quality_id: brandQualityId,
-        ad_definition_id: brandAdDefinitionId,
         parent_article_id: source.id,
         source_product_name: product,
         memo: `親ランキング記事「${source.title}」から商標記事候補として作成。親記事ID: ${source.id}`
@@ -3114,14 +2686,9 @@ function onArticleSelect() {
   if (article) {
     document.getElementById('gen-title').value = article.title;
     document.getElementById('gen-keywords').value = article.keywords;
-    const inferredAdKeywords = inferAdKeywordsFromTitle(article.title, article.keywords, article.article_type || currentArticleType);
-    const genAdKeywords = document.getElementById('gen-ad-keywords');
-    genAdKeywords.value = article.ad_keywords || inferredAdKeywords;
-    genAdKeywords.dataset.autoValue = article.ad_keywords ? '' : inferredAdKeywords;
     document.getElementById('gen-category').value = article.category || '';
     document.getElementById('gen-slug').value = article.slug || '';
     document.getElementById('gen-site').value = article.site_id || '';
-    document.getElementById('gen-ad-definition').value = article.ad_definition_id || '';
     if (output) output.textContent = article.content || '// ここに生成された記事が表示されます...';
     if (genBtn) genBtn.textContent = article.content ? '⚡ 再生成開始' : '⚡ 生成開始';
     currentGenArticleId = id;
@@ -3175,12 +2742,10 @@ async function createArticleFromGenerateForm() {
   const payload = {
     title,
     keywords: document.getElementById('gen-keywords').value,
-    ad_keywords: document.getElementById('gen-ad-keywords').value || inferAdKeywordsFromTitle(title, document.getElementById('gen-keywords').value, currentArticleType),
     category: document.getElementById('gen-category').value,
     slug: document.getElementById('gen-slug').value,
     site_id: document.getElementById('gen-site').value || null,
     quality_id: document.getElementById('gen-quality').value || null,
-    ad_definition_id: document.getElementById('gen-ad-definition').value || null,
     article_type: currentArticleType,
   };
   const res = await fetch('/api/articles', {
@@ -3288,24 +2853,18 @@ async function startGenerate() {
 
   const output = document.getElementById('gen-output');
   const btn = document.getElementById('gen-btn');
-  const includeAmazon = document.getElementById('gen-include-amazon').checked;
-  const includeRakuten = document.getElementById('gen-include-rakuten').checked;
-  const adDefinitionId = document.getElementById('gen-ad-definition').value;
   const title = document.getElementById('gen-title').value;
   const keywords = document.getElementById('gen-keywords').value;
-  const adKeywords = document.getElementById('gen-ad-keywords').value || inferAdKeywordsFromTitle(title, keywords, currentArticleType);
   const category = document.getElementById('gen-category').value;
   const slug = document.getElementById('gen-slug').value;
   const generatePayload = {
     quality_id: qualityId,
     title,
     keywords,
-    ad_keywords: adKeywords,
     category,
     slug,
     site_id: siteId,
-    article_type: currentArticleType,
-    ad_definition_id: adDefinitionId
+    article_type: currentArticleType
   };
 
   output.textContent = '';
@@ -3338,10 +2897,7 @@ async function startGenerate() {
       body: JSON.stringify({
         article_ids: [articleId],
         quality_id: qualityId,
-        article_type: currentArticleType,
-        include_amazon: includeAmazon,
-        include_rakuten: includeRakuten,
-        ad_definition_id: adDefinitionId
+        article_type: currentArticleType
       })
     });
     const jobData = await jobRes.json().catch(() => ({}));
@@ -3377,7 +2933,7 @@ async function waitForSingleGenerateCompletion(articleId, jobId) {
     if (article?.status === 'generated' && article.content) {
       if (output) output.textContent = article.content;
       if (job?.status === 'running' && article.generation_phase === 'base_saved') {
-        if (progressNote) progressNote.textContent = '本文は保存済みです。品質改善と広告挿入などの後処理を続けています。';
+        if (progressNote) progressNote.textContent = '本文は保存済みです。品質改善などの後処理を続けています。';
         if (fill) fill.style.width = '75%';
         continue;
       }
@@ -3642,7 +3198,6 @@ function loadBatchArticles() {
       <td><input type="checkbox" class="check-row" value="${a.id}" ${batchRowSelectable(a, filter) ? 'checked' : 'disabled'}></td>
       <td style="font-size:12px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.title)}</td>
       <td><input type="text" class="form-control" value="${esc(a.slug || '')}" placeholder="自動" style="font-size:11px;height:28px" onchange="saveBatchField('${a.id}', 'slug', this.value)"></td>
-      <td><input type="text" class="form-control" value="${esc(a.ad_keywords || inferAdKeywordsFromTitle(a.title, a.keywords, a.article_type || 'ranking'))}" placeholder="商品検索語" style="font-size:11px;height:28px;min-width:180px" onchange="saveBatchField('${a.id}', 'ad_keywords', this.value)"></td>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${esc(a.category || '—')}</td>
       <td><input type="date" class="form-control" value="${esc(a.schedule_date || '')}" style="font-size:11px;height:28px" onchange="saveBatchField('${a.id}', 'schedule_date', this.value)"></td>
       <td>${scoreBadge(a)}</td>
@@ -3671,14 +3226,11 @@ async function startBatchGenerate() {
   if (!ids.length) { toast('記事を選択してください', 'error'); return; }
   setArticlesLocalStatus(ids, 'generating', '一括生成中です。完了後に点数を更新します。');
   const qualityId = document.getElementById('batch-quality').value;
-  const includeAmazon = document.getElementById('batch-include-amazon').checked;
-  const includeRakuten = document.getElementById('batch-include-rakuten').checked;
-  const adDefinitionId = document.getElementById('batch-ad-definition').value;
   const articleType = document.getElementById('batch-article-type-filter').value || currentArticleType;
   const res = await fetch('/api/batch-generate', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({article_ids: ids, quality_id: qualityId, article_type: articleType, include_amazon: includeAmazon, include_rakuten: includeRakuten, ad_definition_id: adDefinitionId})
+    body: JSON.stringify({article_ids: ids, quality_id: qualityId, article_type: articleType})
   });
   const data = await res.json();
   if (data.success) {
@@ -4086,23 +3638,10 @@ const SETTINGS_BACKUP_KEY = 'affiros9.apiSettingsBackup.v1';
 const SETTINGS_BACKUP_FIELDS = [
   'claude_api_key',
   'default_quality_id',
-  'amazon_access_key',
-  'amazon_secret_key',
-  'amazon_partner_tag',
-  'rakuten_application_id',
-  'rakuten_affiliate_id',
-  'rakuten_asp_enabled',
-  'rakuten_asp_name',
-  'rakuten_asp_link_template',
-  'rakuten_asp_link_text',
-  'rakuten_asp_prompt',
   'article_css'
 ];
 const MASKED_SETTING_FIELDS = new Set([
-  'claude_api_key',
-  'amazon_access_key',
-  'amazon_secret_key',
-  'rakuten_application_id'
+  'claude_api_key'
 ]);
 
 function readSettingsBackup() {
@@ -4147,16 +3686,6 @@ function collectSettingsFormData() {
   return {
     claude_api_key: document.getElementById('s-claude-key').value,
     default_quality_id: document.getElementById('s-default-quality').value,
-    amazon_access_key: document.getElementById('s-amz-access-key').value,
-    amazon_secret_key: document.getElementById('s-amz-secret-key').value,
-    amazon_partner_tag: document.getElementById('s-amz-partner-tag').value,
-    rakuten_application_id: document.getElementById('s-rkt-app-id').value,
-    rakuten_affiliate_id: document.getElementById('s-rkt-aff-id').value,
-    rakuten_asp_enabled: document.getElementById('s-rkt-asp-enabled').checked,
-    rakuten_asp_name: document.getElementById('s-rkt-asp-name').value,
-    rakuten_asp_link_template: document.getElementById('s-rkt-asp-template').value,
-    rakuten_asp_link_text: document.getElementById('s-rkt-asp-text').value,
-    rakuten_asp_prompt: document.getElementById('s-rkt-asp-prompt').value,
     article_css: document.getElementById('s-article-css').value,
   };
 }
@@ -4193,16 +3722,6 @@ async function loadSettings() {
   let s = await res.json();
   s = await restoreSettingsFromBrowserBackup(s);
   document.getElementById('s-claude-key').value = s.claude_api_key || '';
-  document.getElementById('s-amz-access-key').value = s.amazon_access_key || '';
-  document.getElementById('s-amz-secret-key').value = s.amazon_secret_key || '';
-  document.getElementById('s-amz-partner-tag').value = s.amazon_partner_tag || '';
-  document.getElementById('s-rkt-app-id').value = s.rakuten_application_id || '';
-  document.getElementById('s-rkt-aff-id').value = s.rakuten_affiliate_id || '';
-  document.getElementById('s-rkt-asp-enabled').checked = !!s.rakuten_asp_enabled;
-  document.getElementById('s-rkt-asp-name').value = s.rakuten_asp_name || '';
-  document.getElementById('s-rkt-asp-template').value = s.rakuten_asp_link_template || '';
-  document.getElementById('s-rkt-asp-text').value = s.rakuten_asp_link_text || '楽天市場で詳細を見る';
-  document.getElementById('s-rkt-asp-prompt').value = s.rakuten_asp_prompt || '';
   document.getElementById('s-article-css').value = s.article_css || '';
   await loadQuality();
   if (s.default_quality_id) document.getElementById('s-default-quality').value = s.default_quality_id;
@@ -4232,108 +3751,23 @@ async function saveSettings() {
   }
 }
 
-async function testRakuten() {
-  const msgEl = document.getElementById('rakuten-test-msg');
-  msgEl.textContent = '接続中...';
-  msgEl.style.color = 'var(--muted)';
-  const res = await fetch('/api/rakuten/search', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({
-      keywords: 'テスト',
-      item_count: 1,
-      rakuten_application_id: document.getElementById('s-rkt-app-id').value.trim(),
-      rakuten_affiliate_id: document.getElementById('s-rkt-aff-id').value.trim()
-    })
-  });
-  const data = await res.json();
-  if (res.ok && Array.isArray(data)) {
-    writeSettingsBackup(collectSettingsFormData());
-    msgEl.textContent = `✓ 接続成功（${data.length}件取得）`;
-    msgEl.style.color = 'var(--success)';
-  } else {
-    msgEl.textContent = '✗ ' + (data.error || '接続失敗');
-    msgEl.style.color = 'var(--error)';
-  }
-}
-
-async function testAmazon() {
-  const msgEl = document.getElementById('amazon-test-msg');
-  msgEl.textContent = '接続中...';
-  msgEl.style.color = 'var(--muted)';
-  const res = await fetch('/api/amazon/search', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({
-      keywords: 'テスト',
-      item_count: 1,
-      amazon_access_key: document.getElementById('s-amz-access-key').value.trim(),
-      amazon_secret_key: document.getElementById('s-amz-secret-key').value.trim(),
-      amazon_partner_tag: document.getElementById('s-amz-partner-tag').value.trim()
-    })
-  });
-  const data = await res.json();
-  if (res.ok && Array.isArray(data)) {
-    writeSettingsBackup(collectSettingsFormData());
-    msgEl.textContent = `✓ 接続成功（${data.length}件取得）`;
-    msgEl.style.color = 'var(--success)';
-  } else {
-    msgEl.textContent = '✗ ' + (data.error || '接続失敗');
-    msgEl.style.color = 'var(--error)';
-  }
-}
-
 // Close modals on overlay click
-['quality-modal','ad-modal','site-modal','article-modal','rewrite-modal'].forEach(id => {
+['quality-modal','site-modal','article-modal','rewrite-modal'].forEach(id => {
   document.getElementById(id).addEventListener('click', e => {
     if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
   });
 });
-
-function bindAdKeywordAutoFill() {
-  ['gen-title', 'gen-keywords'].forEach(id => {
-    document.getElementById(id)?.addEventListener('input', () => {
-      fillAdKeywordsFromTitle('gen-title', 'gen-keywords', 'gen-ad-keywords', currentArticleType);
-    });
-  });
-  document.getElementById('gen-ad-keywords')?.addEventListener('input', e => {
-    if (e.target.value.trim() !== (e.target.dataset.autoValue || '')) e.target.dataset.autoValue = '';
-  });
-  ['modal-title', 'modal-keywords'].forEach(id => {
-    document.getElementById(id)?.addEventListener('input', () => {
-      fillAdKeywordsFromTitle(
-        'modal-title',
-        'modal-keywords',
-        'modal-ad-keywords',
-        document.getElementById('modal-article-type')?.value || 'ranking'
-      );
-    });
-  });
-  document.getElementById('modal-article-type')?.addEventListener('change', () => {
-    fillAdKeywordsFromTitle(
-      'modal-title',
-      'modal-keywords',
-      'modal-ad-keywords',
-      document.getElementById('modal-article-type')?.value || 'ranking'
-    );
-  });
-  document.getElementById('modal-ad-keywords')?.addEventListener('input', e => {
-    if (e.target.value.trim() !== (e.target.dataset.autoValue || '')) e.target.dataset.autoValue = '';
-  });
-}
 
 window.addEventListener('popstate', () => {
   showPage(pageFromUrl() || 'ranking', { updateUrl: false });
 });
 
 (async function init() {
-  bindAdKeywordAutoFill();
   const initialPage = pageFromUrl() || localStorage.getItem('currentPage') || 'home';
   showPage(initialPage, { replaceUrl: true, skipLoad: true });
   await ensureDurableData();
   await loadSites();
   await loadQuality();
-  await loadAdDefinitions();
   await loadArticles();
   await loadDashboardRewriteItems();
   await showPage(initialPage, { replaceUrl: true });
