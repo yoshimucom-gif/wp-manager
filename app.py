@@ -4007,14 +4007,15 @@ def generate_article(article_id):
         full_content = ''
         try:
             yield f"data: {json.dumps({'status': 'started', 'run_id': generation_run_id})}\n\n"
-            yield f"data: {json.dumps({'status': 'fetching_products', 'message': '楽天市場で実商品データを取得しています'})}\n\n"
+            yield f"data: {json.dumps({'status': 'fetching_products', 'message': 'Amazon/楽天で実商品データを取得しています'})}\n\n"
             products, product_status = fetch_product_context(article_work, settings, limit=15)
             if products:
-                yield f"data: {json.dumps({'status': 'products_loaded', 'count': len(products), 'message': f'実商品 {len(products)}件 を取得しました'})}\n\n"
+                provider_label = 'Amazon' if products[0].get('amazon') else '楽天'
+                yield f"data: {json.dumps({'status': 'products_loaded', 'count': len(products), 'message': f'{provider_label}から実商品 {len(products)}件 を取得しました'})}\n\n"
             elif product_status == 'no_provider':
-                yield f"data: {json.dumps({'status': 'products_skipped', 'message': '楽天APIキー未設定のため、実商品データなしで生成します'})}\n\n"
+                yield f"data: {json.dumps({'status': 'products_skipped', 'message': 'Amazon/楽天APIキー未設定のため、実商品データなしで生成します'})}\n\n"
             else:
-                yield f"data: {json.dumps({'status': 'products_skipped', 'message': f'楽天検索結果が空でした（{product_status}）。実商品データなしで生成します'})}\n\n"
+                yield f"data: {json.dumps({'status': 'products_skipped', 'message': f'検索結果が空でした（{product_status}）。実商品データなしで生成します'})}\n\n"
             client = anthropic.Anthropic(api_key=api_key) if api_key else None
             prompt = f"""以下の情報をもとに、WordPressに投稿する記事を書いてください。
 
@@ -4441,7 +4442,7 @@ def batch_generate():
                         style_reference_url, style_reference_text = '', ''
                     style_reference_cache[article_type] = (style_reference_url, style_reference_text)
                 stage = 'fetch products'
-                update_job(current_title=article.get('title', ''), message=f"楽天で実商品データ取得中: {article.get('title', '')}")
+                update_job(current_title=article.get('title', ''), message=f"Amazon/楽天で実商品データ取得中: {article.get('title', '')}")
                 products, _ = fetch_product_context(article, settings, limit=15)
                 stage = 'build prompt'
                 prompt = f"""以下の情報をもとに、WordPressに投稿する記事を書いてください。
