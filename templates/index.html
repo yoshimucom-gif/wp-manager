@@ -1604,21 +1604,10 @@ function snapshotHasUserData(snapshot) {
   const nonDefaultQuality = quality.some(q => q.id !== 'default' || q.name !== '標準品質');
   return Boolean(
     (Array.isArray(snapshot.articles) && snapshot.articles.length) ||
-    (Array.isArray(snapshot.decorations) && snapshot.decorations.length) ||
     (Array.isArray(snapshot.rewrite_items) && snapshot.rewrite_items.length) ||
-    (Array.isArray(snapshot.ad_definitions) && snapshot.ad_definitions.length) ||
     nonDefaultQuality ||
     (Array.isArray(settings.sites) && settings.sites.length) ||
     settings.claude_api_key ||
-    settings.amazon_access_key ||
-    settings.amazon_secret_key ||
-    settings.amazon_partner_tag ||
-    settings.rakuten_application_id ||
-    settings.rakuten_affiliate_id ||
-    settings.rakuten_asp_enabled ||
-    settings.rakuten_asp_name ||
-    settings.rakuten_asp_link_template ||
-    settings.rakuten_asp_prompt ||
     settings.article_css ||
     Object.values(settings.quality_style_references || {}).some(Boolean)
   );

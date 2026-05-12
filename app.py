@@ -116,7 +116,6 @@ DATA_DIR = resolve_data_dir()
 
 ARTICLES_FILE = DATA_DIR / 'articles.json'
 QUALITY_FILE = DATA_DIR / 'quality.json'
-DECORATIONS_FILE = DATA_DIR / 'decorations.json'
 SETTINGS_FILE = DATA_DIR / 'settings.json'
 REWRITE_FILE = DATA_DIR / 'rewrite_items.json'
 BATCH_JOBS_FILE = DATA_DIR / 'batch_jobs.json'
@@ -396,12 +395,6 @@ def load_quality():
 def save_quality(quality):
     save_json(QUALITY_FILE, quality)
 
-def load_decorations():
-    return load_json(DECORATIONS_FILE, [])
-
-def save_decorations(decorations):
-    save_json(DECORATIONS_FILE, decorations)
-
 def first_env(*names):
     for name in names:
         value = os.environ.get(name)
@@ -444,7 +437,6 @@ def build_data_snapshot():
         'settings': load_settings(),
         'articles': load_articles(),
         'quality': load_quality(),
-        'decorations': load_decorations(),
         'rewrite_items': load_rewrites(),
     }
 
@@ -460,7 +452,6 @@ def has_user_data(snapshot):
     )
     return any([
         bool(snapshot.get('articles')),
-        bool(snapshot.get('decorations')),
         bool(snapshot.get('rewrite_items')),
         bool(non_default_quality),
         any(bool(settings.get(k)) for k in setting_keys),
@@ -474,8 +465,6 @@ def restore_data_snapshot(snapshot):
         save_articles(snapshot['articles'])
     if isinstance(snapshot.get('quality'), list):
         save_quality(snapshot['quality'])
-    if isinstance(snapshot.get('decorations'), list):
-        save_decorations(snapshot['decorations'])
     if isinstance(snapshot.get('rewrite_items'), list):
         save_rewrites(snapshot['rewrite_items'])
 def load_settings():
@@ -579,42 +568,6 @@ def article_html_output_rules():
 - 1つの<p>は長くしすぎず、原則2〜3文で区切る。長い説明は複数段落に分ける
 - 断定しすぎず、選び方・比較理由・向いている人・注意点を具体的に書く
 - 広告カード、アフィリエイトリンク、RINKER風の商品カードは出力しない。広告挿入はWordPress側のプラグインに任せる"""
-
-
-def normalize_decoration_blocks(blocks):
-    normalized = []
-    if not isinstance(blocks, list):
-        return normalized
-    for block in blocks:
-        if not isinstance(block, dict):
-            continue
-        block_type = str(block.get('type') or 'custom').strip()[:40] or 'custom'
-        name = str(block.get('name') or '').strip()[:80]
-        usage = str(block.get('usage') or '').strip()[:300]
-        html = str(block.get('html') or '').strip()
-        if not html:
-            continue
-        normalized.append({
-            'type': block_type,
-            'name': name or block_type,
-            'usage': usage,
-            'html': html[:8000],
-        })
-    return normalized
-
-
-def decoration_has_content(decoration):
-    if not decoration:
-        return False
-    return bool(str(decoration.get('sample_html') or '').strip() or normalize_decoration_blocks(decoration.get('blocks')))
-
-
-def decoration_reference_prompt(decoration, limit=4000):
-    return f"""
-装飾方針:
-- 複雑なHTMLブロックは使わないでください。
-- 使用してよい装飾は <strong>太字</strong>、<span style="color:#d32f2f">赤字</span>、<mark>マーカー</mark>、<ul><li>リスト</li></ul>、<table>表</table> のみです。
-- 吹き出し、ボックス、カード、独自class、Gutenbergコメントは出力しないでください。"""
 
 
 def strip_wp_block_artifacts(html):
@@ -4512,82 +4465,6 @@ def get_seo_news():
             'error': str(e)[:160],
             'fetched_at': datetime.now().isoformat()
         })
-
-
-# Decorations
-@app.route('/api/decorations', methods=['GET'])
-@login_required
-def get_decorations():
-    return jsonify(load_decorations())
-
-@app.route('/api/decorations', methods=['POST'])
-@login_required
-def create_decoration():
-    data = request.json
-    decorations = load_decorations()
-    d = {
-        'id': str(uuid.uuid4()),
-        'name': data.get('name', ''),
-        'article_type': data.get('article_type', 'common'),
-        'description': data.get('description', ''),
-        'sample_html': data.get('sample_html', ''),
-        'blocks': normalize_decoration_blocks(data.get('blocks')),
-        'source_url': data.get('source_url', ''),
-    }
-    decorations.append(d)
-    save_decorations(decorations)
-    return jsonify(d)
-
-@app.route('/api/decorations/<decoration_id>', methods=['PUT'])
-@login_required
-def update_decoration(decoration_id):
-    data = request.json
-    decorations = load_decorations()
-    for d in decorations:
-        if d['id'] == decoration_id:
-            d['name'] = data.get('name', d['name'])
-            d['article_type'] = data.get('article_type', d.get('article_type', 'common'))
-            d['description'] = data.get('description', d.get('description', ''))
-            d['sample_html'] = data.get('sample_html', d['sample_html'])
-            d['blocks'] = normalize_decoration_blocks(data.get('blocks', d.get('blocks', [])))
-            d['source_url'] = data.get('source_url', d.get('source_url', ''))
-            break
-    save_decorations(decorations)
-    return jsonify({'success': True})
-
-@app.route('/api/decorations/<decoration_id>', methods=['DELETE'])
-@login_required
-def delete_decoration(decoration_id):
-    decorations = [d for d in load_decorations() if d['id'] != decoration_id]
-    save_decorations(decorations)
-    return jsonify({'success': True})
-
-@app.route('/api/decorations/fetch', methods=['POST'])
-@login_required
-def fetch_decoration():
-    data = request.json or {}
-    site_id = data.get('site_id')
-    post_id = data.get('post_id')
-    if not site_id or not post_id:
-        return jsonify({'error': 'site_id と post_id は必須です'}), 400
-    settings = load_settings()
-    site = next((s for s in settings.get('sites', []) if s['id'] == site_id), None)
-    if not site:
-        return jsonify({'error': 'サイトが見つかりません'}), 404
-    try:
-        resp = requests.get(
-            f"{site['wp_url'].rstrip('/')}/wp-json/wp/v2/posts/{post_id}",
-            auth=(site['wp_user'], site['wp_password']),
-            timeout=10
-        )
-        resp.raise_for_status()
-        post = resp.json()
-        content = post.get('content', {}).get('rendered', '')
-        title = post.get('title', {}).get('rendered', '')
-        link = post.get('link', '')
-        return jsonify({'content': content, 'title': title, 'link': link})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 
 # Quality
