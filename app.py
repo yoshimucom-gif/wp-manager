@@ -3,6 +3,7 @@ import json
 import uuid
 import threading
 import queue
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import re
 import csv
 import io
@@ -72,9 +73,13 @@ except ValueError:
     TITLE_IDEA_AI_TIMEOUT_SECONDS = 20
 TITLE_IDEA_PER_KEYWORD_RETRY = os.environ.get('TITLE_IDEA_PER_KEYWORD_RETRY', '0') == '1'
 try:
-    TITLE_IDEA_BATCH_SIZE = max(1, int(os.environ.get('TITLE_IDEA_BATCH_SIZE', '10')))
+    TITLE_IDEA_BATCH_SIZE = max(1, int(os.environ.get('TITLE_IDEA_BATCH_SIZE', '5')))
 except ValueError:
-    TITLE_IDEA_BATCH_SIZE = 10
+    TITLE_IDEA_BATCH_SIZE = 5
+try:
+    TITLE_IDEA_PARALLEL_BATCHES = max(1, int(os.environ.get('TITLE_IDEA_PARALLEL_BATCHES', '3')))
+except ValueError:
+    TITLE_IDEA_PARALLEL_BATCHES = 3
 try:
     CLAUDE_ARTICLE_MAX_TOKENS = int(os.environ.get('CLAUDE_ARTICLE_MAX_TOKENS', '20000'))
 except ValueError:
@@ -3141,19 +3146,28 @@ def generate_title_ideas():
                 batch_errors = []
                 model_used = CLAUDE_TITLE_IDEA_MODEL
                 last_error = None
-                for idx, batch in enumerate(batches, 1):
-                    if len(batches) > 1:
-                        result_queue.put(('progress', f'Claudeでタイトル案を生成中 (バッチ {idx}/{len(batches)} / 取得済 {len(all_ideas)}件)'))
-                    try:
-                        batch_ideas, m = generate_claude_title_ideas_once(claude_key, batch, count_per_keyword, category)
-                        all_ideas.extend(batch_ideas)
-                        model_used = m
-                    except Exception as e:
-                        last_error = e
-                        batch_errors.append(f'バッチ{idx} ({len(batch)}KW): {compact_ai_error(e, 100)}')
-                        app.logger.warning('Title idea batch %d/%d failed: %s', idx, len(batches), e)
-                        if non_retryable_ai_error(e):
-                            break
+                completed = 0
+                if len(batches) > 1:
+                    result_queue.put(('progress', f'Claudeでタイトル案を生成中 (0/{len(batches)}バッチ完了)'))
+                max_workers = min(TITLE_IDEA_PARALLEL_BATCHES, len(batches))
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    future_to_idx = {
+                        executor.submit(generate_claude_title_ideas_once, claude_key, batch, count_per_keyword, category): (idx, batch)
+                        for idx, batch in enumerate(batches, 1)
+                    }
+                    for future in as_completed(future_to_idx):
+                        idx, batch = future_to_idx[future]
+                        completed += 1
+                        try:
+                            batch_ideas, m = future.result()
+                            all_ideas.extend(batch_ideas)
+                            model_used = m
+                        except Exception as e:
+                            last_error = e
+                            batch_errors.append(f'バッチ{idx} ({len(batch)}KW): {compact_ai_error(e, 100)}')
+                            app.logger.warning('Title idea batch %d/%d failed: %s', idx, len(batches), e)
+                        if len(batches) > 1:
+                            result_queue.put(('progress', f'Claudeでタイトル案を生成中 ({completed}/{len(batches)}バッチ完了 / 取得済 {len(all_ideas)}件)'))
                 if not all_ideas:
                     error_text = ' / '.join(batch_errors) if batch_errors else (compact_ai_error(last_error) if last_error else 'タイトル案を取得できませんでした')
                     result_queue.put(('err', error_text))
@@ -3187,21 +3201,22 @@ def generate_title_ideas():
         yield sse({'type': 'status', 'message': initial_msg})
 
         heartbeat_interval = 3
-        hard_timeout = 110
-        elapsed = 0
+        idle_timeout = 60
+        idle_elapsed = 0
         while True:
             try:
                 kind, payload = result_queue.get(timeout=heartbeat_interval)
             except queue.Empty:
-                elapsed += heartbeat_interval
-                if elapsed >= hard_timeout:
+                idle_elapsed += heartbeat_interval
+                if idle_elapsed >= idle_timeout:
                     yield sse(title_ideas_failure_payload(
-                        f'タイトル案生成が{hard_timeout}秒以内に完了しませんでした。キーワード数を減らすか、しばらく時間を置いて再試行してください。',
+                        f'Claudeから{idle_timeout}秒応答がありませんでした。しばらく時間を置いて再試行してください。',
                         keywords,
                     ))
                     return
-                yield f": keepalive {elapsed}s\n\n"
+                yield f": keepalive {idle_elapsed}s\n\n"
                 continue
+            idle_elapsed = 0
             if kind == 'progress':
                 yield sse({'type': 'status', 'message': payload})
                 continue
