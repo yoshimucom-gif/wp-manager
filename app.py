@@ -645,7 +645,7 @@ def article_html_output_rules():
 - 比較表は横幅が崩れにくいように列を増やしすぎず、セル内は短くする
 - 1つの<p>は長くしすぎず、原則2〜3文で区切る。長い説明は複数段落に分ける
 - 断定しすぎず、選び方・比較理由・向いている人・注意点を具体的に書く
-- 広告カードやアフィリエイトリンクのHTMLは自分で書かない。代わりに `<!-- AFFI:N -->` というコメントを商品見出しの直後に1行入れること（Affiros9側で実際の商品カードHTMLに置換します）"""
+- 広告カードやアフィリエイトリンクのHTMLは自分で書かない。代わりに商品見出しの直後に `<!-- AFFI:1 -->` のような **実際の数字** 入りHTMLコメントを1行入れる（番号は別途与えられる商品リストの AFFI 番号）。「AFFI:N」のまま N の文字で出すのは絶対禁止"""
 
 
 def strip_wp_block_artifacts(html):
@@ -2591,11 +2591,14 @@ def ranking_subject(article):
     return inferred or article.get('keywords') or article.get('category') or article.get('title') or '商品'
 
 
-def should_use_segmented_generation(article_type, quality=None):
+def should_use_segmented_generation(article_type, quality=None, article=None):
     normalized = normalize_article_type(article_type, 'ranking')
     target = effective_target_chars(quality)
     if normalized == 'ranking':
-        return target >= 6000
+        count = extract_ranking_count(article) if article else 0
+        # 件数が多い（7以上）か、目標文字数が多い場合は分割。
+        # 10選で各商品の解説をしっかり入れると単発生成では途中切れしやすい。
+        return target >= 6000 or (count or 0) >= 7
     return normalized in ('brand', 'column') and target >= 7000
 
 
@@ -2619,6 +2622,10 @@ def build_segmented_article_steps(article, article_type):
                 'prompt': f"""ランキング本文のうち、{start}位から{end}位までの個別解説だけを書いてください。
 - 必ず <h3 class="wp-block-heading">{start}位：商品名</h3> から順に書いてください。
 - {start}〜{end}位の順位番号を欠番・重複なしで入れてください。
+- **各商品の見出し（<h3>）の直後の1行に、必ず `<!-- AFFI:1 -->` のような実際の数字付きHTMLコメントを入れる。**
+  番号は前述の商品リストの AFFI 番号を使う。例: 1位の商品が AFFI:3 なら
+  「<h3>1位：商品名</h3>」の次の行に「<!-- AFFI:3 -->」と書く。
+  「AFFI:N」のまま N の文字を残すのは絶対NG。HTMLコメント形式 `<!--` `-->` も必須。
 - 各商品の解説は、特徴・おすすめな人・注意点・他候補との違いを含めて最低2段落以上。
 - この工程全体で日本語本文換算900〜1200文字を目安にしてください。
 - 比較表やリード文は繰り返さないでください。
@@ -2743,7 +2750,7 @@ def build_segment_prompt(base_prompt, article, article_type, quality, step, inde
 - h2/h3見出しには、できるだけ狙う主要KW「{main_keyword}」を自然に含めてください。
 - <p>は長くしすぎず、2〜3文ごとに分けてください。長い説明は段落を増やしてください。
 - 重要な結論・注意点・選び方の要点には、太字、赤字、マーカー、リスト、表だけを自然に使ってください。
-- 広告カード、アフィリエイトリンク、RINKER風の商品カードは作らないでください。広告挿入はWordPress側のプラグインに任せます。
+- 商品カード/RINKER風HTMLは自分で作らない。代わりに各商品の見出し直後に `<!-- AFFI:1 -->` のような実際の数字付きHTMLコメントを1行入れる（Affiros9側で楽天/Amazonの商品カードに自動置換します）。番号は上で提示されたAFFI番号を使う。「AFFI:N」のままN文字で出すのは絶対NG。
 
 現在までの本文（重複禁止・文脈確認用）:
 {previous_tail}
@@ -3953,7 +3960,7 @@ def generate_article(article_id):
             )
 
             usage_parts = []
-            if client and should_use_segmented_generation(article_type, quality):
+            if client and should_use_segmented_generation(article_type, quality, article_work):
                 full_content, usage_parts = yield from generate_segmented_article_sse(
                     client,
                     prompt,
@@ -4142,7 +4149,7 @@ def generate_article_direct(article_id):
 {build_quality_structure_html_prompt(quality)}
 {build_article_completion_prompt(quality, article_type)}
 """
-        if client and should_use_segmented_generation(article_type, quality):
+        if client and should_use_segmented_generation(article_type, quality, article_work):
             raw_content, usage_parts = generate_segmented_article_sync(
                 client,
                 base_prompt,
@@ -4381,7 +4388,7 @@ def batch_generate():
                 )
 
                 stage = 'generate content'
-                if client and should_use_segmented_generation(article_type, quality):
+                if client and should_use_segmented_generation(article_type, quality, article):
                     raw_content, usage_parts = generate_segmented_article_sync(
                         client,
                         prompt,
