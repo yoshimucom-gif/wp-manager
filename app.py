@@ -56,12 +56,12 @@ def handle_unexpected_error(error):
 
 DATA_DIR_WARNING = ''
 CLAUDE_ARTICLE_MODEL = 'claude-sonnet-4-6'
-CLAUDE_TITLE_IDEA_MODEL = os.environ.get('CLAUDE_TITLE_IDEA_MODEL', 'claude-haiku-4-5-20251001')
+CLAUDE_TITLE_IDEA_MODEL = os.environ.get('CLAUDE_TITLE_IDEA_MODEL', 'claude-3-5-haiku-20241022')
 CLAUDE_TITLE_IDEA_FALLBACK_MODELS = [
     model.strip()
     for model in os.environ.get(
         'CLAUDE_TITLE_IDEA_FALLBACK_MODELS',
-        'claude-haiku-4-5-20251001,claude-sonnet-4-5-20250929,claude-3-5-haiku-20241022'
+        'claude-3-5-haiku-20241022,claude-3-5-haiku-latest,claude-3-haiku-20240307'
     ).split(',')
     if model.strip()
 ]
@@ -1529,6 +1529,18 @@ def generate_claude_title_ideas_resilient(api_key, keywords, count_per_keyword, 
             retry_notes.append('一部キーワード失敗: ' + ' / '.join(failed_keywords[:5]))
         return ideas, retry_notes, model_used
     raise RuntimeError(' / '.join(retry_notes + failed_keywords) or 'Claude title idea generation failed')
+
+
+def title_ideas_failure_payload(error, keywords=None, provider_errors=None):
+    return {
+        'success': False,
+        'ai_used': False,
+        'source': 'none',
+        'keywords': keywords or [],
+        'ideas': [],
+        'error': error,
+        'provider_errors': provider_errors or [],
+    }
 
 
 def append_generation_usage(article, usage, run_id=None, generated_at=None, content=''):
@@ -3082,83 +3094,74 @@ def logout():
 @app.route('/api/title-ideas/generate', methods=['POST'])
 @login_required
 def generate_title_ideas():
+    keywords = []
     try:
-        data = request.json or {}
-    except Exception:
-        data = {}
-    keywords = split_title_keywords(data.get('keywords', ''))
-    if not keywords:
-        return jsonify({
-            'success': False,
-            'ai_used': False,
-            'source': 'none',
-            'ideas': [],
-            'error': 'キーワードを1行以上入力してください',
-        })
-    count_per_keyword = clamp_int(data.get('count_per_keyword'), 3, 1, 5)
-    category = str(data.get('category') or '').strip()
-    site_id = data.get('site_id') or ''
+        try:
+            data = request.get_json(silent=True) or {}
+        except Exception:
+            data = {}
+        keywords = split_title_keywords(data.get('keywords', ''))
+        if not keywords:
+            return jsonify(title_ideas_failure_payload('キーワードを1行以上入力してください', keywords))
+        count_per_keyword = clamp_int(data.get('count_per_keyword'), 3, 1, 5)
+        category = str(data.get('category') or '').strip()
+        site_id = data.get('site_id') or ''
 
-    try:
-        settings = load_settings()
+        try:
+            settings = load_settings()
+        except Exception as e:
+            app.logger.warning('Title idea settings load failed: %s', e)
+            settings = {}
+
+        expected_count = len(keywords) * count_per_keyword
+        provider_errors = []
+
+        claude_key = settings.get('claude_api_key')
+        if not claude_key:
+            return jsonify(title_ideas_failure_payload(
+                'タイトル案生成にはClaude APIキーが必要です。テンプレ生成には切り替えません。',
+                keywords,
+            ))
+
+        try:
+            ideas, retry_notes, model_used = generate_claude_title_ideas_resilient(
+                claude_key,
+                keywords,
+                count_per_keyword,
+                category,
+            )
+            enriched = enrich_title_ideas(ideas, category=category, site_id=site_id)
+            payload = {
+                'success': True,
+                'ai_used': True,
+                'source': 'claude',
+                'model': model_used,
+                'keywords': keywords,
+                'ideas': enriched,
+            }
+            warnings = []
+            if retry_notes:
+                warnings.append('一括生成に失敗したため、Claudeでキーワード単位に再試行しました。')
+            if len(enriched) < expected_count:
+                warnings.append(f'AI返却が{len(enriched)}/{expected_count}件でした。足りない分はテンプレ補完していません。')
+            if warnings:
+                payload['warning'] = ' '.join(warnings)
+            if retry_notes:
+                payload['provider_warnings'] = retry_notes[-3:]
+            return jsonify(payload)
+        except Exception as e:
+            provider_errors.append(f'Claude: {compact_ai_error(e)}')
+            app.logger.warning('Claude title idea generation failed: %s', e)
+
+        error = 'ClaudeでのAIタイトル案生成に失敗しました。テンプレ生成には切り替えていません。APIキー・残高・モデル状態を確認してください。'
+        return jsonify(title_ideas_failure_payload(error, keywords, provider_errors[-3:]))
     except Exception as e:
-        app.logger.warning('Title idea settings load failed: %s', e)
-        settings = {}
-
-    expected_count = len(keywords) * count_per_keyword
-    provider_errors = []
-
-    claude_key = settings.get('claude_api_key')
-    if not claude_key:
-        return jsonify({
-            'success': False,
-            'ai_used': False,
-            'source': 'none',
-            'keywords': keywords,
-            'ideas': [],
-            'error': 'タイトル案生成にはClaude APIキーが必要です。テンプレ生成には切り替えません。',
-        })
-
-    try:
-        ideas, retry_notes, model_used = generate_claude_title_ideas_resilient(
-            claude_key,
+        app.logger.error('Title ideas route hard-failed: %s\n%s', e, traceback.format_exc())
+        return jsonify(title_ideas_failure_payload(
+            'タイトル案APIの内部処理で失敗しました。テンプレ生成には切り替えていません。',
             keywords,
-            count_per_keyword,
-            category,
-        )
-        enriched = enrich_title_ideas(ideas, category=category, site_id=site_id)
-        payload = {
-            'success': True,
-            'ai_used': True,
-            'source': 'claude',
-            'model': model_used,
-            'keywords': keywords,
-            'ideas': enriched,
-        }
-        warnings = []
-        if retry_notes:
-            warnings.append('一括生成に失敗したため、Claudeでキーワード単位に再試行しました。')
-        if len(enriched) < expected_count:
-            warnings.append(f'AI返却が{len(enriched)}/{expected_count}件でした。足りない分はテンプレ補完していません。')
-        if warnings:
-            payload['warning'] = ' '.join(warnings)
-        if retry_notes:
-            payload['provider_warnings'] = retry_notes[-3:]
-        return jsonify(payload)
-    except Exception as e:
-        provider_errors.append(f'Claude: {compact_ai_error(e)}')
-        app.logger.warning('Claude title idea generation failed: %s', e)
-
-    error = 'ClaudeでのAIタイトル案生成に失敗しました。テンプレ生成には切り替えていません。APIキー・残高・モデル状態を確認してください。'
-    return jsonify({
-        'success': False,
-        'ai_used': False,
-        'source': 'none',
-        'keywords': keywords,
-        'ideas': [],
-        'error': error,
-        'provider_errors': provider_errors[-3:],
-    })
+            [compact_ai_error(e)],
+        ))
 
 
 @app.route('/api/title-ideas/save', methods=['POST'])
