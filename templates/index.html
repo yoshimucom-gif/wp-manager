@@ -1132,11 +1132,6 @@ tr.selected td { background: var(--accent-dim); }
                 <input type="file" accept=".csv,.xlsx,.xls" style="display:none" onchange="importExcel(this)">
               </label>
               <button class="btn btn-secondary" onclick="downloadSampleCsv()">サンプルCSV</button>
-              <button class="btn btn-secondary" onclick="assignBatchScheduleDates()">予定日を割当</button>
-              <button class="btn btn-primary" onclick="startBatchGenerate()">⚡ 一括生成開始</button>
-              <button class="btn btn-success" onclick="startBatchPublish()">🚀 一括WP投稿</button>
-              <button class="btn btn-secondary btn-sm" onclick="loadBatchArticles()">↻ 状態更新</button>
-              <button class="btn btn-danger btn-sm" onclick="deleteBatchSelected()">🗑 選択を削除</button>
             </div>
             <div id="batch-msg" style="margin-top:12px;font-size:12px;color:var(--muted)"></div>
             <div id="batch-progress" class="batch-progress" style="display:none">
@@ -1152,7 +1147,14 @@ tr.selected td { background: var(--accent-dim); }
             </div>
           </div>
           <div class="batch-main">
-            <label class="form-label">対象記事 (<span id="batch-count">0</span>件)</label>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+              <label class="form-label" style="margin:0;flex:1">対象記事 (<span id="batch-count">0</span>件)</label>
+              <button class="btn btn-primary btn-sm" onclick="startBatchGenerate()">⚡ 一括生成開始</button>
+              <button class="btn btn-success btn-sm" onclick="startBatchPublish()">🚀 一括WP投稿</button>
+              <button class="btn btn-secondary btn-sm" onclick="assignBatchScheduleDates()">📅 予定日を割当</button>
+              <button class="btn btn-secondary btn-sm" onclick="loadBatchArticles()">↻ 状態更新</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteBatchSelected()">🗑 選択を削除</button>
+            </div>
             <div style="background:var(--surface);border:1px solid var(--border);border-radius:4px;overflow:auto;">
               <table style="width:100%;min-width:1180px">
                 <thead>
