@@ -1479,6 +1479,16 @@ const articleTypeConfig = {
   }
 };
 
+function articleTypeLabel(type) {
+  return {
+    common: '共通',
+    ranking: 'ランキング記事',
+    brand: '商標記事',
+    column: 'コラム記事',
+    rewrite: 'SEOリライト'
+  }[type || 'common'] || '共通';
+}
+
 // ---- Navigation ----
 function normalizePageName(name) {
   if (name === 'generate') return 'ranking';
@@ -2222,7 +2232,7 @@ function renderArticles(articles) {
     <tr id="row-${a.id}">
       <td><input type="checkbox" class="check-row" value="${a.id}"></td>
       <td style="color:var(--muted);font-size:11px">${i + 1}</td>
-      <td style="font-size:11px;color:var(--accent);white-space:nowrap">${adTypeLabel(a.article_type || 'ranking')}</td>
+      <td style="font-size:11px;color:var(--accent);white-space:nowrap">${articleTypeLabel(a.article_type || 'ranking')}</td>
       <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.title)}">${esc(a.title)}</td>
       <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)" title="${esc(a.keywords)}">${esc(a.keywords)}</td>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${esc(a.category || '—')}</td>
@@ -3521,6 +3531,11 @@ async function rescoreRewriteItems() {
 // ---- Quality ----
 async function loadQuality() {
   const res = await fetch('/api/quality');
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    toast(data.error || '品質定義の取得に失敗しました', 'error');
+    return;
+  }
   qualityList = await res.json();
   renderQuality();
   loadQualitySelects();
@@ -3536,7 +3551,7 @@ function renderQuality() {
         ${q.is_default ? '<span class="quality-default">★ デフォルト</span>' : ''}
       </div>
       <div style="font-size:10px;color:var(--accent);margin-bottom:6px">
-        ${adTypeLabel(q.article_type || 'common')} · ${q.target_chars ? `${esc(q.target_chars)}文字` : '文字数指定なし'} · ${esc(q.tone || 'ですます調')}
+        ${articleTypeLabel(q.article_type || 'common')} · ${q.target_chars ? `${esc(q.target_chars)}文字` : '文字数指定なし'} · ${esc(q.tone || 'ですます調')}
       </div>
       <div class="quality-prompt">${esc(q.prompt)}</div>
       ${q.reference_url ? `<div style="font-size:10px;margin-top:6px"><a href="${esc(q.reference_url)}" target="_blank" style="color:var(--accent)">🔗 書き方参考URL</a></div>` : ''}

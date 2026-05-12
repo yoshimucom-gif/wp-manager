@@ -386,7 +386,10 @@ def load_quality():
                 existing.pop('article_type', None)
             changed = True
     if changed:
-        save_json(QUALITY_FILE, quality)
+        try:
+            save_json(QUALITY_FILE, quality)
+        except Exception as e:
+            app.logger.warning('Failed to persist quality presets: %s', e)
     return quality
 
 def save_quality(quality):
