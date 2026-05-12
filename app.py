@@ -56,7 +56,15 @@ def handle_unexpected_error(error):
 
 DATA_DIR_WARNING = ''
 CLAUDE_ARTICLE_MODEL = 'claude-sonnet-4-6'
-CLAUDE_TITLE_IDEA_MODEL = os.environ.get('CLAUDE_TITLE_IDEA_MODEL', 'claude-3-5-haiku-latest')
+CLAUDE_TITLE_IDEA_MODEL = os.environ.get('CLAUDE_TITLE_IDEA_MODEL', 'claude-haiku-4-5-20251001')
+CLAUDE_TITLE_IDEA_FALLBACK_MODELS = [
+    model.strip()
+    for model in os.environ.get(
+        'CLAUDE_TITLE_IDEA_FALLBACK_MODELS',
+        'claude-haiku-4-5-20251001,claude-sonnet-4-5-20250929,claude-3-5-haiku-20241022'
+    ).split(',')
+    if model.strip()
+]
 try:
     TITLE_IDEA_AI_TIMEOUT_SECONDS = int(os.environ.get('TITLE_IDEA_AI_TIMEOUT_SECONDS', '20'))
 except ValueError:
@@ -1451,27 +1459,50 @@ def title_idea_max_tokens(keyword_count, count_per_keyword):
     return min(3000, max(800, keyword_count * count_per_keyword * 160))
 
 
+def claude_title_idea_models():
+    models = []
+    for model in [CLAUDE_TITLE_IDEA_MODEL] + CLAUDE_TITLE_IDEA_FALLBACK_MODELS:
+        if model and model not in models:
+            models.append(model)
+    return models
+
+
+def is_model_not_found_error(error):
+    text = str(error or '').lower()
+    return 'not_found' in text or 'model' in text and '404' in text
+
+
 def generate_claude_title_ideas_once(api_key, keywords, count_per_keyword, category):
     prompt = title_generation_prompt(keywords, count_per_keyword, category)
     client = anthropic.Anthropic(api_key=api_key)
-    message = create_claude_message(
-        client,
-        prompt,
-        max_tokens=title_idea_max_tokens(len(keywords), count_per_keyword),
-        timeout=TITLE_IDEA_AI_TIMEOUT_SECONDS,
-        model=CLAUDE_TITLE_IDEA_MODEL,
-    )
-    text = anthropic_message_text(message)
-    ideas = coerce_title_ideas(extract_title_ideas_payload(text), keywords, count_per_keyword)
-    if not ideas:
-        raise ValueError('Claude returned no usable title ideas')
-    return ideas
+    last_error = None
+    for model in claude_title_idea_models():
+        try:
+            message = create_claude_message(
+                client,
+                prompt,
+                max_tokens=title_idea_max_tokens(len(keywords), count_per_keyword),
+                timeout=TITLE_IDEA_AI_TIMEOUT_SECONDS,
+                model=model,
+            )
+            text = anthropic_message_text(message)
+            ideas = coerce_title_ideas(extract_title_ideas_payload(text), keywords, count_per_keyword)
+            if not ideas:
+                raise ValueError('Claude returned no usable title ideas')
+            return ideas, model
+        except Exception as e:
+            last_error = e
+            app.logger.warning('Claude title idea model failed (%s): %s', model, e)
+            if not is_model_not_found_error(e):
+                break
+    raise last_error or RuntimeError('Claude title idea generation failed')
 
 
 def generate_claude_title_ideas_resilient(api_key, keywords, count_per_keyword, category):
     retry_notes = []
     try:
-        return generate_claude_title_ideas_once(api_key, keywords, count_per_keyword, category), retry_notes
+        ideas, model_used = generate_claude_title_ideas_once(api_key, keywords, count_per_keyword, category)
+        return ideas, retry_notes, model_used
     except Exception as e:
         first_error = compact_ai_error(e)
         retry_notes.append(f'一括生成失敗: {first_error}')
@@ -1480,10 +1511,13 @@ def generate_claude_title_ideas_resilient(api_key, keywords, count_per_keyword, 
             raise RuntimeError(first_error)
 
     ideas = []
+    model_used = CLAUDE_TITLE_IDEA_MODEL
     failed_keywords = []
     for keyword in keywords:
         try:
-            ideas.extend(generate_claude_title_ideas_once(api_key, [keyword], count_per_keyword, category))
+            chunk_ideas, chunk_model = generate_claude_title_ideas_once(api_key, [keyword], count_per_keyword, category)
+            ideas.extend(chunk_ideas)
+            model_used = chunk_model
         except Exception as e:
             failed_keywords.append(f'{keyword}: {compact_ai_error(e, 120)}')
             app.logger.warning('Claude title idea keyword retry failed for %s: %s', keyword, e)
@@ -1493,7 +1527,7 @@ def generate_claude_title_ideas_resilient(api_key, keywords, count_per_keyword, 
     if ideas:
         if failed_keywords:
             retry_notes.append('一部キーワード失敗: ' + ' / '.join(failed_keywords[:5]))
-        return ideas, retry_notes
+        return ideas, retry_notes, model_used
     raise RuntimeError(' / '.join(retry_notes + failed_keywords) or 'Claude title idea generation failed')
 
 
@@ -3086,7 +3120,7 @@ def generate_title_ideas():
         })
 
     try:
-        ideas, retry_notes = generate_claude_title_ideas_resilient(
+        ideas, retry_notes, model_used = generate_claude_title_ideas_resilient(
             claude_key,
             keywords,
             count_per_keyword,
@@ -3097,7 +3131,7 @@ def generate_title_ideas():
             'success': True,
             'ai_used': True,
             'source': 'claude',
-            'model': CLAUDE_TITLE_IDEA_MODEL,
+            'model': model_used,
             'keywords': keywords,
             'ideas': enriched,
         }
