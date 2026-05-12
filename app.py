@@ -1139,47 +1139,82 @@ def split_title_keywords(value, limit=50):
     return keywords
 
 
+def infer_title_article_type(keyword='', title=''):
+    text = f'{keyword} {title}'.strip()
+    if re.search(r'(?:口コミ|評判|レビュー|メリット|デメリット)', text):
+        has_specific_name = bool(re.search(r'[A-Za-z][A-Za-z0-9-]{2,}|[A-Z]{2,}\s*-?\s*\d+|[A-Za-z]+\s*\d+', text))
+        if has_specific_name and not re.search(r'(?:おすすめ|比較|ランキング|選び方|人気|厳選)', text):
+            return 'brand'
+    if re.search(r'(?:とは|選び方|使い方|洗い方|原因|対策|方法|違い|必要|いつ|なぜ|ポイント)', text):
+        return 'column'
+    if re.search(r'(?:おすすめ|比較|ランキング|人気|厳選|ベスト|[0-9０-９]+\s*選)', text):
+        return 'ranking'
+    return 'ranking'
+
+
+def coerce_title_article_type(value, keyword='', title=''):
+    normalized = normalize_article_type(value, '')
+    if normalized in ('ranking', 'brand', 'column'):
+        return normalized
+    return infer_title_article_type(keyword, title)
+
+
+def title_base_keyword(value):
+    text = str(value or '').strip()
+    text = re.sub(
+        r'[\s　]+(?:おすすめ|比較|ランキング|人気|厳選|口コミ|評判|レビュー|選び方|使い方|とは|方法|メリット|デメリット)\s*$',
+        '',
+        text,
+        flags=re.I,
+    ).strip()
+    return text or str(value or '').strip()
+
+
 def title_idea_templates(keyword, article_type, count):
     kw = str(keyword or '').strip()
-    if article_type == 'brand':
-        patterns = [
-            '{kw}の口コミ・評判レビュー｜メリット・デメリットを解説',
-            '{kw}は本当に使いやすい？特徴と注意点を解説',
-            '{kw}レビュー｜向いている人と購入前の注意点',
-            '{kw}の評判は？良い口コミ・悪い口コミを整理',
-            '{kw}を使う前に知りたいメリットと注意点',
-        ]
-    elif article_type == 'column':
-        patterns = [
-            '{kw}とは？基礎知識と選び方をわかりやすく解説',
-            '{kw}で迷ったときの考え方｜失敗しない判断ポイント',
-            '{kw}の原因と対策｜初心者向けにやさしく解説',
-            '{kw}を改善する方法｜具体例と注意点を紹介',
-            '{kw}の基礎知識｜知っておきたいポイントまとめ',
-        ]
-    else:
-        patterns = [
-            '{kw}おすすめランキング｜選び方と比較ポイントを解説',
-            '{kw}を比較｜失敗しない選び方とおすすめ候補',
-            '{kw}おすすめはどれ？用途別に選びやすく紹介',
-            '{kw}の人気候補を比較｜メリット・注意点も解説',
-            '{kw}おすすめ厳選｜価格・使いやすさをわかりやすく比較',
-        ]
+    title_kw = title_base_keyword(kw)
+    article_type = coerce_title_article_type(article_type, kw)
+    pattern_sets = {
+        'brand': [
+            ('brand', '{kw}の口コミ・評判レビュー｜メリット・デメリットを解説'),
+            ('brand', '{kw}は本当に使いやすい？特徴と注意点を解説'),
+            ('brand', '{kw}レビュー｜向いている人と購入前の注意点'),
+            ('column', '{kw}を使う前に知りたい注意点と選び方'),
+            ('brand', '{kw}の評判は？良い口コミ・悪い口コミを整理'),
+        ],
+        'column': [
+            ('column', '{kw}とは？基礎知識と選び方をわかりやすく解説'),
+            ('column', '{kw}で迷ったときの考え方｜失敗しない判断ポイント'),
+            ('column', '{kw}の原因と対策｜初心者向けにやさしく解説'),
+            ('ranking', '{kw}おすすめ候補を比較｜選び方も紹介'),
+            ('column', '{kw}の基礎知識｜知っておきたいポイントまとめ'),
+        ],
+        'ranking': [
+            ('ranking', '{kw}おすすめランキング｜選び方と比較ポイントを解説'),
+            ('ranking', '{kw}を比較｜失敗しない選び方とおすすめ候補'),
+            ('column', '{kw}の選び方｜素材・用途・価格の違いを解説'),
+            ('ranking', '{kw}の人気候補を比較｜メリット・注意点も解説'),
+            ('ranking', '{kw}おすすめ厳選｜価格・使いやすさを比較'),
+        ],
+    }
+    patterns = pattern_sets.get(article_type, pattern_sets['ranking'])
     return [{
         'keyword': kw,
-        'title': pattern.format(kw=kw),
+        'title': pattern.format(kw=title_kw),
+        'article_type': idea_type,
         'search_intent': '購入・比較前に判断材料を集めたい',
         'reason': 'キーワードを含めつつ、読者が知りたい比較軸を明確にしています。',
         'priority': '中',
-    } for pattern in patterns[:count]]
+    } for idea_type, pattern in patterns[:count]]
 
 
 def score_title_idea(title, keyword, article_type, existing_title_keys):
     title = str(title or '').strip()
     keyword = str(keyword or '').strip()
+    base_keyword = title_base_keyword(keyword)
     score = 45
     length = len(title)
-    if keyword and keyword in title:
+    if (keyword and keyword in title) or (base_keyword and base_keyword in title):
         score += 20
     if 28 <= length <= 45:
         score += 18
@@ -1200,18 +1235,13 @@ def score_title_idea(title, keyword, article_type, existing_title_keys):
     return max(1, min(100, score))
 
 
-def title_generation_prompt(keywords, article_type, count_per_keyword, category='', quality=None):
-    quality_text = build_quality_prompt(quality) if quality else ''
+def title_generation_prompt(keywords, count_per_keyword, category=''):
     return f"""あなたはSEO記事の編集者です。
-以下のキーワードごとに、検索意図に合う記事タイトル案を{count_per_keyword}個ずつ作ってください。
+以下のキーワードごとに、検索意図に合う記事タイトル案を{count_per_keyword}個ずつ作り、記事種類も自動分類してください。
 
-記事種類: {article_type_label(article_type)}
 カテゴリー: {category or '未指定'}
 キーワード:
 {chr(10).join(f'- {kw}' for kw in keywords)}
-
-品質定義の要点:
-{quality_text[:1800]}
 
 出力形式:
 {{
@@ -1219,6 +1249,7 @@ def title_generation_prompt(keywords, article_type, count_per_keyword, category=
     {{
       "keyword": "対象キーワード",
       "title": "記事タイトル",
+      "article_type": "ranking/brand/column のいずれか",
       "search_intent": "読者の検索意図を短く",
       "reason": "このタイトルにした理由を短く",
       "priority": "高/中/低"
@@ -1229,6 +1260,10 @@ def title_generation_prompt(keywords, article_type, count_per_keyword, category=
 ルール:
 - 1キーワードにつき必ず{count_per_keyword}案。
 - titleには対象キーワードの主要語を自然に含める。
+- 広い商品ジャンルの「おすすめ・比較・人気」は ranking。
+- 「とは・選び方・使い方・原因・対策・違い」は column。
+- 具体的な商品名・サービス名・型番の口コミ/評判/レビューは brand。
+- 広いジャンル名だけなら brand にしない。
 - 釣りタイトル、誇大表現、根拠のない断定は禁止。
 - 文字数は日本語で28〜45字前後を基本にする。
 - JSON以外の説明文、Markdown、コードフェンスは禁止。"""
@@ -1251,7 +1286,7 @@ def extract_title_ideas_payload(text):
     return {}
 
 
-def coerce_title_ideas(payload, keywords, article_type, count_per_keyword):
+def coerce_title_ideas(payload, keywords, count_per_keyword):
     raw_ideas = payload.get('ideas') if isinstance(payload, dict) else []
     if not isinstance(raw_ideas, list):
         raw_ideas = []
@@ -1274,7 +1309,7 @@ def coerce_title_ideas(payload, keywords, article_type, count_per_keyword):
             'search_intent': str(item.get('search_intent') or item.get('intent') or '').strip()[:160],
             'reason': str(item.get('reason') or '').strip()[:220],
             'priority': str(item.get('priority') or '中').strip()[:10],
-            'article_type': article_type,
+            'article_type': coerce_title_article_type(item.get('article_type'), matched or keyword, title),
         }
         if matched:
             grouped[matched].append(idea)
@@ -1284,13 +1319,13 @@ def coerce_title_ideas(payload, keywords, article_type, count_per_keyword):
     for kw in keywords:
         items = grouped.get(kw, [])[:count_per_keyword]
         if len(items) < count_per_keyword:
-            items.extend(title_idea_templates(kw, article_type, count_per_keyword - len(items)))
+            items.extend(title_idea_templates(kw, '', count_per_keyword - len(items)))
         ideas.extend(items)
     ideas.extend(loose[:max(0, len(keywords) * count_per_keyword - len(ideas))])
     return ideas[:len(keywords) * count_per_keyword]
 
 
-def enrich_title_ideas(ideas, article_type, category='', site_id='', quality_id=''):
+def enrich_title_ideas(ideas, category='', site_id=''):
     existing_title_keys = {normalize_title_key(a.get('title')) for a in load_articles()}
     enriched = []
     seen = set()
@@ -1303,6 +1338,7 @@ def enrich_title_ideas(ideas, article_type, category='', site_id='', quality_id=
             continue
         seen.add(key)
         keyword = str(idea.get('keyword') or '').strip()
+        article_type = coerce_title_article_type(idea.get('article_type'), keyword, title)
         score = score_title_idea(title, keyword, article_type, existing_title_keys)
         enriched.append({
             'id': str(uuid.uuid4()),
@@ -1316,7 +1352,7 @@ def enrich_title_ideas(ideas, article_type, category='', site_id='', quality_id=
             'article_type': article_type,
             'category': category,
             'site_id': site_id or None,
-            'quality_id': quality_id or None,
+            'quality_id': None,
         })
     return enriched
 
@@ -2982,17 +3018,14 @@ def generate_title_ideas():
     keywords = split_title_keywords(data.get('keywords', ''))
     if not keywords:
         return jsonify({'error': 'キーワードを1行以上入力してください'}), 400
-    article_type = normalize_article_type(data.get('article_type'), 'ranking')
     count_per_keyword = clamp_int(data.get('count_per_keyword'), 3, 1, 5)
     category = str(data.get('category') or '').strip()
-    quality_id = data.get('quality_id') or None
-    quality = select_quality_definition(load_quality(), quality_id, article_type)
     settings = load_settings()
     api_key = settings.get('claude_api_key')
     ideas = []
     source = 'template'
     if api_key:
-        prompt = title_generation_prompt(keywords, article_type, count_per_keyword, category, quality)
+        prompt = title_generation_prompt(keywords, count_per_keyword, category)
         try:
             client = anthropic.Anthropic(api_key=api_key)
             max_tokens = min(8000, max(1400, len(keywords) * count_per_keyword * 180))
@@ -3001,7 +3034,6 @@ def generate_title_ideas():
             ideas = coerce_title_ideas(
                 extract_title_ideas_payload(text),
                 keywords,
-                article_type,
                 count_per_keyword,
             )
             source = 'claude'
@@ -3010,13 +3042,11 @@ def generate_title_ideas():
             ideas = []
     if not ideas:
         for keyword in keywords:
-            ideas.extend(title_idea_templates(keyword, article_type, count_per_keyword))
+            ideas.extend(title_idea_templates(keyword, '', count_per_keyword))
     enriched = enrich_title_ideas(
         ideas,
-        article_type,
         category=category,
         site_id=data.get('site_id') or '',
-        quality_id=quality.get('id') if quality else quality_id,
     )
     return jsonify({
         'success': True,
@@ -3033,10 +3063,9 @@ def save_title_ideas():
     ideas = data.get('ideas') or []
     if not isinstance(ideas, list) or not ideas:
         return jsonify({'error': '保存するタイトル案を選択してください'}), 400
-    default_article_type = normalize_article_type(data.get('article_type'), 'ranking')
     default_category = str(data.get('category') or '').strip()
     default_site_id = data.get('site_id') or None
-    default_quality_id = data.get('quality_id') or None
+    default_quality_id = None
     articles = load_articles()
     existing_title_keys = {normalize_title_key(a.get('title')) for a in articles}
     created = []
@@ -3051,10 +3080,10 @@ def save_title_ideas():
         if title_key in existing_title_keys:
             skipped.append({'title': title, 'reason': '既存タイトルと重複'})
             continue
-        article_type = normalize_article_type(idea.get('article_type'), default_article_type)
         keyword = str(idea.get('keyword') or idea.get('keywords') or '').strip()
+        article_type = coerce_title_article_type(idea.get('article_type'), keyword, title)
         now = datetime.now().isoformat()
-        memo_parts = ['タイトル一括生成から作成']
+        memo_parts = ['タイトル案から作成']
         if idea.get('search_intent'):
             memo_parts.append(f"検索意図: {idea.get('search_intent')}")
         if idea.get('reason'):
@@ -3073,7 +3102,7 @@ def save_title_ideas():
             'status': 'pending',
             'content': '',
             'created_at': now,
-            'quality_id': idea.get('quality_id') or default_quality_id,
+            'quality_id': default_quality_id,
             'site_id': idea.get('site_id') or default_site_id,
             'parent_article_id': None,
             'source_product_name': '',

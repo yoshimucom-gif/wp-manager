@@ -719,7 +719,7 @@ tr.selected td { background: var(--accent-dim); }
       </div>
     </div>
     <div class="nav-item" onclick="showPage('title-ideas')" id="nav-title-ideas">
-      タイトル生成
+      タイトル案
     </div>
     <div class="nav-item" onclick="showPage('batch')" id="nav-batch">
       一括処理
@@ -771,7 +771,7 @@ tr.selected td { background: var(--accent-dim); }
               <div class="module-art">▤◔</div>
             </div>
             <div class="module-tile" onclick="showPage('title-ideas')">
-              <div class="module-title">タイトル生成</div>
+              <div class="module-title">タイトル案</div>
               <div class="module-art">T▣</div>
             </div>
             <div class="module-tile" onclick="showPage('batch')">
@@ -991,8 +991,8 @@ tr.selected td { background: var(--accent-dim); }
       <!-- Title Ideas Page -->
       <div class="page" id="page-title-ideas">
         <div class="page-header">
-          <div class="page-title">タイトル一括生成</div>
-          <div class="page-subtitle">キーワード群から記事タイトル案を作成し、採用した案だけ記事データへ保存</div>
+          <div class="page-title">タイトル案</div>
+          <div class="page-subtitle">キーワード群からタイトル案を作成し、ランキング・商標・コラムへ自動振り分けして一括処理へ送る</div>
         </div>
         <div class="title-ideas-layout">
           <div class="title-ideas-side">
@@ -1005,19 +1005,9 @@ tr.selected td { background: var(--accent-dim); }
 電熱ベスト 口コミ
 防寒手袋 比較"></textarea>
               </div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-                <div class="form-group">
-                  <label class="form-label">記事種類</label>
-                  <select id="title-article-type" class="form-control" onchange="updateTitleIdeaDefaults()">
-                    <option value="ranking">ランキング記事</option>
-                    <option value="brand">商標記事</option>
-                    <option value="column">コラム記事</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label class="form-label">案数/キーワード</label>
-                  <input type="number" id="title-count" class="form-control" value="3" min="1" max="5">
-                </div>
+              <div class="form-group">
+                <label class="form-label">案数/キーワード</label>
+                <input type="number" id="title-count" class="form-control" value="3" min="1" max="5">
               </div>
               <div class="form-group">
                 <label class="form-label">投稿先サイト</label>
@@ -1029,15 +1019,9 @@ tr.selected td { background: var(--accent-dim); }
                 <label class="form-label">カテゴリー</label>
                 <input type="text" id="title-category" class="form-control" placeholder="例: 防寒グッズ">
               </div>
-              <div class="form-group">
-                <label class="form-label">品質定義</label>
-                <select id="title-quality" class="form-control">
-                  <option value="">-- 品質定義を選択 --</option>
-                </select>
-              </div>
               <div class="title-ideas-actions">
                 <button class="btn btn-primary" id="title-generate-btn" onclick="generateTitleIdeas()">タイトル案を生成</button>
-                <button class="btn btn-success" id="title-save-btn" onclick="saveSelectedTitleIdeas()" disabled>選択を記事データ化</button>
+                <button class="btn btn-success" id="title-save-btn" onclick="saveSelectedTitleIdeas()" disabled>選択を一括処理へ送る</button>
                 <button class="btn btn-secondary btn-sm" onclick="fillTitleIdeaSample()">サンプル投入</button>
               </div>
               <div id="title-ideas-msg" style="margin-top:12px;font-size:12px;color:var(--muted)"></div>
@@ -1057,6 +1041,7 @@ tr.selected td { background: var(--accent-dim); }
                   <tr>
                     <th><input type="checkbox" id="title-check-all" onchange="toggleTitleIdeaChecks(this.checked)"></th>
                     <th>キーワード</th>
+                    <th>振り分け</th>
                     <th>タイトル案</th>
                     <th>優先度</th>
                     <th>スコア</th>
@@ -1664,7 +1649,7 @@ function showPage(name, opts = {}) {
   if (!opts.skipLoad) {
     if (pageName === 'articles') loadArticles();
     if (pageName === 'generate') { loadQualitySelects(); updateSiteSelects(); populateGenSelect(); }
-    if (pageName === 'title-ideas') { loadQualitySelects(); updateSiteSelects(); updateTitleIdeaDefaults(); renderTitleIdeas(); }
+    if (pageName === 'title-ideas') { updateSiteSelects(); renderTitleIdeas(); }
     if (pageName === 'batch') { loadQualitySelects(); initBatchScheduleDefaults(); loadArticles(); loadLatestBatchJob(); }
     if (pageName === 'rewrite') { loadRewritePage(); }
     if (pageName === 'quality') loadQuality();
@@ -2820,12 +2805,6 @@ async function createBrandDraftsFromRanking() {
 }
 
 // ---- Title Ideas ----
-function updateTitleIdeaDefaults() {
-  const type = document.getElementById('title-article-type')?.value || currentArticleType;
-  const quality = document.getElementById('title-quality');
-  if (quality) quality.value = defaultQualityId(type) || quality.value;
-}
-
 function fillTitleIdeaSample() {
   document.getElementById('title-keywords').value = [
     'ネックウォーマー おすすめ',
@@ -2871,6 +2850,7 @@ function renderTitleIdeas() {
       <tr>
         <td><input type="checkbox" class="title-idea-check" data-index="${i}" ${checked}></td>
         <td style="font-size:12px;max-width:190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(idea.keyword)}">${esc(idea.keyword || '—')}</td>
+        <td style="white-space:nowrap;color:var(--accent);font-size:11px;font-weight:600">${articleTypeLabel(idea.article_type || 'ranking')}</td>
         <td class="title-idea-title">
           <input type="text" class="form-control" value="${esc(idea.title)}" onchange="updateTitleIdea(${i}, 'title', this.value)" style="font-size:12px;height:32px">
           <div class="title-idea-meta">
@@ -2909,10 +2889,8 @@ function selectedTitleIdeas() {
     .filter(Boolean)
     .map(idea => ({
       ...idea,
-      article_type: document.getElementById('title-article-type').value || idea.article_type,
       category: document.getElementById('title-category').value || idea.category || '',
       site_id: document.getElementById('title-site').value || idea.site_id || null,
-      quality_id: document.getElementById('title-quality').value || idea.quality_id || null,
     }));
 }
 
@@ -2921,11 +2899,9 @@ async function generateTitleIdeas() {
   const msg = document.getElementById('title-ideas-msg');
   const payload = {
     keywords: document.getElementById('title-keywords').value,
-    article_type: document.getElementById('title-article-type').value,
     count_per_keyword: document.getElementById('title-count').value,
     site_id: document.getElementById('title-site').value || null,
     category: document.getElementById('title-category').value,
-    quality_id: document.getElementById('title-quality').value || null,
   };
   if (!payload.keywords.trim()) {
     toast('キーワードを1行以上入力してください', 'error');
@@ -2941,15 +2917,15 @@ async function generateTitleIdeas() {
       body: JSON.stringify(payload)
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'タイトル生成に失敗しました');
+    if (!res.ok) throw new Error(data.error || 'タイトル案生成に失敗しました');
     titleIdeaList = data.ideas || [];
     renderTitleIdeas();
     const sourceLabel = data.source === 'claude' ? 'Claude生成' : 'テンプレート生成';
     if (msg) msg.textContent = `${sourceLabel}: ${titleIdeaList.length}件のタイトル案を作成しました。`;
     toast(`${titleIdeaList.length}件のタイトル案を作成しました`, 'success');
   } catch (e) {
-    toast(e.message || 'タイトル生成に失敗しました', 'error');
-    if (msg) msg.textContent = e.message || 'タイトル生成に失敗しました';
+    toast(e.message || 'タイトル案生成に失敗しました', 'error');
+    if (msg) msg.textContent = e.message || 'タイトル案生成に失敗しました';
   } finally {
     btn.disabled = false;
     btn.textContent = 'タイトル案を生成';
@@ -2972,24 +2948,27 @@ async function saveSelectedTitleIdeas() {
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
         ideas,
-        article_type: document.getElementById('title-article-type').value,
         category: document.getElementById('title-category').value,
         site_id: document.getElementById('title-site').value || null,
-        quality_id: document.getElementById('title-quality').value || null,
       })
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || '記事データ化に失敗しました');
-    if (msg) msg.textContent = `記事データ化: ${data.created}件 / 重複スキップ: ${data.skipped || 0}件`;
-    toast(`${data.created}件を記事データに保存しました`, 'success');
+    if (!res.ok) throw new Error(data.error || '一括処理への送信に失敗しました');
+    if (msg) msg.textContent = `一括処理へ送信: ${data.created}件 / 重複スキップ: ${data.skipped || 0}件`;
+    toast(`${data.created}件を一括処理へ送りました`, 'success');
     await loadArticles();
-    showPage('articles');
+    showPage('batch');
+    const filter = document.getElementById('batch-filter');
+    if (filter) filter.value = 'pending';
+    const typeFilter = document.getElementById('batch-article-type-filter');
+    if (typeFilter) typeFilter.value = '';
+    loadBatchArticles();
   } catch (e) {
-    toast(e.message || '記事データ化に失敗しました', 'error');
-    if (msg) msg.textContent = e.message || '記事データ化に失敗しました';
+    toast(e.message || '一括処理への送信に失敗しました', 'error');
+    if (msg) msg.textContent = e.message || '一括処理への送信に失敗しました';
   } finally {
     btn.disabled = !titleIdeaList.length;
-    btn.textContent = '選択を記事データ化';
+    btn.textContent = '選択を一括処理へ送る';
   }
 }
 
@@ -3894,7 +3873,7 @@ function renderQuality() {
 function loadQualitySelects() {
   const opts = '<option value="">-- 品質定義を選択 --</option>' +
     qualityList.map(q => `<option value="${q.id}">${esc(q.name)}</option>`).join('');
-  ['quality-filter', 'gen-quality', 'batch-quality', 'title-quality', 's-default-quality'].forEach(id => {
+  ['quality-filter', 'gen-quality', 'batch-quality', 's-default-quality'].forEach(id => {
     const el = document.getElementById(id);
     if (el) {
       const prev = el.value;
@@ -3904,9 +3883,7 @@ function loadQualitySelects() {
       } else {
         const articleType = id === 'batch-quality'
           ? (document.getElementById('batch-article-type-filter')?.value || currentArticleType)
-          : id === 'title-quality'
-            ? (document.getElementById('title-article-type')?.value || currentArticleType)
-            : currentArticleType;
+          : currentArticleType;
         const fallback = defaultQualityId(articleType);
         el.value = qualityList.some(q => q.id === prev) ? prev : (fallback || '');
       }
