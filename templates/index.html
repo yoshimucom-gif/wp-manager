@@ -2759,6 +2759,36 @@ function generatedTextLength(content) {
   return text.length;
 }
 
+function formatElapsed(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const min = Math.floor(total / 60);
+  const sec = String(total % 60).padStart(2, '0');
+  return `${min}:${sec}`;
+}
+
+function renderGenerateActivityPreview(output, started, article = null, job = null, fallbackMessage = '記事生成中です。', percent = 0) {
+  if (!output) return;
+  const elapsedMs = Date.now() - started;
+  const dots = '.'.repeat((Math.floor(elapsedMs / 1000) % 3) + 1);
+  const title = article?.title || job?.current_title || document.getElementById('gen-title')?.value || '';
+  const message = article?.processing_message || job?.message || fallbackMessage;
+  const total = Number(job?.total || 1);
+  const completed = Number(job?.completed || 0);
+  const failed = Number(job?.failed || 0);
+  const updatedAt = new Date().toLocaleTimeString('ja-JP', {hour12: false});
+  output.textContent = [
+    `// 生成中${dots}`,
+    title ? `タイトル: ${title}` : '',
+    `経過時間: ${formatElapsed(elapsedMs)}`,
+    `進捗目安: ${Math.max(0, Math.min(99, percent))}%`,
+    job ? `ジョブ: ${completed + failed}/${total}件処理済み` : '',
+    `現在の処理: ${message}`,
+    `最終確認: ${updatedAt}`,
+    '',
+    '完了後に本文HTMLをここへ表示します。'
+  ].filter(Boolean).join('\n');
+}
+
 async function recoverGenerateAfterStreamLoss(articleId, formData, streamedContent) {
   await loadArticles();
   const savedArticle = allArticles.find(a => a.id === articleId);
@@ -2842,6 +2872,7 @@ async function startGenerate() {
 
   const output = document.getElementById('gen-output');
   const btn = document.getElementById('gen-btn');
+  const generateStartedAt = Date.now();
   const title = document.getElementById('gen-title').value;
   const keywords = document.getElementById('gen-keywords').value;
   const category = document.getElementById('gen-category').value;
@@ -2856,7 +2887,7 @@ async function startGenerate() {
     article_type: currentArticleType
   };
 
-  output.textContent = '';
+  renderGenerateActivityPreview(output, generateStartedAt, null, null, '生成ジョブを開始しています...', 10);
   btn.disabled = true;
   btn.textContent = '⌛ 生成中...';
   setGeneratePublishActionState(true, false);
@@ -2893,7 +2924,7 @@ async function startGenerate() {
     if (!jobRes.ok || !jobData.success) throw new Error(jobData.error || '生成ジョブの開始に失敗しました');
 
     if (progressNote) progressNote.textContent = 'バックグラウンドで記事生成中です。画面を移動しても処理は継続します。';
-    await waitForSingleGenerateCompletion(articleId, jobData.job_id);
+    await waitForSingleGenerateCompletion(articleId, jobData.job_id, generateStartedAt);
   } catch (e) {
     const message = e?.message || '生成開始に失敗しました。';
     await markGenerateInterrupted(articleId, message);
@@ -2908,11 +2939,10 @@ async function startGenerate() {
   }, 1000);
 }
 
-async function waitForSingleGenerateCompletion(articleId, jobId) {
+async function waitForSingleGenerateCompletion(articleId, jobId, started = Date.now()) {
   const output = document.getElementById('gen-output');
   const fill = document.getElementById('gen-progress-fill');
   const progressNote = document.getElementById('gen-progress-note');
-  const started = Date.now();
   const timeoutMs = 30 * 60 * 1000;
   while (Date.now() - started < timeoutMs) {
     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -2953,9 +2983,11 @@ async function waitForSingleGenerateCompletion(articleId, jobId) {
     const done = Number(job?.completed || 0) + Number(job?.failed || 0);
     const basePercent = total ? Math.round((done / total) * 100) : 0;
     const elapsedPercent = Math.min(85, 15 + Math.floor((Date.now() - started) / 3000));
-    if (fill) fill.style.width = `${Math.max(basePercent, elapsedPercent)}%`;
-    if (progressNote) progressNote.textContent = article?.processing_message || job?.message || '記事生成中です。完了まで待機しています。';
-    if (output && !output.textContent.trim()) output.textContent = '// バックグラウンドで記事生成中です。完了後に本文を表示します。';
+    const percent = Math.max(basePercent, elapsedPercent);
+    if (fill) fill.style.width = `${percent}%`;
+    const message = article?.processing_message || job?.message || '記事生成中です。完了まで待機しています。';
+    if (progressNote) progressNote.textContent = message;
+    renderGenerateActivityPreview(output, started, article, job, message, percent);
   }
   await markGenerateInterrupted(articleId, '生成が長時間完了しませんでした。一括処理または対応履歴で状態を確認してください。');
   return false;

@@ -353,6 +353,13 @@ def load_quality():
     quality = load_json(QUALITY_FILE, presets)
     existing_ids = {q.get('id') for q in quality}
     changed = False
+
+    def fill_missing(existing, key, value):
+        nonlocal changed
+        if key not in existing or existing.get(key) in (None, ''):
+            existing[key] = value
+            changed = True
+
     for preset in presets:
         if preset['id'] not in existing_ids:
             quality.append(preset)
@@ -361,32 +368,22 @@ def load_quality():
         existing = next((q for q in quality if q.get('id') == preset['id']), None)
         if not existing:
             continue
-        version = int(existing.get('system_preset_version') or 0)
-        should_upgrade = version < preset.get('system_preset_version', 0)
-        if preset['id'] == 'default' and existing.get('prompt') == OLD_DEFAULT_QUALITY_PROMPT:
-            should_upgrade = True
-        if should_upgrade:
-            preserve_default = existing.get('is_default', preset.get('is_default', False))
-            preserve_reference = existing.get('reference_url', preset.get('reference_url', ''))
-            existing_target = str(existing.get('target_chars', '')).strip()
-            target_chars = (
-                preset.get('target_chars', existing_target)
-                if existing_target in ('', '2500', '5000')
-                else existing_target
-            )
-            existing.update({
-                'name': preset.get('name', existing.get('name', '')),
-                'article_type': preset.get('article_type', existing.get('article_type')),
-                'prompt': preset.get('prompt', existing.get('prompt', '')),
-                'target_chars': target_chars,
-                'tone': preset.get('tone', existing.get('tone', 'ですます調')),
-                'extra_rules': preset.get('extra_rules', existing.get('extra_rules', '')),
-                'system_preset_version': preset.get('system_preset_version', version),
-                'is_default': preserve_default,
-                'reference_url': preserve_reference,
-            })
-            if existing.get('article_type') is None:
-                existing.pop('article_type', None)
+        fill_missing(existing, 'name', preset.get('name', ''))
+        if preset.get('article_type'):
+            fill_missing(existing, 'article_type', preset.get('article_type'))
+        fill_missing(existing, 'target_chars', preset.get('target_chars', str(DEFAULT_ARTICLE_TARGET_CHARS)))
+        fill_missing(existing, 'tone', preset.get('tone', 'ですます調'))
+        fill_missing(existing, 'extra_rules', preset.get('extra_rules', ''))
+        fill_missing(existing, 'prompt', preset.get('prompt', ''))
+        fill_missing(existing, 'is_default', preset.get('is_default', False))
+        if existing.get('prompt') == OLD_DEFAULT_QUALITY_PROMPT:
+            existing['prompt'] = preset.get('prompt', existing.get('prompt', ''))
+            changed = True
+        if int(existing.get('system_preset_version') or 0) < preset.get('system_preset_version', 0):
+            existing['system_preset_version'] = preset.get('system_preset_version')
+            changed = True
+        if existing.get('article_type') is None:
+            existing.pop('article_type', None)
             changed = True
     if changed:
         save_json(QUALITY_FILE, quality)
