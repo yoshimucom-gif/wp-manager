@@ -1006,7 +1006,7 @@ tr.selected td { background: var(--accent-dim); }
 防寒手袋 比較"></textarea>
               </div>
               <div class="form-group">
-                <label class="form-label">案数/キーワード</label>
+                <label class="form-label">1キーワードあたりのタイトル案数</label>
                 <input type="number" id="title-count" class="form-control" value="3" min="1" max="5">
               </div>
               <div class="form-group">
@@ -2894,6 +2894,20 @@ function selectedTitleIdeas() {
     }));
 }
 
+async function readTitleIdeaJson(res, label) {
+  const text = await res.text();
+  let data = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch (e) {
+    throw new Error(readableHttpError(res.status, text, label));
+  }
+  if (!res.ok) {
+    throw new Error(data.error || readableHttpError(res.status, text, label));
+  }
+  return data;
+}
+
 async function generateTitleIdeas() {
   const btn = document.getElementById('title-generate-btn');
   const msg = document.getElementById('title-ideas-msg');
@@ -2916,8 +2930,7 @@ async function generateTitleIdeas() {
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify(payload)
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'タイトル案生成に失敗しました');
+    const data = await readTitleIdeaJson(res, 'タイトル案API');
     titleIdeaList = data.ideas || [];
     renderTitleIdeas();
     const sourceLabel = data.source === 'claude' ? 'Claude生成' : 'テンプレート生成';
@@ -2952,8 +2965,7 @@ async function saveSelectedTitleIdeas() {
         site_id: document.getElementById('title-site').value || null,
       })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || '一括処理への送信に失敗しました');
+    const data = await readTitleIdeaJson(res, '一括処理送信API');
     if (msg) msg.textContent = `一括処理へ送信: ${data.created}件 / 重複スキップ: ${data.skipped || 0}件`;
     toast(`${data.created}件を一括処理へ送りました`, 'success');
     await loadArticles();
