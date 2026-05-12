@@ -1326,7 +1326,14 @@ def coerce_title_ideas(payload, keywords, count_per_keyword):
 
 
 def enrich_title_ideas(ideas, category='', site_id=''):
-    existing_title_keys = {normalize_title_key(a.get('title')) for a in load_articles()}
+    try:
+        articles = load_articles()
+        if not isinstance(articles, list):
+            articles = []
+    except Exception as e:
+        app.logger.warning('Failed to load articles for title duplicate check: %s', e)
+        articles = []
+    existing_title_keys = {normalize_title_key(a.get('title')) for a in articles if isinstance(a, dict)}
     enriched = []
     seen = set()
     for idea in ideas:
@@ -1355,6 +1362,49 @@ def enrich_title_ideas(ideas, category='', site_id=''):
             'quality_id': None,
         })
     return enriched
+
+
+def fallback_title_ideas_response(keywords, count_per_keyword, category='', site_id='', warning=''):
+    ideas = []
+    for keyword in keywords:
+        ideas.extend(title_idea_templates(keyword, '', count_per_keyword))
+    try:
+        enriched = enrich_title_ideas(ideas, category=category, site_id=site_id or '')
+    except Exception as e:
+        app.logger.warning('Failed to enrich fallback title ideas: %s', e)
+        enriched = []
+        seen = set()
+        for idea in ideas:
+            title = str(idea.get('title') or '').strip()
+            key = normalize_title_key(title)
+            if not title or key in seen:
+                continue
+            seen.add(key)
+            keyword = str(idea.get('keyword') or '').strip()
+            article_type = coerce_title_article_type(idea.get('article_type'), keyword, title)
+            enriched.append({
+                'id': str(uuid.uuid4()),
+                'keyword': keyword,
+                'title': title,
+                'search_intent': str(idea.get('search_intent') or '').strip(),
+                'reason': str(idea.get('reason') or '').strip(),
+                'priority': str(idea.get('priority') or '中').strip() or '中',
+                'score': score_title_idea(title, keyword, article_type, set()),
+                'duplicate': False,
+                'article_type': article_type,
+                'category': category,
+                'site_id': site_id or None,
+                'quality_id': None,
+            })
+    payload = {
+        'success': True,
+        'source': 'template',
+        'keywords': keywords,
+        'ideas': enriched,
+    }
+    if warning:
+        payload['warning'] = warning
+    return payload
 
 
 def build_schedule_datetime(index, schedule_data, date_override=None, slot_override=None):
@@ -3014,46 +3064,57 @@ def logout():
 @app.route('/api/title-ideas/generate', methods=['POST'])
 @login_required
 def generate_title_ideas():
-    data = request.json or {}
+    try:
+        data = request.json or {}
+    except Exception:
+        data = {}
     keywords = split_title_keywords(data.get('keywords', ''))
     if not keywords:
         return jsonify({'error': 'キーワードを1行以上入力してください'}), 400
     count_per_keyword = clamp_int(data.get('count_per_keyword'), 3, 1, 5)
     category = str(data.get('category') or '').strip()
-    settings = load_settings()
-    api_key = settings.get('claude_api_key')
-    ideas = []
-    source = 'template'
-    if api_key:
+    site_id = data.get('site_id') or ''
+
+    # タイトル案は軽い入口なので、AI連携が壊れても画面は止めずテンプレートで返す。
+    try:
+        settings = load_settings()
+        api_key = settings.get('claude_api_key')
+    except Exception as e:
+        app.logger.warning('Title idea settings load failed: %s', e)
+        api_key = ''
+
+    if not api_key:
+        return jsonify(fallback_title_ideas_response(keywords, count_per_keyword, category, site_id))
+
+    try:
         prompt = title_generation_prompt(keywords, count_per_keyword, category)
-        try:
-            client = anthropic.Anthropic(api_key=api_key)
-            max_tokens = min(8000, max(1400, len(keywords) * count_per_keyword * 180))
-            message = create_claude_message(client, prompt, max_tokens=max_tokens, timeout=35)
-            text = anthropic_message_text(message)
-            ideas = coerce_title_ideas(
-                extract_title_ideas_payload(text),
-                keywords,
-                count_per_keyword,
-            )
-            source = 'claude'
-        except Exception as e:
-            app.logger.warning('Title idea generation fell back to templates: %s', e)
-            ideas = []
-    if not ideas:
-        for keyword in keywords:
-            ideas.extend(title_idea_templates(keyword, '', count_per_keyword))
-    enriched = enrich_title_ideas(
-        ideas,
-        category=category,
-        site_id=data.get('site_id') or '',
-    )
-    return jsonify({
-        'success': True,
-        'source': source,
-        'keywords': keywords,
-        'ideas': enriched,
-    })
+        client = anthropic.Anthropic(api_key=api_key)
+        max_tokens = min(8000, max(1400, len(keywords) * count_per_keyword * 180))
+        message = create_claude_message(client, prompt, max_tokens=max_tokens, timeout=35)
+        text = anthropic_message_text(message)
+        ideas = coerce_title_ideas(
+            extract_title_ideas_payload(text),
+            keywords,
+            count_per_keyword,
+        )
+        if not ideas:
+            raise ValueError('Claude returned no usable title ideas')
+        enriched = enrich_title_ideas(ideas, category=category, site_id=site_id)
+        return jsonify({
+            'success': True,
+            'source': 'claude',
+            'keywords': keywords,
+            'ideas': enriched,
+        })
+    except Exception as e:
+        app.logger.warning('Title idea generation fell back to templates: %s', e)
+        return jsonify(fallback_title_ideas_response(
+            keywords,
+            count_per_keyword,
+            category,
+            site_id,
+            warning='AI生成に失敗したためテンプレート案を返しました。',
+        ))
 
 
 @app.route('/api/title-ideas/save', methods=['POST'])
