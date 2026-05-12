@@ -2908,6 +2908,102 @@ async function readTitleIdeaJson(res, label) {
   return data;
 }
 
+function normalizeTitleIdeaKey(value) {
+  return String(value || '').replace(/\s+/g, '').toLowerCase();
+}
+
+function splitTitleIdeaKeywords(value) {
+  const seen = new Set();
+  return String(value || '')
+    .split(/\r?\n/)
+    .map(line => line.replace(/^\s*[-*・\d０-９]+[.)．、\s]*/, '').trim())
+    .filter(Boolean)
+    .filter(line => {
+      const key = normalizeTitleIdeaKey(line);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 50);
+}
+
+function titleBaseKeyword(value) {
+  const text = String(value || '').trim();
+  return text.replace(/[\s　]+(?:おすすめ|比較|ランキング|人気|厳選|口コミ|評判|レビュー|選び方|使い方|とは|方法|メリット|デメリット)\s*$/i, '').trim() || text;
+}
+
+function inferTitleIdeaType(keyword = '', title = '') {
+  const text = `${keyword} ${title}`;
+  if (/(口コミ|評判|レビュー|メリット|デメリット)/.test(text)) {
+    const hasSpecificName = /[A-Za-z][A-Za-z0-9-]{2,}|[A-Z]{2,}\s*-?\s*\d+|[A-Za-z]+\s*\d+/.test(text);
+    if (hasSpecificName && !/(おすすめ|比較|ランキング|選び方|人気|厳選)/.test(text)) return 'brand';
+  }
+  if (/(とは|選び方|使い方|洗い方|原因|対策|方法|違い|必要|いつ|なぜ|ポイント)/.test(text)) return 'column';
+  return 'ranking';
+}
+
+function localTitleIdeaTemplates(keyword, count) {
+  const kw = String(keyword || '').trim();
+  const base = titleBaseKeyword(kw);
+  const type = inferTitleIdeaType(kw);
+  const sets = {
+    ranking: [
+      ['ranking', `${base}おすすめランキング｜選び方と比較ポイントを解説`],
+      ['ranking', `${base}を比較｜失敗しない選び方とおすすめ候補`],
+      ['column', `${base}の選び方｜素材・用途・価格の違いを解説`],
+      ['ranking', `${base}の人気候補を比較｜メリット・注意点も解説`],
+      ['ranking', `${base}おすすめ厳選｜価格・使いやすさを比較`],
+    ],
+    column: [
+      ['column', `${base}とは？基礎知識と選び方をわかりやすく解説`],
+      ['column', `${base}で迷ったときの考え方｜失敗しない判断ポイント`],
+      ['column', `${base}の原因と対策｜初心者向けにやさしく解説`],
+      ['ranking', `${base}おすすめ候補を比較｜選び方も紹介`],
+      ['column', `${base}の基礎知識｜知っておきたいポイントまとめ`],
+    ],
+    brand: [
+      ['brand', `${base}の口コミ・評判レビュー｜メリット・デメリットを解説`],
+      ['brand', `${base}は本当に使いやすい？特徴と注意点を解説`],
+      ['brand', `${base}レビュー｜向いている人と購入前の注意点`],
+      ['column', `${base}を使う前に知りたい注意点と選び方`],
+      ['brand', `${base}の評判は？良い口コミ・悪い口コミを整理`],
+    ],
+  };
+  return (sets[type] || sets.ranking).slice(0, count).map(([articleType, title]) => ({
+    id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+    keyword: kw,
+    title,
+    article_type: articleType,
+    search_intent: '購入・比較前に判断材料を集めたい',
+    reason: 'API不調時のローカル生成です。キーワードと記事種類に合わせた型で作成しています。',
+    priority: '中',
+    category: document.getElementById('title-category')?.value || '',
+    site_id: document.getElementById('title-site')?.value || null,
+    duplicate: allArticles.some(a => normalizeTitleIdeaKey(a.title) === normalizeTitleIdeaKey(title)),
+    score: title.length >= 20 && title.length <= 55 ? 82 : 72,
+  }));
+}
+
+function buildLocalTitleIdeas(payload, reason = '') {
+  const count = Math.max(1, Math.min(5, parseInt(payload.count_per_keyword, 10) || 3));
+  const ideas = [];
+  const seen = new Set();
+  splitTitleIdeaKeywords(payload.keywords).forEach(keyword => {
+    localTitleIdeaTemplates(keyword, count).forEach(idea => {
+      const key = normalizeTitleIdeaKey(idea.title);
+      if (seen.has(key)) return;
+      seen.add(key);
+      ideas.push(idea);
+    });
+  });
+  return {
+    success: true,
+    source: 'local',
+    warning: reason ? 'APIが不安定なため、ブラウザ内のローカル生成に切り替えました。' : '',
+    ideas,
+  };
+}
+
 async function generateTitleIdeas() {
   const btn = document.getElementById('title-generate-btn');
   const msg = document.getElementById('title-ideas-msg');
@@ -2937,8 +3033,11 @@ async function generateTitleIdeas() {
     if (msg) msg.textContent = `${sourceLabel}: ${titleIdeaList.length}件のタイトル案を作成しました。${data.warning ? ` ${data.warning}` : ''}`;
     toast(`${titleIdeaList.length}件のタイトル案を作成しました`, 'success');
   } catch (e) {
-    toast(e.message || 'タイトル案生成に失敗しました', 'error');
-    if (msg) msg.textContent = e.message || 'タイトル案生成に失敗しました';
+    const fallback = buildLocalTitleIdeas(payload, e.message);
+    titleIdeaList = fallback.ideas || [];
+    renderTitleIdeas();
+    if (msg) msg.textContent = `ローカル生成: ${titleIdeaList.length}件のタイトル案を作成しました。${fallback.warning}`;
+    toast(`${titleIdeaList.length}件のタイトル案をローカル生成しました`, 'success');
   } finally {
     btn.disabled = false;
     btn.textContent = 'タイトル案を生成';
