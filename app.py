@@ -72,6 +72,10 @@ except ValueError:
     TITLE_IDEA_AI_TIMEOUT_SECONDS = 20
 TITLE_IDEA_PER_KEYWORD_RETRY = os.environ.get('TITLE_IDEA_PER_KEYWORD_RETRY', '0') == '1'
 try:
+    TITLE_IDEA_BATCH_SIZE = max(1, int(os.environ.get('TITLE_IDEA_BATCH_SIZE', '10')))
+except ValueError:
+    TITLE_IDEA_BATCH_SIZE = 10
+try:
     CLAUDE_ARTICLE_MAX_TOKENS = int(os.environ.get('CLAUDE_ARTICLE_MAX_TOKENS', '20000'))
 except ValueError:
     CLAUDE_ARTICLE_MAX_TOKENS = 20000
@@ -1458,7 +1462,7 @@ def non_retryable_ai_error(error):
 
 
 def title_idea_max_tokens(keyword_count, count_per_keyword):
-    return min(3000, max(800, keyword_count * count_per_keyword * 160))
+    return min(8000, max(800, keyword_count * count_per_keyword * 160))
 
 
 def claude_title_idea_models():
@@ -3129,13 +3133,32 @@ def generate_title_ideas():
 
         result_queue = queue.Queue()
         expected_count = len(keywords) * count_per_keyword
+        batches = [keywords[i:i + TITLE_IDEA_BATCH_SIZE] for i in range(0, len(keywords), TITLE_IDEA_BATCH_SIZE)]
 
         def worker():
             try:
-                ideas, retry_notes, model_used = generate_claude_title_ideas_resilient(
-                    claude_key, keywords, count_per_keyword, category,
-                )
-                enriched = enrich_title_ideas(ideas, category=category, site_id=site_id)
+                all_ideas = []
+                batch_errors = []
+                model_used = CLAUDE_TITLE_IDEA_MODEL
+                last_error = None
+                for idx, batch in enumerate(batches, 1):
+                    if len(batches) > 1:
+                        result_queue.put(('progress', f'Claudeでタイトル案を生成中 (バッチ {idx}/{len(batches)} / 取得済 {len(all_ideas)}件)'))
+                    try:
+                        batch_ideas, m = generate_claude_title_ideas_once(claude_key, batch, count_per_keyword, category)
+                        all_ideas.extend(batch_ideas)
+                        model_used = m
+                    except Exception as e:
+                        last_error = e
+                        batch_errors.append(f'バッチ{idx} ({len(batch)}KW): {compact_ai_error(e, 100)}')
+                        app.logger.warning('Title idea batch %d/%d failed: %s', idx, len(batches), e)
+                        if non_retryable_ai_error(e):
+                            break
+                if not all_ideas:
+                    error_text = ' / '.join(batch_errors) if batch_errors else (compact_ai_error(last_error) if last_error else 'タイトル案を取得できませんでした')
+                    result_queue.put(('err', error_text))
+                    return
+                enriched = enrich_title_ideas(all_ideas, category=category, site_id=site_id)
                 payload = {
                     'success': True,
                     'ai_used': True,
@@ -3145,14 +3168,14 @@ def generate_title_ideas():
                     'ideas': enriched,
                 }
                 warnings = []
-                if retry_notes:
-                    warnings.append('一括生成に失敗したため、Claudeでキーワード単位に再試行しました。')
+                if batch_errors:
+                    warnings.append(f'{len(batch_errors)}/{len(batches)}バッチが失敗しました。')
                 if len(enriched) < expected_count:
                     warnings.append(f'AI返却が{len(enriched)}/{expected_count}件でした。足りない分はテンプレ補完していません。')
                 if warnings:
                     payload['warning'] = ' '.join(warnings)
-                if retry_notes:
-                    payload['provider_warnings'] = retry_notes[-3:]
+                if batch_errors:
+                    payload['provider_warnings'] = batch_errors[-5:]
                 result_queue.put(('ok', payload))
             except Exception as e:
                 app.logger.warning('Claude title idea generation failed: %s', e)
@@ -3160,10 +3183,11 @@ def generate_title_ideas():
 
         threading.Thread(target=worker, daemon=True).start()
 
-        yield sse({'type': 'status', 'message': 'Claudeでタイトル案を生成中...'})
+        initial_msg = f'Claudeでタイトル案を生成中... ({len(keywords)}KW / {len(batches)}バッチ)' if len(batches) > 1 else 'Claudeでタイトル案を生成中...'
+        yield sse({'type': 'status', 'message': initial_msg})
 
         heartbeat_interval = 3
-        hard_timeout = 90
+        hard_timeout = 110
         elapsed = 0
         while True:
             try:
@@ -3177,6 +3201,9 @@ def generate_title_ideas():
                     ))
                     return
                 yield f": keepalive {elapsed}s\n\n"
+                continue
+            if kind == 'progress':
+                yield sse({'type': 'status', 'message': payload})
                 continue
             if kind == 'ok':
                 yield sse(payload)
