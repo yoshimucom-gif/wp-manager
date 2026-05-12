@@ -4766,8 +4766,9 @@ def update_wordpress_post_from_article(article, settings):
     )
     response.raise_for_status()
     post_data = response.json()
-    after_data = fetch_wordpress_post_for_edit(wp_url, wp_user, wp_password, article['wp_post_id'])
-    after_content = extract_wp_edit_content(after_data)
+    # POST レスポンスから検証用コンテンツを取得（2回目フェッチを廃止して時間短縮）。
+    # Render エッジの30秒タイムアウトを避けるため、検証は POST 応答内のデータで行う。
+    after_content = extract_wp_edit_content(post_data)
     repair_info = {
         'source_content_chars': len(html_to_text(clean_content)),
         'sent_content_chars': len(html_to_text(publish_content)),

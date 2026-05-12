@@ -3519,7 +3519,22 @@ async function publishGenerated() {
           headers:{'Content-Type':'application/json'},
           body: JSON.stringify({post_status:'draft'})
         });
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch (parseErr) {
+      // 非JSON応答（Renderエッジタイムアウト等で HTML が返ってきた）
+      const hint = res.status === 504 || res.status === 502
+        ? 'サーバー応答タイムアウト'
+        : `HTTP ${res.status}`;
+      toast(
+        `${hint}: WP側で実際に投稿が反映されたかブラウザでご確認ください。反映済みなら追加操作不要、未反映なら再試行を。`,
+        'error'
+      );
+      await loadArticles();
+      updateGeneratePublishButton(currentGenArticleId);
+      return;
+    }
     if (data.success) {
       toast((isRepair ? (data.wp_changed ? 'WP更新完了: ' : 'WP送信完了（本文変化なし）: ') : '投稿完了: ') + data.wp_url, isRepair && !data.wp_changed ? 'error' : 'success');
       await loadArticles();
