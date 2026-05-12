@@ -1309,6 +1309,9 @@ def title_generation_prompt(keywords, count_per_keyword, category=''):
 - 広いジャンル名だけなら brand にしない。
 - 釣りタイトル、誇大表現、根拠のない断定は禁止。
 - 文字数は日本語で28〜45字前後を基本にする。
+- ranking タイトルで「○選」を入れる場合は **基本5選、最大でも7選** を使う。
+  10選以上は実商品データが揃いにくく品質が落ちるため避ける。
+  「○選」が無くても良い（「おすすめ」「ランキング」「比較」だけでもOK）。
 - slug は英語のみ・小文字・ハイフン区切り（kebab-case）。3〜4単語、最大30文字以内。
   記事内容を端的に表すSEOフレンドリーな英語に翻訳/要約する（直訳のローマ字化は禁止）。
   例: 「ネックウォーマーおすすめランキング」→「neck-warmer-ranking」。
@@ -2674,7 +2677,7 @@ def should_use_segmented_generation(article_type, quality=None, article=None):
 def build_segmented_article_steps(article, article_type):
     normalized = normalize_article_type(article_type, 'ranking')
     if normalized == 'ranking':
-        count = extract_ranking_count(article) or 7
+        count = extract_ranking_count(article) or 5
         steps = [{
             'name': '導入・比較表',
             'prompt': f"""リード文、この記事でわかること、比較表だけを書いてください。
