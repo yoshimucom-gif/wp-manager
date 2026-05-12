@@ -57,10 +57,11 @@ def handle_unexpected_error(error):
 DATA_DIR_WARNING = ''
 CLAUDE_ARTICLE_MODEL = 'claude-sonnet-4-6'
 CLAUDE_TITLE_IDEA_MODEL = os.environ.get('CLAUDE_TITLE_IDEA_MODEL', 'claude-3-5-haiku-latest')
+GEMINI_TITLE_IDEA_MODEL = os.environ.get('GEMINI_TITLE_IDEA_MODEL', 'gemini-2.5-flash')
 try:
-    TITLE_IDEA_AI_TIMEOUT_SECONDS = int(os.environ.get('TITLE_IDEA_AI_TIMEOUT_SECONDS', '8'))
+    TITLE_IDEA_AI_TIMEOUT_SECONDS = int(os.environ.get('TITLE_IDEA_AI_TIMEOUT_SECONDS', '12'))
 except ValueError:
-    TITLE_IDEA_AI_TIMEOUT_SECONDS = 8
+    TITLE_IDEA_AI_TIMEOUT_SECONDS = 12
 try:
     CLAUDE_ARTICLE_MAX_TOKENS = int(os.environ.get('CLAUDE_ARTICLE_MAX_TOKENS', '20000'))
 except ValueError:
@@ -410,6 +411,7 @@ def first_env(*names):
 def apply_settings_env_fallbacks(settings):
     fallback_map = {
         'claude_api_key': ('ANTHROPIC_API_KEY', 'CLAUDE_API_KEY'),
+        'gemini_api_key': ('GEMINI_API_KEY', 'GOOGLE_API_KEY'),
     }
     for setting_key, env_names in fallback_map.items():
         if not settings.get(setting_key):
@@ -453,7 +455,7 @@ def has_user_data(snapshot):
         if q.get('id') != 'default' or q.get('name') != '標準品質'
     ]
     setting_keys = (
-        'sites', 'claude_api_key', 'article_css'
+        'sites', 'claude_api_key', 'gemini_api_key', 'article_css'
     )
     return any([
         bool(snapshot.get('articles')),
@@ -476,6 +478,7 @@ def load_settings():
     settings = load_json(SETTINGS_FILE, {
         "sites": [],
         "claude_api_key": "",
+        "gemini_api_key": "",
         "default_quality_id": "default",
         "article_css": "",
         "quality_style_references": {
@@ -1175,44 +1178,6 @@ def title_base_keyword(value):
     return text or str(value or '').strip()
 
 
-def title_idea_templates(keyword, article_type, count):
-    kw = str(keyword or '').strip()
-    title_kw = title_base_keyword(kw)
-    article_type = coerce_title_article_type(article_type, kw)
-    pattern_sets = {
-        'brand': [
-            ('brand', '{kw}の口コミ・評判レビュー｜メリット・デメリットを解説'),
-            ('brand', '{kw}は本当に使いやすい？特徴と注意点を解説'),
-            ('brand', '{kw}レビュー｜向いている人と購入前の注意点'),
-            ('column', '{kw}を使う前に知りたい注意点と選び方'),
-            ('brand', '{kw}の評判は？良い口コミ・悪い口コミを整理'),
-        ],
-        'column': [
-            ('column', '{kw}とは？基礎知識と選び方をわかりやすく解説'),
-            ('column', '{kw}で迷ったときの考え方｜失敗しない判断ポイント'),
-            ('column', '{kw}の原因と対策｜初心者向けにやさしく解説'),
-            ('ranking', '{kw}おすすめ候補を比較｜選び方も紹介'),
-            ('column', '{kw}の基礎知識｜知っておきたいポイントまとめ'),
-        ],
-        'ranking': [
-            ('ranking', '{kw}おすすめランキング｜選び方と比較ポイントを解説'),
-            ('ranking', '{kw}を比較｜失敗しない選び方とおすすめ候補'),
-            ('column', '{kw}の選び方｜素材・用途・価格の違いを解説'),
-            ('ranking', '{kw}の人気候補を比較｜メリット・注意点も解説'),
-            ('ranking', '{kw}おすすめ厳選｜価格・使いやすさを比較'),
-        ],
-    }
-    patterns = pattern_sets.get(article_type, pattern_sets['ranking'])
-    return [{
-        'keyword': kw,
-        'title': pattern.format(kw=title_kw),
-        'article_type': idea_type,
-        'search_intent': '購入・比較前に判断材料を集めたい',
-        'reason': 'キーワードを含めつつ、読者が知りたい比較軸を明確にしています。',
-        'priority': '中',
-    } for idea_type, pattern in patterns[:count]]
-
-
 def score_title_idea(title, keyword, article_type, existing_title_keys):
     title = str(title or '').strip()
     keyword = str(keyword or '').strip()
@@ -1265,6 +1230,8 @@ def title_generation_prompt(keywords, count_per_keyword, category=''):
 ルール:
 - 1キーワードにつき必ず{count_per_keyword}案。
 - titleには対象キーワードの主要語を自然に含める。
+- 似た語尾、似た構文、同じ切り口を連発しない。
+- 1キーワード内で「比較」「選び方」「悩み解決」「購入判断」など切り口を分ける。
 - 広い商品ジャンルの「おすすめ・比較・人気」は ranking。
 - 「とは・選び方・使い方・原因・対策・違い」は column。
 - 具体的な商品名・サービス名・型番の口コミ/評判/レビューは brand。
@@ -1272,6 +1239,52 @@ def title_generation_prompt(keywords, count_per_keyword, category=''):
 - 釣りタイトル、誇大表現、根拠のない断定は禁止。
 - 文字数は日本語で28〜45字前後を基本にする。
 - JSON以外の説明文、Markdown、コードフェンスは禁止。"""
+
+
+def gemini_generate_text(api_key, prompt, max_tokens=2500, timeout=None, model=None):
+    api_key = str(api_key or '').strip()
+    if not api_key:
+        raise RuntimeError('Gemini API key is missing')
+    endpoint = f'https://generativelanguage.googleapis.com/v1beta/models/{model or GEMINI_TITLE_IDEA_MODEL}:generateContent'
+    payload = {
+        'contents': [{
+            'role': 'user',
+            'parts': [{'text': prompt}],
+        }],
+        'generationConfig': {
+            'temperature': 0.8,
+            'topP': 0.95,
+            'maxOutputTokens': max_tokens,
+            'responseMimeType': 'application/json',
+        },
+    }
+    response = requests.post(
+        endpoint,
+        headers={
+            'Content-Type': 'application/json',
+            'x-goog-api-key': api_key,
+        },
+        json=payload,
+        timeout=timeout or TITLE_IDEA_AI_TIMEOUT_SECONDS,
+    )
+    if not response.ok:
+        message = response.text[:500]
+        try:
+            error_payload = response.json()
+            message = (
+                (error_payload.get('error') or {}).get('message')
+                or message
+            )
+        except Exception:
+            pass
+        raise RuntimeError(f'Gemini API error ({response.status_code}): {message}')
+    data = response.json()
+    parts = (((data.get('candidates') or [{}])[0].get('content') or {}).get('parts') or [])
+    text = ''.join(str(part.get('text') or '') for part in parts if isinstance(part, dict)).strip()
+    if not text:
+        finish_reason = (data.get('candidates') or [{}])[0].get('finishReason')
+        raise RuntimeError(f'Gemini returned empty text{f" ({finish_reason})" if finish_reason else ""}')
+    return text
 
 
 def extract_title_ideas_payload(text):
@@ -1322,11 +1335,8 @@ def coerce_title_ideas(payload, keywords, count_per_keyword):
             loose.append(idea)
     ideas = []
     for kw in keywords:
-        items = grouped.get(kw, [])[:count_per_keyword]
-        if len(items) < count_per_keyword:
-            items.extend(title_idea_templates(kw, '', count_per_keyword - len(items)))
-        ideas.extend(items)
-    ideas.extend(loose[:max(0, len(keywords) * count_per_keyword - len(ideas))])
+        ideas.extend(grouped.get(kw, [])[:count_per_keyword])
+    ideas.extend(loose)
     return ideas[:len(keywords) * count_per_keyword]
 
 
@@ -1367,49 +1377,6 @@ def enrich_title_ideas(ideas, category='', site_id=''):
             'quality_id': None,
         })
     return enriched
-
-
-def fallback_title_ideas_response(keywords, count_per_keyword, category='', site_id='', warning=''):
-    ideas = []
-    for keyword in keywords:
-        ideas.extend(title_idea_templates(keyword, '', count_per_keyword))
-    try:
-        enriched = enrich_title_ideas(ideas, category=category, site_id=site_id or '')
-    except Exception as e:
-        app.logger.warning('Failed to enrich fallback title ideas: %s', e)
-        enriched = []
-        seen = set()
-        for idea in ideas:
-            title = str(idea.get('title') or '').strip()
-            key = normalize_title_key(title)
-            if not title or key in seen:
-                continue
-            seen.add(key)
-            keyword = str(idea.get('keyword') or '').strip()
-            article_type = coerce_title_article_type(idea.get('article_type'), keyword, title)
-            enriched.append({
-                'id': str(uuid.uuid4()),
-                'keyword': keyword,
-                'title': title,
-                'search_intent': str(idea.get('search_intent') or '').strip(),
-                'reason': str(idea.get('reason') or '').strip(),
-                'priority': str(idea.get('priority') or '中').strip() or '中',
-                'score': score_title_idea(title, keyword, article_type, set()),
-                'duplicate': False,
-                'article_type': article_type,
-                'category': category,
-                'site_id': site_id or None,
-                'quality_id': None,
-            })
-    payload = {
-        'success': True,
-        'source': 'template',
-        'keywords': keywords,
-        'ideas': enriched,
-    }
-    if warning:
-        payload['warning'] = warning
-    return payload
 
 
 def build_schedule_datetime(index, schedule_data, date_override=None, slot_override=None):
@@ -3075,51 +3042,109 @@ def generate_title_ideas():
         data = {}
     keywords = split_title_keywords(data.get('keywords', ''))
     if not keywords:
-        return jsonify({'error': 'キーワードを1行以上入力してください'}), 400
+        return jsonify({
+            'success': False,
+            'ai_used': False,
+            'source': 'none',
+            'ideas': [],
+            'error': 'キーワードを1行以上入力してください',
+        })
     count_per_keyword = clamp_int(data.get('count_per_keyword'), 3, 1, 5)
     category = str(data.get('category') or '').strip()
     site_id = data.get('site_id') or ''
 
     try:
         settings = load_settings()
-        api_key = settings.get('claude_api_key')
     except Exception as e:
         app.logger.warning('Title idea settings load failed: %s', e)
-        api_key = ''
+        settings = {}
 
-    if not api_key:
-        return jsonify(fallback_title_ideas_response(keywords, count_per_keyword, category, site_id))
+    prompt = title_generation_prompt(keywords, count_per_keyword, category)
+    expected_count = len(keywords) * count_per_keyword
+    max_tokens = min(3000, max(900, expected_count * 140))
+    provider_errors = []
 
-    try:
-        prompt = title_generation_prompt(keywords, count_per_keyword, category)
-        client = anthropic.Anthropic(api_key=api_key)
-        max_tokens = min(3500, max(900, len(keywords) * count_per_keyword * 80))
-        message = create_claude_message(
-            client,
-            prompt,
-            max_tokens=max_tokens,
-            timeout=TITLE_IDEA_AI_TIMEOUT_SECONDS,
-            model=CLAUDE_TITLE_IDEA_MODEL,
-        )
-        text = anthropic_message_text(message)
-        ideas = coerce_title_ideas(extract_title_ideas_payload(text), keywords, count_per_keyword)
-        if not ideas:
-            raise ValueError('AI returned no usable title ideas')
-        return jsonify({
-            'success': True,
-            'source': 'claude',
-            'keywords': keywords,
-            'ideas': enrich_title_ideas(ideas, category=category, site_id=site_id),
-        })
-    except Exception as e:
-        app.logger.warning('Title idea AI fell back to rules: %s', e)
-        return jsonify(fallback_title_ideas_response(
-            keywords,
-            count_per_keyword,
-            category,
-            site_id,
-            warning='AI提案が時間内に完了しなかったため、ルール生成に切り替えました。',
-        ))
+    gemini_key = settings.get('gemini_api_key')
+    if gemini_key:
+        try:
+            text = gemini_generate_text(
+                gemini_key,
+                prompt,
+                max_tokens=max_tokens,
+                timeout=TITLE_IDEA_AI_TIMEOUT_SECONDS,
+                model=GEMINI_TITLE_IDEA_MODEL,
+            )
+            ideas = coerce_title_ideas(
+                extract_title_ideas_payload(text),
+                keywords,
+                count_per_keyword,
+            )
+            if not ideas:
+                raise ValueError('Gemini returned no usable title ideas')
+            enriched = enrich_title_ideas(ideas, category=category, site_id=site_id)
+            payload = {
+                'success': True,
+                'ai_used': True,
+                'source': 'gemini',
+                'model': GEMINI_TITLE_IDEA_MODEL,
+                'keywords': keywords,
+                'ideas': enriched,
+            }
+            if len(enriched) < expected_count:
+                payload['warning'] = f'AI返却が{len(enriched)}/{expected_count}件でした。足りない分はテンプレ補完していません。'
+            return jsonify(payload)
+        except Exception as e:
+            provider_errors.append(f'Gemini: {e}')
+            app.logger.warning('Gemini title idea generation failed: %s', e)
+
+    claude_key = settings.get('claude_api_key')
+    if claude_key:
+        try:
+            client = anthropic.Anthropic(api_key=claude_key)
+            message = create_claude_message(
+                client,
+                prompt,
+                max_tokens=max_tokens,
+                timeout=TITLE_IDEA_AI_TIMEOUT_SECONDS,
+                model=CLAUDE_TITLE_IDEA_MODEL,
+            )
+            text = anthropic_message_text(message)
+            ideas = coerce_title_ideas(
+                extract_title_ideas_payload(text),
+                keywords,
+                count_per_keyword,
+            )
+            if not ideas:
+                raise ValueError('Claude returned no usable title ideas')
+            enriched = enrich_title_ideas(ideas, category=category, site_id=site_id)
+            payload = {
+                'success': True,
+                'ai_used': True,
+                'source': 'claude',
+                'model': CLAUDE_TITLE_IDEA_MODEL,
+                'keywords': keywords,
+                'ideas': enriched,
+            }
+            if len(enriched) < expected_count:
+                payload['warning'] = f'AI返却が{len(enriched)}/{expected_count}件でした。足りない分はテンプレ補完していません。'
+            return jsonify(payload)
+        except Exception as e:
+            provider_errors.append(f'Claude: {e}')
+            app.logger.warning('Claude title idea generation failed: %s', e)
+
+    if not gemini_key and not claude_key:
+        error = 'タイトル案生成にはGemini APIキーまたはClaude APIキーが必要です。テンプレ生成には切り替えません。'
+    else:
+        error = 'AIタイトル案生成に失敗しました。テンプレ生成には切り替えていません。APIキー・残高・モデル状態を確認してください。'
+    return jsonify({
+        'success': False,
+        'ai_used': False,
+        'source': 'none',
+        'keywords': keywords,
+        'ideas': [],
+        'error': error,
+        'provider_errors': provider_errors[-3:],
+    })
 
 
 @app.route('/api/title-ideas/save', methods=['POST'])
@@ -5096,6 +5121,7 @@ def get_settings():
     settings = load_settings()
     safe = {
         'claude_api_key': mask_secret(settings.get('claude_api_key', '')),
+        'gemini_api_key': mask_secret(settings.get('gemini_api_key', '')),
         'default_quality_id': settings.get('default_quality_id', 'default'),
         'article_css': settings.get('article_css', ''),
     }
@@ -5110,6 +5136,8 @@ def update_settings():
         settings['default_quality_id'] = data['default_quality_id']
     if data.get('claude_api_key') and not is_masked_value(data['claude_api_key']):
         settings['claude_api_key'] = data['claude_api_key']
+    if data.get('gemini_api_key') and not is_masked_value(data['gemini_api_key']):
+        settings['gemini_api_key'] = data['gemini_api_key']
     if 'article_css' in data:
         if looks_like_html(data.get('article_css', '')):
             return jsonify({'success': False, 'error': '記事CSS定義にはHTMLを保存できません。CSSだけを入力してください。'}), 400
