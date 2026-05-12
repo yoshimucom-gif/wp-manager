@@ -981,6 +981,8 @@ tr.selected td { background: var(--accent-dim); }
               <div class="generate-push-note" id="gen-push-note">生成済み本文をWordPressへ送信できます。</div>
               <div class="generate-push-actions">
                 <button class="btn btn-success btn-push" id="gen-push-btn" onclick="publishGenerated()" disabled>WPにPUSH</button>
+                <a class="btn btn-secondary" id="gen-wp-view-btn" target="_blank" rel="noopener" style="display:none">🔍 WPで記事を見る</a>
+                <a class="btn btn-secondary" id="gen-wp-edit-btn" target="_blank" rel="noopener" style="display:none">✏️ WP管理画面で編集</a>
                 <button class="btn btn-secondary" onclick="showPage('history')">対応履歴で確認</button>
               </div>
             </div>
@@ -3123,6 +3125,25 @@ function updateGeneratePublishButton(articleId = currentGenArticleId) {
     note.textContent = article?.wp_post_id
       ? '生成済み本文を既存のWordPress投稿へ上書き送信できます。'
       : '生成済み本文をWordPressへ下書き投稿できます。';
+  }
+  const viewBtn = document.getElementById('gen-wp-view-btn');
+  const editBtn = document.getElementById('gen-wp-edit-btn');
+  const site = article?.site_id ? siteList.find(s => s.id === article.site_id) : null;
+  if (viewBtn) {
+    if (article?.wp_url) {
+      viewBtn.href = article.wp_url;
+      viewBtn.style.display = 'inline-flex';
+    } else {
+      viewBtn.style.display = 'none';
+    }
+  }
+  if (editBtn) {
+    if (article?.wp_post_id && site?.wp_url) {
+      editBtn.href = `${site.wp_url.replace(/\/$/, '')}/wp-admin/post.php?post=${article.wp_post_id}&action=edit`;
+      editBtn.style.display = 'inline-flex';
+    } else {
+      editBtn.style.display = 'none';
+    }
   }
 }
 
