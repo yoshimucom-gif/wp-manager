@@ -2321,6 +2321,9 @@ def build_product_context_prompt(products, article_type='ranking'):
         '- 商品名は上記のものをそのまま使う（架空名や「候補1」は禁止）。\n'
         '- 価格・レビューは上記の数値を引用してください（必要な数値だけでOK）。\n'
         '- 上記に含まれない商品は本文に登場させないでください。\n'
+        '- **同じ商品の販売バリエーション**（同じ商品名で別ショップ・別価格）が複数ある場合は\n'
+        '  1件として最も代表的な AFFI 番号を選んで紹介。同じ商品を「最安値版」「送料無料版」\n'
+        '  のように順位を分けて複数掲載しないこと。\n'
         '\n'
         '**重要 — 商品カード自動挿入のマーカー（厳守）**:\n'
         '各順位の見出しの直後の行に、必ず以下の正確な形式のHTMLコメントを入れてください:\n'
@@ -2352,7 +2355,8 @@ def build_product_context_prompt(products, article_type='ranking'):
 
 
 def build_product_card_html(product):
-    """マージ済み商品エントリ {rakuten, amazon} から RINKER スタイルの商品カードHTMLを生成。"""
+    """マージ済み商品エントリ {rakuten, amazon} から RINKER スタイルの商品カードHTMLを生成。
+    価格・レビュー・ショップ等は <table> のミニ表で表示する。"""
     if not product:
         return ''
     rakuten = product.get('rakuten')
@@ -2363,21 +2367,35 @@ def build_product_card_html(product):
     from html import escape as _esc
     name = _esc(_product_display_name(primary))
     image_url = primary.get('image_url') or (amazon.get('image_url') if amazon else '') or ''
-    price_parts = []
-    for src, label in ((amazon, 'Amazon'), (rakuten, '楽天')):
-        disp = _product_display_price(src)
-        if disp:
-            price_parts.append(f'<span class="aff-product-price-item">{label} {_esc(disp)}</span>')
-    price_html = '<div class="aff-product-prices">' + ''.join(price_parts) + '</div>' if price_parts else ''
-    review_html = ''
+
+    rows = []
+    amazon_price = _product_display_price(amazon)
+    rakuten_price = _product_display_price(rakuten)
+    if amazon_price and rakuten_price:
+        rows.append(f'<tr><th>価格</th><td>Amazon {_esc(amazon_price)} / 楽天 {_esc(rakuten_price)}</td></tr>')
+    elif amazon_price:
+        rows.append(f'<tr><th>Amazon価格</th><td>{_esc(amazon_price)}</td></tr>')
+    elif rakuten_price:
+        rows.append(f'<tr><th>楽天価格</th><td>{_esc(rakuten_price)}</td></tr>')
+
+    review_text = ''
     for src in (rakuten, amazon):
         if not src:
             continue
         avg = src.get('review_avg')
         cnt = src.get('review_count')
         if isinstance(avg, (int, float)) and avg:
-            review_html = f'<div class="aff-product-rating">★{float(avg):.1f} <span class="aff-product-rating-count">({int(cnt or 0)}件)</span></div>'
+            review_text = f'★{float(avg):.1f}（{int(cnt or 0):,}件）'
             break
+    if review_text:
+        rows.append(f'<tr><th>レビュー</th><td>{review_text}</td></tr>')
+
+    shop = (rakuten or {}).get('shop_name', '') if rakuten else ''
+    if shop:
+        rows.append(f'<tr><th>ショップ</th><td>{_esc(shop[:40])}</td></tr>')
+
+    table_html = f'<table class="aff-product-info"><tbody>{"".join(rows)}</tbody></table>' if rows else ''
+
     buttons = []
     if amazon and amazon.get('url'):
         buttons.append(f'<a class="aff-btn aff-btn-amazon" href="{_esc(amazon["url"])}" target="_blank" rel="nofollow sponsored noopener">Amazonで見る</a>')
@@ -2393,8 +2411,7 @@ def build_product_card_html(product):
         f'{image_html}'
         f'<div class="aff-product-body">'
         f'<div class="aff-product-name">{name}</div>'
-        f'{review_html}'
-        f'{price_html}'
+        f'{table_html}'
         f'{buttons_html}'
         f'</div>'
         f'</div>'
@@ -2659,9 +2676,10 @@ def build_segmented_article_steps(article, article_type):
     if normalized == 'ranking':
         count = extract_ranking_count(article) or 7
         steps = [{
-            'name': '導入・早見表・比較表',
-            'prompt': f"""リード文、この記事でわかること、結論早見表、比較表だけを書いてください。
+            'name': '導入・比較表',
+            'prompt': f"""リード文、この記事でわかること、比較表だけを書いてください。
 - リード文は短めにまとめる（おおむね200〜300文字）。
+- 「結論早見表」「おすすめ早見表」のような早見表セクションは作らないこと。比較表だけで十分です。
 - 比較表は必ずヘッダーを除いて{count}行にしてください。
 - 比較表のあとにランキング本文へ入らず、ここで止めてください。
 - 文字数は次の「今回の出力目安」に従い、長く書きすぎないこと。"""
@@ -2669,6 +2687,7 @@ def build_segmented_article_steps(article, article_type):
         chunk_size = 2
         for start in range(1, count + 1, chunk_size):
             end = min(count, start + chunk_size - 1)
+            num_products = end - start + 1
             steps.append({
                 'name': f'ランキング個別解説 {start}〜{end}位',
                 'prompt': f"""ランキング本文のうち、{start}位から{end}位までの個別解説だけを書いてください。
@@ -2678,10 +2697,12 @@ def build_segmented_article_steps(article, article_type):
   番号は前述の商品リストの AFFI 番号を使う。例: 1位の商品が AFFI:3 なら
   「<h3>1位：商品名</h3>」の次の行に「<!-- AFFI:3 -->」と書く。
   「AFFI:N」のまま N の文字を残すのは絶対NG。HTMLコメント形式 `<!--` `-->` も必須。
-- 各商品の解説は、特徴・おすすめな人・注意点を含めて簡潔に。
+- **各商品の解説本文（マーカー後の段落）は厳格に300〜400文字に収める**。
+  これを超えるとカードと本文のバランスが崩れるため、冗長な前置き・繰り返しは厳禁。
+- 解説には特徴・おすすめな人・注意点を簡潔に1〜2段落でまとめる。
 - 比較表やリード文は繰り返さないでください。
-- 文字数は次の「今回の出力目安」に従う。商品ごとの解説は冗長にせず、必要十分にまとめる。
-- {end}位を書き終えたら、選び方やFAQへ進まず止めてください。"""
+- {end}位を書き終えたら、選び方やFAQへ進まず止めてください。
+- この工程は{num_products}商品 × 約350字 = 約{num_products * 350 + 200}字以内が目安。"""
             })
         steps.append({
             'name': '選び方・FAQ・まとめ',
