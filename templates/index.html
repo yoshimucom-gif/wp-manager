@@ -983,6 +983,7 @@ tr.selected td { background: var(--accent-dim); }
                 <button class="btn btn-success btn-push" id="gen-push-btn" onclick="publishGenerated()" disabled>WPにPUSH</button>
                 <a class="btn btn-secondary" id="gen-wp-view-btn" target="_blank" rel="noopener" style="display:none">🔍 WPで記事を見る</a>
                 <a class="btn btn-secondary" id="gen-wp-edit-btn" target="_blank" rel="noopener" style="display:none">✏️ WP管理画面で編集</a>
+                <button class="btn btn-danger btn-sm" id="gen-unlink-btn" onclick="unlinkWpPost()" style="display:none">🔗 WP紐付けをリセット</button>
                 <button class="btn btn-secondary" onclick="showPage('history')">対応履歴で確認</button>
               </div>
             </div>
@@ -3156,6 +3157,7 @@ function updateGeneratePublishButton(articleId = currentGenArticleId) {
   }
   const viewBtn = document.getElementById('gen-wp-view-btn');
   const editBtn = document.getElementById('gen-wp-edit-btn');
+  const unlinkBtn = document.getElementById('gen-unlink-btn');
   const site = article?.site_id ? siteList.find(s => s.id === article.site_id) : null;
   if (viewBtn) {
     if (article?.wp_url) {
@@ -3172,6 +3174,9 @@ function updateGeneratePublishButton(articleId = currentGenArticleId) {
     } else {
       editBtn.style.display = 'none';
     }
+  }
+  if (unlinkBtn) {
+    unlinkBtn.style.display = article?.wp_post_id ? 'inline-flex' : 'none';
   }
 }
 
@@ -3481,6 +3486,24 @@ async function publishGenerated() {
   if (!currentGenArticleId) return;
   const article = allArticles.find(a => a.id === currentGenArticleId);
   const isRepair = !!article?.wp_post_id;
+
+  // A: タイトル/キーワード変更ガード
+  const lastTitle = article?.last_generation_title;
+  const lastKw = article?.last_generation_keywords;
+  const titleChanged = lastTitle && lastTitle !== article.title;
+  const kwChanged = lastKw !== undefined && lastKw !== article.keywords;
+  if (titleChanged || kwChanged) {
+    const parts = [];
+    if (titleChanged) parts.push(`タイトル: 「${lastTitle}」 → 「${article.title}」`);
+    if (kwChanged) parts.push(`キーワード: 「${lastKw || '(なし)'}」 → 「${article.keywords || '(なし)'}」`);
+    if (!confirm(
+      '⚠️ 前回の生成からタイトル/キーワードが変更されています:\n\n'
+      + parts.join('\n')
+      + '\n\n保存済み本文は古いタイトル/キーワードで生成されたものです。'
+      + 'このままWordPressに送信しますか？（先に「再生成開始」を押すのを推奨）'
+    )) return;
+  }
+
   if (isRepair && !confirm('Affiros9に保存されている本文を、既存のWordPress投稿へ上書き送信します。Claude生成やリライトは行いません。実行しますか?')) return;
   setArticleLocalStatus(
     currentGenArticleId,
@@ -3508,6 +3531,29 @@ async function publishGenerated() {
         : `WPへ送信しましたが、WordPress側の本文は更新前と同じでした（${compare}）。Affiros9保存本文とWP本文がすでに同じ可能性があります。`;
       setArticleLocalMessage(currentGenArticleId, isRepair ? repairMessage : '投稿完了しました。');
       updateGeneratePublishButton(currentGenArticleId);
+    } else if (data.wp_post_not_found) {
+      // B: 404 リカバリ
+      if (confirm(
+        `この記事の紐付き先 WordPress 投稿 (ID: ${data.wp_post_id}) が見つかりません。\n`
+        + 'WordPress側で削除された可能性があります。\n\n'
+        + 'WP紐付けをクリアして、新規下書きとして投稿しますか？'
+      )) {
+        await fetch(`/api/articles/${currentGenArticleId}/unlink-wp`, {method:'POST'});
+        await loadArticles();
+        const res2 = await fetch(`/api/publish/${currentGenArticleId}`, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({post_status:'draft'})
+        });
+        const data2 = await res2.json();
+        if (data2.success) {
+          toast('新規投稿として作成しました: ' + data2.wp_url, 'success');
+          await loadArticles();
+        } else {
+          toast(data2.error || '新規投稿に失敗しました', 'error');
+        }
+      }
+      updateGeneratePublishButton(currentGenArticleId);
     } else {
       toast(data.error || (isRepair ? 'WP上書き送信に失敗しました' : '投稿失敗'), 'error');
       await loadArticles();
@@ -3517,6 +3563,29 @@ async function publishGenerated() {
     toast((isRepair ? 'WP更新エラー: ' : '投稿エラー: ') + e.message, 'error');
     await loadArticles();
     updateGeneratePublishButton(currentGenArticleId);
+  }
+}
+
+async function unlinkWpPost() {
+  if (!currentGenArticleId) return;
+  const article = allArticles.find(a => a.id === currentGenArticleId);
+  if (!article?.wp_post_id) {
+    toast('この記事はWPに紐付いていません', 'error');
+    return;
+  }
+  if (!confirm(
+    `WP投稿 (ID: ${article.wp_post_id}) との紐付けを解除します。\n`
+    + 'Affiros9側のデータのみ変更され、WordPress側の投稿は削除されません。\n'
+    + '次回PUSH時は新規投稿として作成されます。\n\n実行しますか？'
+  )) return;
+  const res = await fetch(`/api/articles/${currentGenArticleId}/unlink-wp`, {method:'POST'});
+  const data = await res.json();
+  if (data.success) {
+    toast('WP紐付けを解除しました', 'success');
+    await loadArticles();
+    updateGeneratePublishButton(currentGenArticleId);
+  } else {
+    toast(data.error || '解除に失敗しました', 'error');
   }
 }
 

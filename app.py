@@ -3744,6 +3744,8 @@ def generate_article(article_id):
                     a['last_generation_changed'] = changed
                     a['last_generation_chars'] = content_chars
                     a['last_generation_similarity'] = round(similarity, 4)
+                    a['last_generation_title'] = article_work.get('title', a.get('title', ''))
+                    a['last_generation_keywords'] = article_work.get('keywords', a.get('keywords', ''))
                     usage = combine_article_usages(usage_parts)
                     append_generation_usage(a, usage, generation_run_id, generated_at, clean_content)
                     apply_score_fields(a)
@@ -3884,6 +3886,8 @@ def generate_article_direct(article_id):
                 a['last_generation_changed'] = changed
                 a['last_generation_chars'] = content_chars
                 a['last_generation_similarity'] = round(similarity, 4)
+                a['last_generation_title'] = article_work.get('title', a.get('title', ''))
+                a['last_generation_keywords'] = article_work.get('keywords', a.get('keywords', ''))
                 a.pop('error', None)
                 if enhance_warning:
                     a['generation_warning'] = enhance_warning
@@ -4453,6 +4457,29 @@ def publish_article(article_id):
         return jsonify({'error': f'WordPress投稿エラー: {str(e)}'}), 500
 
 
+@app.route('/api/articles/<article_id>/unlink-wp', methods=['POST'])
+@login_required
+def unlink_wp_post(article_id):
+    """記事から wp_post_id / wp_url の紐付けを外す（再投稿で新規作成したい時に使う）。"""
+    articles = load_articles()
+    target = None
+    for a in articles:
+        if a['id'] == article_id:
+            target = a
+            a.pop('wp_post_id', None)
+            a.pop('wp_url', None)
+            a.pop('posted_at', None)
+            a.pop('repaired_at', None)
+            if a.get('status') in ('published', 'scheduled'):
+                a['status'] = 'generated' if a.get('content') else 'pending'
+            a['updated_at'] = datetime.now().isoformat()
+            break
+    if not target:
+        return jsonify({'error': '記事が見つかりません'}), 404
+    save_articles(articles)
+    return jsonify({'success': True})
+
+
 @app.route('/api/articles/<article_id>/repair-post', methods=['POST'])
 @login_required
 def repair_article_post(article_id):
@@ -4486,6 +4513,15 @@ def repair_article_post(article_id):
         })
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
+    except requests.exceptions.HTTPError as e:
+        status_code = e.response.status_code if e.response is not None else 0
+        if status_code == 404:
+            return jsonify({
+                'error': f'WordPress側で投稿ID {article.get("wp_post_id")} が見つかりません（削除された可能性）',
+                'wp_post_not_found': True,
+                'wp_post_id': article.get('wp_post_id'),
+            }), 404
+        return jsonify({'error': f'WordPress上書き更新エラー: {str(e)}'}), 500
     except requests.exceptions.RequestException as e:
         return jsonify({'error': f'WordPress上書き更新エラー: {str(e)}'}), 500
 
