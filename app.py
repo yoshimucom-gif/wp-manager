@@ -3074,47 +3074,7 @@ def generate_title_ideas():
     count_per_keyword = clamp_int(data.get('count_per_keyword'), 3, 1, 5)
     category = str(data.get('category') or '').strip()
     site_id = data.get('site_id') or ''
-
-    # タイトル案は軽い入口なので、AI連携が壊れても画面は止めずテンプレートで返す。
-    try:
-        settings = load_settings()
-        api_key = settings.get('claude_api_key')
-    except Exception as e:
-        app.logger.warning('Title idea settings load failed: %s', e)
-        api_key = ''
-
-    if not api_key:
-        return jsonify(fallback_title_ideas_response(keywords, count_per_keyword, category, site_id))
-
-    try:
-        prompt = title_generation_prompt(keywords, count_per_keyword, category)
-        client = anthropic.Anthropic(api_key=api_key)
-        max_tokens = min(8000, max(1400, len(keywords) * count_per_keyword * 180))
-        message = create_claude_message(client, prompt, max_tokens=max_tokens, timeout=35)
-        text = anthropic_message_text(message)
-        ideas = coerce_title_ideas(
-            extract_title_ideas_payload(text),
-            keywords,
-            count_per_keyword,
-        )
-        if not ideas:
-            raise ValueError('Claude returned no usable title ideas')
-        enriched = enrich_title_ideas(ideas, category=category, site_id=site_id)
-        return jsonify({
-            'success': True,
-            'source': 'claude',
-            'keywords': keywords,
-            'ideas': enriched,
-        })
-    except Exception as e:
-        app.logger.warning('Title idea generation fell back to templates: %s', e)
-        return jsonify(fallback_title_ideas_response(
-            keywords,
-            count_per_keyword,
-            category,
-            site_id,
-            warning='AI生成に失敗したためテンプレート案を返しました。',
-        ))
+    return jsonify(fallback_title_ideas_response(keywords, count_per_keyword, category, site_id))
 
 
 @app.route('/api/title-ideas/save', methods=['POST'])

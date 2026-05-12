@@ -2933,7 +2933,7 @@ async function generateTitleIdeas() {
     const data = await readTitleIdeaJson(res, 'タイトル案API');
     titleIdeaList = data.ideas || [];
     renderTitleIdeas();
-    const sourceLabel = data.source === 'claude' ? 'Claude生成' : 'テンプレート生成';
+    const sourceLabel = data.source === 'claude' ? 'Claude生成' : 'ルール生成';
     if (msg) msg.textContent = `${sourceLabel}: ${titleIdeaList.length}件のタイトル案を作成しました。`;
     toast(`${titleIdeaList.length}件のタイトル案を作成しました`, 'success');
   } catch (e) {
