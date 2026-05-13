@@ -4204,12 +4204,13 @@ def generate_article(article_id):
                     a['last_generation_similarity'] = round(similarity, 4)
                     a['last_generation_title'] = article_work.get('title', a.get('title', ''))
                     a['last_generation_keywords'] = article_work.get('keywords', a.get('keywords', ''))
+                    a['card_injection_stats'] = card_stats
                     usage = combine_article_usages(usage_parts)
                     append_generation_usage(a, usage, generation_run_id, generated_at, clean_content)
                     apply_score_fields(a)
                     break
             save_articles(current_articles)
-            yield f"data: {json.dumps({'done': True, 'run_id': generation_run_id, 'content_chars': content_chars, 'changed': changed, 'similarity': round(similarity, 4), 'warning': generation_warning, 'usage': usage})}\n\n"
+            yield f"data: {json.dumps({'done': True, 'run_id': generation_run_id, 'content_chars': content_chars, 'changed': changed, 'similarity': round(similarity, 4), 'warning': generation_warning, 'usage': usage, 'card_stats': card_stats})}\n\n"
         except Exception as e:
             current_articles = load_articles()
             for a in current_articles:

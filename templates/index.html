@@ -3468,9 +3468,20 @@ async function finalizeGenerateSuccess(articleId, result = {}) {
   const charInfo = result.content_chars ? `${Number(result.content_chars).toLocaleString()}文字` : '本文';
   const article = allArticles.find(a => a.id === articleId);
   const warningText = result.warning || article?.generation_warning || '';
-  const message = warningText || (result.changed === false
-    ? `生成は完了しましたが、保存済み本文と同一でした（${charInfo}${usageYen}）。`
-    : `生成完了しました（${charInfo}${usageYen}）。点数と今月コストも更新済みです。`);
+  const cs = result.card_stats || article?.card_injection_stats || {};
+  let cardInfo = '';
+  if (cs && typeof cs.h3_count === 'number') {
+    if (cs.products_available === 0) {
+      cardInfo = ' / 商品カード: 未挿入（実商品データを取得できませんでした。Amazon/楽天APIキーと疎通を確認）';
+    } else if (cs.matched_count === 0 && cs.h3_count > 0) {
+      cardInfo = ` / 商品カード: 未挿入（取得商品 ${cs.products_available}件あるが商品名がマッチせず）`;
+    } else if (cs.matched_count > 0) {
+      cardInfo = ` / 商品カード ${cs.matched_count}件挿入（取得商品 ${cs.products_available}件）`;
+    }
+  }
+  const message = (warningText ? warningText + cardInfo : (result.changed === false
+    ? `生成は完了しましたが、保存済み本文と同一でした（${charInfo}${usageYen}）。${cardInfo}`
+    : `生成完了しました（${charInfo}${usageYen}）。${cardInfo}`));
   setArticleLocalMessage(articleId, message);
   document.getElementById('gen-article-select').value = articleId;
   const output = document.getElementById('gen-output');
