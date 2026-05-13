@@ -5044,6 +5044,62 @@ def unlink_wp_post(article_id):
     return jsonify({'success': True})
 
 
+@app.route('/api/diagnostics/inject/<article_id>', methods=['GET', 'POST'])
+@login_required
+def diagnose_card_injection(article_id):
+    """指定された記事に対して inject_affiliate_cards をドライランして、
+    どのステップで何が起きているかを返す診断エンドポイント。"""
+    articles = load_articles()
+    article = next((a for a in articles if a['id'] == article_id), None)
+    if not article:
+        return jsonify({'error': '記事が見つかりません'}), 404
+    settings = load_settings()
+    content = article.get('content', '') or ''
+
+    # 商品データを取得
+    products, product_status = fetch_product_context(article, settings, limit=15)
+
+    # h3 ランキング検出
+    h3_pattern = re.compile(
+        r'(<h3[^>]*>)\s*((?:\d+|[０-９]+)\s*位\s*[:：]?\s*[^<]+?)\s*(</h3>)',
+        re.IGNORECASE
+    )
+    h3_matches = list(h3_pattern.finditer(content))
+
+    # ドライラン: inject_affiliate_cards を呼ぶ
+    new_html, stats = inject_affiliate_cards(content, products)
+
+    return jsonify({
+        'article': {
+            'id': article_id,
+            'title': article.get('title', ''),
+            'ad_keywords': article.get('ad_keywords', ''),
+            'keywords': article.get('keywords', ''),
+            'content_length': len(content),
+            'has_aff_card_in_saved': 'aff-product-card' in content,
+            'card_injection_stats_saved': article.get('card_injection_stats'),
+        },
+        'products': {
+            'count': len(products),
+            'status': product_status,
+            'names': [
+                ((p.get('amazon') or p.get('rakuten') or {}).get('name', '') or '')[:80]
+                for p in products[:10]
+            ],
+            'sample': products[0] if products else None,
+        },
+        'h3_ranking_detection': {
+            'count': len(h3_matches),
+            'titles': [m.group(2)[:80] for m in h3_matches],
+        },
+        'inject_dry_run': {
+            'stats': stats,
+            'new_content_length': len(new_html),
+            'cards_in_new_content': new_html.count('aff-product-card'),
+        },
+    })
+
+
 @app.route('/api/articles/<article_id>/repair-post', methods=['POST'])
 @login_required
 def repair_article_post(article_id):
