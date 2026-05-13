@@ -1160,7 +1160,10 @@ tr.selected td { background: var(--accent-dim); }
               <button class="btn btn-secondary btn-sm" onclick="loadBatchArticles()">↻ 状態更新</button>
               <button class="btn btn-danger btn-sm" onclick="deleteBatchSelected()">🗑 選択を削除</button>
             </div>
-            <div style="background:var(--surface);border:1px solid var(--border);border-radius:4px;overflow:auto;">
+            <div id="batch-top-scroll" style="overflow-x:auto;overflow-y:hidden;height:14px;margin-bottom:2px;border:1px solid var(--border);border-radius:4px;background:var(--surface)">
+              <div id="batch-top-scroll-inner" style="height:1px;width:1180px"></div>
+            </div>
+            <div id="batch-table-wrap" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;overflow:auto;">
               <table style="width:100%;min-width:1180px">
                 <thead>
                   <tr>
@@ -3882,6 +3885,35 @@ function loadBatchArticles() {
       <td>${statusBadge(a.status)}${a.processing_message ? `<div style="font-size:10px;color:var(--muted);margin-top:4px">${esc(a.processing_message)}</div>` : ''}</td>
     </tr>
   `).join('');
+  syncBatchTopScroll();
+}
+
+function syncBatchTopScroll() {
+  const wrap = document.getElementById('batch-table-wrap');
+  const topScroll = document.getElementById('batch-top-scroll');
+  const topInner = document.getElementById('batch-top-scroll-inner');
+  if (!wrap || !topScroll || !topInner) return;
+  const table = wrap.querySelector('table');
+  if (!table) return;
+  // 内側のダミー要素の幅 = 実テーブルの幅にする
+  const width = table.scrollWidth;
+  topInner.style.width = width + 'px';
+  // 一度だけイベントリスナーをセット（フラグで重複防止）
+  if (!topScroll._scrollSyncBound) {
+    topScroll.addEventListener('scroll', () => {
+      if (topScroll._syncing) return;
+      wrap._syncing = true;
+      wrap.scrollLeft = topScroll.scrollLeft;
+      wrap._syncing = false;
+    });
+    wrap.addEventListener('scroll', () => {
+      if (wrap._syncing) return;
+      topScroll._syncing = true;
+      topScroll.scrollLeft = wrap.scrollLeft;
+      topScroll._syncing = false;
+    });
+    topScroll._scrollSyncBound = true;
+  }
 }
 
 function batchRowSelectable(article, filter) {
