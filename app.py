@@ -5073,6 +5073,41 @@ def unlink_wp_post(article_id):
     return jsonify({'success': True})
 
 
+@app.route('/api/articles/<article_id>/apply-cards', methods=['POST'])
+@login_required
+def apply_cards_to_existing_article(article_id):
+    """既存記事の本文に対して inject_affiliate_cards を後付け適用する。
+    本文を Claude で再生成せず、保存済みコンテンツに対してカード挿入だけ行う。"""
+    articles = load_articles()
+    article = next((a for a in articles if a['id'] == article_id), None)
+    if not article:
+        return jsonify({'error': '記事が見つかりません'}), 404
+    settings = load_settings()
+    content = article.get('content', '') or ''
+    if not content:
+        return jsonify({'error': '記事本文がまだ生成されていません'}), 400
+
+    products, product_status = fetch_product_context(article, settings, limit=15)
+    new_content, stats = inject_affiliate_cards(content, products)
+
+    # 既存記事に上書き保存
+    for a in articles:
+        if a['id'] == article_id:
+            a['content'] = new_content
+            a['card_injection_stats'] = stats
+            a['updated_at'] = datetime.now().isoformat()
+            break
+    save_articles(articles)
+
+    return jsonify({
+        'success': True,
+        'stats': stats,
+        'product_status': product_status,
+        'cards_inserted': stats.get('matched_count', 0),
+        'content_length': len(new_content),
+    })
+
+
 @app.route('/api/diagnostics/inject/<article_id>', methods=['GET', 'POST'])
 @login_required
 def diagnose_card_injection(article_id):
