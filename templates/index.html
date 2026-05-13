@@ -3191,6 +3191,19 @@ function updateGeneratePublishButton(articleId = currentGenArticleId) {
   if (unlinkBtn) {
     unlinkBtn.style.display = article?.wp_post_id ? 'inline-flex' : 'none';
   }
+  const applyBtn = document.getElementById('gen-apply-cards-btn');
+  if (applyBtn) {
+    const alreadyHasCards = !!article?.content?.includes('aff-product-card');
+    if (alreadyHasCards) {
+      applyBtn.disabled = true;
+      applyBtn.textContent = '✅ 商品カード挿入済み';
+      applyBtn.title = 'この記事は既に商品カードが挿入されています。再挿入したい場合は「再生成開始」してください';
+    } else {
+      applyBtn.disabled = !hasContent;
+      applyBtn.textContent = '🛒 商品カードを後付け挿入';
+      applyBtn.title = '本文を保ったまま商品カードを挿入します（Claude API は使いません）';
+    }
+  }
 }
 
 function setGeneratePublishActionState(disabled, showPanel = null) {
@@ -3620,12 +3633,16 @@ async function applyCardsToCurrent() {
       const total = data.stats?.h3_count || 0;
       const products = data.stats?.products_available || 0;
       if (n > 0) {
-        toast(`✅ 商品カード ${n}件を後付け挿入しました（h3 ${total}件 / 取得商品 ${products}件）`, 'success');
+        toast(`✅ 商品カード ${n}件を後付け挿入しました（h3 ${total}件 / 取得商品 ${products}件）。WPに反映するには「WPに上書きPUSH」を押してください。`, 'success');
       } else if (products === 0) {
         toast('⚠️ 商品データを取得できませんでした。API設定を確認してください', 'error');
       } else {
         toast(`⚠️ カード挿入なし（h3 ${total}件 / 取得商品 ${products}件）`, 'error');
       }
+      await loadArticles();
+      updateGeneratePublishButton(currentGenArticleId);
+    } else if (data.already_has_cards) {
+      toast('既に商品カードが挿入されています', 'info');
       await loadArticles();
       updateGeneratePublishButton(currentGenArticleId);
     } else {
@@ -3634,7 +3651,8 @@ async function applyCardsToCurrent() {
   } catch (e) {
     toast('エラー: ' + e.message, 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '🛒 商品カードを後付け挿入'; }
+    // updateGeneratePublishButton 側で正しいラベルに戻すのでここでは触らない
+    updateGeneratePublishButton(currentGenArticleId);
   }
 }
 

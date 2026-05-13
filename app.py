@@ -5080,7 +5080,11 @@ def unlink_wp_post(article_id):
 @login_required
 def apply_cards_to_existing_article(article_id):
     """既存記事の本文に対して inject_affiliate_cards を後付け適用する。
-    本文を Claude で再生成せず、保存済みコンテンツに対してカード挿入だけ行う。"""
+    本文を Claude で再生成せず、保存済みコンテンツに対してカード挿入だけ行う。
+
+    既にカードが挿入されている場合は重複挿入を防ぐためエラーを返す
+    （?force=1 で強制再挿入可能、ただしまず既存カードを除去してから挿入）。
+    """
     articles = load_articles()
     article = next((a for a in articles if a['id'] == article_id), None)
     if not article:
@@ -5089,6 +5093,25 @@ def apply_cards_to_existing_article(article_id):
     content = article.get('content', '') or ''
     if not content:
         return jsonify({'error': '記事本文がまだ生成されていません'}), 400
+
+    force = (request.args.get('force') or (request.json or {}).get('force')) in (1, '1', True, 'true', 'yes')
+
+    if 'aff-product-card' in content and not force:
+        return jsonify({
+            'error': '既に商品カードが挿入されています。再挿入するには ?force=1 を指定してください。',
+            'already_has_cards': True,
+            'card_injection_stats': article.get('card_injection_stats'),
+        }), 409
+
+    # force=1 のとき: 既存のカードを除去してから再挿入
+    if force and 'aff-product-card' in content:
+        content = re.sub(
+            r'<div\s+class="aff-product-card"[\s\S]*?</div>\s*</div>\s*</div>',
+            '',
+            content
+        )
+        # 念のため class="aff-product-card" だけ単独の閉じ忘れも掃除
+        content = re.sub(r'<div\s+class="aff-product-card"[\s\S]*?(?=<h[23]|<p|$)', '', content)
 
     products, product_status = fetch_product_context(article, settings, limit=15)
     new_content, stats = inject_affiliate_cards(content, products)
