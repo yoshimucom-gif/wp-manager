@@ -3538,7 +3538,7 @@ def login_page():
 
 @app.route('/login', methods=['POST'])
 def login():
-    password = request.json.get('password', '')
+    password = (request.get_json(silent=True) or {}).get('password', '')
     app_password = os.environ.get('APP_PASSWORD', 'admin')
     if password == app_password:
         session['authenticated'] = True
@@ -3715,7 +3715,7 @@ def generate_title_ideas():
 @app.route('/api/title-ideas/save', methods=['POST'])
 @login_required
 def save_title_ideas():
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     ideas = data.get('ideas') or []
     if not isinstance(ideas, list) or not ideas:
         return jsonify({'error': '保存するタイトル案を選択してください'}), 400
@@ -3796,7 +3796,7 @@ def get_articles():
 @app.route('/api/articles', methods=['POST'])
 @login_required
 def create_article():
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     title = str(data.get('title') or '').strip()
     if not title:
         return jsonify({'error': 'タイトルを入力してください'}), 400
@@ -3845,7 +3845,7 @@ def get_article(article_id):
 @app.route('/api/articles/<article_id>', methods=['PUT'])
 @login_required
 def update_article(article_id):
-    data = request.json
+    data = request.get_json(silent=True) or {}
     articles = load_articles()
     for a in articles:
         if a['id'] == article_id:
@@ -3876,7 +3876,7 @@ def update_article(article_id):
 @app.route('/api/articles/<article_id>/recover-generated-content', methods=['POST'])
 @login_required
 def recover_generated_content(article_id):
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     clean_content = sanitize_generated_html(data.get('content', ''))
     content_chars = len(html_to_text(clean_content))
     if content_chars < 500:
@@ -3960,7 +3960,7 @@ def delete_article(article_id):
 @app.route('/api/articles/bulk-delete', methods=['POST'])
 @login_required
 def bulk_delete():
-    ids = set(request.json.get('ids', []))
+    ids = set((request.get_json(silent=True) or {}).get('ids', []))
     articles = [a for a in load_articles() if a['id'] not in ids]
     save_articles(articles)
     return jsonify({'success': True})
@@ -4122,7 +4122,7 @@ def generate_article(article_id):
     if not article:
         return jsonify({'error': '記事が見つかりません'}), 404
 
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     quality_id = data.get('quality_id') or article.get('quality_id')
     settings = load_settings()
     api_key = settings.get('claude_api_key') or os.environ.get('ANTHROPIC_API_KEY', '')
@@ -4367,7 +4367,7 @@ def generate_article_direct(article_id):
     if not article:
         return jsonify({'error': '記事が見つかりません'}), 404
 
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     settings = load_settings()
     api_key = settings.get('claude_api_key') or os.environ.get('ANTHROPIC_API_KEY', '')
 
@@ -4515,7 +4515,7 @@ def generate_article_direct(article_id):
 @app.route('/api/batch-generate', methods=['POST'])
 @login_required
 def batch_generate():
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     requested_ids = list(dict.fromkeys(data.get('article_ids', [])))
     article_ids = set(requested_ids)
     quality_id = data.get('quality_id')
@@ -5011,7 +5011,7 @@ def publish_article(article_id):
     if not all([wp_url, wp_user, wp_password]):
         return jsonify({'error': 'サイトが設定されていません。記事にサイトを紐付けてください。'}), 400
 
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     post_status = data.get('post_status', 'draft')
     content = prepare_article_content_for_publish(article['content'], settings)
     post_payload = {'title': article['title'], 'content': content, 'status': post_status}
@@ -5094,7 +5094,8 @@ def apply_cards_to_existing_article(article_id):
     if not content:
         return jsonify({'error': '記事本文がまだ生成されていません'}), 400
 
-    force = (request.args.get('force') or (request.json or {}).get('force')) in (1, '1', True, 'true', 'yes')
+    body = request.get_json(silent=True) or {}
+    force = (request.args.get('force') or body.get('force')) in (1, '1', True, 'true', 'yes')
 
     if 'aff-product-card' in content and not force:
         return jsonify({
@@ -5140,7 +5141,7 @@ def bulk_apply_cards():
     """選択された記事に対して inject_affiliate_cards を一括適用する。
     既にカードが入っている記事はスキップ。Claude API は使わず Amazon/楽天検索のみ。
     """
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     ids = data.get('ids') or data.get('article_ids') or []
     force = bool(data.get('force'))
     if not isinstance(ids, list) or not ids:
@@ -5309,7 +5310,7 @@ def repair_article_post(article_id):
 @app.route('/api/articles/bulk-repair-posts', methods=['POST'])
 @login_required
 def bulk_repair_article_posts():
-    ids = set((request.json or {}).get('ids', []))
+    ids = set((request.get_json(silent=True) or {}).get('ids', []))
     articles = load_articles()
     settings = load_settings()
     results = {'success': 0, 'unchanged': 0, 'mismatch': 0, 'error': 0, 'errors': []}
@@ -5344,7 +5345,7 @@ def bulk_repair_article_posts():
 @app.route('/api/batch-publish', methods=['POST'])
 @login_required
 def batch_publish():
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     article_ids = data.get('article_ids', [])
     post_status = data.get('post_status', 'draft')
     schedule_enabled = bool(data.get('schedule_enabled'))
@@ -5445,7 +5446,7 @@ def get_rewrite_items():
 @app.route('/api/rewrite/fetch', methods=['POST'])
 @login_required
 def fetch_rewrite_items():
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     site_id = data.get('site_id')
     per_page = int(data.get('per_page', 20) or 20)
     max_pages = int(data.get('max_pages', 3) or 3)
@@ -5561,7 +5562,7 @@ def rewrite_item(item_id):
     if not item:
         return jsonify({'error': 'リライト対象が見つかりません'}), 404
 
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     settings = load_settings()
     api_key = settings.get('claude_api_key') or os.environ.get('ANTHROPIC_API_KEY', '')
     if not api_key:
@@ -5626,7 +5627,7 @@ def update_rewritten_post(item_id):
     item = next((i for i in items if i['id'] == item_id), None)
     if not item:
         return jsonify({'error': 'リライト対象が見つかりません'}), 404
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     content = data.get('content') or item.get('rewritten_content')
     if not content:
         return jsonify({'error': '先にリライトを実行してください'}), 400
@@ -5663,7 +5664,7 @@ def update_rewritten_post(item_id):
 @app.route('/api/rewrite/bulk-delete', methods=['POST'])
 @login_required
 def delete_rewrite_items():
-    ids = set((request.json or {}).get('ids', []))
+    ids = set((request.get_json(silent=True) or {}).get('ids', []))
     items = [i for i in load_rewrites() if i['id'] not in ids]
     save_rewrites(items)
     return jsonify({'success': True})
@@ -5714,7 +5715,7 @@ def get_quality():
 @app.route('/api/quality', methods=['POST'])
 @login_required
 def create_quality():
-    data = request.json
+    data = request.get_json(silent=True) or {}
     quality_list = load_quality()
     article_type = normalize_article_type(data.get('article_type'), '') if data.get('article_type') else ''
     q = {
@@ -5740,7 +5741,7 @@ def create_quality():
 @app.route('/api/quality/<quality_id>', methods=['PUT'])
 @login_required
 def update_quality(quality_id):
-    data = request.json
+    data = request.get_json(silent=True) or {}
     quality_list = load_quality()
     for q in quality_list:
         if q['id'] == quality_id:
@@ -5788,7 +5789,7 @@ def get_quality_style_references():
 @app.route('/api/quality/style-references', methods=['POST'])
 @login_required
 def update_quality_style_references():
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     settings = load_settings()
     settings['quality_style_references'] = {
         'ranking': data.get('ranking', '').strip(),
@@ -5815,7 +5816,7 @@ def get_sites():
 @app.route('/api/sites', methods=['POST'])
 @login_required
 def create_site():
-    data = request.json
+    data = request.get_json(silent=True) or {}
     settings = load_settings()
     sites = settings.get('sites', [])
     site = {
@@ -5836,7 +5837,7 @@ def create_site():
 @app.route('/api/sites/<site_id>', methods=['PUT'])
 @login_required
 def update_site(site_id):
-    data = request.json
+    data = request.get_json(silent=True) or {}
     settings = load_settings()
     for s in settings.get('sites', []):
         if s['id'] == site_id:
@@ -5873,7 +5874,7 @@ def get_site_categories(site_id):
 @app.route('/api/articles/<article_id>/site', methods=['PUT'])
 @login_required
 def update_article_site(article_id):
-    data = request.json
+    data = request.get_json(silent=True) or {}
     articles = load_articles()
     for a in articles:
         if a['id'] == article_id:
@@ -5898,7 +5899,7 @@ def get_data_snapshot():
 @app.route('/api/data-snapshot', methods=['POST'])
 @login_required
 def restore_data_snapshot_api():
-    snapshot = request.json or {}
+    snapshot = request.get_json(silent=True) or {}
     if not isinstance(snapshot, dict):
         return jsonify({'error': 'スナップショット形式が不正です'}), 400
     restore_data_snapshot(snapshot)
@@ -5925,7 +5926,7 @@ def get_settings():
 @app.route('/api/settings', methods=['POST'])
 @login_required
 def update_settings():
-    data = request.json
+    data = request.get_json(silent=True) or {}
     settings = load_settings()
     if 'default_quality_id' in data:
         settings['default_quality_id'] = data['default_quality_id']
@@ -5951,7 +5952,7 @@ def update_settings():
 @login_required
 def search_products():
     """商品検索（楽天 + Amazon）テスト用エンドポイント。プロバイダ別に結果を返す。"""
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     query = str(data.get('query') or '').strip()
     if not query:
         return jsonify({'error': '検索キーワードを入力してください'}), 400

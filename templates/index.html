@@ -3666,7 +3666,11 @@ async function applyCardsToCurrent() {
   const btn = document.getElementById('gen-apply-cards-btn');
   if (btn) { btn.disabled = true; btn.textContent = '🛒 適用中...'; }
   try {
-    const res = await fetch(`/api/articles/${currentGenArticleId}/apply-cards`, {method:'POST'});
+    const res = await fetch(`/api/articles/${currentGenArticleId}/apply-cards`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: '{}'
+    });
     const data = await res.json();
     if (data.success) {
       const n = data.cards_inserted || 0;
