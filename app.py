@@ -4245,14 +4245,17 @@ def generate_article(article_id):
                 )
                 usage_parts.append(build_article_usage(prompt, full_content, final_message))
 
-            print(f'[GEN-SSE] about to call inject_affiliate_cards: products={len(products) if products else 0}, content_len={len(full_content)}', flush=True)
+            print(f'[GEN-SSE] BEFORE inject: products={len(products) if products else 0}, content_len={len(full_content)}, has_card={"aff-product-card" in full_content}', flush=True)
             full_content, card_stats = inject_affiliate_cards(full_content, products)
+            print(f'[GEN-SSE] AFTER inject: content_len={len(full_content)}, has_card={"aff-product-card" in full_content}, stats={card_stats}', flush=True)
             _cards_msg = '商品カード挿入: {0}件 / 見出し {1}件 / 取得商品 {2}件'.format(
                 card_stats.get('matched_count', 0), card_stats.get('h3_count', 0), card_stats.get('products_available', 0)
             )
             yield f"data: {json.dumps({'status': 'cards_injected', 'message': _cards_msg})}\n\n"
             clean_content, enhance_warning = safe_enhance_generated_article_html(full_content, article_work, article_type)
+            print(f'[GEN-SSE] AFTER enhance: clean_content_len={len(clean_content)}, has_card={"aff-product-card" in clean_content}, enhance_warning={enhance_warning!r}', flush=True)
             clean_content = strip_summary_table_sections(clean_content)
+            print(f'[GEN-SSE] AFTER strip_summary: clean_content_len={len(clean_content)}, has_card={"aff-product-card" in clean_content}', flush=True)
             validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
             content_chars = len(html_to_text(clean_content))
             continuation_round = 0
