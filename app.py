@@ -2456,7 +2456,7 @@ def _tokenize_product_name(name):
     return [t for t in tokens if len(t) >= 2]
 
 
-def _find_best_product_match(query_name, products, threshold=0.5):
+def _find_best_product_match(query_name, products, threshold=0.4):
     """商品名（h3見出しテキスト等）から最も類似度の高い商品インデックスを返す。
 
     Claude の短い商品名 vs Amazon の長い商品名でも安定するよう、
@@ -2470,6 +2470,9 @@ def _find_best_product_match(query_name, products, threshold=0.5):
     query_tokens = _tokenize_product_name(query_name)
     if not query_tokens:
         return None
+    # ノイズ除去: 「ネックウォーマー」「冷感」のような汎用語はトークンとして低価値
+    # ブランド名や固有名詞（英数字）の方が一致判定の根拠として強い
+    distinctive_tokens = [t for t in query_tokens if re.search(r'[a-z0-9]', t) or len(t) >= 4]
     best_score = 0.0
     best_idx = None
     for idx, p in enumerate(products):
@@ -2482,8 +2485,14 @@ def _find_best_product_match(query_name, products, threshold=0.5):
         # クエリ側のトークンが商品名にいくつ含まれるか（substring判定）
         matched = sum(1 for t in query_tokens if t.lower() in pname_norm)
         score = matched / len(query_tokens)
+        # 識別力の高いトークン（英数字/長い語）が含まれていれば大幅加点
+        if distinctive_tokens:
+            distinctive_matched = sum(1 for t in distinctive_tokens if t.lower() in pname_norm)
+            if distinctive_matched:
+                distinctive_ratio = distinctive_matched / len(distinctive_tokens)
+                score = max(score, distinctive_ratio * 0.9)
         # 完全包含なら満点扱い
-        if query_norm in pname_norm:
+        if query_norm in pname_norm or (len(query_norm) >= 4 and query_norm[:20] in pname_norm):
             score = max(score, 0.95)
         if score > best_score:
             best_score = score
@@ -2557,10 +2566,15 @@ def inject_affiliate_cards(html, products):
     used_products = set()
 
     # Step 1: 商品名マッチ（信頼度高い方を優先割当）
-    match_candidates = []  # (h3_index, product_index, score)
+    match_candidates = []  # (h3_index, product_index)
     for i, m in enumerate(h3_matches):
         h3_text = m.group(2).strip()
         title_only = re.sub(r'^\s*[\d０-９]+\s*位\s*[:：]?\s*', '', h3_text).strip()
+        # 「｜キャッチコピー」「| catchy」のように区切り後の修飾語を除去
+        title_only = re.sub(r'\s*[｜|│⁞∣]\s*[^<]*$', '', title_only).strip()
+        # 「商品名 - 説明」「商品名 : 説明」のような区切りも除去
+        title_only = re.sub(r'\s+[-—–:：]\s+[^<]{8,}$', '', title_only).strip()
+        # 末尾の括弧書き（対応機種注釈など）を除去
         title_only = re.sub(r'\s*[（(][^)）]{0,80}[)）]\s*$', '', title_only).strip()
         prod_idx = _find_best_product_match(title_only, products)
         if prod_idx is not None:
