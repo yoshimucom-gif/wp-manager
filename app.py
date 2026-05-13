@@ -2539,7 +2539,9 @@ def inject_affiliate_cards(html, products):
     Returns: (html, stats_dict) — stats = {h3_count, matched_count, products_available, fallback_count}
     """
     stats = {'h3_count': 0, 'matched_count': 0, 'products_available': len(products or []), 'fallback_count': 0}
+    print(f'[AFFI] inject_affiliate_cards called: products={len(products or [])}, html_len={len(html or "")}', flush=True)
     if not html:
+        print('[AFFI] early-return: html is empty', flush=True)
         return html, stats
     products = products or []
     text = strip_summary_table_sections(str(html))
@@ -2551,9 +2553,11 @@ def inject_affiliate_cards(html, products):
     )
     h3_matches = list(h3_rank_pattern.finditer(text))
     stats['h3_count'] = len(h3_matches)
+    print(f'[AFFI] h3 ranking matches found: {len(h3_matches)}, products: {len(products)}', flush=True)
 
     if not products or not h3_matches:
         # 商品 or h3 が無いなら何もしない（マーカー掃除だけ）
+        print(f'[AFFI] skip injection (no products or no h3): products={len(products)}, h3={len(h3_matches)}', flush=True)
         text = re.sub(r'<p[^>]*>\s*(?:<!--\s*)?AFFI[:：]?\s*\w+\s*(?:-->)?\s*</p>', '', text)
         text = re.sub(r'<!--\s*AFFI[:：]?\s*\w+\s*-->', '', text)
         text = re.sub(r'(?m)^\s*AFFI[:：]?\s*\w+\s*$', '', text)
@@ -2597,7 +2601,7 @@ def inject_affiliate_cards(html, products):
             assignments[i] = prod_idx
             used_products.add(prod_idx)
             stats['fallback_count'] += 1
-            app.logger.info('AFFI: sequential fallback for h3[%d] -> product[%d]', i, prod_idx)
+            print(f'[AFFI] sequential fallback: h3[{i}] -> product[{prod_idx}]', flush=True)
         except StopIteration:
             break
 
@@ -2612,9 +2616,12 @@ def inject_affiliate_cards(html, products):
             if card:
                 new_parts.append('\n' + card)
                 stats['matched_count'] += 1
+            else:
+                print(f'[AFFI] build_product_card_html returned empty for product[{prod_idx}]', flush=True)
         last_end = m.end()
     new_parts.append(text[last_end:])
     text = ''.join(new_parts)
+    print(f'[AFFI] injection complete: matched={stats["matched_count"]}, fallback={stats["fallback_count"]}, h3={stats["h3_count"]}, html_len={len(text)}', flush=True)
 
     # Cleanup: Claude が残した AFFI:N マーカーを全部消す（カードはもう挿入済み）
     text = re.sub(r'<p[^>]*>\s*(?:<!--\s*)?AFFI[:：]?\s*\w+\s*(?:-->)?\s*</p>', '', text)
@@ -4209,6 +4216,7 @@ def generate_article(article_id):
                 )
                 usage_parts.append(build_article_usage(prompt, full_content, final_message))
 
+            print(f'[GEN-SSE] about to call inject_affiliate_cards: products={len(products) if products else 0}, content_len={len(full_content)}', flush=True)
             full_content, card_stats = inject_affiliate_cards(full_content, products)
             _cards_msg = '商品カード挿入: {0}件 / 見出し {1}件 / 取得商品 {2}件'.format(
                 card_stats.get('matched_count', 0), card_stats.get('h3_count', 0), card_stats.get('products_available', 0)
