@@ -2519,47 +2519,88 @@ def strip_summary_table_sections(html):
 def inject_affiliate_cards(html, products):
     """全 <h3>N位：商品名</h3> の直後に商品カードを挿入。
 
-    Claude のマーカー(AFFI:N) に依存せず、h3 の商品名から類似度マッチで
-    商品を見つけてカードを挿入する。マーカーは入っていれば掃除、なくてもOK。
+    2段階で確実にカードを挿入:
+    1. 商品名マッチ（h3商品名と商品リストの類似度）— 優先
+    2. 順序フォールバック — 1位h3→products[0], 2位→products[1], ...
+    これで Claude が商品名を変えて書いても、ランキング順序が保たれる限り
+    必ずカードが挿入される。
+
     早見表セクションは強制削除（比較表と重複するため）。
 
-    Returns: (html, stats_dict) — stats_dict = {h3_count, matched_count, products_available}
+    Returns: (html, stats_dict) — stats = {h3_count, matched_count, products_available, fallback_count}
     """
-    stats = {'h3_count': 0, 'matched_count': 0, 'products_available': len(products or [])}
+    stats = {'h3_count': 0, 'matched_count': 0, 'products_available': len(products or []), 'fallback_count': 0}
     if not html:
         return html, stats
     products = products or []
     text = strip_summary_table_sections(str(html))
 
-    # 全 h3 ランキング見出しを検出して、その直後にカードを挿入
+    # 全 h3 ランキング見出しを検出
     h3_rank_pattern = re.compile(
         r'(<h3[^>]*>)\s*((?:\d+|[０-９]+)\s*位\s*[:：]?\s*[^<]+?)\s*(</h3>)',
         re.IGNORECASE
     )
+    h3_matches = list(h3_rank_pattern.finditer(text))
+    stats['h3_count'] = len(h3_matches)
 
-    def insert_card_after_h3(match):
-        h3_open = match.group(1)
-        h3_text = match.group(2).strip()
-        h3_close = match.group(3)
-        h3_full = f'{h3_open}{h3_text}{h3_close}'
-        stats['h3_count'] += 1
-        if not products:
-            return h3_full
-        # 「N位：商品名」から商品名部分を抽出
+    if not products or not h3_matches:
+        # 商品 or h3 が無いなら何もしない（マーカー掃除だけ）
+        text = re.sub(r'<p[^>]*>\s*(?:<!--\s*)?AFFI[:：]?\s*\w+\s*(?:-->)?\s*</p>', '', text)
+        text = re.sub(r'<!--\s*AFFI[:：]?\s*\w+\s*-->', '', text)
+        text = re.sub(r'(?m)^\s*AFFI[:：]?\s*\w+\s*$', '', text)
+        text = re.sub(r'\bAFFI[:：]\s*\w+\b', '', text)
+        text = re.sub(r'(<p[^>]*>)\s*(</p>)', '', text)
+        return text, stats
+
+    # 各 h3 にどの product を割り当てるか決定
+    assignments = {}  # h3_index -> product_index
+    used_products = set()
+
+    # Step 1: 商品名マッチ（信頼度高い方を優先割当）
+    match_candidates = []  # (h3_index, product_index, score)
+    for i, m in enumerate(h3_matches):
+        h3_text = m.group(2).strip()
         title_only = re.sub(r'^\s*[\d０-９]+\s*位\s*[:：]?\s*', '', h3_text).strip()
-        # 末尾の括弧書き（対応機種注釈など）を除去
         title_only = re.sub(r'\s*[（(][^)）]{0,80}[)）]\s*$', '', title_only).strip()
-        match_idx = _find_best_product_match(title_only, products)
-        if match_idx is None:
-            app.logger.info('AFFI: no product match for h3 "%s" (products=%d)', title_only[:60], len(products))
-            return h3_full
-        card = build_product_card_html(products[match_idx])
-        if card:
-            stats['matched_count'] += 1
-            return f'{h3_full}\n{card}'
-        return h3_full
+        prod_idx = _find_best_product_match(title_only, products)
+        if prod_idx is not None:
+            match_candidates.append((i, prod_idx))
 
-    text = h3_rank_pattern.sub(insert_card_after_h3, text)
+    # マッチした h3 から先に割り当て（重複は先勝ち）
+    for h3_idx, prod_idx in match_candidates:
+        if h3_idx not in assignments and prod_idx not in used_products:
+            assignments[h3_idx] = prod_idx
+            used_products.add(prod_idx)
+
+    # Step 2: 未割当の h3 に対して、未使用 product を順序通りに割り当て
+    available_products = [i for i in range(len(products)) if i not in used_products]
+    avail_iter = iter(available_products)
+    for i in range(len(h3_matches)):
+        if i in assignments:
+            continue
+        try:
+            prod_idx = next(avail_iter)
+            assignments[i] = prod_idx
+            used_products.add(prod_idx)
+            stats['fallback_count'] += 1
+            app.logger.info('AFFI: sequential fallback for h3[%d] -> product[%d]', i, prod_idx)
+        except StopIteration:
+            break
+
+    # カードを挿入してテキストを再構築
+    new_parts = []
+    last_end = 0
+    for i, m in enumerate(h3_matches):
+        new_parts.append(text[last_end:m.end()])
+        prod_idx = assignments.get(i)
+        if prod_idx is not None:
+            card = build_product_card_html(products[prod_idx])
+            if card:
+                new_parts.append('\n' + card)
+                stats['matched_count'] += 1
+        last_end = m.end()
+    new_parts.append(text[last_end:])
+    text = ''.join(new_parts)
 
     # Cleanup: Claude が残した AFFI:N マーカーを全部消す（カードはもう挿入済み）
     text = re.sub(r'<p[^>]*>\s*(?:<!--\s*)?AFFI[:：]?\s*\w+\s*(?:-->)?\s*</p>', '', text)
