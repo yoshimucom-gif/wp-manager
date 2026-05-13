@@ -2107,7 +2107,9 @@ def amazon_search(query, access_key, secret_key, partner_tag, limit=10, timeout=
         'Resources': [
             'Images.Primary.Medium',
             'ItemInfo.Title',
+            'ItemInfo.Features',
             'Offers.Listings.Price',
+            'Offers.Summaries.LowestPrice',
             'CustomerReviews.StarRating',
             'CustomerReviews.Count',
         ],
@@ -2166,15 +2168,36 @@ def amazon_search(query, access_key, secret_key, partner_tag, limit=10, timeout=
     results = []
     for item in (payload.get('SearchResult') or {}).get('Items') or []:
         title = ((item.get('ItemInfo') or {}).get('Title') or {}).get('DisplayValue') or ''
-        listings = ((item.get('Offers') or {}).get('Listings') or [])
+        offers = item.get('Offers') or {}
+        listings = offers.get('Listings') or []
+        summaries = offers.get('Summaries') or []
         price_amount = None
         price_display = ''
+        # まず Listings から取得
         if listings:
             price_obj = (listings[0] or {}).get('Price') or {}
             price_amount = price_obj.get('Amount')
             price_display = price_obj.get('DisplayAmount') or ''
+        # Listings に無ければ Summaries.LowestPrice にフォールバック
+        if not price_amount and not price_display and summaries:
+            for summary in summaries:
+                low = (summary or {}).get('LowestPrice') or {}
+                if low.get('Amount') or low.get('DisplayAmount'):
+                    price_amount = price_amount or low.get('Amount')
+                    price_display = price_display or low.get('DisplayAmount') or ''
+                    break
         image_url = (((item.get('Images') or {}).get('Primary') or {}).get('Medium') or {}).get('URL', '')
         reviews = item.get('CustomerReviews') or {}
+        review_count_raw = reviews.get('Count')
+        if isinstance(review_count_raw, dict):
+            review_count = review_count_raw.get('Value') or 0
+        else:
+            review_count = review_count_raw or 0
+        review_avg_raw = reviews.get('StarRating')
+        if isinstance(review_avg_raw, dict):
+            review_avg = review_avg_raw.get('Value') or 0
+        else:
+            review_avg = review_avg_raw or 0
         results.append({
             'name': title.strip(),
             'price': price_amount,
@@ -2182,8 +2205,8 @@ def amazon_search(query, access_key, secret_key, partner_tag, limit=10, timeout=
             'url': item.get('DetailPageURL') or '',
             'image_url': image_url,
             'asin': item.get('ASIN') or '',
-            'review_count': (reviews.get('Count') or {}).get('Value') if isinstance(reviews.get('Count'), dict) else reviews.get('Count') or 0,
-            'review_avg': (reviews.get('StarRating') or {}).get('Value') or 0,
+            'review_count': review_count,
+            'review_avg': review_avg,
         })
     return results
 

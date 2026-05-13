@@ -3151,9 +3151,21 @@ function updateGeneratePublishButton(articleId = currentGenArticleId) {
   });
   if (panel) panel.style.display = hasContent ? 'block' : 'none';
   if (note) {
-    note.textContent = article?.wp_post_id
+    const baseMsg = article?.wp_post_id
       ? '生成済み本文を既存のWordPress投稿へ上書き送信できます。'
       : '生成済み本文をWordPressへ下書き投稿できます。';
+    const cs = article?.card_injection_stats || {};
+    let cardMsg = '';
+    if (typeof cs.h3_count === 'number') {
+      if (cs.products_available === 0) {
+        cardMsg = ' ⚠️ 商品カード未挿入: 実商品データを取得できませんでした（Amazon/楽天APIキーと疎通を確認してください）';
+      } else if (cs.matched_count === 0 && cs.h3_count > 0) {
+        cardMsg = ` ⚠️ 商品カード未挿入: 取得商品 ${cs.products_available}件あるが商品名がマッチしませんでした`;
+      } else if (cs.matched_count > 0) {
+        cardMsg = ` ✅ 商品カード ${cs.matched_count}件挿入済み（取得商品 ${cs.products_available}件 / 見出し ${cs.h3_count}件）`;
+      }
+    }
+    note.innerHTML = esc(baseMsg) + (cardMsg ? `<br><span style="color:${cardMsg.startsWith(' ⚠️') ? 'var(--error)' : 'var(--accent)'}">${esc(cardMsg.trim())}</span>` : '');
   }
   const viewBtn = document.getElementById('gen-wp-view-btn');
   const editBtn = document.getElementById('gen-wp-edit-btn');
