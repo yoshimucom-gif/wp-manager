@@ -2499,9 +2499,12 @@ def inject_affiliate_cards(html, products):
     Claude のマーカー(AFFI:N) に依存せず、h3 の商品名から類似度マッチで
     商品を見つけてカードを挿入する。マーカーは入っていれば掃除、なくてもOK。
     早見表セクションは強制削除（比較表と重複するため）。
+
+    Returns: (html, stats_dict) — stats_dict = {h3_count, matched_count, products_available}
     """
+    stats = {'h3_count': 0, 'matched_count': 0, 'products_available': len(products or [])}
     if not html:
-        return html
+        return html, stats
     products = products or []
     text = strip_summary_table_sections(str(html))
 
@@ -2516,6 +2519,7 @@ def inject_affiliate_cards(html, products):
         h3_text = match.group(2).strip()
         h3_close = match.group(3)
         h3_full = f'{h3_open}{h3_text}{h3_close}'
+        stats['h3_count'] += 1
         if not products:
             return h3_full
         # 「N位：商品名」から商品名部分を抽出
@@ -2524,9 +2528,13 @@ def inject_affiliate_cards(html, products):
         title_only = re.sub(r'\s*[（(][^)）]{0,80}[)）]\s*$', '', title_only).strip()
         match_idx = _find_best_product_match(title_only, products)
         if match_idx is None:
+            app.logger.info('AFFI: no product match for h3 "%s" (products=%d)', title_only[:60], len(products))
             return h3_full
         card = build_product_card_html(products[match_idx])
-        return f'{h3_full}\n{card}' if card else h3_full
+        if card:
+            stats['matched_count'] += 1
+            return f'{h3_full}\n{card}'
+        return h3_full
 
     text = h3_rank_pattern.sub(insert_card_after_h3, text)
 
@@ -2536,7 +2544,7 @@ def inject_affiliate_cards(html, products):
     text = re.sub(r'(?m)^\s*AFFI[:：]?\s*\w+\s*$', '', text)
     text = re.sub(r'\bAFFI[:：]\s*\w+\b', '', text)
     text = re.sub(r'(<p[^>]*>)\s*(</p>)', '', text)  # 残った空 p タグ
-    return text
+    return text, stats
 
 
 def build_quality_structure_html_prompt(quality, limit=6000):
@@ -4112,7 +4120,11 @@ def generate_article(article_id):
                 )
                 usage_parts.append(build_article_usage(prompt, full_content, final_message))
 
-            full_content = inject_affiliate_cards(full_content, products)
+            full_content, card_stats = inject_affiliate_cards(full_content, products)
+            _cards_msg = '商品カード挿入: {0}件 / 見出し {1}件 / 取得商品 {2}件'.format(
+                card_stats.get('matched_count', 0), card_stats.get('h3_count', 0), card_stats.get('products_available', 0)
+            )
+            yield f"data: {json.dumps({'status': 'cards_injected', 'message': _cards_msg})}\n\n"
             clean_content, enhance_warning = safe_enhance_generated_article_html(full_content, article_work, article_type)
             clean_content = strip_summary_table_sections(clean_content)
             validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
@@ -4299,7 +4311,7 @@ def generate_article_direct(article_id):
             usage_parts = [build_article_usage(base_prompt, raw_content, message)]
         else:
             raise ValueError('Claude APIキーが設定されていません')
-        raw_content = inject_affiliate_cards(raw_content, products)
+        raw_content, _card_stats = inject_affiliate_cards(raw_content, products)
         clean_content, enhance_warning = safe_enhance_generated_article_html(raw_content, article_work, article_type)
         clean_content = strip_summary_table_sections(clean_content)
         validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
@@ -4542,7 +4554,9 @@ def batch_generate():
                     raw_content = anthropic_message_text(message)
                     usage_parts = [build_article_usage(prompt, raw_content, message)]
                 stage = 'inject affiliate cards'
-                raw_content = inject_affiliate_cards(raw_content, products)
+                raw_content, card_stats = inject_affiliate_cards(raw_content, products)
+                if card_stats.get('h3_count') and not card_stats.get('matched_count'):
+                    update_job(current_title=article.get('title', ''), message=f"商品カード未挿入（取得商品 {card_stats.get('products_available', 0)}件 / 見出し {card_stats.get('h3_count', 0)}件）: {article.get('title', '')}")
                 stage = 'enhance and validate content'
                 content, enhance_warning = safe_enhance_generated_article_html(raw_content, article, article_type)
                 content = strip_summary_table_sections(content)
