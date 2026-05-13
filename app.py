@@ -5134,6 +5134,76 @@ def apply_cards_to_existing_article(article_id):
     })
 
 
+@app.route('/api/articles/bulk-apply-cards', methods=['POST'])
+@login_required
+def bulk_apply_cards():
+    """選択された記事に対して inject_affiliate_cards を一括適用する。
+    既にカードが入っている記事はスキップ。Claude API は使わず Amazon/楽天検索のみ。
+    """
+    data = request.json or {}
+    ids = data.get('ids') or data.get('article_ids') or []
+    force = bool(data.get('force'))
+    if not isinstance(ids, list) or not ids:
+        return jsonify({'error': '記事IDが指定されていません'}), 400
+
+    articles = load_articles()
+    settings = load_settings()
+    id_set = set(ids)
+
+    results = {
+        'inserted': 0,
+        'skipped_already_has_cards': 0,
+        'skipped_no_content': 0,
+        'skipped_no_products': 0,
+        'error': 0,
+        'errors': [],
+        'details': [],
+    }
+
+    for a in articles:
+        if a['id'] not in id_set:
+            continue
+        title_short = (a.get('title') or '')[:30]
+        content = a.get('content', '') or ''
+        if not content:
+            results['skipped_no_content'] += 1
+            results['details'].append({'id': a['id'], 'title': title_short, 'status': 'skipped', 'reason': 'no_content'})
+            continue
+        if 'aff-product-card' in content and not force:
+            results['skipped_already_has_cards'] += 1
+            results['details'].append({'id': a['id'], 'title': title_short, 'status': 'skipped', 'reason': 'already_has_cards'})
+            continue
+        try:
+            # force=True で既存カード除去
+            if force and 'aff-product-card' in content:
+                content = re.sub(
+                    r'<div\s+class="aff-product-card"[\s\S]*?</div>\s*</div>\s*</div>',
+                    '',
+                    content
+                )
+            products, product_status = fetch_product_context(a, settings, limit=15)
+            if not products:
+                results['skipped_no_products'] += 1
+                results['details'].append({'id': a['id'], 'title': title_short, 'status': 'skipped', 'reason': f'no_products({product_status})'})
+                continue
+            new_content, stats = inject_affiliate_cards(content, products)
+            if stats.get('matched_count', 0) == 0:
+                results['skipped_no_products'] += 1
+                results['details'].append({'id': a['id'], 'title': title_short, 'status': 'skipped', 'reason': 'no_matched_h3', 'stats': stats})
+                continue
+            a['content'] = new_content
+            a['card_injection_stats'] = stats
+            a['updated_at'] = datetime.now().isoformat()
+            results['inserted'] += 1
+            results['details'].append({'id': a['id'], 'title': title_short, 'status': 'inserted', 'matched_count': stats.get('matched_count'), 'h3_count': stats.get('h3_count')})
+        except Exception as e:
+            results['error'] += 1
+            results['errors'].append({'id': a['id'], 'title': title_short, 'message': str(e)[:200]})
+
+    save_articles(articles)
+    return jsonify({'success': True, **results})
+
+
 @app.route('/api/diagnostics/inject/<article_id>', methods=['GET', 'POST'])
 @login_required
 def diagnose_card_injection(article_id):

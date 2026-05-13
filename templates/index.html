@@ -1154,6 +1154,7 @@ tr.selected td { background: var(--accent-dim); }
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
               <label class="form-label" style="margin:0;flex:1">対象記事 (<span id="batch-count">0</span>件)</label>
               <button class="btn btn-primary btn-sm" onclick="startBatchGenerate()">⚡ 一括生成開始</button>
+              <button class="btn btn-primary btn-sm" onclick="bulkApplyCardsToSelected()">🛒 選択にカード一括挿入</button>
               <button class="btn btn-success btn-sm" onclick="startBatchPublish()">🚀 一括WP投稿</button>
               <button class="btn btn-secondary btn-sm" onclick="assignBatchScheduleDates()">📅 予定日を割当</button>
               <button class="btn btn-secondary btn-sm" onclick="loadBatchArticles()">↻ 状態更新</button>
@@ -2529,6 +2530,42 @@ async function deleteSelected() {
   await fetch('/api/articles/bulk-delete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids})});
   toast(`${ids.length}件削除しました`, 'success');
   loadArticles();
+}
+
+async function bulkApplyCardsToSelected() {
+  const ids = getBatchSelectedIds();
+  if (!ids.length) { toast('記事を選択してください', 'error'); return; }
+  if (!confirm(
+    `${ids.length}件の記事に商品カードを後付け挿入します。\n`
+    + '本文を保ったままカードだけ追加します（Claude API は使いません）。\n'
+    + '既にカードが入っている記事はスキップします。\n\n実行しますか？'
+  )) return;
+  toast(`${ids.length}件にカード挿入中... 商品検索で15〜30秒かかります`, 'info');
+  try {
+    const res = await fetch('/api/articles/bulk-apply-cards', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ids})
+    });
+    const data = await res.json();
+    if (data.success) {
+      const parts = [];
+      if (data.inserted) parts.push(`✅ ${data.inserted}件挿入`);
+      if (data.skipped_already_has_cards) parts.push(`🟡 ${data.skipped_already_has_cards}件スキップ（既に挿入済み）`);
+      if (data.skipped_no_content) parts.push(`⚠️ ${data.skipped_no_content}件スキップ（本文未生成）`);
+      if (data.skipped_no_products) parts.push(`⚠️ ${data.skipped_no_products}件スキップ（商品データ取得失敗）`);
+      if (data.error) parts.push(`❌ ${data.error}件エラー`);
+      toast(parts.join(' / ') || '何も処理されませんでした', data.error ? 'error' : 'success');
+      if (data.inserted) {
+        toast('WPに反映するには各記事で「WPに上書きPUSH」を押してください', 'info');
+      }
+      await loadArticles();
+    } else {
+      toast(data.error || '一括挿入に失敗しました', 'error');
+    }
+  } catch (e) {
+    toast('エラー: ' + e.message, 'error');
+  }
 }
 
 async function deleteBatchSelected() {
