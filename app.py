@@ -640,6 +640,8 @@ def article_html_output_rules():
 - tableを使う場合は <table><thead><tbody><tr><th><td> を正しく閉じ、tableの外に他要素が漏れないようにする
 - WordPress/Gutenbergコメント（<!-- wp:... -->、<!-- /wp:... -->）は出力しない
 - H2は主要セクション、H3はH2内の小項目に使う。メリット、デメリット・注意点、よくある質問を作る場合は、H2の直下に各項目・各質問を <h3 class="wp-block-heading">...</h3> で分ける
+- 見出し（H2/H3）は **SEO を意識して具体的に**。「選び方」「よくある質問」「まとめ」のような単語だけの見出しは避け、主要キーワードや検索意図に沿った語を自然に含める（例:「冷感ヘッドバンドの選び方｜5つのチェックポイント」「冷感ヘッドバンドのよくある質問」「まとめ｜用途で選ぶのが失敗しないコツ」）。ただし全見出しにキーワードを詰め込みすぎない（過剰最適化を避ける）
+- 「結論早見表」「おすすめ早見表」のような早見表セクションは作らない（比較表があれば十分。重複は不要）
 - 装飾は <strong>太字</strong>、<span style="color:#d32f2f">赤字</span>、<mark>マーカー</mark>、<ul><li>リスト</li></ul>、<table>表</table> だけを使う
 - 装飾目的の複雑なdiv、独自class、吹き出し、ボックス、カード、GutenbergブロックHTMLは出力しない
 - 比較表は横幅が崩れにくいように列を増やしすぎず、セル内は短くする
@@ -2037,9 +2039,9 @@ def minimum_required_content_chars(quality=None):
     return max(300, int(target * 0.3))
 
 
-def claude_max_tokens_for_quality(quality=None, floor=2800, ceiling=8000):
+def claude_max_tokens_for_quality(quality=None, floor=3200, ceiling=12000):
     target = effective_target_chars(quality)
-    return max(floor, min(ceiling, int(target * 1.4) + 1200))
+    return max(floor, min(ceiling, int(target * 2.2) + 2400))
 
 
 def claude_segment_max_tokens(quality=None, total=1):
@@ -2467,18 +2469,28 @@ def _find_best_product_match(query_name, products, threshold=0.5):
 
 
 def strip_summary_table_sections(html):
-    """「早見表」を含むH2セクション（H2 + 内容）を削除する。
+    """「早見表」を含むH2セクション（H2 + そのセクション内容）を削除する。
 
-    比較表と内容が重複しがちなので、Claude が出力しても物理削除する。
+    比較表と重複しがちなので、Claude が出力しても物理削除する。
+    h2内にstrong等のネストタグがあってもOK。次のh2 / ランキング個別h3 / 末尾まで削除。
+    wp:heading コメントラッパーも一緒に除去。
     """
     if not html:
         return html
-    # 「早見表」を含むH2から、次のH2の直前まで（または末尾）を削除
+    text = str(html)
+    # 「早見表」を含むH2（中にタグがあってもOK）〜次のセクション開始直前まで削除
     pattern = re.compile(
-        r'<h2[^>]*>[^<]*?早見表[^<]*?</h2>[\s\S]*?(?=<h2)',
+        r'(?:<!--\s*wp:heading[^>]*-->\s*)?'
+        r'<h2[^>]*>(?:(?!</h2>)[\s\S])*?早見表(?:(?!</h2>)[\s\S])*?</h2>'
+        r'(?:\s*<!--\s*/wp:heading\s*-->)?'
+        r'[\s\S]*?'
+        r'(?=<h2|<!--\s*wp:heading|<h3[^>]*>\s*(?:<!--\s*wp:[^>]*-->\s*)?[\d０-９]+\s*位|$)',
         re.IGNORECASE
     )
-    return pattern.sub('', html)
+    cleaned = pattern.sub('', text)
+    # 念のため2回（Claude が複数の早見表を出すケース）
+    cleaned = pattern.sub('', cleaned)
+    return cleaned
 
 
 def inject_affiliate_cards(html, products):
@@ -3086,11 +3098,32 @@ def detect_ranking_item_count(content):
     return max(count_ranked_items_from_text(content), count_table_rows_from_html(content))
 
 
+def _looks_truncated(content):
+    """生成本文が途中で切れているか簡易判定。"""
+    text = html_to_text(content or '').rstrip()
+    if not text:
+        return True
+    # 末尾が文末記号 / 閉じ括弧 で終わっていなければ途中切れの可能性
+    last = text[-1]
+    if last in '。．！？!?）)」』】〕》>…':
+        return False
+    # 「。」が直近30文字以内にあれば許容（多少のはみ出しは許す）
+    tail = text[-30:]
+    return not any(c in tail for c in '。．！？!?')
+
+
 def validate_generated_article(article, article_type, content, quality=None):
     content_chars = len(html_to_text(content))
     min_chars = minimum_required_content_chars(quality)
     if content_chars < min_chars:
-        return f'生成本文が短すぎます（{content_chars}文字）。目標は{effective_target_chars(quality)}文字前後、最低{min_chars}文字以上です。途中で止まっている可能性が高いため保存しません。'
+        return f'生成本文が短すぎます（{content_chars}文字）。最低{min_chars}文字以上必要です。途中で止まっている可能性が高いため保存しません。'
+
+    # 途中切れ検出: まとめセクションが無い or 文末が途中
+    has_matome = bool(re.search(r'<h2[^>]*>(?:(?!</h2>)[\s\S])*?(?:まとめ|総まとめ|結論として)(?:(?!</h2>)[\s\S])*?</h2>', content, flags=re.I))
+    if not has_matome:
+        return '記事に「まとめ」セクションが見当たりません。途中で切れている可能性が高いため、続きを生成して記事を完結させてください。'
+    if _looks_truncated(content):
+        return '本文末尾が文の途中で終わっています。途中で切れている可能性が高いため、続きを生成して記事を完結させてください。'
 
     if normalize_article_type(article_type, 'ranking') != 'ranking':
         return ''
@@ -4081,6 +4114,7 @@ def generate_article(article_id):
 
             full_content = inject_affiliate_cards(full_content, products)
             clean_content, enhance_warning = safe_enhance_generated_article_html(full_content, article_work, article_type)
+            clean_content = strip_summary_table_sections(clean_content)
             validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
             content_chars = len(html_to_text(clean_content))
             continuation_round = 0
@@ -4267,6 +4301,7 @@ def generate_article_direct(article_id):
             raise ValueError('Claude APIキーが設定されていません')
         raw_content = inject_affiliate_cards(raw_content, products)
         clean_content, enhance_warning = safe_enhance_generated_article_html(raw_content, article_work, article_type)
+        clean_content = strip_summary_table_sections(clean_content)
         validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
         content_chars = len(html_to_text(clean_content))
         if not validation_error and content_chars < 500:
@@ -4510,6 +4545,7 @@ def batch_generate():
                 raw_content = inject_affiliate_cards(raw_content, products)
                 stage = 'enhance and validate content'
                 content, enhance_warning = safe_enhance_generated_article_html(raw_content, article, article_type)
+                content = strip_summary_table_sections(content)
                 if enhance_warning:
                     pipeline_warnings.append(enhance_warning)
                 validation_error = validate_generated_article(article, article_type, content, quality)
