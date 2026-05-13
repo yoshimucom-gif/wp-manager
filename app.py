@@ -2500,6 +2500,34 @@ def _find_best_product_match(query_name, products, threshold=0.4):
     return best_idx if (best_idx is not None and best_score >= threshold) else None
 
 
+def strip_leading_introduction_h2(html):
+    """記事冒頭の「○○とは｜選ぶポイントと本記事の結論」のような
+    introduction-style H2 を物理削除し、その下のリード段落を露出させる。
+
+    Claude がプロンプト指示を無視してリードを H2 で囲むケースが多発するので、
+    冒頭が H2 で始まっていてかつ intro 系キーワードを含んでいたら H2 タグだけ削除。
+    """
+    if not html:
+        return html
+    text = str(html)
+    # 先頭の空白＋wp:headingコメント（あれば）の直後がH2かをチェック
+    m = re.match(
+        r'^\s*(?:<!--\s*wp:heading[^>]*-->\s*)?<h2([^>]*)>((?:(?!</h2>)[\s\S])*?)</h2>(?:\s*<!--\s*/wp:heading\s*-->)?',
+        text,
+        re.IGNORECASE
+    )
+    if not m:
+        return text
+    h2_inner = re.sub(r'<[^>]+>', '', m.group(2))  # h2 内部のテキスト
+    intro_keywords = ['とは', '結論', '選ぶポイント', '選定ポイント', '本記事の', '解説', 'について', 'を知る', '記事のポイント']
+    is_intro = any(kw in h2_inner for kw in intro_keywords)
+    if not is_intro:
+        return text
+    # 冒頭の H2 (+ ラッパーコメント) を削除して残りを返す
+    print(f'[INTRO-H2] stripped leading introduction H2: "{h2_inner[:60]}"', flush=True)
+    return text[m.end():].lstrip()
+
+
 def strip_summary_table_sections(html):
     """「早見表」を含むH2セクション（H2 + そのセクション内容）を削除する。
 
@@ -2544,7 +2572,8 @@ def inject_affiliate_cards(html, products):
         print('[AFFI] early-return: html is empty', flush=True)
         return html, stats
     products = products or []
-    text = strip_summary_table_sections(str(html))
+    text = strip_leading_introduction_h2(str(html))
+    text = strip_summary_table_sections(text)
 
     # 全 h3 ランキング見出しを検出
     h3_rank_pattern = re.compile(
