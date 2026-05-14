@@ -12,8 +12,20 @@
             const dryRun = $('#aipi-dry-run').is(':checked');
             const mode = $('input[name=aipi_mode]').val() || 'marker';
             const design = $('input[name=aipi_design]').val() || 'vertical';
+            const isReinsert = $(this).text().includes('再挿入');
 
-            if (!confirm(dryRun ? 'プレビューモードで商品挿入を実行します。よろしいですか？' : '実際に記事本文に商品を挿入して保存します。元の本文はバックアップされます。実行しますか？')) {
+            let confirmMessage;
+            if (dryRun) {
+                confirmMessage = 'プレビューモードで商品挿入を実行します。よろしいですか？';
+            } else if (isReinsert) {
+                confirmMessage = '⚠️ 再挿入を実行します。\n\n' +
+                    '前回の挿入後にこの記事を手動編集していた場合、その変更は失われます。\n' +
+                    '（バックアップ済みの「マーカー入り原本」から再描画します）\n\n' +
+                    '続けますか？';
+            } else {
+                confirmMessage = '実際に記事本文に商品を挿入して保存します。元の本文はバックアップされます。実行しますか？';
+            }
+            if (!confirm(confirmMessage)) {
                 return;
             }
 
