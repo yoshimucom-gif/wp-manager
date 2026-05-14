@@ -87,17 +87,29 @@ class AI_PI_Inserter {
      */
     private static function process_marker_mode($post_id, $content, $design) {
         $marker_pattern = '/<!--\s*ai-product(?::([a-z]+)(?::(\d+))?)?\s*-->/i';
-        preg_match_all($marker_pattern, $content, $markers);
-        $marker_count = count($markers[0]);
+        preg_match_all($marker_pattern, $content, $markers, PREG_SET_ORDER);
+        $marker_count = count($markers);
 
         if ($marker_count === 0) {
             return new WP_Error('no_markers', '記事本文に <!--ai-product--> マーカーが見つかりません');
         }
 
+        // 単体マーカー(vertical/proscons等)と多商品マーカー(ranking/compare)を分けてカウント
+        // 多商品マーカーは「単体マーカーで選定された商品」を流用するため、Claudeへは単体分だけ依頼する
+        $single_marker_count = 0;
+        foreach ($markers as $m) {
+            $m_design = !empty($m[1]) ? strtolower($m[1]) : $design;
+            if ($m_design !== 'ranking' && $m_design !== 'compare') {
+                $single_marker_count++;
+            }
+        }
+
         $claude = new AI_PI_Claude_API();
         $total_usage = ['input_tokens' => 0, 'output_tokens' => 0];
 
-        $kw_result = $claude->extract_keywords($content, $marker_count);
+        // キーワード抽出は記事全体から（単体マーカー数を考慮）
+        $kw_count = max($single_marker_count, 1);
+        $kw_result = $claude->extract_keywords($content, $kw_count);
         if (is_wp_error($kw_result)) return $kw_result;
         $keywords = $kw_result['keywords'];
         self::accumulate_usage($total_usage, $kw_result['usage']);
@@ -118,46 +130,88 @@ class AI_PI_Inserter {
             return new WP_Error('no_candidates', '商品候補が取得できませんでした');
         }
 
-        $sel_result = $claude->select_products_marker($content, $all_candidates, $marker_count);
-        if (is_wp_error($sel_result)) return $sel_result;
-        self::accumulate_usage($total_usage, $sel_result['usage']);
-
+        // Claudeには「単体マーカー数」分だけ選定を依頼（多商品マーカーは流用するため重複依頼を避ける）
         $selections_by_index = [];
-        foreach ($sel_result['selections'] as $sel) {
-            if (!isset($sel['marker_index'])) continue;
-            $idx = intval($sel['marker_index']);
-            // product_idバリデーション
-            if (!AI_PI_Product_Selector::find_by_id($all_candidates, $sel['product_id'])) continue;
-            if (!isset($selections_by_index[$idx])) {
-                $selections_by_index[$idx] = $sel;
+        if ($single_marker_count > 0) {
+            $sel_result = $claude->select_products_marker($content, $all_candidates, $single_marker_count);
+            if (is_wp_error($sel_result)) return $sel_result;
+            self::accumulate_usage($total_usage, $sel_result['usage']);
+
+            foreach ($sel_result['selections'] as $sel) {
+                if (!isset($sel['marker_index'])) continue;
+                $idx = intval($sel['marker_index']);
+                if (!AI_PI_Product_Selector::find_by_id($all_candidates, $sel['product_id'])) continue;
+                if (!isset($selections_by_index[$idx])) {
+                    $selections_by_index[$idx] = $sel;
+                }
             }
         }
 
+        // 単体マーカーの選定結果を順番に並べた配列（多商品マーカーの一次ソース）
+        $article_products = [];
+        $seen_article_ids = [];
+        foreach ($selections_by_index as $sel) {
+            $p = AI_PI_Product_Selector::find_by_id($all_candidates, $sel['product_id']);
+            if (!$p) continue;
+            $pid = $p['id'] ?? '';
+            if (!$pid || isset($seen_article_ids[$pid])) continue;
+            $article_products[] = $p;
+            $seen_article_ids[$pid] = true;
+        }
+
         $selected_products = [];
-        $marker_counter = 0;
+        $single_counter = 0;
 
         $new_content = preg_replace_callback(
             $marker_pattern,
-            function($match) use (&$marker_counter, $selections_by_index, $all_candidates, $design, &$selected_products) {
-                $current_idx = $marker_counter;
-                $marker_counter++;
-
+            function($match) use (&$single_counter, $selections_by_index, $all_candidates, $article_products, $design, &$selected_products) {
                 // マーカーから design hint を取得（無ければプラグイン既定）
                 $marker_design = !empty($match[1]) ? strtolower($match[1]) : $design;
                 $marker_count  = !empty($match[2]) ? intval($match[2]) : 3;
 
-                // multi-product マーカー: 候補から上位N件をまとめて表示
+                // multi-product マーカー: 記事内で既に使われた商品を優先（同一商品の比較表/ランキング）
                 if ($marker_design === 'ranking' || $marker_design === 'compare') {
-                    $multi_products = array_slice($all_candidates, 0, $marker_count);
-                    if (empty($multi_products)) return $match[0];
-                    foreach ($multi_products as $p) {
-                        $selected_products[] = $p;
+                    $multi = [];
+                    $seen = [];
+                    // 1. 記事内で選定済みの商品を最優先
+                    foreach ($article_products as $p) {
+                        $pid = $p['id'] ?? '';
+                        if (!$pid || isset($seen[$pid])) continue;
+                        $multi[] = $p;
+                        $seen[$pid] = true;
+                        if (count($multi) >= $marker_count) break;
                     }
+                    // 2. 足りなければ候補プールから補完
+                    if (count($multi) < $marker_count) {
+                        foreach ($all_candidates as $p) {
+                            $pid = $p['id'] ?? '';
+                            if (!$pid || isset($seen[$pid])) continue;
+                            $multi[] = $p;
+                            $seen[$pid] = true;
+                            if (count($multi) >= $marker_count) break;
+                        }
+                    }
+                    if (empty($multi)) return $match[0];
+
+                    // 重複しない商品だけ selected_products に追加
+                    foreach ($multi as $p) {
+                        $pid = $p['id'] ?? '';
+                        $already = false;
+                        foreach ($selected_products as $sp) {
+                            if (($sp['id'] ?? '') === $pid) { $already = true; break; }
+                        }
+                        if (!$already) $selected_products[] = $p;
+                    }
+
                     if ($marker_design === 'compare') {
-                        return AI_PI_Card_Renderer::render_compare($multi_products);
+                        return AI_PI_Card_Renderer::render_compare($multi);
                     }
-                    return AI_PI_Card_Renderer::render_ranking($multi_products);
+                    return AI_PI_Card_Renderer::render_ranking($multi);
                 }
+
+                // 単体マーカー: Claudeが選定した商品を使う
+                $current_idx = $single_counter;
+                $single_counter++;
 
                 if (!isset($selections_by_index[$current_idx])) return $match[0];
 
@@ -250,12 +304,25 @@ class AI_PI_Inserter {
             }
         }
 
+        // 単体マーカーで選定された商品を順に並べた配列（多商品マーカーの一次ソース）
+        $article_products = [];
+        $seen_article_ids = [];
+        ksort($selections_by_index);
+        foreach ($selections_by_index as $sel) {
+            $p = AI_PI_Product_Selector::find_by_id($all_candidates_pool, $sel['product_id']);
+            if (!$p) continue;
+            $pid = $p['id'] ?? '';
+            if (!$pid || isset($seen_article_ids[$pid])) continue;
+            $article_products[] = $p;
+            $seen_article_ids[$pid] = true;
+        }
+
         $selected_products = [];
         $marker_counter = 0;
 
         $new_content = preg_replace_callback(
             $marker_pattern,
-            function($match) use (&$marker_counter, $selections_by_index, $all_candidates_pool, $design, &$selected_products) {
+            function($match) use (&$marker_counter, $selections_by_index, $all_candidates_pool, $article_products, $design, &$selected_products) {
                 $current_idx = $marker_counter;
                 $marker_counter++;
 
@@ -263,17 +330,41 @@ class AI_PI_Inserter {
                 $marker_design = !empty($match[1]) ? strtolower($match[1]) : $design;
                 $marker_count  = !empty($match[2]) ? intval($match[2]) : 3;
 
-                // multi-product マーカー: 候補プールから上位N件をまとめて表示
+                // multi-product マーカー: 記事内で既に使われた商品を優先
                 if ($marker_design === 'ranking' || $marker_design === 'compare') {
-                    $multi_products = array_slice(array_values($all_candidates_pool), 0, $marker_count);
-                    if (empty($multi_products)) return $match[0];
-                    foreach ($multi_products as $p) {
-                        $selected_products[] = $p;
+                    $multi = [];
+                    $seen = [];
+                    foreach ($article_products as $p) {
+                        $pid = $p['id'] ?? '';
+                        if (!$pid || isset($seen[$pid])) continue;
+                        $multi[] = $p;
+                        $seen[$pid] = true;
+                        if (count($multi) >= $marker_count) break;
                     }
+                    if (count($multi) < $marker_count) {
+                        foreach ($all_candidates_pool as $p) {
+                            $pid = $p['id'] ?? '';
+                            if (!$pid || isset($seen[$pid])) continue;
+                            $multi[] = $p;
+                            $seen[$pid] = true;
+                            if (count($multi) >= $marker_count) break;
+                        }
+                    }
+                    if (empty($multi)) return $match[0];
+
+                    foreach ($multi as $p) {
+                        $pid = $p['id'] ?? '';
+                        $already = false;
+                        foreach ($selected_products as $sp) {
+                            if (($sp['id'] ?? '') === $pid) { $already = true; break; }
+                        }
+                        if (!$already) $selected_products[] = $p;
+                    }
+
                     if ($marker_design === 'compare') {
-                        return AI_PI_Card_Renderer::render_compare($multi_products);
+                        return AI_PI_Card_Renderer::render_compare($multi);
                     }
-                    return AI_PI_Card_Renderer::render_ranking($multi_products);
+                    return AI_PI_Card_Renderer::render_ranking($multi);
                 }
 
                 if (!isset($selections_by_index[$current_idx])) return $match[0];
