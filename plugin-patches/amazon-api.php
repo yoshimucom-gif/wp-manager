@@ -59,6 +59,21 @@ class AI_PI_Amazon_API {
         $result = $this->call_api('SearchItems', $payload);
         if (is_wp_error($result)) return $result;
 
+        // デバッグ: 最初の商品の生レスポンスを保存（設定画面で表示用）
+        $first_item = $result['SearchResult']['Items'][0] ?? null;
+        if ($first_item) {
+            set_transient('ai_pi_last_amazon_raw_sample', [
+                'keyword' => $keyword,
+                'asin' => $first_item['ASIN'] ?? '',
+                'has_offers' => isset($first_item['Offers']),
+                'has_listings' => isset($first_item['Offers']['Listings']),
+                'has_summaries' => isset($first_item['Offers']['Summaries']),
+                'has_reviews' => isset($first_item['CustomerReviews']),
+                'raw_first_item' => wp_json_encode($first_item, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT),
+                'fetched_at' => current_time('mysql'),
+            ], 30 * MINUTE_IN_SECONDS);
+        }
+
         return $this->parse_search_results($result);
     }
 
