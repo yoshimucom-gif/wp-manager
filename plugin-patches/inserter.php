@@ -444,7 +444,7 @@ class AI_PI_Inserter {
      */
     private static function extract_marker_headings($content, $fallback = '') {
         preg_match_all(
-            '/(<h([234])[^>]*>(.*?)<\/h\2>)|(<!--\s*ai-product\s*-->)/is',
+            '/(<h([234])[^>]*>(.*?)<\/h\2>)|(<!--\s*ai-product(?::[a-z]+(?::\d+)?)?\s*-->)/is',
             $content,
             $matches,
             PREG_SET_ORDER
