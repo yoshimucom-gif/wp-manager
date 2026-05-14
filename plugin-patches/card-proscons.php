@@ -79,22 +79,25 @@ if (empty($cons)) {
             <a href="<?php echo esc_url($amazon_url ?: $rakuten_url); ?>" target="_blank" rel="nofollow noopener sponsored" class="aipi-proscons__title">
                 <?php echo esc_html($display_title); ?>
             </a>
-            <?php if ($rating > 0): ?>
-                <div class="aipi-proscons__rating">
-                    <span class="aipi-stars">
-                        <?php
-                        $full = floor($rating);
-                        for ($s = 1; $s <= 5; $s++) echo $s <= $full ? '★' : '☆';
-                        ?>
-                    </span>
-                    <span class="aipi-rating-num"><?php echo esc_html(number_format($rating, 1)); ?></span>
-                    <?php if (!empty($product['review_count'])): ?>
-                        <span class="aipi-review-count">（<?php echo esc_html(number_format($product['review_count'])); ?>件）</span>
+            <?php
+            $has_rating = $rating > 0;
+            $has_price  = !empty($product['price_display']);
+            ?>
+            <?php if ($has_rating || $has_price): ?>
+                <div class="aipi-proscons__meta">
+                    <?php if ($has_rating): $full = floor($rating); ?>
+                        <span class="aipi-proscons__rating">
+                            <span class="aipi-stars"><?php for ($s = 1; $s <= 5; $s++) echo $s <= $full ? '★' : '☆'; ?></span>
+                            <span class="aipi-rating-num"><?php echo esc_html(number_format($rating, 1)); ?></span>
+                            <?php if (!empty($product['review_count'])): ?>
+                                <span class="aipi-review-count">（<?php echo esc_html(number_format($product['review_count'])); ?>件）</span>
+                            <?php endif; ?>
+                        </span>
+                    <?php endif; ?>
+                    <?php if ($has_price): ?>
+                        <span class="aipi-proscons__price"><?php echo esc_html($product['price_display']); ?></span>
                     <?php endif; ?>
                 </div>
-            <?php endif; ?>
-            <?php if (!empty($product['price_display'])): ?>
-                <div class="aipi-proscons__price"><?php echo esc_html($product['price_display']); ?></div>
             <?php endif; ?>
         </div>
     </div>
