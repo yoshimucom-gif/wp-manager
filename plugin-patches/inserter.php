@@ -146,14 +146,17 @@ class AI_PI_Inserter {
                 $marker_design = !empty($match[1]) ? strtolower($match[1]) : $design;
                 $marker_count  = !empty($match[2]) ? intval($match[2]) : 3;
 
-                // ranking マーカー: 候補から上位N件を ranking ブロックで表示
-                if ($marker_design === 'ranking') {
-                    $ranking_products = array_slice($all_candidates, 0, $marker_count);
-                    if (empty($ranking_products)) return $match[0];
-                    foreach ($ranking_products as $p) {
+                // multi-product マーカー: 候補から上位N件をまとめて表示
+                if ($marker_design === 'ranking' || $marker_design === 'compare') {
+                    $multi_products = array_slice($all_candidates, 0, $marker_count);
+                    if (empty($multi_products)) return $match[0];
+                    foreach ($multi_products as $p) {
                         $selected_products[] = $p;
                     }
-                    return AI_PI_Card_Renderer::render_ranking($ranking_products);
+                    if ($marker_design === 'compare') {
+                        return AI_PI_Card_Renderer::render_compare($multi_products);
+                    }
+                    return AI_PI_Card_Renderer::render_ranking($multi_products);
                 }
 
                 if (!isset($selections_by_index[$current_idx])) return $match[0];
@@ -260,14 +263,17 @@ class AI_PI_Inserter {
                 $marker_design = !empty($match[1]) ? strtolower($match[1]) : $design;
                 $marker_count  = !empty($match[2]) ? intval($match[2]) : 3;
 
-                // ranking マーカー: 候補プールから上位N件を ranking ブロックで表示
-                if ($marker_design === 'ranking') {
-                    $ranking_products = array_slice(array_values($all_candidates_pool), 0, $marker_count);
-                    if (empty($ranking_products)) return $match[0];
-                    foreach ($ranking_products as $p) {
+                // multi-product マーカー: 候補プールから上位N件をまとめて表示
+                if ($marker_design === 'ranking' || $marker_design === 'compare') {
+                    $multi_products = array_slice(array_values($all_candidates_pool), 0, $marker_count);
+                    if (empty($multi_products)) return $match[0];
+                    foreach ($multi_products as $p) {
                         $selected_products[] = $p;
                     }
-                    return AI_PI_Card_Renderer::render_ranking($ranking_products);
+                    if ($marker_design === 'compare') {
+                        return AI_PI_Card_Renderer::render_compare($multi_products);
+                    }
+                    return AI_PI_Card_Renderer::render_ranking($multi_products);
                 }
 
                 if (!isset($selections_by_index[$current_idx])) return $match[0];

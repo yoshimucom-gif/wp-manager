@@ -1,0 +1,95 @@
+<?php
+/**
+ * 一括処理画面
+ */
+if (!defined('ABSPATH')) exit;
+
+function ai_pi_render_bulk_page() {
+    if (!current_user_can('manage_options')) return;
+
+    $categories = get_categories(['hide_empty' => false]);
+    $tags = get_tags(['hide_empty' => false]);
+    $preview_url = admin_url('admin.php?page=ai-product-inserter-preview');
+    ?>
+    <div class="wrap aipi-wrap">
+        <h1>AI商品挿入 一括処理</h1>
+
+        <div class="notice notice-warning">
+            <p><strong>⚠️ 注意：</strong>一括処理はAPIコストが発生します。最初は5〜10件で必ずテストしてください。</p>
+        </div>
+
+        <div class="aipi-bulk-form">
+            <h2>対象記事の絞り込み</h2>
+
+            <table class="form-table">
+                <tr>
+                    <th>カテゴリ</th>
+                    <td>
+                        <div class="aipi-checkbox-list">
+                            <?php foreach ($categories as $cat): ?>
+                                <label><input type="checkbox" class="aipi-cat" value="<?php echo esc_attr($cat->term_id); ?>"> <?php echo esc_html($cat->name); ?> <span class="aipi-count">(<?php echo esc_html($cat->count); ?>)</span></label>
+                            <?php endforeach; ?>
+                        </div>
+                    </td>
+                </tr>
+
+                <tr>
+                    <th>タグ</th>
+                    <td>
+                        <div class="aipi-checkbox-list">
+                            <?php foreach ($tags as $tag): ?>
+                                <label><input type="checkbox" class="aipi-tag" value="<?php echo esc_attr($tag->term_id); ?>"> <?php echo esc_html($tag->name); ?> <span class="aipi-count">(<?php echo esc_html($tag->count); ?>)</span></label>
+                            <?php endforeach; ?>
+                        </div>
+                    </td>
+                </tr>
+
+                <tr>
+                    <th>処理対象</th>
+                    <td>
+                        <label><input type="radio" name="aipi_filter" value="has_marker" checked> マーカー(<code>&lt;!--ai-product...--&gt;</code>)を含む未処理記事</label><br>
+                        <label><input type="radio" name="aipi_filter" value="uninserted"> 未挿入の記事すべて</label><br>
+                        <label><input type="radio" name="aipi_filter" value="expired"> ⚠️24時間経過の記事（再取得）</label><br>
+                        <label><input type="radio" name="aipi_filter" value="all"> 全件（挿入済みも再処理）</label>
+                    </td>
+                </tr>
+            </table>
+
+            <h2>挿入の設定</h2>
+            <p class="description" style="margin-left:0;">マーカー方式で固定。各マーカーのデザインは記事本文に書かれた <code>&lt;!--ai-product:vertical--&gt;</code> 等のヒントに従って自動切替されます。</p>
+            <input type="hidden" name="aipi_bulk_mode" value="marker">
+            <input type="hidden" name="aipi_bulk_design" value="vertical">
+            <table class="form-table">
+                <tr>
+                    <th>処理上限</th>
+                    <td>
+                        <input type="number" id="aipi_limit" value="5" min="1" max="200" style="width:80px;">
+                        <p class="description">最初は5件程度を推奨</p>
+                    </td>
+                </tr>
+            </table>
+
+            <p>
+                <button type="button" class="button aipi-count-targets">対象記事を確認</button>
+                <button type="button" class="button button-primary aipi-start-bulk" disabled>一括処理を開始</button>
+            </p>
+
+            <div class="aipi-targets-result" style="display:none;">
+                <h3>対象記事</h3>
+                <div class="aipi-targets-summary"></div>
+                <div class="aipi-targets-list"></div>
+            </div>
+
+            <div class="aipi-progress" style="display:none;">
+                <h3>処理状況</h3>
+                <div class="aipi-progress-bar">
+                    <div class="aipi-progress-fill" style="width:0%;">0%</div>
+                </div>
+                <div class="aipi-progress-log"></div>
+                <button type="button" class="button aipi-stop-bulk">⏹ 中断</button>
+            </div>
+        </div>
+    </div>
+
+    <?php
+}

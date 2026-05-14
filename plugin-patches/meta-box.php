@@ -57,7 +57,7 @@ function ai_pi_render_meta_box($post) {
         <div class="aipi-marker-info">
             <strong>マーカー検出:</strong> <?php echo intval($marker_count); ?>個
             <?php if ($marker_count === 0): ?>
-                <p class="description">マーカー方式で使う場合は本文に <code>&lt;!--ai-product--&gt;</code> を挿入</p>
+                <p class="description">本文に <code>&lt;!--ai-product:vertical--&gt;</code> 等のマーカーを挿入してください（Affiros9 で生成すれば自動で入ります）。</p>
             <?php endif; ?>
         </div>
 
@@ -74,34 +74,9 @@ function ai_pi_render_meta_box($post) {
 
         <hr>
 
-        <p><label><strong>① 挿入方式</strong></label></p>
-        <p class="aipi-mode-radios">
-            <label><input type="radio" name="aipi_mode" value="marker" <?php checked($default_mode, 'marker'); ?>> マーカー方式</label><br>
-            <label><input type="radio" name="aipi_mode" value="marker_per_heading" <?php checked($default_mode, 'marker_per_heading'); ?>> 見出し連動マーカー ⭐</label><br>
-            <label><input type="radio" name="aipi_mode" value="auto" <?php checked($default_mode, 'auto'); ?>> 自動配置</label>
-        </p>
-
-        <p>
-            <label><strong>② デザイン</strong></label>
-            <a href="<?php echo esc_url($preview_url); ?>" target="_blank" style="font-size:11px;margin-left:8px;">🎨 プレビュー</a>
-        </p>
-        <p>
-            <label><input type="radio" name="aipi_design" value="vertical" <?php checked($default_design, 'vertical'); ?>> 縦置きカード</label><br>
-            <label><input type="radio" name="aipi_design" value="horizontal" <?php checked($default_design, 'horizontal'); ?>> 横長カード</label><br>
-            <label><input type="radio" name="aipi_design" value="ranking" <?php checked($default_design, 'ranking'); ?>> ランキングカード</label>
-        </p>
-
-        <div class="aipi-position-section" style="<?php echo $default_mode === 'auto' ? '' : 'display:none;'; ?>">
-            <p><label><strong>③ 挿入位置</strong>（自動配置のみ）</label></p>
-            <p>
-                <label><input type="radio" name="aipi_position" value="top" <?php checked($default_position, 'top'); ?>> 記事冒頭</label><br>
-                <label><input type="radio" name="aipi_position" value="before_first_h2" <?php checked($default_position, 'before_first_h2'); ?>> 最初のH2の直前</label><br>
-                <label><input type="radio" name="aipi_position" value="after_first_h2" <?php checked($default_position, 'after_first_h2'); ?>> 最初のH2の直後</label><br>
-                <label><input type="radio" name="aipi_position" value="before_last_h2" <?php checked($default_position, 'before_last_h2'); ?>> 最後のH2の直前</label><br>
-                <label><input type="radio" name="aipi_position" value="after_last_h2" <?php checked($default_position, 'after_last_h2'); ?>> 最後のH2の直後</label><br>
-                <label><input type="radio" name="aipi_position" value="bottom" <?php checked($default_position, 'bottom'); ?>> 記事末尾</label>
-            </p>
-        </div>
+        <p class="description">マーカー方式で固定。各マーカーのデザイン (<code>vertical</code> / <code>compare</code> / <code>proscons</code> / <code>score</code> / <code>mini</code> / <code>ranking</code>) は本文のマーカー記法に従って自動切替されます。</p>
+        <input type="hidden" name="aipi_mode" value="marker">
+        <input type="hidden" name="aipi_design" value="vertical">
 
         <hr>
 
@@ -158,19 +133,6 @@ function ai_pi_render_meta_box($post) {
 
     </div>
 
-    <script>
-    (function($) {
-        // 自動配置モード選択時のみ「挿入位置」セクションを表示
-        $(document).on('change', '.aipi-mode-radios input[name="aipi_mode"]', function() {
-            var mode = $(this).val();
-            if (mode === 'auto') {
-                $('.aipi-position-section').slideDown(150);
-            } else {
-                $('.aipi-position-section').slideUp(150);
-            }
-        });
-    })(jQuery);
-    </script>
     <?php
 }
 
