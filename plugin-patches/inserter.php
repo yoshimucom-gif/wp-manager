@@ -32,7 +32,16 @@ class AI_PI_Inserter {
             $mode = 'auto';
         }
 
-        $original_content = $post->post_content;
+        // 再挿入時: バックアップ（=オリジナルのマーカー入り content）が残っていれば
+        // そちらを source として使う。現在の content はカード描画後のためマーカーが消えており
+        // そのままだと「マーカーが見つかりません」になる。
+        $backup_content = get_post_meta($post_id, '_ai_pi_backup', true);
+        $already_inserted = !empty(get_post_meta($post_id, '_ai_pi_inserted', true));
+        if ($already_inserted && !empty($backup_content)) {
+            $original_content = $backup_content;
+        } else {
+            $original_content = $post->post_content;
+        }
 
         try {
             if ($mode === 'marker') {
