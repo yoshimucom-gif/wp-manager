@@ -143,6 +143,10 @@ class AI_PI_Inserter {
             return new WP_Error('no_candidates', '商品候補が取得できませんでした。' . $detail);
         }
 
+        // Amazon と 楽天 両方に存在する商品にフィルタ（ペア化）
+        // 両方のボタンを出すため、片方しか無い商品はペア無しに分類される
+        $all_candidates = AI_PI_Product_Selector::pair_candidates($all_candidates);
+
         // Claudeには「単体マーカー数」分だけ選定を依頼（多商品マーカーは流用するため重複依頼を避ける）
         $selections_by_index = [];
         if ($single_marker_count > 0) {
@@ -281,6 +285,9 @@ class AI_PI_Inserter {
         if (empty($all_candidates_pool)) {
             return new WP_Error('no_candidates', '全マーカーで商品候補が0件でした');
         }
+
+        // Amazon と 楽天 両方に存在する商品にフィルタ
+        $all_candidates_pool = AI_PI_Product_Selector::pair_candidates($all_candidates_pool);
 
         $claude = new AI_PI_Claude_API();
         $sel_result = $claude->select_products_per_heading($marker_data);

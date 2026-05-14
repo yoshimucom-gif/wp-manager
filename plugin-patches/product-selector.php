@@ -79,6 +79,44 @@ class AI_PI_Product_Selector {
     }
 
     /**
+     * Amazon と 楽天 両方に存在する商品のみフィルタリング
+     *
+     * - merge_duplicates でタイトル類似度ペア化
+     * - rakuten_pair が紐付いた Amazon 商品（=両プラットフォーム存在）のみ返す
+     * - ペアが0件なら fallback として merge_duplicates 結果全体を返す
+     *
+     * @param array $candidates fetch_candidates の戻り値
+     * @return array ペア化された商品（先頭）+ fallback 時は全候補
+     */
+    public static function pair_candidates($candidates) {
+        if (empty($candidates)) return [];
+
+        $merged = self::merge_duplicates($candidates);
+
+        // 両プラットフォーム存在する商品のみ抽出
+        $paired = [];
+        $unpaired = [];
+        foreach ($merged as $item) {
+            $has_amazon = (($item['source'] ?? '') === 'amazon' && !empty($item['asin']));
+            $has_rakuten_pair = !empty($item['rakuten_pair']['url']);
+            if ($has_amazon && $has_rakuten_pair) {
+                $paired[] = $item;
+            } else {
+                $unpaired[] = $item;
+            }
+        }
+
+        if (empty($paired)) {
+            // ペアが見つからなければ fallback（候補ゼロにしない）
+            error_log('[AI_PI] pair_candidates: no paired products found, falling back to all candidates');
+            return $unpaired;
+        }
+
+        error_log('[AI_PI] pair_candidates: ' . count($paired) . ' paired, ' . count($unpaired) . ' unpaired (paired only kept)');
+        return $paired;
+    }
+
+    /**
      * IDから候補商品を検索
      */
     public static function find_by_id($candidates, $id) {
