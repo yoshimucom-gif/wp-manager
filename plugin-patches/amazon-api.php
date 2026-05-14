@@ -34,6 +34,8 @@ class AI_PI_Amazon_API {
             return new WP_Error('not_configured', 'Amazon PA-APIが未設定');
         }
 
+        // CustomerReviews は 2020 年以降ほとんどのアカウントで制限されており、
+        // 含めると Offers ごとレスポンスから消える既知バグがあるため除外する。
         $payload = [
             'Keywords' => $keyword,
             'Resources' => [
@@ -47,8 +49,6 @@ class AI_PI_Amazon_API {
                 'Offers.Listings.Availability.Message',
                 'Offers.Summaries.LowestPrice',
                 'Offers.Summaries.OfferCount',
-                'CustomerReviews.StarRating',
-                'CustomerReviews.Count',
             ],
             'PartnerTag' => $this->partner_tag,
             'PartnerType' => 'Associates',
@@ -88,6 +88,7 @@ class AI_PI_Amazon_API {
         $asins = is_array($asins) ? $asins : [$asins];
         $asins = array_slice($asins, 0, 10);
 
+        // CustomerReviews は制限により Offers を巻き込んで消えるため除外
         $payload = [
             'ItemIds' => $asins,
             'Resources' => [
@@ -95,8 +96,7 @@ class AI_PI_Amazon_API {
                 'ItemInfo.Title',
                 'ItemInfo.ByLineInfo',
                 'Offers.Listings.Price',
-                'CustomerReviews.StarRating',
-                'CustomerReviews.Count',
+                'Offers.Summaries.LowestPrice',
             ],
             'PartnerTag' => $this->partner_tag,
             'PartnerType' => 'Associates',
