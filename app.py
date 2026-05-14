@@ -2554,27 +2554,45 @@ def strip_leading_introduction_h2(html, title=None):
 
 
 def strip_summary_table_sections(html):
-    """「早見表」を含むH2セクション（H2 + そのセクション内容）を削除する。
+    """サマリー/比較系のH2セクション（H2 + そのセクション内容）を削除する。
 
-    比較表と重複しがちなので、Claude が出力しても物理削除する。
-    h2内にstrong等のネストタグがあってもOK。次のh2 / ランキング個別h3 / 末尾まで削除。
-    wp:heading コメントラッパーも一緒に除去。
+    プラグインの compare デザインが同じ役割を担うため、本文中の比較表/早見表は不要。
+    検出条件:
+      (a) H2 が比較・要約系キーワード（早見表 / 比較表 / 一覧表 / スペック比較 等）を含む
+      (b) H2 の直後に <table> が来ている（タイトルにキーワードが無くてもテーブルがあれば削除）
+    削除範囲: H2 から「次のH2 / ランキング個別H3 / 末尾」まで。
     """
     if not html:
         return html
     text = str(html)
-    # 「早見表」を含むH2（中にタグがあってもOK）〜次のセクション開始直前まで削除
-    pattern = re.compile(
+
+    # (a) キーワードを含むH2のセクション削除
+    summary_keywords = '早見表|比較表|比較一覧|一覧表|スペック比較|スペック表|主要スペック|ラインナップ|商品比較|一目で|早分かり|早わかり'
+    pattern_keyword = re.compile(
         r'(?:<!--\s*wp:heading[^>]*-->\s*)?'
-        r'<h2[^>]*>(?:(?!</h2>)[\s\S])*?早見表(?:(?!</h2>)[\s\S])*?</h2>'
+        r'<h2[^>]*>(?:(?!</h2>)[\s\S])*?(?:' + summary_keywords + r')(?:(?!</h2>)[\s\S])*?</h2>'
         r'(?:\s*<!--\s*/wp:heading\s*-->)?'
         r'[\s\S]*?'
-        r'(?=<h2|<!--\s*wp:heading|<h3[^>]*>\s*(?:<!--\s*wp:[^>]*-->\s*)?[\d０-９]+\s*位|$)',
+        r'(?=<h2|<!--\s*wp:heading|<h3[^>]*>\s*(?:<!--\s*wp:[^>]*-->\s*)?(?:第\s*)?[\d０-９]+\s*位|$)',
         re.IGNORECASE
     )
-    cleaned = pattern.sub('', text)
-    # 念のため2回（Claude が複数の早見表を出すケース）
-    cleaned = pattern.sub('', cleaned)
+    cleaned = pattern_keyword.sub('', text)
+    cleaned = pattern_keyword.sub('', cleaned)  # 複数の早見表対策
+
+    # (b) H2 の直後に table が来ているセクションも削除（タイトル違いでもテーブルなら除去）
+    pattern_table_after_h2 = re.compile(
+        r'(?:<!--\s*wp:heading[^>]*-->\s*)?'
+        r'<h2[^>]*>(?:(?!</h2>)[\s\S])*?</h2>'
+        r'(?:\s*<!--\s*/wp:heading\s*-->)?'
+        r'\s*(?:<!--\s*wp:[^>]*-->\s*)?\s*<table\b[\s\S]*?</table>'
+        r'(?:\s*<!--\s*/wp:[^>]*-->)?'
+        r'[\s\S]*?'
+        r'(?=<h2|<!--\s*wp:heading|<h3[^>]*>\s*(?:<!--\s*wp:[^>]*-->\s*)?(?:第\s*)?[\d０-９]+\s*位|$)',
+        re.IGNORECASE
+    )
+    cleaned = pattern_table_after_h2.sub('', cleaned)
+    cleaned = pattern_table_after_h2.sub('', cleaned)
+
     return cleaned
 
 
