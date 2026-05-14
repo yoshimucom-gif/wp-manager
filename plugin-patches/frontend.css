@@ -463,122 +463,6 @@
     font-weight: 700;
 }
 
-/* === 総合評価カード（score） === */
-.aipi-card--score {
-    background: #fff;
-    border: 1px solid #e0e0e0;
-    border-radius: 6px;
-    padding: 16px;
-}
-.aipi-score__head {
-    display: flex;
-    gap: 14px;
-    padding-bottom: 14px;
-    border-bottom: 1px solid #f0f0f0;
-    margin-bottom: 14px;
-}
-.aipi-score__img {
-    flex: 0 0 120px;
-    height: 120px;
-    background: #fafafa;
-    border: 1px solid #eee;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-}
-.aipi-score__img img { max-width: 100%; max-height: 100%; object-fit: contain; }
-.aipi-score__head-body { flex: 1; min-width: 0; }
-.aipi-score__brand { font-size: 11px; color: #888; margin-bottom: 4px; }
-.aipi-score__title {
-    font-size: 15px;
-    font-weight: 600;
-    color: #2563a6;
-    text-decoration: none;
-    line-height: 1.4;
-    margin-bottom: 6px;
-    display: block;
-}
-.aipi-score__title:hover { text-decoration: underline; }
-.aipi-score__price { font-size: 14px; color: #c0392b; font-weight: 700; }
-
-.aipi-score__axes { margin-bottom: 16px; }
-.aipi-score__axis {
-    display: grid;
-    grid-template-columns: 90px 1fr 40px;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 6px;
-}
-.aipi-score__label { font-size: 12px; color: #555; }
-.aipi-score__bar {
-    height: 8px;
-    background: #f0f0f0;
-    border-radius: 4px;
-    overflow: hidden;
-}
-.aipi-score__bar-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #4caf83, #2563a6);
-    border-radius: 4px;
-}
-.aipi-score__num { font-size: 12px; font-weight: 700; color: #333; text-align: right; }
-
-.aipi-score__total {
-    background: #fafbfc;
-    border-radius: 4px;
-    padding: 10px 12px;
-    text-align: center;
-    margin-bottom: 14px;
-}
-.aipi-score__total-label { font-size: 12px; color: #555; margin-right: 8px; }
-.aipi-score__total-stars { color: #f0c14b; font-size: 16px; vertical-align: middle; }
-.aipi-score__total-num {
-    font-size: 18px;
-    font-weight: 700;
-    color: #c0392b;
-    margin-left: 6px;
-    vertical-align: middle;
-}
-
-/* === ミニカード（mini）— インライン === */
-.aipi-card--mini {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    background: #fff;
-    border: 1px solid #e0e0e0;
-    border-radius: 4px;
-    margin: 4px 2px;
-    vertical-align: middle;
-    max-width: 100%;
-    box-sizing: border-box;
-}
-.aipi-mini__img {
-    flex: 0 0 36px;
-    height: 36px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: #fafafa;
-    border: 1px solid #eee;
-}
-.aipi-mini__img img { max-width: 100%; max-height: 100%; object-fit: contain; }
-.aipi-mini__body { display: inline-flex; flex-direction: column; min-width: 0; max-width: 200px; }
-.aipi-mini__title {
-    font-size: 12px;
-    color: #2563a6;
-    text-decoration: none;
-    line-height: 1.3;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.aipi-mini__title:hover { text-decoration: underline; }
-.aipi-mini__price { font-size: 11px; color: #c0392b; font-weight: 700; }
-.aipi-mini__buttons { display: inline-flex; gap: 4px; }
-
 /* === レスポンシブ === */
 @media (max-width: 480px) {
     .aipi-card--vertical .aipi-card__inner {
@@ -599,12 +483,10 @@
         flex: 0 0 60px;
         height: 60px;
     }
-    .aipi-proscons__head,
-    .aipi-score__head {
+    .aipi-proscons__head {
         flex-direction: column;
     }
-    .aipi-proscons__img,
-    .aipi-score__img {
+    .aipi-proscons__img {
         flex: 0 0 200px;
         width: 100%;
         height: 200px;
@@ -612,13 +494,4 @@
     .aipi-proscons__lists {
         grid-template-columns: 1fr;
     }
-    .aipi-score__axis {
-        grid-template-columns: 72px 1fr 36px;
-        gap: 8px;
-    }
-    .aipi-card--mini {
-        display: flex;
-        max-width: 100%;
-    }
-    .aipi-mini__body { max-width: none; }
 }
