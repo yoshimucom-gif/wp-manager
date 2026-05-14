@@ -136,7 +136,11 @@ class AI_PI_Inserter {
         $all_candidates = array_values($all_candidates);
 
         if (empty($all_candidates)) {
-            return new WP_Error('no_candidates', '商品候補が取得できませんでした');
+            $errs = AI_PI_Product_Selector::get_last_api_errors();
+            $detail = !empty($errs)
+                ? '  詳細: ' . implode(' / ', array_slice($errs, 0, 3))
+                : '';
+            return new WP_Error('no_candidates', '商品候補が取得できませんでした。' . $detail);
         }
 
         // Claudeには「単体マーカー数」分だけ選定を依頼（多商品マーカーは流用するため重複依頼を避ける）
@@ -395,7 +399,11 @@ class AI_PI_Inserter {
         $all_candidates = array_values($all_candidates);
 
         if (empty($all_candidates)) {
-            return new WP_Error('no_candidates', '商品候補が取得できませんでした');
+            $errs = AI_PI_Product_Selector::get_last_api_errors();
+            $detail = !empty($errs)
+                ? '  詳細: ' . implode(' / ', array_slice($errs, 0, 3))
+                : '';
+            return new WP_Error('no_candidates', '商品候補が取得できませんでした。' . $detail);
         }
 
         // AI選定（ランキング）
