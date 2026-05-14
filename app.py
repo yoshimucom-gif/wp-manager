@@ -27,9 +27,11 @@ import openpyxl
 import requests
 try:
     from bs4 import BeautifulSoup, FeatureNotFound, NavigableString
+    from bs4.element import Comment as BS4Comment
 except ImportError:
     BeautifulSoup = None
     FeatureNotFound = Exception
+    BS4Comment = None
     NavigableString = None
 
 app = Flask(__name__)
@@ -666,7 +668,7 @@ def strip_generated_noise(content):
     text = re.sub(r'\s*```\s*$', '', text)
     text = text.replace('```html', '').replace('```HTML', '').replace('```', '')
     first = re.search(
-        r'(<h[2-4]\b|<p\b|<ul\b|<ol\b|<table\b|<div\b|<!--\s*wp:(?!/))',
+        r'(<h[2-4]\b|<p\b|<ul\b|<ol\b|<table\b|<div\b|<!--\s*wp:(?!/)|<!--\s*ai-product)',
         text,
         flags=re.I
     )
@@ -797,7 +799,12 @@ def sanitize_generated_html(content):
                 if attr.lower().startswith('on'):
                     del tag.attrs[attr]
         clean_visible_commerce_urls(root)
-        html = ''.join(str(child) for child in root.contents)
+        # コメントノードは str() すると <!--..--> が剥がれるので明示的に復元
+        def _serialize_child(child):
+            if BS4Comment is not None and isinstance(child, BS4Comment):
+                return f'<!--{str(child)}-->'
+            return str(child)
+        html = ''.join(_serialize_child(child) for child in root.contents)
     if not BeautifulSoup:
         html = strip_non_affiliate_commerce_links_regex(balance_common_html_tags(html))
     return strip_wp_block_artifacts(html).strip().strip('`').strip()
@@ -970,7 +977,12 @@ def enhance_generated_article_html(content, article, article_type):
             heading.string = keyword_heading_text(heading.get_text(' ', strip=True), keyword, article_type)
     split_plain_paragraphs(root)
     add_marker_to_first_keyword(root, keyword)
-    return format_block_html(''.join(str(child) for child in root.contents))
+    # コメントノード（ai-product マーカー等）は str() すると <!--...--> が剥がれるので明示復元
+    def _serialize_enhance_child(child):
+        if BS4Comment is not None and isinstance(child, BS4Comment):
+            return f'<!--{str(child)}-->'
+        return str(child)
+    return format_block_html(''.join(_serialize_enhance_child(child) for child in root.contents))
 
 
 def safe_enhance_generated_article_html(content, article, article_type):
@@ -1022,6 +1034,13 @@ def image_to_block(tag):
 
 
 def node_to_gutenberg_block(node):
+    # HTMLコメント（ai-productマーカー等）はwp:htmlブロックで包んで原型を維持
+    # 通常の段落変換を通すとコメント形式が失われプラグインに認識されない
+    if BS4Comment is not None and isinstance(node, BS4Comment):
+        comment_text = str(node)
+        if not comment_text.strip():
+            return ''
+        return wp_block('html', f'<!--{comment_text}-->')
     if not getattr(node, 'name', None):
         text = str(node).strip()
         return wp_block('paragraph', f'<p>{escape(text)}</p>') if text else ''
