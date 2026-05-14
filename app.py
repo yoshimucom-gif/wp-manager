@@ -4387,21 +4387,11 @@ def generate_article(article_id):
                 usage_parts.append(build_article_usage(prompt, full_content, final_message))
 
             print(f'[GEN-SSE] BEFORE inject: products={len(products) if products else 0}, content_len={len(full_content)}, has_card={"aff-product-card" in full_content}', flush=True)
-            card_mode = settings.get('card_insertion_mode', 'direct')
-            if card_mode == 'marker_only':
-                full_content, marker_stats = insert_card_markers(full_content, article_type)
-                card_stats = {'h3_count': 0, 'matched_count': 0, 'products_available': 0, 'fallback_count': 0,
-                              'marker_count': marker_stats.get('marker_count', 0), 'mode': 'marker_only'}
-                _cards_msg = f'広告マーカー挿入: {card_stats["marker_count"]}件（プラグイン処理）'
-            elif card_mode == 'none':
-                card_stats = {'h3_count': 0, 'matched_count': 0, 'products_available': 0, 'fallback_count': 0, 'mode': 'none'}
-                _cards_msg = '広告カード挿入なし（プラグイン自動配置に委任）'
-            else:
-                full_content, card_stats = inject_affiliate_cards(full_content, products)
-                card_stats['mode'] = 'direct'
-                _cards_msg = '商品カード挿入: {0}件 / 見出し {1}件 / 取得商品 {2}件'.format(
-                    card_stats.get('matched_count', 0), card_stats.get('h3_count', 0), card_stats.get('products_available', 0)
-                )
+            # プラグイン連携前提でマーカー挿入に固定（UIセレクタ廃止）
+            full_content, marker_stats = insert_card_markers(full_content, article_type)
+            card_stats = {'h3_count': 0, 'matched_count': 0, 'products_available': 0, 'fallback_count': 0,
+                          'marker_count': marker_stats.get('marker_count', 0), 'mode': 'marker_only'}
+            _cards_msg = f'広告マーカー挿入: {card_stats["marker_count"]}件（プラグイン処理）'
             print(f'[GEN-SSE] AFTER inject: content_len={len(full_content)}, has_card={"aff-product-card" in full_content}, stats={card_stats}', flush=True)
             yield f"data: {json.dumps({'status': 'cards_injected', 'message': _cards_msg})}\n\n"
             clean_content, enhance_warning = safe_enhance_generated_article_html(full_content, article_work, article_type)
@@ -4593,11 +4583,8 @@ def generate_article_direct(article_id):
             usage_parts = [build_article_usage(base_prompt, raw_content, message)]
         else:
             raise ValueError('Claude APIキーが設定されていません')
-        card_mode_sync = settings.get('card_insertion_mode', 'direct')
-        if card_mode_sync == 'marker_only':
-            raw_content, _marker_stats = insert_card_markers(raw_content, article_type)
-        elif card_mode_sync != 'none':
-            raw_content, _card_stats = inject_affiliate_cards(raw_content, products)
+        # プラグイン連携前提でマーカー挿入に固定（UIセレクタ廃止）
+        raw_content, _marker_stats = insert_card_markers(raw_content, article_type)
         clean_content, enhance_warning = safe_enhance_generated_article_html(raw_content, article_work, article_type)
         clean_content = strip_summary_table_sections(clean_content)
         validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
@@ -4839,17 +4826,11 @@ def batch_generate():
                     message = create_claude_message(client, prompt, max_tokens=claude_max_tokens_for_quality(quality))
                     raw_content = anthropic_message_text(message)
                     usage_parts = [build_article_usage(prompt, raw_content, message)]
-                stage = 'inject affiliate cards'
-                card_mode_batch = settings.get('card_insertion_mode', 'direct')
-                if card_mode_batch == 'marker_only':
-                    raw_content, marker_stats = insert_card_markers(raw_content, article_type)
-                    card_stats = {'h3_count': 0, 'matched_count': 0, 'products_available': 0,
-                                  'fallback_count': 0, 'marker_count': marker_stats.get('marker_count', 0), 'mode': 'marker_only'}
-                elif card_mode_batch == 'none':
-                    card_stats = {'h3_count': 0, 'matched_count': 0, 'products_available': 0, 'fallback_count': 0, 'mode': 'none'}
-                else:
-                    raw_content, card_stats = inject_affiliate_cards(raw_content, products)
-                    card_stats['mode'] = 'direct'
+                stage = 'inject affiliate markers'
+                # プラグイン連携前提でマーカー挿入に固定（UIセレクタ廃止）
+                raw_content, marker_stats = insert_card_markers(raw_content, article_type)
+                card_stats = {'h3_count': 0, 'matched_count': 0, 'products_available': 0,
+                              'fallback_count': 0, 'marker_count': marker_stats.get('marker_count', 0), 'mode': 'marker_only'}
                 if card_stats.get('h3_count') and not card_stats.get('matched_count'):
                     update_job(current_title=article.get('title', ''), message=f"商品カード未挿入（取得商品 {card_stats.get('products_available', 0)}件 / 見出し {card_stats.get('h3_count', 0)}件）: {article.get('title', '')}")
                 stage = 'enhance and validate content'
@@ -6085,7 +6066,6 @@ def get_settings():
         'amazon_partner_tag': settings.get('amazon_partner_tag', ''),
         'rakuten_app_id': mask_secret(settings.get('rakuten_app_id', '')),
         'rakuten_affiliate_id': settings.get('rakuten_affiliate_id', ''),
-        'card_insertion_mode': settings.get('card_insertion_mode', 'direct'),
     }
     return jsonify(safe)
 
@@ -6110,11 +6090,7 @@ def update_settings():
     for key in ('amazon_partner_tag', 'rakuten_affiliate_id'):
         if key in data:
             settings[key] = str(data.get(key) or '').strip()
-    if 'card_insertion_mode' in data:
-        mode = str(data.get('card_insertion_mode') or 'direct').strip()
-        if mode not in ('direct', 'marker_only', 'none'):
-            mode = 'direct'
-        settings['card_insertion_mode'] = mode
+    # card_insertion_mode はUIから廃止。マーカー挿入固定なので保存しない
     save_settings(settings)
     return jsonify({'success': True})
 
