@@ -1334,6 +1334,28 @@ tr.selected td { background: var(--accent-dim); }
             </div>
           </div>
           <div class="settings-section">
+            <div class="section-header">// 商品カード処理モード</div>
+            <div class="form-help" style="margin-bottom:8px">
+              記事生成時の商品カード挿入方式を選びます。WordPress側で AI Product Inserter プラグインを使う場合は <strong>マーカー挿入</strong> を選択。
+            </div>
+            <div class="form-group">
+              <label class="form-label">処理モード</label>
+              <select id="s-card-insertion-mode" class="form-control">
+                <option value="direct">直接挿入（Affiros9内で商品検索・カード生成）</option>
+                <option value="marker_only">マーカー挿入のみ（プラグイン連携）— 記事種別ごとに &lt;!--ai-product:...--&gt; を埋め込む</option>
+                <option value="none">何もしない（プラグインの自動配置に委任）</option>
+              </select>
+              <div class="form-help" style="margin-top:6px">
+                <strong>マーカー挿入の既定ルール</strong>:
+                <ul style="margin:4px 0 0 18px;font-size:11px;color:var(--muted)">
+                  <li>ランキング記事: 各 h3 直下に縦置き + まとめ後にランキングTOP3</li>
+                  <li>商標記事: 最初のH2直後・まとめ前 に縦置き</li>
+                  <li>コラム記事: 最初のH2直前に縦置き×2 + まとめ後にランキングTOP3</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <div class="settings-section">
             <div class="section-header">// Amazon PA-API v5（推奨・優先）</div>
             <div class="form-help" style="margin-bottom:8px">Amazonアソシエイト商品検索用。<strong>設定するとAmazonが優先で使われます</strong>（CV率重視）。楽天はフォールバックとして使用。</div>
             <div class="form-group">
@@ -4414,6 +4436,7 @@ function collectSettingsFormData() {
     claude_api_key: document.getElementById('s-claude-key').value,
     default_quality_id: document.getElementById('s-default-quality').value,
     article_css: document.getElementById('s-article-css').value,
+    card_insertion_mode: document.getElementById('s-card-insertion-mode').value,
     amazon_access_key: document.getElementById('s-amazon-access-key').value,
     amazon_secret_key: document.getElementById('s-amazon-secret-key').value,
     amazon_partner_tag: document.getElementById('s-amazon-partner-tag').value,
@@ -4455,6 +4478,7 @@ async function loadSettings() {
   s = await restoreSettingsFromBrowserBackup(s);
   document.getElementById('s-claude-key').value = s.claude_api_key || '';
   document.getElementById('s-article-css').value = s.article_css || '';
+  document.getElementById('s-card-insertion-mode').value = s.card_insertion_mode || 'direct';
   document.getElementById('s-amazon-access-key').value = s.amazon_access_key || '';
   document.getElementById('s-amazon-secret-key').value = s.amazon_secret_key || '';
   document.getElementById('s-amazon-partner-tag').value = s.amazon_partner_tag || '';

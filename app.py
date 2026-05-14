@@ -2553,6 +2553,147 @@ def strip_summary_table_sections(html):
     return cleaned
 
 
+# 記事種別ごとの広告マーカー挿入ルール（既定値）。
+# 各ルール: {position, design, count?, repeat?}
+# position: 'before_first_h2', 'after_first_h2', 'after_each_h3_rank',
+#           'before_matome_h2', 'after_matome_h2', 'top', 'bottom'
+# design: 'vertical', 'horizontal', 'ranking'
+# count: ランキングデザインの場合の件数 (TOP3 等)
+# repeat: 同じ位置に何個マーカーを並べるか (既定1)
+DEFAULT_CARD_INSERTION_PATTERNS = {
+    'ranking': [
+        {'position': 'after_each_h3_rank', 'design': 'vertical'},
+        {'position': 'after_matome_h2', 'design': 'ranking', 'count': 3},
+    ],
+    'brand': [
+        {'position': 'after_first_h2', 'design': 'vertical'},
+        {'position': 'before_matome_h2', 'design': 'vertical'},
+    ],
+    'column': [
+        {'position': 'before_first_h2', 'design': 'vertical', 'repeat': 2},
+        {'position': 'after_matome_h2', 'design': 'ranking', 'count': 3},
+    ],
+    'rewrite': [],
+}
+
+
+def _build_marker(design='vertical', count=None):
+    """プラグイン用のマーカー文字列を組み立てる。
+    例: '<!--ai-product:vertical-->' / '<!--ai-product:ranking:3-->'"""
+    if not design or design == 'default':
+        return '<!--ai-product-->'
+    if design == 'ranking' and count:
+        return f'<!--ai-product:ranking:{int(count)}-->'
+    return f'<!--ai-product:{design}-->'
+
+
+def _find_matome_h2_range(html):
+    """「まとめ」を含むH2の位置 (start, end_of_h2) を返す。無ければ None。"""
+    pattern = re.compile(
+        r'<h2[^>]*>(?:(?!</h2>)[\s\S])*?(?:まとめ|総まとめ|結論|要点)(?:(?!</h2>)[\s\S])*?</h2>',
+        re.IGNORECASE
+    )
+    m = pattern.search(html)
+    if not m:
+        return None
+    return m.start(), m.end()
+
+
+def _find_first_h2_range(html):
+    """記事の最初のH2の (start, end) を返す。無ければ None。"""
+    m = re.search(r'<h2[^>]*>(?:(?!</h2>)[\s\S])*?</h2>', html, re.IGNORECASE)
+    if not m:
+        return None
+    return m.start(), m.end()
+
+
+def insert_card_markers(html, article_type='ranking', patterns=None):
+    """記事種別ごとの広告マーカー (<!--ai-product:...-->) を本文に挿入する。
+
+    本文には直接カードHTMLを書かず、後工程のプラグインが解釈する。
+    patterns 未指定なら DEFAULT_CARD_INSERTION_PATTERNS から取得。
+
+    Returns: (new_html, stats_dict)
+    stats: {marker_count, rules_applied, positions}
+    """
+    stats = {'marker_count': 0, 'rules_applied': 0, 'positions': []}
+    if not html:
+        return html, stats
+    rules = (patterns or DEFAULT_CARD_INSERTION_PATTERNS).get(article_type) or []
+    if not rules:
+        return html, stats
+
+    text = str(html)
+
+    # まずは前処理: 早見表削除と先頭introH2削除
+    text = strip_leading_introduction_h2(text)
+    text = strip_summary_table_sections(text)
+
+    matome_range = _find_matome_h2_range(text)
+    first_h2_range = _find_first_h2_range(text)
+
+    # 各位置への挿入を後ろから処理（インデックス保持のため）
+    insertions = []  # [(insert_pos, marker_text)]
+
+    for rule in rules:
+        pos = rule.get('position')
+        design = rule.get('design', 'vertical')
+        count = rule.get('count')
+        repeat = max(1, int(rule.get('repeat', 1)))
+        marker = _build_marker(design, count)
+        marker_block = ('\n' + marker) * repeat
+
+        if pos == 'top':
+            insertions.append((0, marker_block + '\n'))
+            stats['rules_applied'] += 1
+            stats['marker_count'] += repeat
+            stats['positions'].append(pos)
+        elif pos == 'bottom':
+            insertions.append((len(text), '\n' + marker_block))
+            stats['rules_applied'] += 1
+            stats['marker_count'] += repeat
+            stats['positions'].append(pos)
+        elif pos == 'before_first_h2' and first_h2_range:
+            insertions.append((first_h2_range[0], marker_block + '\n'))
+            stats['rules_applied'] += 1
+            stats['marker_count'] += repeat
+            stats['positions'].append(pos)
+        elif pos == 'after_first_h2' and first_h2_range:
+            insertions.append((first_h2_range[1], '\n' + marker_block))
+            stats['rules_applied'] += 1
+            stats['marker_count'] += repeat
+            stats['positions'].append(pos)
+        elif pos == 'before_matome_h2' and matome_range:
+            insertions.append((matome_range[0], marker_block + '\n'))
+            stats['rules_applied'] += 1
+            stats['marker_count'] += repeat
+            stats['positions'].append(pos)
+        elif pos == 'after_matome_h2' and matome_range:
+            insertions.append((matome_range[1], '\n' + marker_block))
+            stats['rules_applied'] += 1
+            stats['marker_count'] += repeat
+            stats['positions'].append(pos)
+        elif pos == 'after_each_h3_rank':
+            # h3ランキング見出し直下に1個ずつ
+            h3_pattern = re.compile(
+                r'<h3[^>]*>\s*(?:\d+|[０-９]+)\s*位\s*[:：]?\s*[^<]+?\s*</h3>',
+                re.IGNORECASE
+            )
+            for m in h3_pattern.finditer(text):
+                insertions.append((m.end(), '\n' + marker))
+                stats['marker_count'] += 1
+            stats['rules_applied'] += 1
+            stats['positions'].append(pos)
+
+    # 後ろから挿入してインデックスずれを防ぐ
+    insertions.sort(key=lambda x: x[0], reverse=True)
+    for pos, marker_text in insertions:
+        text = text[:pos] + marker_text + text[pos:]
+
+    print(f'[MARKER] inserted: article_type={article_type}, stats={stats}', flush=True)
+    return text, stats
+
+
 def inject_affiliate_cards(html, products):
     """全 <h3>N位：商品名</h3> の直後に商品カードを挿入。
 
@@ -4246,11 +4387,22 @@ def generate_article(article_id):
                 usage_parts.append(build_article_usage(prompt, full_content, final_message))
 
             print(f'[GEN-SSE] BEFORE inject: products={len(products) if products else 0}, content_len={len(full_content)}, has_card={"aff-product-card" in full_content}', flush=True)
-            full_content, card_stats = inject_affiliate_cards(full_content, products)
+            card_mode = settings.get('card_insertion_mode', 'direct')
+            if card_mode == 'marker_only':
+                full_content, marker_stats = insert_card_markers(full_content, article_type)
+                card_stats = {'h3_count': 0, 'matched_count': 0, 'products_available': 0, 'fallback_count': 0,
+                              'marker_count': marker_stats.get('marker_count', 0), 'mode': 'marker_only'}
+                _cards_msg = f'広告マーカー挿入: {card_stats["marker_count"]}件（プラグイン処理）'
+            elif card_mode == 'none':
+                card_stats = {'h3_count': 0, 'matched_count': 0, 'products_available': 0, 'fallback_count': 0, 'mode': 'none'}
+                _cards_msg = '広告カード挿入なし（プラグイン自動配置に委任）'
+            else:
+                full_content, card_stats = inject_affiliate_cards(full_content, products)
+                card_stats['mode'] = 'direct'
+                _cards_msg = '商品カード挿入: {0}件 / 見出し {1}件 / 取得商品 {2}件'.format(
+                    card_stats.get('matched_count', 0), card_stats.get('h3_count', 0), card_stats.get('products_available', 0)
+                )
             print(f'[GEN-SSE] AFTER inject: content_len={len(full_content)}, has_card={"aff-product-card" in full_content}, stats={card_stats}', flush=True)
-            _cards_msg = '商品カード挿入: {0}件 / 見出し {1}件 / 取得商品 {2}件'.format(
-                card_stats.get('matched_count', 0), card_stats.get('h3_count', 0), card_stats.get('products_available', 0)
-            )
             yield f"data: {json.dumps({'status': 'cards_injected', 'message': _cards_msg})}\n\n"
             clean_content, enhance_warning = safe_enhance_generated_article_html(full_content, article_work, article_type)
             print(f'[GEN-SSE] AFTER enhance: clean_content_len={len(clean_content)}, has_card={"aff-product-card" in clean_content}, enhance_warning={enhance_warning!r}', flush=True)
@@ -4441,7 +4593,11 @@ def generate_article_direct(article_id):
             usage_parts = [build_article_usage(base_prompt, raw_content, message)]
         else:
             raise ValueError('Claude APIキーが設定されていません')
-        raw_content, _card_stats = inject_affiliate_cards(raw_content, products)
+        card_mode_sync = settings.get('card_insertion_mode', 'direct')
+        if card_mode_sync == 'marker_only':
+            raw_content, _marker_stats = insert_card_markers(raw_content, article_type)
+        elif card_mode_sync != 'none':
+            raw_content, _card_stats = inject_affiliate_cards(raw_content, products)
         clean_content, enhance_warning = safe_enhance_generated_article_html(raw_content, article_work, article_type)
         clean_content = strip_summary_table_sections(clean_content)
         validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
@@ -4684,7 +4840,16 @@ def batch_generate():
                     raw_content = anthropic_message_text(message)
                     usage_parts = [build_article_usage(prompt, raw_content, message)]
                 stage = 'inject affiliate cards'
-                raw_content, card_stats = inject_affiliate_cards(raw_content, products)
+                card_mode_batch = settings.get('card_insertion_mode', 'direct')
+                if card_mode_batch == 'marker_only':
+                    raw_content, marker_stats = insert_card_markers(raw_content, article_type)
+                    card_stats = {'h3_count': 0, 'matched_count': 0, 'products_available': 0,
+                                  'fallback_count': 0, 'marker_count': marker_stats.get('marker_count', 0), 'mode': 'marker_only'}
+                elif card_mode_batch == 'none':
+                    card_stats = {'h3_count': 0, 'matched_count': 0, 'products_available': 0, 'fallback_count': 0, 'mode': 'none'}
+                else:
+                    raw_content, card_stats = inject_affiliate_cards(raw_content, products)
+                    card_stats['mode'] = 'direct'
                 if card_stats.get('h3_count') and not card_stats.get('matched_count'):
                     update_job(current_title=article.get('title', ''), message=f"商品カード未挿入（取得商品 {card_stats.get('products_available', 0)}件 / 見出し {card_stats.get('h3_count', 0)}件）: {article.get('title', '')}")
                 stage = 'enhance and validate content'
@@ -5920,6 +6085,7 @@ def get_settings():
         'amazon_partner_tag': settings.get('amazon_partner_tag', ''),
         'rakuten_app_id': mask_secret(settings.get('rakuten_app_id', '')),
         'rakuten_affiliate_id': settings.get('rakuten_affiliate_id', ''),
+        'card_insertion_mode': settings.get('card_insertion_mode', 'direct'),
     }
     return jsonify(safe)
 
@@ -5944,6 +6110,11 @@ def update_settings():
     for key in ('amazon_partner_tag', 'rakuten_affiliate_id'):
         if key in data:
             settings[key] = str(data.get(key) or '').strip()
+    if 'card_insertion_mode' in data:
+        mode = str(data.get('card_insertion_mode') or 'direct').strip()
+        if mode not in ('direct', 'marker_only', 'none'):
+            mode = 'direct'
+        settings['card_insertion_mode'] = mode
     save_settings(settings)
     return jsonify({'success': True})
 
