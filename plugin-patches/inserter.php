@@ -169,31 +169,13 @@ class AI_PI_Inserter {
                 $marker_design = !empty($match[1]) ? strtolower($match[1]) : $design;
                 $marker_count  = !empty($match[2]) ? intval($match[2]) : 3;
 
-                // multi-product マーカー: 記事内で既に使われた商品を優先（同一商品の比較表/ランキング）
+                // multi-product マーカー: 記事内で既に使われた商品だけを使う（候補プール補完なし）
+                // → 比較表/ランキングは「本文で語った商品」と完全一致する保証
+                // → 足りない場合は表示数が指定Nより少なくなる（=記事内容との不一致を防ぐ）
                 if ($marker_design === 'ranking' || $marker_design === 'compare') {
-                    $multi = [];
-                    $seen = [];
-                    // 1. 記事内で選定済みの商品を最優先
-                    foreach ($article_products as $p) {
-                        $pid = $p['id'] ?? '';
-                        if (!$pid || isset($seen[$pid])) continue;
-                        $multi[] = $p;
-                        $seen[$pid] = true;
-                        if (count($multi) >= $marker_count) break;
-                    }
-                    // 2. 足りなければ候補プールから補完
-                    if (count($multi) < $marker_count) {
-                        foreach ($all_candidates as $p) {
-                            $pid = $p['id'] ?? '';
-                            if (!$pid || isset($seen[$pid])) continue;
-                            $multi[] = $p;
-                            $seen[$pid] = true;
-                            if (count($multi) >= $marker_count) break;
-                        }
-                    }
+                    $multi = array_slice($article_products, 0, $marker_count);
                     if (empty($multi)) return $match[0];
 
-                    // 重複しない商品だけ selected_products に追加
                     foreach ($multi as $p) {
                         $pid = $p['id'] ?? '';
                         $already = false;
@@ -330,26 +312,9 @@ class AI_PI_Inserter {
                 $marker_design = !empty($match[1]) ? strtolower($match[1]) : $design;
                 $marker_count  = !empty($match[2]) ? intval($match[2]) : 3;
 
-                // multi-product マーカー: 記事内で既に使われた商品を優先
+                // multi-product マーカー: 記事内で既に使われた商品だけを使う（候補プール補完なし）
                 if ($marker_design === 'ranking' || $marker_design === 'compare') {
-                    $multi = [];
-                    $seen = [];
-                    foreach ($article_products as $p) {
-                        $pid = $p['id'] ?? '';
-                        if (!$pid || isset($seen[$pid])) continue;
-                        $multi[] = $p;
-                        $seen[$pid] = true;
-                        if (count($multi) >= $marker_count) break;
-                    }
-                    if (count($multi) < $marker_count) {
-                        foreach ($all_candidates_pool as $p) {
-                            $pid = $p['id'] ?? '';
-                            if (!$pid || isset($seen[$pid])) continue;
-                            $multi[] = $p;
-                            $seen[$pid] = true;
-                            if (count($multi) >= $marker_count) break;
-                        }
-                    }
+                    $multi = array_slice($article_products, 0, $marker_count);
                     if (empty($multi)) return $match[0];
 
                     foreach ($multi as $p) {

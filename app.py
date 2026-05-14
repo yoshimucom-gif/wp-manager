@@ -2570,7 +2570,7 @@ DEFAULT_CARD_INSERTION_PATTERNS = {
         {'position': 'before_matome_h2', 'design': 'vertical'},
     ],
     'column': [
-        {'position': 'before_first_h2', 'design': 'vertical', 'repeat': 2},
+        {'position': 'before_first_h2', 'design': 'vertical', 'repeat': 3},
         {'position': 'after_matome_h2', 'design': 'ranking', 'count': 3},
     ],
     'rewrite': [],
