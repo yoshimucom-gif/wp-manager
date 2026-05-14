@@ -1723,15 +1723,11 @@ def scoring_caps_and_penalties(title, html, text, keywords=''):
     ranking_expected = extract_ranking_count({'title': title or '', 'keywords': keywords or ''})
     if ranking_expected:
         ranked_count = count_ranked_items_from_text(html)
-        table_rows = count_table_rows_from_html(html)
         if ranked_count < ranking_expected:
             caps.append(35)
             penalties += 25
             suggestions.append(f'タイトルは{ranking_expected}選ですが、個別ランキング見出しが{ranked_count}件しかありません。')
-        if table_rows < ranking_expected:
-            caps.append(45)
-            penalties += 15
-            suggestions.append(f'タイトルは{ranking_expected}選ですが、比較表が{table_rows}行しかありません。')
+        # 比較表は plugin の compare デザインで描画されるため、本文中のテーブル有無はスコア評価しない
 
     return caps, penalties, suggestions
 
@@ -2010,7 +2006,6 @@ def build_ranking_count_prompt(article, article_type):
 
 ランキング件数の厳守:
 - タイトルから「{count}選」と判断しています。本文では必ず{count}件を紹介してください。
-- 比較表はヘッダーを除いて{count}行にしてください。
 - 個別解説は「1位」から「{count}位」まで欠番・重複なしで作ってください。
 - {count}件未満で終了しないでください。商品名や候補が不足する場合でも、記事テーマに合う候補を補って{count}件にしてください。"""
 
@@ -2024,12 +2019,11 @@ def build_ranking_structure_prompt(article, article_type):
     return f"""
 
 ランキング記事の必須構成:
-- リード文 → 結論早見表 → 比較表 → ランキング本文 → 選び方 → FAQ → まとめ、の順で書いてください。
-- 比較表は <table><tbody> に商品行を必ず{count}行入れてください。
+- リード文 → 選定基準 → ランキング本文 → 選び方 → FAQ → まとめ、の順で書いてください。
+- **比較表・早見表は絶対に本文に書かないでください**（後処理で別途レンダリングされます）。
 - ランキング本文では、必ず <h3>1位：商品名</h3> から <h3>{count}位：商品名</h3> まで、順位番号入りのh3見出しを{count}個出してください。
 - 各順位のh3ごとに、特徴・おすすめな人・注意点を最低2段落以上で書いてください。
-- {count}位まで書き終える前に「選定基準」「選び方」「FAQ」「まとめ」へ進まないでください。
-- 比較表だけで商品紹介を終わらせないでください。比較表とは別に、必ず{count}商品の個別解説を本文に含めてください。
+- {count}位まで書き終える前に「選び方」「FAQ」「まとめ」へ進まないでください。
 - 途中で終わりそうな場合は、装飾よりも{count}位までの個別解説とまとめを優先してください。
 """
 
@@ -3056,17 +3050,15 @@ def build_segmented_article_steps(article, article_type):
     if normalized == 'ranking':
         count = extract_ranking_count(article) or 5
         steps = [{
-            'name': '導入・比較表',
-            'prompt': f"""リード文、この記事でわかること、比較表だけを書いてください。
+            'name': '導入・選定基準',
+            'prompt': f"""リード文、この記事でわかること、選定基準だけを書いてください。
 - **リード文は H2 の前**に、<p>段落だけ</p>で書く。リード文を H2 で囲まない。
   記事タイトル（H1）は WordPress が表示するので、本文の最初は <p> から始める。
   「○○で猛暑を乗り切る｜選び方と比較ポイント」のような導入用H2は作らない。
 - リード文は読者の悩みと記事の結論を簡潔に。自然に2〜3段落で十分。
-- **早見表（簡易な一覧テーブル）は絶対に作らない**。具体的に禁止するH2例:
-  「結論：◯◯おすすめ早見表」「おすすめ早見表」「◯選 早見表」「結論早見表」等。
-- 比較表（H2は「比較表」「◯◯比較」など）は1つだけ。必ずヘッダーを除いて{count}行。
-- 順位・商品名・特徴・価格などをまとめる表は比較表1つに集約。同じ情報の表を2回作らない。
-- 比較表のあとにランキング本文へ入らず、ここで止めてください。
+- **早見表・比較表は絶対に本文に書かない**（後処理でランキングカードに置換されます）。具体的に禁止するH2例:
+  「結論：◯◯おすすめ早見表」「おすすめ早見表」「◯選 早見表」「比較表」「◯◯比較」等。
+- 順位・商品名・特徴・価格などをまとめる表は一切作らない。
 - 冗長な前置きや同じ内容の繰り返しは避け、必要な情報を密度高くまとめる。
 
 理想的な構造:
@@ -3074,8 +3066,8 @@ def build_segmented_article_steps(article, article_type):
   <p>リード文2段落目（記事の結論を含む）</p>
   <h2 class="wp-block-heading">この記事でわかること</h2>
   <ul>...</ul>
-  <h2 class="wp-block-heading">比較表</h2>
-  <table>...</table>"""
+  <h2 class="wp-block-heading">{count}選を選ぶ際の選定基準</h2>
+  <ul>...</ul>"""
         }]
         chunk_size = 2
         for start in range(1, count + 1, chunk_size):
@@ -3492,11 +3484,9 @@ def validate_generated_article(article, article_type, content, quality=None):
     if not expected:
         return ''
     ranked_count = count_ranked_items_from_text(content)
-    table_rows = count_table_rows_from_html(content)
     if ranked_count < expected:
         return f'タイトルは{expected}選ですが、個別ランキング見出しが{ranked_count}件しか検出できませんでした。もう一度生成してください。'
-    if table_rows < expected:
-        return f'タイトルは{expected}選ですが、比較表が{table_rows}行しか検出できませんでした。もう一度生成してください。'
+    # 比較表は plugin の compare デザインが代替するため、本文中の <table> 有無は検証しない
     return ''
 
 

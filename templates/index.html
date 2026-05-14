@@ -3173,7 +3173,15 @@ function updateGeneratePublishButton(articleId = currentGenArticleId) {
       : '生成済み本文をWordPressへ下書き投稿できます。';
     const cs = article?.card_injection_stats || {};
     let cardMsg = '';
-    if (typeof cs.h3_count === 'number') {
+    if (cs.mode === 'marker_only' || typeof cs.marker_count === 'number') {
+      const mc = cs.marker_count || 0;
+      if (mc > 0) {
+        cardMsg = ` ✅ 広告マーカー ${mc}件挿入済み（WP側プラグインで商品カードに置換）`;
+      } else {
+        cardMsg = ' ⚠️ 広告マーカー未挿入: 記事構造を確認してください';
+      }
+    } else if (typeof cs.h3_count === 'number') {
+      // 旧 direct モードの記事を表示する後方互換
       if (cs.products_available === 0) {
         cardMsg = ' ⚠️ 商品カード未挿入: 実商品データを取得できませんでした（Amazon/楽天APIキーと疎通を確認してください）';
       } else if (cs.matched_count === 0 && cs.h3_count > 0) {
