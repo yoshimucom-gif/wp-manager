@@ -10,21 +10,18 @@ $asin = $product['asin'] ?? '';
 $source = $product['source'] ?? '';
 $display_title = AI_PI_Card_Renderer::get_display_title($product, 90);
 
+// 直リンのみ採用（検索URLは CVR を落とすので出さない）
 $amazon_url = '';
 $rakuten_url = '';
 $yahoo_url = '';
 
 if ($source === 'amazon' && !empty($asin)) {
     $amazon_url = AI_PI_Card_Renderer::build_amazon_url($asin);
-    $rakuten_url = AI_PI_Card_Renderer::build_rakuten_search_url($display_title);
-    $yahoo_url = AI_PI_Card_Renderer::build_yahoo_search_url($display_title);
+    if (!empty($product['rakuten_pair']['url'])) {
+        $rakuten_url = $product['rakuten_pair']['url'];
+    }
 } elseif ($source === 'rakuten') {
     $rakuten_url = $product['url'];
-    $amazon_url = AI_PI_Card_Renderer::build_amazon_search_url($display_title);
-    $yahoo_url = AI_PI_Card_Renderer::build_yahoo_search_url($display_title);
-}
-if (!empty($product['rakuten_pair']['url'])) {
-    $rakuten_url = $product['rakuten_pair']['url'];
 }
 
 // Pros: 商品の features / bullet_points / description から自動生成

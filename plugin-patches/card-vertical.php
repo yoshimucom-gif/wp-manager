@@ -12,23 +12,20 @@ $source = $product['source'] ?? '';
 // 表示用タイトル（楽天の販促ノイズ除去・長さ制限済み）
 $display_title = AI_PI_Card_Renderer::get_display_title($product, 90);
 
+// 商品ページへの「直リン」のみ採用する方針（検索URLは CVR が大きく落ちるため出さない）
 $amazon_url = '';
 $rakuten_url = '';
 $yahoo_url = '';
 
 if ($source === 'amazon' && !empty($asin)) {
     $amazon_url = AI_PI_Card_Renderer::build_amazon_url($asin);
-    $rakuten_url = AI_PI_Card_Renderer::build_rakuten_search_url($display_title);
-    $yahoo_url = AI_PI_Card_Renderer::build_yahoo_search_url($display_title);
+    // 楽天ペア（同一商品の楽天版）がある場合のみ楽天ボタンを出す
+    if (!empty($product['rakuten_pair']['url'])) {
+        $rakuten_url = $product['rakuten_pair']['url'];
+    }
 } elseif ($source === 'rakuten') {
     $rakuten_url = $product['url'];
-    $amazon_url = AI_PI_Card_Renderer::build_amazon_search_url($display_title);
-    $yahoo_url = AI_PI_Card_Renderer::build_yahoo_search_url($display_title);
-}
-
-// 楽天ペアがあれば使用
-if (!empty($product['rakuten_pair']['url'])) {
-    $rakuten_url = $product['rakuten_pair']['url'];
+    // Amazon側に同一商品の直リンが無いため、検索URLは出さない
 }
 ?>
 <div class="aipi-card aipi-card--vertical">
