@@ -5021,6 +5021,11 @@ def batch_generate():
                         post_content, enhance_warning = safe_enhance_generated_article_html(post_content, article, article_type)
                         if enhance_warning:
                             postprocess_warnings.append(enhance_warning)
+                        # ★ polish 後にマーカーを再挿入する（Claude polish は HTMLコメントを保持しない）
+                        post_content, post_marker_stats = insert_card_markers(
+                            post_content, article_type,
+                            title=article.get('title') if isinstance(article, dict) else None,
+                        )
                         post_generated_at = datetime.now().isoformat()
                         current_articles = load_articles()
                         for a in current_articles:
@@ -5032,6 +5037,13 @@ def batch_generate():
                                 a['last_generation_chars'] = len(html_to_text(post_content))
                                 usage = combine_article_usages(usage_parts)
                                 a['usage'] = usage
+                                # polish 後の marker_stats で card_injection_stats を更新
+                                a['card_injection_stats'] = {
+                                    'h3_count': 0, 'matched_count': 0, 'products_available': 0,
+                                    'fallback_count': 0,
+                                    'marker_count': post_marker_stats.get('marker_count', 0),
+                                    'mode': 'marker_only',
+                                }
                                 warnings = pipeline_warnings + postprocess_warnings
                                 if warnings:
                                     a['generation_warning'] = ' / '.join(dict.fromkeys(warnings))
