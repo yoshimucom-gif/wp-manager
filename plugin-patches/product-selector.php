@@ -150,8 +150,9 @@ class AI_PI_Product_Selector {
 
             foreach ($results as $r) {
                 $r_title_clean = self::clean_rakuten_title($r['title'] ?? '');
-                $similarity = self::title_similarity($title, $r_title_clean);
-                if ($similarity >= 0.5) {
+                // クリーン済 Amazon タイトル(search_term) vs クリーン済 Rakuten タイトル
+                // 短い方の何割が一致してるか + 最低3トークン共通 で判定
+                if (self::title_match_for_enrichment($search_term, $r_title_clean)) {
                     $merged_candidates[$i]['rakuten_pair'] = [
                         'url' => $r['url'] ?? '',
                         'price_display' => $r['price_display'] ?? '',
@@ -164,6 +165,31 @@ class AI_PI_Product_Selector {
 
         error_log("[AI_PI] enrich_with_rakuten_pair: searched={$searches_done}, paired={$enriched_count}");
         return $merged_candidates;
+    }
+
+    /**
+     * ペア再検索専用のタイトル一致判定
+     *
+     * title_similarity は max(...) で割るため、長いAmazonタイトルvs短い楽天タイトルで
+     * 同一商品でも 0.5 を下回りやすい。enrichment 用には短い方基準で評価する。
+     *
+     * - 共通トークン数 >= 3
+     * - 共通トークン数 / 短い方のトークン数 >= 0.5
+     */
+    private static function title_match_for_enrichment($a, $b) {
+        $tokens_a = self::tokenize($a);
+        $tokens_b = self::tokenize($b);
+        if (empty($tokens_a) || empty($tokens_b)) return false;
+
+        $common = array_intersect($tokens_a, $tokens_b);
+        $common_count = count($common);
+        if ($common_count < 3) return false;
+
+        $shorter = min(count($tokens_a), count($tokens_b));
+        if ($shorter < 1) return false;
+        $ratio = $common_count / $shorter;
+
+        return ($ratio >= 0.5);
     }
 
     /**
