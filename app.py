@@ -891,6 +891,94 @@ def split_plain_paragraphs(soup):
         p.decompose()
 
 
+def _split_inner_html_by_sentence(inner_html):
+    """インライン HTML を文末記号で分割（タグの開閉を保護）
+
+    - 文末記号: 。！？!?
+    - depth == 0 のときだけ分割（タグの中の。は無視）
+    - 直後が 」 』 ） ) の場合は分割しない（引用閉じ前を保護）
+    """
+    if not inner_html:
+        return []
+    parts = []
+    current = ''
+    depth = 0
+    i = 0
+    n = len(inner_html)
+    void_tags_re = re.compile(r'<(br|img|hr|meta|link|input)\b', re.I)
+    while i < n:
+        c = inner_html[i]
+        if c == '<':
+            tag_end = inner_html.find('>', i)
+            if tag_end == -1:
+                current += inner_html[i:]
+                break
+            tag_content = inner_html[i:tag_end + 1]
+            if tag_content.startswith('</'):
+                depth = max(0, depth - 1)
+            elif not tag_content.endswith('/>') and not void_tags_re.match(tag_content):
+                depth += 1
+            current += tag_content
+            i = tag_end + 1
+            continue
+        if depth == 0 and c in '。！？!?':
+            current += c
+            next_c = inner_html[i + 1] if i + 1 < n else ''
+            i += 1
+            # 閉じ括弧の前では分割しない（「内側」。 のような構造を保護）
+            if next_c and next_c in '」』）)':
+                continue
+            if current.strip():
+                parts.append(current)
+                current = ''
+            continue
+        current += c
+        i += 1
+    if current.strip():
+        parts.append(current)
+    return parts
+
+
+def split_paragraphs_per_sentence(soup):
+    """各 <p> を文末記号で分割し、1文1段落 (1文改行) スタイルにする
+
+    - <strong>/<a>/<em>/<mark>/<span> 等のインラインタグは保持
+    - 画像・表・リスト等のブロック要素を含む <p> はスキップ
+    - 結果として短すぎる断片（10文字未満）は前の文と結合
+    """
+    if not BeautifulSoup:
+        return
+    for p in list(soup.find_all('p')):
+        # ブロック要素を含む段落はスキップ
+        if p.find(['img', 'table', 'ul', 'ol', 'div', 'figure', 'iframe']):
+            continue
+        inner_html = ''.join(str(child) for child in p.contents)
+        if not inner_html.strip():
+            continue
+        parts = _split_inner_html_by_sentence(inner_html)
+        if len(parts) <= 1:
+            continue
+        # 短い断片を前の文と結合
+        merged = []
+        for part in parts:
+            text_only = re.sub(r'<[^>]+>', '', part).strip()
+            if merged and len(text_only) < 10:
+                merged[-1] = merged[-1] + part
+            else:
+                merged.append(part)
+        if len(merged) <= 1:
+            continue
+        # 既存 <p> の前に新 <p> 群を挿入し、元の <p> を削除
+        for part in merged:
+            wrapped = f'<p>{part.strip()}</p>'
+            tmp = BeautifulSoup(wrapped, 'html.parser')
+            new_p = tmp.find('p')
+            if new_p is None:
+                continue
+            p.insert_before(new_p.extract())
+        p.decompose()
+
+
 def add_marker_to_first_keyword(soup, keyword):
     if not keyword:
         return
@@ -978,6 +1066,7 @@ def enhance_generated_article_html(content, article, article_type):
         for heading in root.find_all(['h2', 'h3']):
             heading.string = keyword_heading_text(heading.get_text(' ', strip=True), keyword, article_type)
     split_plain_paragraphs(root)
+    split_paragraphs_per_sentence(root)
     add_marker_to_first_keyword(root, keyword)
     # コメントノード（ai-product マーカー等）は str() すると <!--...--> が剥がれるので明示復元
     def _serialize_enhance_child(child):
