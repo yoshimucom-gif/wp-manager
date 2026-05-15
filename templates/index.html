@@ -826,7 +826,7 @@ tr.selected td { background: var(--accent-dim); }
 <body>
 
 <div class="header">
-  <div class="header-logo" onclick="goHome()">
+  <div class="header-logo" onclick="goToDashboard()">
     <span class="logo-mark" aria-hidden="true">
       <span></span><span></span><span></span>
       <span></span><span></span><span></span>
@@ -854,7 +854,7 @@ tr.selected td { background: var(--accent-dim); }
     </div>
     <!-- サイト未選択時の案内 -->
     <div class="nav-no-site-hint" id="nav-no-site-hint" style="color:rgba(255,255,255,0.5);font-size:12px;padding:0 14px;align-self:center;display:none">
-      ← サイドバーからサイトを選んで記事作成・一括処理を開始
+      ← サイドバーから対象サイトを選ぶ
     </div>
     <!-- グローバルメニュー（常時表示） -->
     <div class="nav-item" onclick="showPage('articles')" id="nav-articles">
