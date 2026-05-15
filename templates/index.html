@@ -2807,8 +2807,42 @@ function closeBrandExpansionModal() {
   document.getElementById('brand-expansion-modal').classList.remove('open');
 }
 
+function shortenProductName(name) {
+  let s = String(name || '').trim();
+  if (!s) return '';
+  if (s.length <= 30) return s; // 既に短ければそのまま
+
+  // 装飾系の括弧を除去（販促文言が入りがち）
+  // ただし先頭の【BRAND】[BRAND] は中身を残す（ブランド情報の可能性）
+  s = s.replace(/^[【\[]\s*([^】\]\s]{1,15})\s*[】\]]\s*/, '$1 ');
+  s = s.replace(/【[^】]*】/g, ' ').replace(/\[[^\]]*\]/g, ' ');
+  s = s.replace(/（[^）]*）/g, ' ').replace(/\([^)]{3,}\)/g, ' ');
+  s = s.replace(/\s+/g, ' ').trim();
+
+  if (s.length <= 30) return s;
+
+  // トークン分割、最大25〜30文字に収まるまで先頭から積む
+  const tokens = s.split(/[\s,、・\/｜|]+/).filter(Boolean);
+  if (tokens.length === 0) return s.slice(0, 28);
+  let result = '';
+  for (const t of tokens) {
+    const next = result ? `${result} ${t}` : t;
+    if (next.length > 28) {
+      if (!result) {
+        // 最初のトークン自体が長い場合は強制カット
+        result = t.slice(0, 28);
+      }
+      break;
+    }
+    result = next;
+    if (result.length >= 20) break;
+  }
+  return result || s.slice(0, 28);
+}
+
 function brandDraftTitle(productName) {
-  return `${productName}の口コミ・評判レビュー｜メリット・デメリットを解説`;
+  const short = shortenProductName(productName);
+  return `${short}の口コミ・評判レビュー｜メリット・デメリットを解説`;
 }
 
 async function createBrandDraftsFromRanking() {
