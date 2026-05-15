@@ -2989,105 +2989,152 @@ async function readTitleIdeaJson(res, label) {
   return data;
 }
 
+// Render の 30秒タイムアウトを避けるため、キーワードをこの数で分割してチャンク並列実行する
+const TITLE_IDEA_CLIENT_CHUNK_SIZE = 25;
+
+// 1 chunk 分の生成を実行（SSE 消費 → ideas を返す）
+async function generateTitleIdeasChunk({ keywordsText, count_per_keyword, site_id, category, onProgress }) {
+  const payload = { keywords: keywordsText, count_per_keyword, site_id, category };
+  const res = await fetch('/api/title-ideas/generate', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json', 'Accept':'text/event-stream'},
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok || !res.body) {
+    const text = await res.text().catch(()=>'');
+    let parsed = {};
+    try { parsed = text ? JSON.parse(text) : {}; } catch (_) {}
+    throw new Error(parsed.error || readableHttpError(res.status, text, 'タイトル案API'));
+  }
+
+  let data = null;
+  let partialData = null;
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const {done, value} = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, {stream: true});
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data:')) continue;
+      const raw = line.slice(line.indexOf(':') + 1).trim();
+      if (!raw) continue;
+      let evt;
+      try { evt = JSON.parse(raw); } catch (_) { continue; }
+      if (evt && evt.type === 'status') { if (onProgress) onProgress(evt.message || ''); continue; }
+      if (evt && evt.type === 'partial') {
+        partialData = evt;
+        if (onProgress && Array.isArray(evt.ideas)) {
+          const prog = evt.progress || {};
+          onProgress(`チャンク内 ${prog.completed||'?'}/${prog.total||'?'}バッチ完了 (${evt.ideas.length}件取得)`);
+        }
+        continue;
+      }
+      data = evt;
+    }
+  }
+  if (!data && partialData) {
+    data = {...partialData, warning: 'チャンク途中で接続が切れました（30秒タイムアウト）'};
+    delete data.type;
+  }
+  if (!data) throw new Error('タイトル案APIから結果が返りませんでした');
+  return data;
+}
+
 async function generateTitleIdeas() {
   const btn = document.getElementById('title-generate-btn');
   const msg = document.getElementById('title-ideas-msg');
-  const payload = {
-    keywords: document.getElementById('title-keywords').value,
-    count_per_keyword: document.getElementById('title-count').value,
-    site_id: document.getElementById('title-site').value || null,
-    category: document.getElementById('title-category').value,
-  };
-  if (!payload.keywords.trim()) {
+  const keywordsRaw = document.getElementById('title-keywords').value;
+  const count_per_keyword = document.getElementById('title-count').value;
+  const site_id = document.getElementById('title-site').value || null;
+  const category = document.getElementById('title-category').value;
+
+  if (!keywordsRaw.trim()) {
     toast('キーワードを1行以上入力してください', 'error');
     return;
   }
+
+  // キーワードをチャンク分割（Render 30秒タイムアウト回避）
+  const allKeywords = keywordsRaw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const chunks = [];
+  for (let i = 0; i < allKeywords.length; i += TITLE_IDEA_CLIENT_CHUNK_SIZE) {
+    chunks.push(allKeywords.slice(i, i + TITLE_IDEA_CLIENT_CHUNK_SIZE));
+  }
+
   btn.disabled = true;
   btn.textContent = '生成中...';
   if (msg) {
     msg.style.color = 'var(--muted)';
-    msg.textContent = 'Claudeでタイトル案を生成しています。失敗時はテンプレに切り替えず、Claudeで分割再試行します。';
+    msg.textContent = chunks.length > 1
+      ? `${allKeywords.length}KW を ${chunks.length} チャンクに分割して順次生成します...`
+      : 'Claudeでタイトル案を生成しています...';
   }
-  try {
-    const res = await fetch('/api/title-ideas/generate', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json', 'Accept':'text/event-stream'},
-      body: JSON.stringify(payload)
-    });
-    if (!res.ok || !res.body) {
-      const text = await res.text().catch(()=>'');
-      let parsed = {};
-      try { parsed = text ? JSON.parse(text) : {}; } catch (_) {}
-      throw new Error(parsed.error || readableHttpError(res.status, text, 'タイトル案API'));
-    }
 
-    let data = null;
-    let partialData = null;
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    while (true) {
-      const {done, value} = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, {stream: true});
-      const lines = buffer.split('\n');
-      buffer = lines.pop();
-      for (const line of lines) {
-        if (!line.startsWith('data:')) continue;
-        const raw = line.slice(line.indexOf(':') + 1).trim();
-        if (!raw) continue;
-        let evt;
-        try { evt = JSON.parse(raw); } catch (_) { continue; }
-        if (evt && evt.type === 'status') {
-          if (msg && typeof evt.message === 'string') msg.textContent = evt.message;
+  const mergedIdeas = [];
+  const chunkWarnings = [];
+  const chunkErrors = [];
+  let sourceLabel = 'Claude生成';
+  let aiUsed = true;
+
+  try {
+    for (let ci = 0; ci < chunks.length; ci++) {
+      const chunk = chunks[ci];
+      const chunkLabel = `チャンク ${ci + 1}/${chunks.length}`;
+      if (msg) msg.textContent = `${chunkLabel} 開始（${chunk.length}KW）...`;
+      try {
+        const data = await generateTitleIdeasChunk({
+          keywordsText: chunk.join('\n'),
+          count_per_keyword,
+          site_id,
+          category,
+          onProgress: (text) => { if (msg) msg.textContent = `${chunkLabel}: ${text}`; },
+        });
+        if (!data.success || !Array.isArray(data.ideas) || data.ideas.length === 0) {
+          const reason = data.error || 'タイトル案を取得できませんでした';
+          chunkErrors.push(`${chunkLabel}: ${reason}`);
+          aiUsed = aiUsed && Boolean(data.ai_used);
           continue;
         }
-        if (evt && evt.type === 'partial') {
-          partialData = evt;
-          if (msg && Array.isArray(evt.ideas)) {
-            const prog = evt.progress || {};
-            msg.textContent = `生成中... (${prog.completed||'?'}/${prog.total||'?'}バッチ完了 / ${evt.ideas.length}件取得)`;
-          }
-          continue;
-        }
-        data = evt;
+        mergedIdeas.push(...data.ideas);
+        if (data.warning) chunkWarnings.push(`${chunkLabel}: ${data.warning}`);
+        if (data.source && data.source !== 'claude') sourceLabel = 'AI生成';
+        // 進捗を即座に表示（途中結果を見せる）
+        titleIdeaList = mergedIdeas.slice();
+        renderTitleIdeas();
+        if (msg) msg.textContent = `${chunkLabel} 完了 (累計 ${mergedIdeas.length}件 / ${allKeywords.length}KW中 ${Math.min((ci + 1) * TITLE_IDEA_CLIENT_CHUNK_SIZE, allKeywords.length)}KW処理済)`;
+      } catch (e) {
+        chunkErrors.push(`${chunkLabel}: ${e.message || e}`);
       }
     }
-    if (!data && partialData) {
-      data = {...partialData, warning: '接続タイムアウトのため途中までの結果を表示しています。残りキーワードは別途再実行してください。'};
-      delete data.type;
-    }
-    if (!data) {
-      throw new Error('タイトル案APIから結果が返りませんでした');
-    }
 
-    if (!data.success || !data.ai_used || !Array.isArray(data.ideas) || data.ideas.length === 0) {
+    if (!mergedIdeas.length) {
       titleIdeaList = [];
       renderTitleIdeas();
-      const details = Array.isArray(data.provider_errors) && data.provider_errors.length ? ` 詳細: ${data.provider_errors.join(' / ')}` : '';
-      const reason = (data.error || 'ClaudeでのAIタイトル案生成に失敗しました。テンプレ生成には切り替えていません。') + details;
-      if (msg) {
-        msg.style.color = 'var(--error)';
-        msg.textContent = reason;
-      }
+      const details = chunkErrors.length ? ` 詳細: ${chunkErrors.slice(0, 5).join(' / ')}` : '';
+      const reason = `ClaudeでのAIタイトル案生成に失敗しました。${details}`;
+      if (msg) { msg.style.color = 'var(--error)'; msg.textContent = reason; }
       toast(reason, 'error');
       return;
     }
-    titleIdeaList = data.ideas;
+
+    titleIdeaList = mergedIdeas;
     renderTitleIdeas();
-    const sourceLabel = data.source === 'claude' ? 'Claude生成' : 'AI生成';
-    if (msg) msg.style.color = 'var(--muted)';
-    const warningDetails = Array.isArray(data.provider_warnings) && data.provider_warnings.length ? ` 詳細: ${data.provider_warnings.join(' / ')}` : '';
-    if (msg) msg.textContent = `${sourceLabel}: ${titleIdeaList.length}件のタイトル案を作成しました。${data.warning ? ` ${data.warning}` : ''}${warningDetails}`;
-    toast(`${titleIdeaList.length}件のタイトル案を作成しました`, 'success');
-  } catch (e) {
-    titleIdeaList = [];
-    renderTitleIdeas();
-    const reason = `AIタイトル案APIと通信できませんでした。テンプレ生成には切り替えていません。${e.message ? ` ${e.message}` : ''}`;
+    const summary = `${sourceLabel}: ${mergedIdeas.length}件のタイトル案を作成しました（${chunks.length}チャンク）`;
+    const warn = chunkWarnings.length ? ` ${chunkWarnings.length}チャンクで警告あり` : '';
+    const err = chunkErrors.length ? ` / ${chunkErrors.length}チャンク失敗: ${chunkErrors.slice(0, 3).join('; ')}` : '';
     if (msg) {
-      msg.style.color = 'var(--error)';
-      msg.textContent = reason;
+      msg.style.color = chunkErrors.length ? 'var(--error)' : 'var(--muted)';
+      msg.textContent = summary + warn + err;
     }
+    toast(summary, chunkErrors.length ? 'error' : 'success');
+  } catch (e) {
+    titleIdeaList = mergedIdeas;
+    renderTitleIdeas();
+    const reason = `AIタイトル案APIと通信できませんでした。${e.message ? ` ${e.message}` : ''}`;
+    if (msg) { msg.style.color = 'var(--error)'; msg.textContent = reason; }
     toast(reason, 'error');
   } finally {
     btn.disabled = false;
