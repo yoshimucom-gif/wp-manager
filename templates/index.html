@@ -7,7 +7,7 @@
 <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
 <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.svg') }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700;800&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -25,7 +25,7 @@
   --success: #1a7f37;
   --error: #cf222e;
   --warning: #9a6700;
-  --font: 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', 'Yu Gothic UI', 'Meiryo', sans-serif;
+  --font: 'Noto Sans JP', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Yu Gothic', 'Meiryo', sans-serif;
   --font-logo: 'Nunito', var(--font);
 }
 html, body { height: 100%; }
@@ -713,7 +713,7 @@ tr.selected td { background: var(--accent-dim); }
 }
 .module-tile:last-child { border-right: 0; }
 .module-tile:hover { background: var(--accent-dim); color: var(--accent); }
-.module-title { font-size: 13px; margin-bottom: 10px; color: #111827; }
+.module-title { font-size: 15px; font-weight: 700; letter-spacing: 0.02em; margin-bottom: 10px; color: #111827; }
 .module-art {
   height: 90px;
   display: grid;
