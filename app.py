@@ -6071,22 +6071,33 @@ def fetch_rewrite_items():
                 names.append(category_cache[cid])
         return ', '.join(names)
 
+    # publish のみの取得は認証不要。Basic Auth を付けると WAF/ConoHa等が
+    # 怪しい認証試行と判定してブロックすることがあるため、必要な時だけ認証を付ける。
+    publish_only = (set(statuses) <= {'publish'})
+
+    def do_request(use_auth):
+        return requests.get(
+            f"{wp_url}/wp-json/wp/v2/posts",
+            auth=(site['wp_user'], site['wp_password']) if use_auth else None,
+            params={
+                'per_page': per_page,
+                'page': page,
+                'status': status,
+                'orderby': 'date',
+                'order': 'desc',
+            },
+            headers=WP_REQUEST_HEADERS,
+            timeout=20
+        )
+
     try:
         for status in statuses:
             for page in range(1, max_pages + 1):
-                resp = requests.get(
-                    f"{wp_url}/wp-json/wp/v2/posts",
-                    auth=(site['wp_user'], site['wp_password']),
-                    params={
-                        'per_page': per_page,
-                        'page': page,
-                        'status': status,
-                        'orderby': 'date',
-                        'order': 'desc',
-                    },
-                    headers=WP_REQUEST_HEADERS,
-                    timeout=20
-                )
+                # publish のみは認証なしで試行 → 失敗時のみ認証付きで再試行
+                resp = do_request(use_auth=not publish_only)
+                if resp.status_code in (401, 403) and publish_only:
+                    print(f'[WP-FETCH] anonymous failed with {resp.status_code}, retry with auth', flush=True)
+                    resp = do_request(use_auth=True)
                 if resp.status_code == 400 and page > 1:
                     break
                 if resp.status_code >= 400:
