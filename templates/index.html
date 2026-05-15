@@ -4796,8 +4796,8 @@ async function switchToSite(siteId) {
     localStorage.setItem('lastSiteId', siteId);
     renderSidebarSites();
     updateHomePageMode();
-    // 切替後は記事一覧へ
-    showPage('articles');
+    // 切替後はそのサイトの作業ホームへ
+    showPage('home');
     // 記事一覧を新フィルタで再ロード
     await loadArticles();
     toast('サイトを切替しました', 'success');
