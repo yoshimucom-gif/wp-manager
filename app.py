@@ -87,6 +87,14 @@ try:
     CLAUDE_ARTICLE_MAX_TOKENS = int(os.environ.get('CLAUDE_ARTICLE_MAX_TOKENS', '20000'))
 except ValueError:
     CLAUDE_ARTICLE_MAX_TOKENS = 20000
+
+# WordPress REST API リクエスト共通ヘッダ
+# 'python-requests/x.x' UA は WAF / Wordfence / Cloudflare で 403 になりやすいため
+# ブラウザ風 User-Agent を必ず付与
+WP_REQUEST_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (compatible; Affiros9/1.0; +https://github.com/yoshimucom-gif/wp-manager)',
+    'Accept': 'application/json',
+}
 try:
     CLAUDE_ARTICLE_CONTINUATION_MAX_ROUNDS = int(os.environ.get('CLAUDE_ARTICLE_CONTINUATION_MAX_ROUNDS', '4'))
 except ValueError:
@@ -3810,6 +3818,7 @@ def resolve_wp_category_ids(wp_url, wp_user, wp_password, category_value):
                 f"{wp_url}/wp-json/wp/v2/categories",
                 auth=(wp_user, wp_password),
                 params={'search': category, 'per_page': 100},
+                headers=WP_REQUEST_HEADERS,
                 timeout=15
             )
             search.raise_for_status()
@@ -3822,6 +3831,7 @@ def resolve_wp_category_ids(wp_url, wp_user, wp_password, category_value):
                 f"{wp_url}/wp-json/wp/v2/categories",
                 auth=(wp_user, wp_password),
                 json={'name': category},
+                headers=WP_REQUEST_HEADERS,
                 timeout=15
             )
             created.raise_for_status()
@@ -3846,6 +3856,7 @@ def fetch_wp_categories(site, limit=100):
                 'order': 'asc',
                 'hide_empty': False,
             },
+            headers=WP_REQUEST_HEADERS,
             timeout=15
         )
         if resp.status_code == 400 and page > 1:
@@ -5478,6 +5489,7 @@ def fetch_wordpress_post_for_edit(wp_url, wp_user, wp_password, post_id):
         f"{wp_url}/wp-json/wp/v2/posts/{post_id}",
         auth=(wp_user, wp_password),
         params={'context': 'edit'},
+        headers=WP_REQUEST_HEADERS,
         timeout=30
     )
     response.raise_for_status()
@@ -5522,6 +5534,7 @@ def update_wordpress_post_from_article(article, settings):
         f"{wp_url}/wp-json/wp/v2/posts/{article['wp_post_id']}",
         auth=(wp_user, wp_password),
         json=post_payload,
+        headers=WP_REQUEST_HEADERS,
         timeout=30
     )
     response.raise_for_status()
@@ -5602,6 +5615,7 @@ def publish_article(article_id):
             f"{wp_url}/wp-json/wp/v2/posts",
             auth=(wp_user, wp_password),
             json=post_payload,
+            headers=WP_REQUEST_HEADERS,
             timeout=30
         )
         response.raise_for_status()
@@ -5984,6 +5998,7 @@ def batch_publish():
                 f"{wp_url}/wp-json/wp/v2/posts",
                 auth=(wp_user, wp_password),
                 json=post_payload,
+                headers=WP_REQUEST_HEADERS,
                 timeout=30
             )
             response.raise_for_status()
@@ -6043,6 +6058,7 @@ def fetch_rewrite_items():
                     f"{wp_url}/wp-json/wp/v2/categories",
                     auth=(site['wp_user'], site['wp_password']),
                     params={'include': ','.join(str(cid) for cid in missing), 'per_page': 100},
+                    headers=WP_REQUEST_HEADERS,
                     timeout=15
                 )
                 cat_resp.raise_for_status()
@@ -6068,6 +6084,7 @@ def fetch_rewrite_items():
                         'orderby': 'date',
                         'order': 'desc',
                     },
+                    headers=WP_REQUEST_HEADERS,
                     timeout=20
                 )
                 if resp.status_code == 400 and page > 1:
@@ -6214,6 +6231,7 @@ def update_rewritten_post(item_id):
             f"{site['wp_url'].rstrip('/')}/wp-json/wp/v2/posts/{item['wp_post_id']}",
             auth=(site['wp_user'], site['wp_password']),
             json={'content': publish_content},
+            headers=WP_REQUEST_HEADERS,
             timeout=30
         )
         resp.raise_for_status()
