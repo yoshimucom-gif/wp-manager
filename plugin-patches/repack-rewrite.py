@@ -4,7 +4,7 @@ import os
 import zipfile
 
 SRC_DIR = r"C:\Users\yoshi\OneDrive\デスクトップ\Codex\plugin-patches\affiros-rewrite"
-OUT_ZIP = r"C:\Users\yoshi\Downloads\affiros-rewrite-0.1.0.zip"
+OUT_ZIP = r"C:\Users\yoshi\Downloads\affiros-rewrite-0.2.0.zip"
 
 if os.path.exists(OUT_ZIP):
     os.remove(OUT_ZIP)
