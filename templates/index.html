@@ -910,9 +910,42 @@ tr.selected td { background: var(--accent-dim); }
       <div id="storage-alert" class="storage-alert" style="display:none"></div>
 
       <div class="page" id="page-home">
-        <div class="dashboard-hero" id="dashboard-hero">
+        <!-- ダッシュボード（サイト未選択時） -->
+        <div id="dashboard-overview-section">
           <div class="dashboard-title">ダッシュボード</div>
-          <div class="dashboard-subtitle" style="color:var(--muted);font-size:13px;margin-bottom:20px;">サイトを選んで記事作成・一括処理を開始してください。下の統計は全サイトの集計です。</div>
+          <div class="dashboard-subtitle" style="color:var(--muted);font-size:13px;margin-bottom:20px;">サイトを選んで記事作成・一括処理を開始してください。下のサイトカードをクリックすると、そのサイトの作業画面に入ります。</div>
+          <!-- site-cards-grid は JS で挿入される -->
+        </div>
+        <!-- サイト選択中のワークスペースホーム -->
+        <div class="dashboard-hero" id="dashboard-hero" style="display:none">
+          <div class="dashboard-title" id="workspace-site-title">サイトの作業ホーム</div>
+          <div class="dashboard-subtitle" style="color:var(--muted);font-size:13px;margin-bottom:16px;" id="workspace-site-url"></div>
+          <div class="module-panel">
+            <div class="module-tile" onclick="showPage('ranking')">
+              <div class="module-title">ランキング記事</div>
+              <div class="module-art">◉↺</div>
+            </div>
+            <div class="module-tile" onclick="showPage('brand')">
+              <div class="module-title">商標記事</div>
+              <div class="module-art">▣✉</div>
+            </div>
+            <div class="module-tile" onclick="showPage('column')">
+              <div class="module-title">コラム記事</div>
+              <div class="module-art">▤◔</div>
+            </div>
+            <div class="module-tile" onclick="showPage('title-ideas')">
+              <div class="module-title">タイトル案</div>
+              <div class="module-art">T▣</div>
+            </div>
+            <div class="module-tile" onclick="showPage('batch')">
+              <div class="module-title">一括処理</div>
+              <div class="module-art">▧⌁</div>
+            </div>
+            <div class="module-tile" onclick="showPage('rewrite')">
+              <div class="module-title">SEOリライト</div>
+              <div class="module-art">✉＋</div>
+            </div>
+          </div>
           <div class="dashboard-kpis">
             <div class="stat-card">
               <div class="stat-label">新規記事</div>
@@ -4612,6 +4645,7 @@ async function loadSitesDashboard() {
     currentSiteId = String(data.current_site_id || '');
     renderSidebarSites();
     renderSiteCardsOnHome();
+    updateHomePageMode();
   } catch (e) {
     console.error('loadSitesDashboard failed', e);
   }
@@ -4668,17 +4702,32 @@ function renderSidebarSites() {
   }).join('');
 }
 
+function updateHomePageMode() {
+  // dashboard-overview-section と dashboard-hero を currentSiteId で切替
+  const overview = document.getElementById('dashboard-overview-section');
+  const hero = document.getElementById('dashboard-hero');
+  if (overview) overview.style.display = currentSiteId ? 'none' : '';
+  if (hero) hero.style.display = currentSiteId ? '' : 'none';
+  // ワークスペース時のサイトタイトル設定
+  if (currentSiteId) {
+    const current = sitesDashboardData.find(s => String(s.id) === currentSiteId);
+    const titleEl = document.getElementById('workspace-site-title');
+    const urlEl = document.getElementById('workspace-site-url');
+    if (current && titleEl) titleEl.textContent = '🏠 ' + current.name + ' の作業ホーム';
+    if (current && urlEl) urlEl.textContent = current.wp_url || '';
+  }
+}
+
 function renderSiteCardsOnHome() {
-  // ホームページにサイトカードを表示
+  // ホームページにサイトカードを表示（ダッシュボードsectionの内側に挿入）
   let grid = document.getElementById('site-cards-grid');
   if (!grid) {
-    // 初回挿入
-    const home = document.getElementById('page-home');
-    if (!home) return;
+    const overview = document.getElementById('dashboard-overview-section');
+    if (!overview) return;
     grid = document.createElement('div');
     grid.id = 'site-cards-grid';
     grid.className = 'site-cards-grid';
-    home.insertBefore(grid, home.firstChild);
+    overview.appendChild(grid);
   }
   if (!sitesDashboardData.length) {
     grid.innerHTML = '<div class="intel-empty" style="grid-column:1/-1;padding:20px;text-align:center">サイトが未登録です。「サイトを追加」から登録してください。</div>';
@@ -4746,6 +4795,7 @@ async function switchToSite(siteId) {
     currentSiteId = siteId;
     localStorage.setItem('lastSiteId', siteId);
     renderSidebarSites();
+    updateHomePageMode();
     // 切替後は記事一覧へ
     showPage('articles');
     // 記事一覧を新フィルタで再ロード
@@ -4765,6 +4815,7 @@ async function goToDashboard() {
     });
     currentSiteId = '';
     renderSidebarSites();
+    updateHomePageMode();
     showPage('home');
     await loadSitesDashboard();
     // 全サイト集計に切り替えるため記事を再ロード
