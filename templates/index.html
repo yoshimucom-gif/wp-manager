@@ -220,6 +220,19 @@ body {
   overflow: visible;
   height: 48px;
 }
+.nav-site-scoped {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 48px;
+}
+.nav-site-scoped::after {
+  content: '';
+  width: 1px;
+  height: 24px;
+  background: rgba(255,255,255,0.15);
+  margin: 0 8px;
+}
 .nav-group { position: relative; height: 48px; }
 .nav-item,
 .nav-trigger {
@@ -822,23 +835,31 @@ tr.selected td { background: var(--accent-dim); }
     Affiros9
   </div>
   <nav class="nav">
-    <div class="nav-group">
-      <div class="nav-trigger active" id="nav-create">記事作成</div>
-      <div class="nav-menu">
-        <div class="nav-link" onclick="showPage('ranking')" id="nav-ranking">ランキング記事</div>
-        <div class="nav-link" onclick="showPage('brand')" id="nav-brand">商標記事</div>
-        <div class="nav-link" onclick="showPage('column')" id="nav-column">コラム記事</div>
+    <!-- サイトスコープのメニュー（現在サイトが選択されている時のみ表示） -->
+    <div class="nav-site-scoped" id="nav-site-scoped" style="display:none">
+      <div class="nav-group">
+        <div class="nav-trigger active" id="nav-create">記事作成</div>
+        <div class="nav-menu">
+          <div class="nav-link" onclick="showPage('ranking')" id="nav-ranking">ランキング記事</div>
+          <div class="nav-link" onclick="showPage('brand')" id="nav-brand">商標記事</div>
+          <div class="nav-link" onclick="showPage('column')" id="nav-column">コラム記事</div>
+        </div>
+      </div>
+      <div class="nav-item" onclick="showPage('title-ideas')" id="nav-title-ideas">
+        タイトル案
+      </div>
+      <div class="nav-item" onclick="showPage('batch')" id="nav-batch">
+        一括処理
+      </div>
+      <div class="nav-item" onclick="showPage('rewrite')" id="nav-rewrite">
+        SEOリライト
       </div>
     </div>
-    <div class="nav-item" onclick="showPage('title-ideas')" id="nav-title-ideas">
-      タイトル案
+    <!-- サイト未選択時の案内 -->
+    <div class="nav-no-site-hint" id="nav-no-site-hint" style="color:rgba(255,255,255,0.5);font-size:12px;padding:0 14px;align-self:center;display:none">
+      ← サイドバーからサイトを選んで記事作成・一括処理を開始
     </div>
-    <div class="nav-item" onclick="showPage('batch')" id="nav-batch">
-      一括処理
-    </div>
-    <div class="nav-item" onclick="showPage('rewrite')" id="nav-rewrite">
-      SEOリライト
-    </div>
+    <!-- グローバルメニュー（常時表示） -->
     <div class="nav-item" onclick="showPage('articles')" id="nav-articles">
       対応履歴
     </div>
@@ -890,37 +911,8 @@ tr.selected td { background: var(--accent-dim); }
 
       <div class="page" id="page-home">
         <div class="dashboard-hero" id="dashboard-hero">
-          <div class="dashboard-title">Affiros9 へようこそ！</div>
-          <div class="module-panel">
-            <div class="module-tile" onclick="showPage('ranking')">
-              <div class="module-title">ランキング記事</div>
-              <div class="module-art">◉↺</div>
-            </div>
-            <div class="module-tile" onclick="showPage('brand')">
-              <div class="module-title">商標記事</div>
-              <div class="module-art">▣✉</div>
-            </div>
-            <div class="module-tile" onclick="showPage('column')">
-              <div class="module-title">コラム記事</div>
-              <div class="module-art">▤◔</div>
-            </div>
-            <div class="module-tile" onclick="showPage('title-ideas')">
-              <div class="module-title">タイトル案</div>
-              <div class="module-art">T▣</div>
-            </div>
-            <div class="module-tile" onclick="showPage('batch')">
-              <div class="module-title">一括処理</div>
-              <div class="module-art">▧⌁</div>
-            </div>
-            <div class="module-tile" onclick="showPage('rewrite')">
-              <div class="module-title">SEOリライト</div>
-              <div class="module-art">✉＋</div>
-            </div>
-            <div class="module-tile" onclick="showPage('sites')">
-              <div class="module-title">サイト管理</div>
-              <div class="module-art">⚙◌</div>
-            </div>
-          </div>
+          <div class="dashboard-title">ダッシュボード</div>
+          <div class="dashboard-subtitle" style="color:var(--muted);font-size:13px;margin-bottom:20px;">サイトを選んで記事作成・一括処理を開始してください。下の統計は全サイトの集計です。</div>
           <div class="dashboard-kpis">
             <div class="stat-card">
               <div class="stat-label">新規記事</div>
@@ -4644,6 +4636,18 @@ function renderSidebarSites() {
       indicator.style.display = 'none';
     }
   }
+  // サイトスコープメニューの表示制御
+  const siteScoped = document.getElementById('nav-site-scoped');
+  const noSiteHint = document.getElementById('nav-no-site-hint');
+  if (siteScoped && noSiteHint) {
+    if (currentSiteId) {
+      siteScoped.style.display = 'flex';
+      noSiteHint.style.display = 'none';
+    } else {
+      siteScoped.style.display = 'none';
+      noSiteHint.style.display = 'block';
+    }
+  }
   if (!sitesDashboardData.length) {
     container.innerHTML = '<div class="sidebar-link muted">登録なし</div>';
     return;
@@ -4763,6 +4767,8 @@ async function goToDashboard() {
     renderSidebarSites();
     showPage('home');
     await loadSitesDashboard();
+    // 全サイト集計に切り替えるため記事を再ロード
+    await loadArticles();
   } catch (e) {
     toast('エラー: ' + e.message, 'error');
   }
