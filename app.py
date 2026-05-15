@@ -3919,10 +3919,14 @@ def fetch_wp_categories(site, limit=100):
     categories = []
     page = 1
     wp_url = site['wp_url'].rstrip('/')
-    while len(categories) < limit:
-        resp = requests.get(
+
+    # categories は公開エンドポイント。Basic Auth を付けると ConoHa 等の
+    # 共用サーバWAFが怪しい認証試行と判定して 403 を返すことがあるため、
+    # まず匿名で取りに行き、401/403 の場合のみ認証付きで再試行する。
+    def do_request(use_auth):
+        return requests.get(
             f"{wp_url}/wp-json/wp/v2/categories",
-            auth=(site['wp_user'], site['wp_password']),
+            auth=(site['wp_user'], site['wp_password']) if use_auth else None,
             params={
                 'per_page': min(100, limit - len(categories)),
                 'page': page,
@@ -3933,6 +3937,12 @@ def fetch_wp_categories(site, limit=100):
             headers=WP_REQUEST_HEADERS,
             timeout=15
         )
+
+    while len(categories) < limit:
+        resp = do_request(use_auth=False)
+        if resp.status_code in (401, 403):
+            print(f'[WP-CATEGORIES] anonymous failed with {resp.status_code}, retry with auth', flush=True)
+            resp = do_request(use_auth=True)
         if resp.status_code == 400 and page > 1:
             break
         resp.raise_for_status()
