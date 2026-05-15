@@ -979,6 +979,79 @@ def split_paragraphs_per_sentence(soup):
         p.decompose()
 
 
+def merge_duplicate_label_bullets(soup):
+    """同じラベル（例「向いている人：」）が連続する <ul> bullet を1つにマージする
+
+    Claude が <ul> 内で同じラベルを複数行で繰り返した場合、
+    値部分をカンマ区切りで1行にまとめる。
+    例:
+      <li><strong>向いている人</strong>：A</li>
+      <li><strong>向いている人</strong>：B</li>
+      <li><strong>向いている人</strong>：C</li>
+      →
+      <li><strong>向いている人</strong>：A、B、C</li>
+    """
+    if not BeautifulSoup:
+        return
+    label_pattern = re.compile(r'^\s*(?:<strong>)?([^：:<]{1,20})(?:</strong>)?\s*[：:]\s*(.*)$', re.S)
+    for ul in list(soup.find_all('ul')):
+        items = list(ul.find_all('li', recursive=False))
+        if len(items) < 2:
+            continue
+        # 各 <li> をラベル/値に分解
+        parsed = []
+        for li in items:
+            inner = li.decode_contents().strip()
+            m = label_pattern.match(inner)
+            if m:
+                label = m.group(1).strip()
+                value = m.group(2).strip()
+                parsed.append((label, value, li))
+            else:
+                parsed.append((None, inner, li))
+
+        # ラベルでグループ化（連続だけでなく ul 全体）
+        from collections import OrderedDict
+        groups = OrderedDict()
+        for label, value, li in parsed:
+            key = label if label else f'__no_label_{id(li)}'
+            if key not in groups:
+                groups[key] = {'label': label, 'values': [], 'first_li': li, 'extra_lis': []}
+            else:
+                groups[key]['extra_lis'].append(li)
+            groups[key]['values'].append(value)
+
+        # 重複ラベルがなければスキップ
+        if all(len(g['extra_lis']) == 0 for g in groups.values()):
+            continue
+
+        # 各グループを1つの li にマージ
+        for key, g in groups.items():
+            if not g['extra_lis']:
+                continue
+            label = g['label']
+            values = [v for v in g['values'] if v.strip()]
+            # 重複値を除去
+            seen = set()
+            unique_values = []
+            for v in values:
+                if v not in seen:
+                    seen.add(v)
+                    unique_values.append(v)
+            merged_value = '、'.join(unique_values)
+            new_inner = f'<strong>{label}</strong>：{merged_value}' if label else merged_value
+            # 最初の li の内容を置き換え
+            wrapped = BeautifulSoup(f'<li>{new_inner}</li>', 'html.parser')
+            new_li = wrapped.find('li')
+            if new_li:
+                g['first_li'].clear()
+                for child in list(new_li.contents):
+                    g['first_li'].append(child.extract())
+            # 残りの li を削除
+            for extra in g['extra_lis']:
+                extra.decompose()
+
+
 def add_marker_to_first_keyword(soup, keyword):
     if not keyword:
         return
@@ -1067,6 +1140,7 @@ def enhance_generated_article_html(content, article, article_type):
             heading.string = keyword_heading_text(heading.get_text(' ', strip=True), keyword, article_type)
     split_plain_paragraphs(root)
     split_paragraphs_per_sentence(root)
+    merge_duplicate_label_bullets(root)
     add_marker_to_first_keyword(root, keyword)
     # コメントノード（ai-product マーカー等）は str() すると <!--...--> が剥がれるので明示復元
     def _serialize_enhance_child(child):
@@ -3172,12 +3246,35 @@ def build_segmented_article_steps(article, article_type):
 - {start}〜{end}位の順位番号を欠番・重複なしで入れてください。
 - 商品カード（画像・価格・ボタン）は **Affiros9 側で h3 の直後に自動挿入** するので、
   本文側で AFFI マーカーや商品カードHTMLを書く必要はない。
-- 解説には特徴・おすすめな人・注意点を **簡潔に必要十分な情報量で** 書く。
-  文字数のために情報を水増ししない。冗長な前置き・同じ内容の繰り返し・遠回しな表現は避ける。
-  自然に書いた結果として短くなっても OK。読者が「結局どんな商品か・誰向けか・注意点は何か」を
-  すぐ理解できる密度を優先する。
 - 比較表やリード文は繰り返さないでください。
-- {end}位を書き終えたら、選び方やFAQへ進まず止めてください。"""
+- {end}位を書き終えたら、選び方やFAQへ進まず止めてください。
+
+【各H3商品セクションの構造（必須）】
+順位ごとに以下の構造で書く:
+1. 商品の特徴説明: <p> 2〜3段落で具体的に
+2. 注意点・デメリット: <p><span style="color:#d32f2f"><strong>注意点：</strong>...</span></p> として明示
+3. 最後に <ul> で 3〜4行の箇条書き。**各行は必ず異なるラベル**を使う
+
+★絶対ルール: <ul>内で同じラベル（例「向いている人」）を複数行で繰り返さない★
+
+【良いリスト例】
+<ul>
+  <li><strong>向いている人</strong>：寒冷地在住、登山やスキーをする方、保温性最優先の方</li>
+  <li><strong>向いていない人</strong>：温暖地域、軽い防寒で十分な方</li>
+  <li><strong>価格帯</strong>：2,000円台前半</li>
+  <li><strong>サイズ・フィット感</strong>：フリーサイズ、首周り40cm前後まで対応</li>
+</ul>
+
+【悪い例（禁止）】
+<ul>
+  <li><strong>向いている人</strong>：寒冷地在住</li>
+  <li><strong>向いている人</strong>：登山やスキーをする方</li>
+  <li><strong>向いている人</strong>：保温性最優先の方</li>
+</ul>
+→ 同じラベルを繰り返さない。複数条件はカンマで1行にまとめる。
+
+文字数のために水増ししない。冗長な前置き・同じ内容の繰り返しは避ける。
+読者が「どんな商品か・誰向けか・注意点は何か」をすぐ理解できる密度を優先。"""
             })
         steps.append({
             'name': '選び方・FAQ',
