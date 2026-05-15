@@ -960,7 +960,7 @@ tr.selected td { background: var(--accent-dim); }
               <div class="stat-value"><span id="dash-generated">0</span><span style="font-size:13px;font-weight:400">件</span></div>
             </div>
             <div class="stat-card">
-              <div class="stat-label">投稿済</div>
+              <div class="stat-label">PUSH済</div>
               <div class="stat-value"><span id="dash-published">0</span><span style="font-size:13px;font-weight:400">件</span></div>
             </div>
             <div class="stat-card">
@@ -1019,7 +1019,7 @@ tr.selected td { background: var(--accent-dim); }
           </div>
           <div class="stat-card">
             <div class="stat-value" id="stat-published">0</div>
-            <div class="stat-label">PUBLISHED</div>
+            <div class="stat-label">PUSHED</div>
           </div>
         </div>
 
@@ -2610,8 +2610,8 @@ function statusBadge(status) {
     pending: ['⊙', '未生成'],
     generating: ['◌', '再生成中'],
     generated: ['✓', '生成済'],
-    publishing: ['◌', '投稿中'],
-    published: ['★', '投稿済'],
+    publishing: ['◌', 'PUSH中'],
+    published: ['★', 'PUSH済'],
     repairing: ['◌', 'WP送信中'],
     updated: ['✓', '更新完了'],
     scheduled: ['◷', '予約済'],
@@ -4757,7 +4757,7 @@ function renderSiteCardsOnHome() {
           </div>
           <div class="site-card__count">
             <span class="num">${c.published || 0}</span>
-            <span class="lbl">公開済</span>
+            <span class="lbl">PUSH済</span>
           </div>
         </div>
         <div class="site-card__footer">
