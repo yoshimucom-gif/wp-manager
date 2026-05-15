@@ -24,17 +24,20 @@ if (!defined('ABSPATH')) exit;
 
         $display_title = AI_PI_Card_Renderer::get_display_title($product, 80);
 
-        // 直リンのみ採用（検索URLは CVR を落とすので出さない）
+        // ハイブリッド: 直リン優先、無ければ検索URLフォールバック
         $amazon_url = '';
         $rakuten_url = '';
 
         if ($source === 'amazon' && !empty($asin)) {
             $amazon_url = AI_PI_Card_Renderer::build_amazon_url($asin);
-            if (!empty($product['rakuten_pair']['url'])) {
-                $rakuten_url = $product['rakuten_pair']['url'];
-            }
+            $rakuten_url = !empty($product['rakuten_pair']['url'])
+                ? $product['rakuten_pair']['url']
+                : AI_PI_Card_Renderer::build_rakuten_search_url($display_title);
         } elseif ($source === 'rakuten') {
             $rakuten_url = $product['url'];
+            $amazon_url = !empty($product['amazon_pair']['asin'])
+                ? AI_PI_Card_Renderer::build_amazon_url($product['amazon_pair']['asin'])
+                : AI_PI_Card_Renderer::build_amazon_search_url($display_title);
         }
 
         $rank_class = 'aipi-rank--' . ($rank <= 3 ? $rank : 'other');

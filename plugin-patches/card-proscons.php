@@ -10,18 +10,20 @@ $asin = $product['asin'] ?? '';
 $source = $product['source'] ?? '';
 $display_title = AI_PI_Card_Renderer::get_display_title($product, 90);
 
-// 直リンのみ採用（検索URLは CVR を落とすので出さない）
+// ハイブリッド: 直リン優先、無ければ検索URLフォールバック
 $amazon_url = '';
 $rakuten_url = '';
-$yahoo_url = '';
 
 if ($source === 'amazon' && !empty($asin)) {
     $amazon_url = AI_PI_Card_Renderer::build_amazon_url($asin);
-    if (!empty($product['rakuten_pair']['url'])) {
-        $rakuten_url = $product['rakuten_pair']['url'];
-    }
+    $rakuten_url = !empty($product['rakuten_pair']['url'])
+        ? $product['rakuten_pair']['url']
+        : AI_PI_Card_Renderer::build_rakuten_search_url($display_title);
 } elseif ($source === 'rakuten') {
     $rakuten_url = $product['url'];
+    $amazon_url = !empty($product['amazon_pair']['asin'])
+        ? AI_PI_Card_Renderer::build_amazon_url($product['amazon_pair']['asin'])
+        : AI_PI_Card_Renderer::build_amazon_search_url($display_title);
 }
 
 // Pros: 商品の features / bullet_points / description から自動生成
@@ -124,9 +126,6 @@ if (empty($cons)) {
         <?php endif; ?>
         <?php if (!empty($rakuten_url)): ?>
             <a href="<?php echo esc_url($rakuten_url); ?>" target="_blank" rel="nofollow noopener sponsored" class="aipi-btn aipi-btn--rakuten">楽天市場で見る</a>
-        <?php endif; ?>
-        <?php if (!empty($yahoo_url)): ?>
-            <a href="<?php echo esc_url($yahoo_url); ?>" target="_blank" rel="nofollow noopener sponsored" class="aipi-btn aipi-btn--yahoo">Yahoo!</a>
         <?php endif; ?>
     </div>
 

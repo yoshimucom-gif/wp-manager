@@ -79,41 +79,36 @@ class AI_PI_Product_Selector {
     }
 
     /**
-     * Amazon と 楽天 両方に存在する商品のみフィルタリング
+     * 候補リストにペア情報を付与（ハイブリッドモード）
      *
-     * - merge_duplicates でタイトル類似度ペア化
-     * - rakuten_pair が紐付いた Amazon 商品（=両プラットフォーム存在）のみ返す
-     * - ペアが0件なら fallback として merge_duplicates 結果全体を返す
+     * - merge_duplicates でタイトル類似度ペア化を実行
+     * - ペアが見つかれば Amazon商品に rakuten_pair が紐付く
+     * - フィルタリングはしない（全候補を Claude に渡す）
+     * - 並び順: ペア済 → 単独 の順なので、Claude選定で自然にペア商品が優先される
+     *
+     * テンプレ側ではペアあり=直リン、ペア無し=検索URLにフォールバック。
      *
      * @param array $candidates fetch_candidates の戻り値
-     * @return array ペア化された商品（先頭）+ fallback 時は全候補
+     * @return array merge_duplicates 適用後の全候補
      */
     public static function pair_candidates($candidates) {
         if (empty($candidates)) return [];
 
         $merged = self::merge_duplicates($candidates);
 
-        // 両プラットフォーム存在する商品のみ抽出
-        $paired = [];
-        $unpaired = [];
+        // 統計ログ
+        $paired_count = 0;
+        $unpaired_count = 0;
         foreach ($merged as $item) {
-            $has_amazon = (($item['source'] ?? '') === 'amazon' && !empty($item['asin']));
-            $has_rakuten_pair = !empty($item['rakuten_pair']['url']);
-            if ($has_amazon && $has_rakuten_pair) {
-                $paired[] = $item;
+            if (!empty($item['rakuten_pair']['url']) || !empty($item['amazon_pair']['asin'])) {
+                $paired_count++;
             } else {
-                $unpaired[] = $item;
+                $unpaired_count++;
             }
         }
+        error_log("[AI_PI] pair_candidates: paired={$paired_count}, unpaired={$unpaired_count} (all kept, paired sorted first)");
 
-        if (empty($paired)) {
-            // ペアが見つからなければ fallback（候補ゼロにしない）
-            error_log('[AI_PI] pair_candidates: no paired products found, falling back to all candidates');
-            return $unpaired;
-        }
-
-        error_log('[AI_PI] pair_candidates: ' . count($paired) . ' paired, ' . count($unpaired) . ' unpaired (paired only kept)');
-        return $paired;
+        return $merged;
     }
 
     /**

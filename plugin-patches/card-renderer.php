@@ -75,15 +75,17 @@ class AI_PI_Card_Renderer {
 
     /**
      * 楽天検索リンク生成（フォールバック用）
+     * RINKER 流の "?f=1&grp=product" で商品カテゴリ絞り込み
      */
     public static function build_rakuten_search_url($keyword) {
         $settings = get_option('ai_pi_settings', []);
         $affiliate_id = $settings['rakuten_affiliate_id'] ?? '';
 
-        $url = 'https://search.rakuten.co.jp/search/mall/' . urlencode($keyword) . '/';
+        $url = 'https://search.rakuten.co.jp/search/mall/' . urlencode($keyword) . '/?f=1&grp=product';
 
         if (!empty($affiliate_id)) {
-            $url = 'https://hb.afl.rakuten.co.jp/hgc/' . $affiliate_id . '/?pc=' . urlencode($url);
+            // hb.afl 経由でアフィID紐付け
+            $url = 'https://hb.afl.rakuten.co.jp/hgc/' . $affiliate_id . '/?pc=' . urlencode($url) . '&m=' . urlencode($url);
         }
 
         return $url;

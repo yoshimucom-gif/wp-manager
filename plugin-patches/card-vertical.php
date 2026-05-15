@@ -12,20 +12,27 @@ $source = $product['source'] ?? '';
 // 表示用タイトル（楽天の販促ノイズ除去・長さ制限済み）
 $display_title = AI_PI_Card_Renderer::get_display_title($product, 90);
 
-// 商品ページへの「直リン」のみ採用する方針（検索URLは CVR が大きく落ちるため出さない）
+// ハイブリッドモード: 直リン優先、無ければ検索URLフォールバック（RINKER式）
+// 両ボタン常に出す → ペア成立時は最強、無くてもアフィ報酬機会は維持
 $amazon_url = '';
 $rakuten_url = '';
-$yahoo_url = '';
 
 if ($source === 'amazon' && !empty($asin)) {
+    // Amazon source: Amazon は直リン、楽天はペア優先・無ければ検索URL
     $amazon_url = AI_PI_Card_Renderer::build_amazon_url($asin);
-    // 楽天ペア（同一商品の楽天版）がある場合のみ楽天ボタンを出す
     if (!empty($product['rakuten_pair']['url'])) {
         $rakuten_url = $product['rakuten_pair']['url'];
+    } else {
+        $rakuten_url = AI_PI_Card_Renderer::build_rakuten_search_url($display_title);
     }
 } elseif ($source === 'rakuten') {
+    // Rakuten source: 楽天は直リン、Amazonはペア優先・無ければ検索URL
     $rakuten_url = $product['url'];
-    // Amazon側に同一商品の直リンが無いため、検索URLは出さない
+    if (!empty($product['amazon_pair']['asin'])) {
+        $amazon_url = AI_PI_Card_Renderer::build_amazon_url($product['amazon_pair']['asin']);
+    } else {
+        $amazon_url = AI_PI_Card_Renderer::build_amazon_search_url($display_title);
+    }
 }
 ?>
 <div class="aipi-card aipi-card--vertical">
@@ -76,9 +83,6 @@ if ($source === 'amazon' && !empty($asin)) {
                 <?php endif; ?>
                 <?php if (!empty($rakuten_url)): ?>
                     <a href="<?php echo esc_url($rakuten_url); ?>" target="_blank" rel="nofollow noopener sponsored" class="aipi-btn aipi-btn--rakuten">楽天市場</a>
-                <?php endif; ?>
-                <?php if (!empty($yahoo_url)): ?>
-                    <a href="<?php echo esc_url($yahoo_url); ?>" target="_blank" rel="nofollow noopener sponsored" class="aipi-btn aipi-btn--yahoo">Yahoo!</a>
                 <?php endif; ?>
             </div>
 
