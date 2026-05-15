@@ -152,7 +152,6 @@ DATA_DIR = resolve_data_dir()
 ARTICLES_FILE = DATA_DIR / 'articles.json'
 QUALITY_FILE = DATA_DIR / 'quality.json'
 SETTINGS_FILE = DATA_DIR / 'settings.json'
-REWRITE_FILE = DATA_DIR / 'rewrite_items.json'
 BATCH_JOBS_FILE = DATA_DIR / 'batch_jobs.json'
 
 
@@ -249,12 +248,6 @@ def recover_stale_article_statuses(articles, jobs=None):
         changed = True
 
     return changed
-
-def load_rewrites():
-    return load_json(REWRITE_FILE, [])
-
-def save_rewrites(items):
-    save_json(REWRITE_FILE, items)
 
 OLD_DEFAULT_QUALITY_PROMPT = "SEOに最適化された、読みやすく情報量の多い記事を書いてください。見出しを適切に使い、具体例を含めてください。"
 QUALITY_PRESET_VERSION = 8
@@ -472,7 +465,6 @@ def build_data_snapshot():
         'settings': load_settings(),
         'articles': load_articles(),
         'quality': load_quality(),
-        'rewrite_items': load_rewrites(),
     }
 
 def has_user_data(snapshot):
@@ -487,7 +479,6 @@ def has_user_data(snapshot):
     )
     return any([
         bool(snapshot.get('articles')),
-        bool(snapshot.get('rewrite_items')),
         bool(non_default_quality),
         any(bool(settings.get(k)) for k in setting_keys),
         any(bool(v) for v in (settings.get('quality_style_references') or {}).values()),
@@ -500,8 +491,7 @@ def restore_data_snapshot(snapshot):
         save_articles(snapshot['articles'])
     if isinstance(snapshot.get('quality'), list):
         save_quality(snapshot['quality'])
-    if isinstance(snapshot.get('rewrite_items'), list):
-        save_rewrites(snapshot['rewrite_items'])
+
 def load_settings():
     settings = load_json(SETTINGS_FILE, {
         "sites": [],
@@ -1315,9 +1305,6 @@ def normalize_article_type(value, default='ranking'):
         'column': 'column',
         'コラム': 'column',
         'コラム記事': 'column',
-        'rewrite': 'rewrite',
-        'seoリライト': 'rewrite',
-        'リライト': 'rewrite',
     }
     return mapping.get(raw, default)
 
@@ -1327,7 +1314,6 @@ def article_type_label(article_type):
         'ranking': 'ランキング記事',
         'brand': '商標記事',
         'column': 'コラム記事',
-        'rewrite': 'SEOリライト',
     }.get(article_type, 'ランキング記事')
 
 
@@ -2106,7 +2092,7 @@ SEO_NEWS_FALLBACK = [
 
 def japanese_search_blog_summary(title):
     if any(word in title for word in ('コア アップデート', 'ランキング', 'スパム')):
-        return '検索順位や品質評価に関わる重要な更新です。リライト優先度の判断材料として確認してください。'
+        return '検索順位や品質評価に関わる重要な更新です。記事改善の判断材料として確認してください。'
     if any(word in title for word in ('Search Console', '分析', 'レポート')):
         return 'Search Consoleや分析まわりの更新です。流入低下や改善候補の確認に役立ちます。'
     if any(word in title for word in ('クロール', 'Googlebot', 'インデックス')):
@@ -2802,7 +2788,6 @@ DEFAULT_CARD_INSERTION_PATTERNS = {
         {'position': 'before_first_h2', 'design': 'vertical', 'repeat': 3},
         {'position': 'after_matome_h2', 'design': 'ranking', 'count': 3},
     ],
-    'rewrite': [],
 }
 
 
@@ -3882,70 +3867,6 @@ def fetch_wp_categories(site, limit=100):
     ]
 
 
-def get_rewrite_style_prompt(data, settings):
-    structure_mode = data.get('structure_mode', 'seo')
-    tone = data.get('tone', 'natural')
-    decoration_level = data.get('decoration_level', 'standard')
-    target_chars = str(data.get('target_chars', '')).strip()
-    tolerance = int(data.get('tolerance', 10) or 10)
-
-    structure_map = {
-        'keep': '元記事の構成を活かしながら、段落と見出しを読みやすく整える',
-        'organize': '段落と見出しをしっかり整理し、情報の順序を改善する',
-        'rebuild': '記事構成から見直し、読者が理解しやすい流れに再構成する',
-        'seo': 'SEO記事として検索意図、見出し階層、網羅性を意識して再構成する',
-        'cta': '読者の行動につながる導線とCTAを意識して再構成する',
-    }
-    tone_map = {
-        'natural': '自然で読みやすい文体',
-        'trust': '丁寧で信頼感のある文体',
-        'friendly': '親しみやすい文体',
-        'seo': 'SEOを意識した明確な文体',
-        'concise': '簡潔で要点重視の文体',
-    }
-    decoration_map = {
-        'none': '装飾は追加せず、基本的なHTMLタグだけを使う',
-        'light': '太字、マーカー、リストを軽く使う',
-        'standard': '太字、赤字、マーカー、リスト、表だけで読みやすく整える',
-        'rich': '太字、赤字、マーカー、リスト、表を使うが、複雑なボックスや独自classは使わない',
-    }
-
-    prompt = f"""
-リライト方針:
-- {structure_map.get(structure_mode, structure_map['seo'])}
-- {tone_map.get(tone, tone_map['natural'])}
-- {decoration_map.get(decoration_level, decoration_map['standard'])}
-- 元記事の事実関係、固有名詞、重要な主張は保持する
-- 重複表現、冗長な表現、読みにくい段落を整理する
-- WordPress本文として使えるHTML形式で出力する
-
-{article_html_output_rules()}"""
-
-    if target_chars:
-        try:
-            target = int(target_chars)
-            lower = max(1, int(target * (100 - tolerance) / 100))
-            upper = int(target * (100 + tolerance) / 100)
-            prompt += f"""
-
-文字数条件:
-- 目標文字数: {target}文字
-- 許容範囲: ±{tolerance}%
-- {lower}文字から{upper}文字の範囲を目安にする
-- 文字数を優先しすぎて不自然な言い回しにしない"""
-        except ValueError:
-            pass
-
-    if safe_article_css(settings.get('article_css')):
-        prompt += f"""
-
-サイト共通CSS:
-以下のCSSに合うHTML構造とクラス設計を意識してください。
-
-{safe_article_css(settings.get('article_css'))[:3000]}"""
-
-    return prompt
-
 def save_settings(settings):
     save_json(SETTINGS_FILE, settings)
 
@@ -3966,7 +3887,6 @@ def login_required(f):
 @app.route('/column')
 @app.route('/title-ideas')
 @app.route('/batch')
-@app.route('/rewrite')
 @app.route('/history')
 @app.route('/articles')
 @app.route('/quality')
@@ -6020,292 +5940,6 @@ def batch_publish():
 
     save_articles(articles)
     return jsonify(results)
-
-
-# Rewrite existing WordPress posts
-@app.route('/api/rewrite/items', methods=['GET'])
-@login_required
-def get_rewrite_items():
-    return jsonify(load_rewrites())
-
-
-@app.route('/api/rewrite/fetch', methods=['POST'])
-@login_required
-def fetch_rewrite_items():
-    data = request.get_json(silent=True) or {}
-    site_id = data.get('site_id')
-    per_page = int(data.get('per_page', 20) or 20)
-    max_pages = int(data.get('max_pages', 3) or 3)
-    statuses = data.get('statuses') or ['publish']
-    per_page = max(1, min(per_page, 100))
-    max_pages = max(1, min(max_pages, 10))
-
-    settings = load_settings()
-    site = get_site_by_id(site_id, settings)
-    if not site:
-        return jsonify({'error': 'サイトを選択してください'}), 400
-
-    wp_url = site['wp_url'].rstrip('/')
-    fetched = []
-    category_cache = {}
-
-    def post_category_names(ids):
-        names = []
-        missing = [cid for cid in (ids or []) if cid not in category_cache]
-        if missing:
-            try:
-                cat_resp = requests.get(
-                    f"{wp_url}/wp-json/wp/v2/categories",
-                    auth=(site['wp_user'], site['wp_password']),
-                    params={'include': ','.join(str(cid) for cid in missing), 'per_page': 100},
-                    headers=WP_REQUEST_HEADERS,
-                    timeout=15
-                )
-                cat_resp.raise_for_status()
-                for cat in cat_resp.json():
-                    category_cache[cat.get('id')] = cat.get('name', '')
-            except Exception:
-                pass
-        for cid in (ids or []):
-            if category_cache.get(cid):
-                names.append(category_cache[cid])
-        return ', '.join(names)
-
-    # publish のみの取得は認証不要。Basic Auth を付けると WAF/ConoHa等が
-    # 怪しい認証試行と判定してブロックすることがあるため、必要な時だけ認証を付ける。
-    publish_only = (set(statuses) <= {'publish'})
-
-    def do_request(use_auth):
-        return requests.get(
-            f"{wp_url}/wp-json/wp/v2/posts",
-            auth=(site['wp_user'], site['wp_password']) if use_auth else None,
-            params={
-                'per_page': per_page,
-                'page': page,
-                'status': status,
-                'orderby': 'date',
-                'order': 'desc',
-            },
-            headers=WP_REQUEST_HEADERS,
-            timeout=20
-        )
-
-    try:
-        for status in statuses:
-            for page in range(1, max_pages + 1):
-                # publish のみは認証なしで試行 → 失敗時のみ認証付きで再試行
-                resp = do_request(use_auth=not publish_only)
-                if resp.status_code in (401, 403) and publish_only:
-                    print(f'[WP-FETCH] anonymous failed with {resp.status_code}, retry with auth', flush=True)
-                    resp = do_request(use_auth=True)
-                if resp.status_code == 400 and page > 1:
-                    break
-                if resp.status_code >= 400:
-                    # 403/401などのエラー詳細をログに残す
-                    body_snippet = resp.text[:500] if resp.text else '(empty body)'
-                    server_hdr = resp.headers.get('server', '?')
-                    cf_hdr = resp.headers.get('cf-ray', '')
-                    waf_hdr = resp.headers.get('x-sucuri-id', '') or resp.headers.get('x-mod-security-id', '')
-                    print(
-                        f'[WP-FETCH] status={resp.status_code} server={server_hdr} '
-                        f'cf-ray={cf_hdr} waf={waf_hdr} body={body_snippet!r}',
-                        flush=True
-                    )
-                resp.raise_for_status()
-                posts = resp.json()
-                if not posts:
-                    break
-                for post in posts:
-                    item = {
-                        'id': f"{site_id}:{post.get('id')}",
-                        'site_id': site_id,
-                        'site_name': site.get('name', ''),
-                        'wp_post_id': post.get('id'),
-                        'title': unescape(post.get('title', {}).get('rendered', '') or ''),
-                        'content': post.get('content', {}).get('rendered', '') or '',
-                        'category': post_category_names(post.get('categories', [])),
-                        'original_status': post.get('status', ''),
-                        'article_type': 'rewrite',
-                        'post_date': post.get('date', ''),
-                        'modified_at': post.get('modified', ''),
-                        'link': post.get('link', ''),
-                        'status': 'fetched',
-                        'rewritten_content': '',
-                        'fetched_at': datetime.now().isoformat(),
-                        'rewritten_at': None,
-                        'updated_at': None,
-                    }
-                    apply_score_fields(item, item['title'], item['content'], '')
-                    fetched.append(item)
-    except requests.exceptions.HTTPError as he:
-        # 403等のエラー詳細をユーザーに見せる
-        body_hint = ''
-        if he.response is not None:
-            body_hint = he.response.text[:300] if he.response.text else ''
-            server = he.response.headers.get('server', '')
-            cf = 'Cloudflare ' if he.response.headers.get('cf-ray') else ''
-            waf = ''
-            if he.response.headers.get('x-sucuri-id'):
-                waf = 'Sucuri '
-            if 'wordfence' in body_hint.lower():
-                waf = 'Wordfence '
-            origin = f'[{cf}{waf}server={server}] ' if (cf or waf or server) else ''
-            body_hint = origin + body_hint
-        return jsonify({'error': f'WordPress記事取得エラー: {str(he)} / {body_hint}'.strip()}), 500
-    except Exception as e:
-        return jsonify({'error': f'WordPress記事取得エラー: {str(e)}'}), 500
-
-    existing = {item['id']: item for item in load_rewrites()}
-    for item in fetched:
-        if item['id'] in existing and existing[item['id']].get('rewritten_content'):
-            item['rewritten_content'] = existing[item['id']].get('rewritten_content', '')
-            item['status'] = existing[item['id']].get('status', item['status'])
-            item['rewritten_at'] = existing[item['id']].get('rewritten_at')
-            item['updated_at'] = existing[item['id']].get('updated_at')
-            item['rewritten_score_data'] = existing[item['id']].get('rewritten_score_data')
-        existing[item['id']] = item
-    items = list(existing.values())
-    items.sort(key=lambda x: x.get('fetched_at', ''), reverse=True)
-    save_rewrites(items)
-    return jsonify({'success': True, 'fetched': len(fetched), 'total': len(items)})
-
-
-@app.route('/api/rewrite/<path:item_id>', methods=['GET'])
-@login_required
-def get_rewrite_item(item_id):
-    item = next((i for i in load_rewrites() if i['id'] == item_id), None)
-    if not item:
-        return jsonify({'error': 'リライト対象が見つかりません'}), 404
-    return jsonify(item)
-
-
-@app.route('/api/rewrite/<path:item_id>', methods=['POST'])
-@login_required
-def rewrite_item(item_id):
-    items = load_rewrites()
-    item = next((i for i in items if i['id'] == item_id), None)
-    if not item:
-        return jsonify({'error': 'リライト対象が見つかりません'}), 404
-
-    data = request.get_json(silent=True) or {}
-    settings = load_settings()
-    api_key = settings.get('claude_api_key') or os.environ.get('ANTHROPIC_API_KEY', '')
-    if not api_key:
-        return jsonify({'error': 'Claude APIキーが設定されていません'}), 400
-
-    style_prompt = get_rewrite_style_prompt(data, settings)
-
-    def generate():
-        client = anthropic.Anthropic(api_key=api_key)
-        full_content = ''
-        try:
-            prompt = f"""以下のWordPress記事をリライトしてください。
-
-タイトル:
-{item.get('title', '')}
-
-元記事HTML:
-{item.get('content', '')[:30000]}
-
-{style_prompt}"""
-
-            with client.messages.stream(
-                model="claude-sonnet-4-6",
-                max_tokens=int(data.get('max_tokens', 4096) or 4096),
-                messages=[{"role": "user", "content": prompt}]
-            ) as stream:
-                for text in stream.text_stream:
-                    full_content += text
-                    yield f"data: {json.dumps({'text': text})}\n\n"
-
-            current_items = load_rewrites()
-            for i in current_items:
-                if i['id'] == item_id:
-                    i['rewritten_content'] = full_content
-                    i['status'] = 'rewritten'
-                    i['rewritten_at'] = datetime.now().isoformat()
-                    i['rewritten_score_data'] = score_article_content(i.get('title', ''), full_content, '')
-                    break
-            save_rewrites(current_items)
-            yield f"data: {json.dumps({'done': True})}\n\n"
-        except Exception as e:
-            current_items = load_rewrites()
-            for i in current_items:
-                if i['id'] == item_id:
-                    i['status'] = 'error'
-                    i['error'] = str(e)
-                    break
-            save_rewrites(current_items)
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
-
-    return Response(
-        stream_with_context(generate()),
-        mimetype='text/event-stream',
-        headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'}
-    )
-
-
-@app.route('/api/rewrite/<path:item_id>/update', methods=['POST'])
-@login_required
-def update_rewritten_post(item_id):
-    items = load_rewrites()
-    item = next((i for i in items if i['id'] == item_id), None)
-    if not item:
-        return jsonify({'error': 'リライト対象が見つかりません'}), 404
-    data = request.get_json(silent=True) or {}
-    content = data.get('content') or item.get('rewritten_content')
-    if not content:
-        return jsonify({'error': '先にリライトを実行してください'}), 400
-
-    settings = load_settings()
-    site = get_site_by_id(item.get('site_id'), settings)
-    if not site:
-        return jsonify({'error': 'サイト設定が見つかりません'}), 404
-
-    try:
-        publish_content = prepare_article_content_for_publish(content, settings)
-        resp = requests.post(
-            f"{site['wp_url'].rstrip('/')}/wp-json/wp/v2/posts/{item['wp_post_id']}",
-            auth=(site['wp_user'], site['wp_password']),
-            json={'content': publish_content},
-            headers=WP_REQUEST_HEADERS,
-            timeout=30
-        )
-        resp.raise_for_status()
-        post = resp.json()
-        for i in items:
-            if i['id'] == item_id:
-                i['status'] = 'updated'
-                i['content'] = content
-                i['link'] = post.get('link', i.get('link', ''))
-                i['updated_at'] = datetime.now().isoformat()
-                apply_score_fields(i, i.get('title', ''), content, '')
-                break
-        save_rewrites(items)
-        return jsonify({'success': True, 'wp_url': post.get('link', '')})
-    except Exception as e:
-        return jsonify({'error': f'WordPress更新エラー: {str(e)}'}), 500
-
-
-@app.route('/api/rewrite/bulk-delete', methods=['POST'])
-@login_required
-def delete_rewrite_items():
-    ids = set((request.get_json(silent=True) or {}).get('ids', []))
-    items = [i for i in load_rewrites() if i['id'] not in ids]
-    save_rewrites(items)
-    return jsonify({'success': True})
-
-
-@app.route('/api/rewrite/score', methods=['POST'])
-@login_required
-def score_rewrite_items():
-    items = load_rewrites()
-    for item in items:
-        apply_score_fields(item, item.get('title', ''), item.get('content', ''), '')
-        if item.get('rewritten_content'):
-            item['rewritten_score_data'] = score_article_content(item.get('title', ''), item.get('rewritten_content', ''), '')
-    save_rewrites(items)
-    return jsonify({'success': True, 'scored': len(items)})
 
 
 @app.route('/api/seo-news', methods=['GET'])
