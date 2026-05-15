@@ -4263,6 +4263,36 @@ def set_current_site():
     return jsonify({'success': True, 'site_id': session.get('current_site_id') or ''})
 
 
+def recover_stale_batch_jobs(jobs, articles):
+    """ステータス running/queued なのに対象記事が全部処理完了してるジョブを finished に矯正。
+    Render の再起動などで thread が落ちて job 状態だけ残ってる時の保険。
+    """
+    article_by_id = {a.get('id'): a for a in articles}
+    pending_states = ('pending', 'generating')
+    changed = False
+    now_iso = datetime.now().isoformat()
+    for j in jobs:
+        if j.get('status') not in ('queued', 'running'):
+            continue
+        ids = j.get('article_ids') or []
+        if not ids:
+            continue
+        still_running = False
+        for aid in ids:
+            a = article_by_id.get(aid)
+            if a and a.get('status') in pending_states:
+                still_running = True
+                break
+        if not still_running:
+            j['status'] = 'completed_stale_recovered'
+            j['completed_at'] = j.get('completed_at') or now_iso
+            j['message'] = j.get('message', '') + ' [自動復旧: 対象記事が全て処理完了状態のため終了マーク]'
+            changed = True
+    if changed:
+        save_batch_jobs(jobs)
+    return changed
+
+
 @app.route('/api/dashboard/sites', methods=['GET'])
 @login_required
 def get_sites_dashboard():
@@ -4271,16 +4301,21 @@ def get_sites_dashboard():
     sites = settings.get('sites', [])
     articles = load_articles()
     jobs = load_batch_jobs()
+    # 古い running ジョブを自動復旧
+    recover_stale_batch_jobs(jobs, articles)
+    pending_states = ('pending', 'generating')
     result = []
     for site in sites:
         sid = site.get('id')
         site_articles = [a for a in articles if str(a.get('site_id') or '') == sid]
-        # ジョブを「対象記事 ID にこのサイトが含まれてる」で判定
+        # 「ジョブが running/queued かつ そのジョブの対象記事の中に
+        # まだ pending/generating の記事が存在するサイト記事を含む」場合のみアクティブとカウント
         active_jobs = [
             j for j in jobs
             if j.get('status') in ('queued', 'running')
             and any(
                 str(a.get('site_id') or '') == sid
+                and a.get('status') in pending_states
                 for a in articles if a.get('id') in (j.get('article_ids') or [])
             )
         ]
