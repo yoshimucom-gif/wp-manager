@@ -153,6 +153,70 @@ ARTICLES_FILE = DATA_DIR / 'articles.json'
 QUALITY_FILE = DATA_DIR / 'quality.json'
 SETTINGS_FILE = DATA_DIR / 'settings.json'
 BATCH_JOBS_FILE = DATA_DIR / 'batch_jobs.json'
+TITLE_DEFINITION_FILE = DATA_DIR / 'title_definition.json'
+
+
+DEFAULT_TITLE_DEFINITION = {
+    'version': 1,
+    'char_basic_min': 28,
+    'char_basic_max': 35,
+    'char_max': 45,
+    'forbidden_phrases': [
+        '徹底比較', '完全ガイド', '決定版', '○○のすべて',
+        '最強', '神', 'No.1', '絶対', '必見', '驚愕', '衝撃',
+        'プロが選ぶ', 'プロおすすめ', 'プロ厳選',
+    ],
+    'concreteness_examples': (
+        '数字（5選、3つの違い、3,000円以下、2026年）／'
+        '条件（賃貸でも、初心者でも、在宅ワーク向け、子ども部屋に）／'
+        '検証視点（本当に効果ある？、実際どう？、失敗例から学ぶ）／'
+        '悩み訴求（もう迷わない、失敗しない、〜で困ったら）／'
+        'ベネフィット（快適に〜できる、夏でも涼しい、水洗いOK）'
+    ),
+    'angle_categories': [
+        '比較・選び方系',
+        '悩み解決系',
+        '検証・疑問系',
+        '条件絞り込み系',
+        'ベネフィット明示系',
+    ],
+    'symbol_rules': '区切りは｜（全角縦棒）を基本。【】は1タイトル最大1箇所、本当に強調したいときだけ。',
+    'ranking_default_count': 5,
+    'ranking_max_count': 7,
+    'additional_instructions': '',
+}
+
+
+def load_title_definition():
+    raw = load_json(TITLE_DEFINITION_FILE, None)
+    if not isinstance(raw, dict):
+        return dict(DEFAULT_TITLE_DEFINITION)
+    merged = dict(DEFAULT_TITLE_DEFINITION)
+    merged.update({k: v for k, v in raw.items() if k in DEFAULT_TITLE_DEFINITION})
+    # 配列フィールドは型確認
+    for key in ('forbidden_phrases', 'angle_categories'):
+        if not isinstance(merged.get(key), list):
+            merged[key] = list(DEFAULT_TITLE_DEFINITION[key])
+    return merged
+
+
+def save_title_definition(definition):
+    clean = dict(DEFAULT_TITLE_DEFINITION)
+    for k, v in (definition or {}).items():
+        if k not in DEFAULT_TITLE_DEFINITION:
+            continue
+        if k in ('forbidden_phrases', 'angle_categories'):
+            if isinstance(v, list):
+                clean[k] = [str(x).strip() for x in v if str(x).strip()]
+        elif k in ('char_basic_min', 'char_basic_max', 'char_max', 'ranking_default_count', 'ranking_max_count'):
+            try:
+                clean[k] = int(v)
+            except (TypeError, ValueError):
+                pass
+        else:
+            clean[k] = str(v or '').strip()
+    save_json(TITLE_DEFINITION_FILE, clean)
+    return clean
 
 
 def load_json(path, default):
@@ -1456,6 +1520,13 @@ def score_title_idea(title, keyword, article_type, existing_title_keys):
 
 
 def title_generation_prompt(keywords, count_per_keyword, category=''):
+    d = load_title_definition()
+    forbidden_list = '、'.join(d.get('forbidden_phrases') or [])
+    angles = d.get('angle_categories') or []
+    angles_text = '「' + '」「'.join(angles) + '」' if angles else ''
+    additional = (d.get('additional_instructions') or '').strip()
+    additional_block = f'\n【追加指示（運用ルール）】\n{additional}\n' if additional else ''
+
     return f"""あなたはSEO記事の編集者です。検索順位とクリック率（CTR）の両方を最大化する記事タイトルを設計してください。
 
 以下のキーワードごとに、検索意図に合うタイトル案を{count_per_keyword}個ずつ作り、記事種類も自動分類してください。
@@ -1488,40 +1559,34 @@ def title_generation_prompt(keywords, count_per_keyword, category=''):
 【SEO 観点 ─ 検索される & 評価される】
 - メインキーワードは **タイトルの先頭〜中盤** に置く。末尾に流さない。
 - メインKWの言い換えで関連サジェスト語を1つ盛り込む（口コミ・評判・効果・選び方・デメリット・違い・値段・賃貸OK・電気代・何歳から、など対象に合うもの）。
-- 文字数は日本語で **28〜35字を基本**（検索結果での表示切れを避ける）。最大でも 45字まで。
+- 文字数は日本語で **{d['char_basic_min']}〜{d['char_basic_max']}字を基本**（検索結果での表示切れを避ける）。最大でも {d['char_max']}字まで。
 - 同じKW内で全タイトルが似た構文・似た語尾になるのは禁止。検索意図ごとに違う切り口を割り当てる。
 
 【CTR 観点 ─ クリックされる】
 - 抽象的に締めず、必ず具体性を1つ以上入れる。
   使える要素の例:
-    * 数字: 「5選」「3つの違い」「3,000円以下」「2026年」
-    * 条件: 「賃貸でも」「初心者でも」「在宅ワーク向け」「子ども部屋に」
-    * 検証視点: 「本当に効果ある？」「実際どう？」「失敗例から学ぶ」
-    * 悩み訴求: 「もう迷わない」「失敗しない」「〜で困ったら」
-    * ベネフィット: 「快適に〜できる」「夏でも涼しい」「水洗いOK」
+    {d.get('concreteness_examples', '')}
 - 1キーワード内では切り口をしっかり分ける（同じパターンを2つ並べない）。
-  例: 「比較・選び方系」「悩み解決系」「検証・疑問系」「条件絞り込み系」「ベネフィット明示系」から複数を組み合わせる。
+  例: {angles_text} から複数を組み合わせる。
 
 【禁止表現】
-- 陳腐な手垢ワード: 「徹底比較」「完全ガイド」「決定版」「○○のすべて」「○○方法」を末尾連発
-- 誇大・釣り: 「最強」「神」「No.1」「絶対」「必見」「驚愕」「衝撃」
-- 「プロが選ぶ」「プロおすすめ」など **「プロ」を主語にする訴求は禁止**（信頼性の根拠が薄い）
-- 根拠のない断定（「絶対に〜できる」など）
+- 以下の表現は使用禁止: {forbidden_list}
+- 根拠のない断定（「絶対に〜できる」など）も禁止
+- 釣りタイトル、誇大表現も禁止
 
 【記号】
-- 区切りは `｜`（全角縦棒）を基本にする。
-- `【】` は1タイトルに最大1箇所、本当に強調したいときだけ。多用しない。
+- {d.get('symbol_rules', '')}
 
 【ranking のときの追加ルール】
-- ranking タイトルには **必ず「○選」を入れる**。デフォルトは **5選**。
-  特別な理由がない限り 5選。候補が明らかに豊富なら最大 7選まで。
-  10選以上は実商品データが揃いにくく品質が落ちるため避ける。
+- ranking タイトルには **必ず「○選」を入れる**。デフォルトは **{d['ranking_default_count']}選**。
+  特別な理由がない限り {d['ranking_default_count']}選。候補が明らかに豊富なら最大 {d['ranking_max_count']}選まで。
+  それ以上は実商品データが揃いにくく品質が落ちるため避ける。
 
 【slug】
 - slug は英語のみ・小文字・ハイフン区切り（kebab-case）。3〜4単語、最大30文字以内。
   記事内容を端的に表すSEOフレンドリーな英語に翻訳/要約する（直訳のローマ字化は禁止）。
   例: 「ネックウォーマーおすすめランキング」→「neck-warmer-ranking」。
-
+{additional_block}
 【出力】
 - JSON以外の説明文、Markdown、コードフェンスは禁止。
 
@@ -3914,6 +3979,7 @@ def login_required(f):
 @app.route('/history')
 @app.route('/articles')
 @app.route('/quality')
+@app.route('/title-definition')
 @app.route('/ads')
 @app.route('/sites')
 @app.route('/api-settings')
@@ -5988,6 +6054,31 @@ def get_seo_news():
             'error': str(e)[:160],
             'fetched_at': datetime.now().isoformat()
         })
+
+
+# Title definition (タイトル生成ルール)
+@app.route('/api/title-definition', methods=['GET'])
+@login_required
+def get_title_definition():
+    return jsonify({
+        'definition': load_title_definition(),
+        'defaults': DEFAULT_TITLE_DEFINITION,
+    })
+
+
+@app.route('/api/title-definition', methods=['PUT'])
+@login_required
+def update_title_definition():
+    data = request.get_json(silent=True) or {}
+    saved = save_title_definition(data)
+    return jsonify({'success': True, 'definition': saved})
+
+
+@app.route('/api/title-definition/reset', methods=['POST'])
+@login_required
+def reset_title_definition():
+    saved = save_title_definition(dict(DEFAULT_TITLE_DEFINITION))
+    return jsonify({'success': True, 'definition': saved})
 
 
 # Quality
