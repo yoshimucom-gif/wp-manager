@@ -4232,7 +4232,84 @@ def get_articles():
         changed = True
     if changed:
         save_articles(articles)
+    # 現在サイトでフィルタ（?site_id=xxx）。指定なしまたは 'all' で全件返す（後方互換）
+    site_id = request.args.get('site_id', '').strip()
+    if site_id and site_id != 'all':
+        articles = [a for a in articles if str(a.get('site_id') or '') == site_id]
     return jsonify(articles)
+
+
+@app.route('/api/current-site', methods=['GET'])
+@login_required
+def get_current_site():
+    """現在選択中のサイトIDを返す。"""
+    return jsonify({'site_id': session.get('current_site_id') or ''})
+
+
+@app.route('/api/current-site', methods=['POST'])
+@login_required
+def set_current_site():
+    """現在サイトを設定（'' or 'all' でクリア = ダッシュボード表示）"""
+    data = request.get_json(silent=True) or {}
+    site_id = str(data.get('site_id') or '').strip()
+    if site_id and site_id != 'all':
+        settings = load_settings()
+        sites = settings.get('sites', [])
+        if not any(s.get('id') == site_id for s in sites):
+            return jsonify({'success': False, 'error': '不正なサイトIDです'}), 400
+        session['current_site_id'] = site_id
+    else:
+        session.pop('current_site_id', None)
+    return jsonify({'success': True, 'site_id': session.get('current_site_id') or ''})
+
+
+@app.route('/api/dashboard/sites', methods=['GET'])
+@login_required
+def get_sites_dashboard():
+    """各サイトの統計情報をダッシュボード用に集計して返す。"""
+    settings = load_settings()
+    sites = settings.get('sites', [])
+    articles = load_articles()
+    jobs = load_batch_jobs()
+    result = []
+    for site in sites:
+        sid = site.get('id')
+        site_articles = [a for a in articles if str(a.get('site_id') or '') == sid]
+        # ジョブを「対象記事 ID にこのサイトが含まれてる」で判定
+        active_jobs = [
+            j for j in jobs
+            if j.get('status') in ('queued', 'running')
+            and any(
+                str(a.get('site_id') or '') == sid
+                for a in articles if a.get('id') in (j.get('article_ids') or [])
+            )
+        ]
+        published = [a for a in site_articles if a.get('status') == 'published']
+        recent_published = sorted(
+            published,
+            key=lambda a: a.get('published_at') or a.get('updated_at') or '',
+            reverse=True
+        )
+        last_published_at = recent_published[0].get('published_at') if recent_published else None
+        result.append({
+            'id': sid,
+            'name': site.get('name') or site.get('wp_url') or '(無名サイト)',
+            'wp_url': site.get('wp_url') or '',
+            'counts': {
+                'total': len(site_articles),
+                'pending': sum(1 for a in site_articles if a.get('status') == 'pending'),
+                'generating': sum(1 for a in site_articles if a.get('status') == 'generating'),
+                'generated': sum(1 for a in site_articles if a.get('status') == 'generated'),
+                'published': len(published),
+                'error': sum(1 for a in site_articles if a.get('status') == 'error'),
+            },
+            'active_batch_count': len(active_jobs),
+            'last_published_at': last_published_at,
+        })
+    return jsonify({
+        'sites': result,
+        'current_site_id': session.get('current_site_id') or '',
+    })
 
 
 @app.route('/api/articles', methods=['POST'])
