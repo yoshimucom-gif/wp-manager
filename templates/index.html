@@ -4621,9 +4621,20 @@ async function saveSettings() {
 }
 
 // Close modals on overlay click
-['quality-modal','site-modal','article-modal','rewrite-modal'].forEach(id => {
-  document.getElementById(id).addEventListener('click', e => {
-    if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
+// mousedown と mouseup が両方 overlay 上の時だけ閉じる。
+// （input 選択中にドラッグで外に出てもモーダルが閉じないように）
+['quality-modal','site-modal','article-modal','rewrite-modal','brand-expansion-modal'].forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  let mouseDownOnOverlay = false;
+  el.addEventListener('mousedown', e => {
+    mouseDownOnOverlay = (e.target === e.currentTarget);
+  });
+  el.addEventListener('mouseup', e => {
+    if (mouseDownOnOverlay && e.target === e.currentTarget) {
+      e.currentTarget.classList.remove('open');
+    }
+    mouseDownOnOverlay = false;
   });
 });
 
