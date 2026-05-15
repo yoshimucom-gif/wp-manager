@@ -61,11 +61,13 @@ add_action('wp_ajax_affiros_rewrite_run_single', function () {
     }
 
     $opts = [];
-    foreach (['rewrite_mode', 'emphasis_level', 'tone', 'target_chars', 'tolerance_percent'] as $k) {
+    foreach (['rewrite_mode', 'emphasis_level', 'tone', 'target_chars', 'tolerance_percent', 'preset_id', 'article_type'] as $k) {
         if (isset($_POST[$k]) && $_POST[$k] !== '') {
             $opts[$k] = sanitize_text_field($_POST[$k]);
         }
     }
+    // マーカー挿入オプション
+    $opts['insert_markers'] = !empty($_POST['insert_markers']) && $_POST['insert_markers'] !== '0';
 
     // PHP の実行時間を伸ばす（Claude API が長くかかるケースに備える）
     @set_time_limit(180);

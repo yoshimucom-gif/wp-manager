@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros リライト
  * Description: WordPress記事をClaude APIでリライトする。WP_Queryで内部処理するためホスティングWAFの影響を受けない（403回避）。
- * Version: 0.2.0
+ * Version: 0.3.0
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-rewrite
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('AFFIROS_REWRITE_VERSION', '0.2.0');
+define('AFFIROS_REWRITE_VERSION', '0.3.0');
 define('AFFIROS_REWRITE_PATH', plugin_dir_path(__FILE__));
 define('AFFIROS_REWRITE_URL', plugin_dir_url(__FILE__));
 
@@ -22,8 +22,11 @@ define('AFFIROS_REWRITE_OPTION_KEY', 'affiros_rewrite_settings');
 // モジュール読み込み
 require_once AFFIROS_REWRITE_PATH . 'includes/claude-api.php';
 require_once AFFIROS_REWRITE_PATH . 'includes/post-fetcher.php';
+require_once AFFIROS_REWRITE_PATH . 'includes/quality-presets.php';
+require_once AFFIROS_REWRITE_PATH . 'includes/marker-inserter.php';
 require_once AFFIROS_REWRITE_PATH . 'includes/rewrite-engine.php';
 require_once AFFIROS_REWRITE_PATH . 'admin/settings-page.php';
+require_once AFFIROS_REWRITE_PATH . 'admin/presets-page.php';
 require_once AFFIROS_REWRITE_PATH . 'admin/rewrite-page.php';
 require_once AFFIROS_REWRITE_PATH . 'admin/ajax-handler.php';
 
@@ -70,6 +73,14 @@ add_action('admin_menu', function () {
         'manage_options',
         'affiros-rewrite',
         'affiros_rewrite_render_rewrite_page'
+    );
+    add_submenu_page(
+        'affiros-rewrite',
+        '品質プリセット',
+        '品質プリセット',
+        'manage_options',
+        'affiros-rewrite-presets',
+        'affiros_rewrite_render_presets_page'
     );
     add_submenu_page(
         'affiros-rewrite',

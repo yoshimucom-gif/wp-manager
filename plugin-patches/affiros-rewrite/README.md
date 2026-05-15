@@ -18,17 +18,23 @@ Affiros（外部 SaaS）から WP REST API 経由でリライトしようとす�
 - カテゴリー / 公開状態 / 検索 フィルタ
 - ページネーション
 
-### Phase 2 (予定)
+### Phase 2 (実装済 / v0.2.0)
 - 1記事のリライト実行（Claude API 呼び出し）
-- 結果プレビュー / 保存
+- 結果プレビュー（元記事と左右比較・編集可）
+- WP投稿への上書き保存（リビジョンで個別ロールバック可）
+- 一括リライト（複数選択 → 進捗バー表示で順次実行）
 
-### Phase 3 (予定)
-- 品質定義のインポート（Affiros からエクスポートした JSON）
-- バッチリライト（複数記事まとめて）
+### Phase 3 (実装済 / v0.3.0)
+- 品質プリセット管理画面（追加/編集/削除）
+- Affiros の品質定義 JSON インポート
+- リライト実行時にプリセット選択 → article_type / target_chars / tone / custom prompt / reference_url を上書き
 
-### Phase 4 (予定)
+### Phase 4 (実装済 / v0.3.0)
 - マーカー挿入（Affiros の DEFAULT_CARD_INSERTION_PATTERNS を PHP 移植）
-- ai-product-inserter プラグインとの連携
+- 記事タイプ別の規則: ranking / brand / column
+- 位置: each_h3 / after_first_h2 / before_first_h2 / after_matome_h2 / before_matome_h2
+- デザイン: vertical / ranking(count)
+- ai-product-inserter プラグインがマーカーを実際の商品カードに置換
 
 ## インストール
 

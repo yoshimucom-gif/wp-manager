@@ -1,7 +1,6 @@
 <?php
 /**
  * リライトプロンプト生成 + 実行ロジック
- * Claude API へ投げる prompt を組み立て、結果を返す
  */
 
 if (!defined('ABSPATH')) exit;
@@ -12,10 +11,12 @@ class Affiros_Rewrite_Engine {
      * 1記事をリライトする
      *
      * @param int $post_id
-     * @param array $opts （UIから来る上書き値）
+     * @param array $opts
      *   - rewrite_mode, emphasis_level, tone, target_chars, tolerance_percent
+     *   - preset_id (string, 任意)  品質プリセットID
+     *   - article_type ('ranking'|'brand'|'column'|'', 任意)
+     *   - insert_markers (bool, 任意)  trueなら記事タイプ別マーカー挿入
      * @return array|WP_Error
-     *   { post_id, original_title, original_content, rewritten_title, rewritten_content, usage }
      */
     public static function run($post_id, $opts = []) {
         $post = Affiros_Rewrite_Post_Fetcher::get_post_content($post_id);
@@ -28,7 +29,20 @@ class Affiros_Rewrite_Engine {
             return $v !== '' && $v !== null;
         }));
 
-        $prompt = self::build_prompt($post, $merged);
+        // プリセット指定があれば優先で上書き
+        $preset = null;
+        if (!empty($opts['preset_id'])) {
+            $preset = Affiros_Rewrite_Quality_Presets::find($opts['preset_id']);
+            if ($preset) {
+                if (!empty($preset['tone'])) $merged['tone'] = $preset['tone'];
+                if (!empty($preset['target_chars'])) $merged['target_chars'] = $preset['target_chars'];
+                if (!empty($preset['article_type']) && empty($opts['article_type'])) {
+                    $merged['article_type'] = $preset['article_type'];
+                }
+            }
+        }
+
+        $prompt = self::build_prompt($post, $merged, $preset);
 
         $api = new Affiros_Rewrite_Claude_API();
         $result = $api->complete($prompt, 8000);
@@ -37,22 +51,32 @@ class Affiros_Rewrite_Engine {
         }
 
         $parsed = self::parse_output($result['text']);
+        $content = $parsed['content'];
+
+        // マーカー挿入（記事タイプが指定されかつ insert_markers が true）
+        $article_type = $merged['article_type'] ?? '';
+        if (!empty($opts['insert_markers']) && $article_type) {
+            $content = Affiros_Rewrite_Marker_Inserter::insert($content, $article_type);
+        }
 
         return [
             'post_id' => $post_id,
             'original_title' => $post['title'],
             'original_content' => $post['content'],
             'rewritten_title' => $parsed['title'] ?: $post['title'],
-            'rewritten_content' => $parsed['content'],
+            'rewritten_content' => $content,
             'usage' => $result['usage'] ?? [],
             'model' => $result['model'] ?? '',
+            'preset_used' => $preset['name'] ?? '',
+            'article_type' => $article_type,
+            'markers_inserted' => !empty($opts['insert_markers']) && $article_type,
         ];
     }
 
     /**
      * Claude へ投げる prompt
      */
-    private static function build_prompt($post, $opts) {
+    private static function build_prompt($post, $opts, $preset = null) {
         $mode_map = [
             'seo' => 'SEO観点で検索意図を満たし、見出し構造・キーワード網羅性を強化する',
             'readability' => '読みやすさを最優先に、段落分け・改行・冗長表現の整理に重点を置く',
@@ -84,8 +108,28 @@ class Affiros_Rewrite_Engine {
             $char_section = "\n文字数条件:\n- 元記事と同等の長さを目安にする（極端な短縮・引き伸ばしは避ける）";
         }
 
+        // プリセットのカスタムプロンプト・参考URLを差し込む
+        $preset_section = '';
+        if ($preset) {
+            if (!empty($preset['prompt'])) {
+                $preset_section .= "\n追加指示（品質プリセット「" . ($preset['name'] ?? '') . "」より）:\n" . trim($preset['prompt']);
+            }
+            if (!empty($preset['reference_url'])) {
+                $preset_section .= "\n参考URL（文章構成・権威性・根拠の置き方を参考にする。内容そのものはコピーしない）:\n" . $preset['reference_url'];
+            }
+        }
+
+        $article_type = $opts['article_type'] ?? '';
+        $type_section = '';
+        if ($article_type === 'ranking') {
+            $type_section = "\n記事タイプ: ランキング記事\n- 比較・おすすめ視点で構成する\n- 商品紹介セクションは h3 単位で区切る（後段で商品カードを挿入するため）";
+        } elseif ($article_type === 'brand') {
+            $type_section = "\n記事タイプ: 商標（レビュー）記事\n- 1商品に絞り、メリット・デメリット・実体験ベースの記述を意識";
+        } elseif ($article_type === 'column') {
+            $type_section = "\n記事タイプ: コラム記事\n- 読み物として自然に流れる構成。最後にまとめセクションを置く";
+        }
+
         $original_title = $post['title'];
-        // HTML を保持したまま prompt へ。長すぎる場合は冒頭 30000 文字に切る
         $original_content = mb_substr((string)$post['content'], 0, 30000);
 
         $prompt = <<<PROMPT
@@ -100,7 +144,9 @@ class Affiros_Rewrite_Engine {
 - WordPress本文として使えるHTML形式で出力する（h2, h3, p, ul, ol, strong, em, span class="marker" など）
 - 既存の <!--ai-product:...--> や <!--more--> などのHTMLコメントは原文の位置に残す
 - WordPressショートコード（[xxx]）はそのまま残す
+{$type_section}
 {$char_section}
+{$preset_section}
 
 出力フォーマット（必ずこの形式で出力すること）:
 ===TITLE===
@@ -119,9 +165,6 @@ PROMPT;
         return $prompt;
     }
 
-    /**
-     * Claude 出力を title / content に分割
-     */
     private static function parse_output($text) {
         $title = '';
         $content = $text;
@@ -130,12 +173,9 @@ PROMPT;
             $title = trim($m[1]);
             $content = trim($m[2]);
         }
-
-        // Claude が ```html ... ``` で囲ってきた場合は剥がす
         if (preg_match('/^```(?:html)?\s*(.*?)\s*```$/su', $content, $m)) {
             $content = $m[1];
         }
-
         return ['title' => $title, 'content' => $content];
     }
 }
