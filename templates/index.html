@@ -1093,7 +1093,7 @@ tr.selected td { background: var(--accent-dim); }
               </select>
               <div style="font-size:11px;color:var(--muted);margin-top:4px">CSVインポートや対応履歴にある記事情報を生成対象として呼び出します。タイトル等を編集してから生成できます。</div>
             </div>
-            <div class="form-group">
+            <div class="form-group site-selector-group" id="gen-site-group">
               <label class="form-label">投稿先サイト</label>
               <select id="gen-site" class="form-control" onchange="onGenerateSiteChange()">
                 <option value="">-- サイトを選択 --</option>
@@ -1171,7 +1171,7 @@ tr.selected td { background: var(--accent-dim); }
                 <label class="form-label">1キーワードあたりのタイトル案数</label>
                 <input type="number" id="title-count" class="form-control" value="3" min="1" max="5">
               </div>
-              <div class="form-group">
+              <div class="form-group site-selector-group" id="title-site-group">
                 <label class="form-label">投稿先サイト</label>
                 <select id="title-site" class="form-control">
                   <option value="">-- サイトを選択 --</option>
@@ -1352,7 +1352,7 @@ tr.selected td { background: var(--accent-dim); }
           <div>
             <div class="settings-section">
               <div class="section-header">// 記事取得</div>
-              <div class="form-group">
+              <div class="form-group site-selector-group" id="rewrite-site-group">
                 <label class="form-label">取得元サイト</label>
                 <select id="rewrite-site" class="form-control">
                   <option value="">-- サイトを選択 --</option>
@@ -2079,6 +2079,10 @@ function updateSiteSelects() {
     const v = rewriteEl.value;
     rewriteEl.innerHTML = modalOpts;
     rewriteEl.value = v;
+  }
+  // currentSiteId が設定済みなら option 投入後に自動選択 + 非表示
+  if (typeof applySiteSelectorAutoFill === 'function') {
+    applySiteSelectorAutoFill();
   }
 }
 
@@ -4720,6 +4724,31 @@ function updateHomePageMode() {
     if (current && titleEl) titleEl.textContent = '🏠 ' + current.name + ' の作業ホーム';
     if (current && urlEl) urlEl.textContent = current.wp_url || '';
   }
+  // 各フォームの「投稿先サイト」セレクタを現在サイト時は非表示にして自動選択
+  applySiteSelectorAutoFill();
+}
+
+function applySiteSelectorAutoFill() {
+  // 全フォームの site-selector-group を currentSiteId で非表示にし、
+  // 内側の select の値を currentSiteId に自動設定
+  const groups = document.querySelectorAll('.site-selector-group');
+  groups.forEach(g => {
+    const select = g.querySelector('select');
+    if (currentSiteId) {
+      g.style.display = 'none';
+      if (select) {
+        // option が存在すれば設定（存在しない場合は loadSites 後に再試行）
+        const hasOpt = Array.from(select.options).some(o => o.value === currentSiteId);
+        if (hasOpt) {
+          select.value = currentSiteId;
+          // change イベント発火（カテゴリー候補等を更新するため）
+          select.dispatchEvent(new Event('change'));
+        }
+      }
+    } else {
+      g.style.display = '';
+    }
+  });
 }
 
 function renderSiteCardsOnHome() {
