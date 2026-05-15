@@ -1489,9 +1489,9 @@ def title_generation_prompt(keywords, count_per_keyword, category=''):
 - 広いジャンル名だけなら brand にしない。
 - 釣りタイトル、誇大表現、根拠のない断定は禁止。
 - 文字数は日本語で28〜45字前後を基本にする。
-- ranking タイトルで「○選」を入れる場合は **基本5選、最大でも7選** を使う。
+- ranking タイトルには **必ず「○選」を入れる**。デフォルトは **5選**。
+  特別な理由がない限り 5 選にする（候補が多ければ最大 7 まで）。
   10選以上は実商品データが揃いにくく品質が落ちるため避ける。
-  「○選」が無くても良い（「おすすめ」「ランキング」「比較」だけでもOK）。
 - slug は英語のみ・小文字・ハイフン区切り（kebab-case）。3〜4単語、最大30文字以内。
   記事内容を端的に表すSEOフレンドリーな英語に翻訳/要約する（直訳のローマ字化は禁止）。
   例: 「ネックウォーマーおすすめランキング」→「neck-warmer-ranking」。
@@ -2158,9 +2158,7 @@ def extract_ranking_count(article):
 def build_ranking_count_prompt(article, article_type):
     if normalize_article_type(article_type, 'ranking') != 'ranking':
         return ''
-    count = extract_ranking_count(article)
-    if not count:
-        return ''
+    count = extract_ranking_count(article) or 5  # ranking は最低5選
     return f"""
 
 ランキング件数の厳守:
@@ -2172,9 +2170,7 @@ def build_ranking_count_prompt(article, article_type):
 def build_ranking_structure_prompt(article, article_type):
     if normalize_article_type(article_type, 'ranking') != 'ranking':
         return ''
-    count = extract_ranking_count(article)
-    if not count:
-        return ''
+    count = extract_ranking_count(article) or 5  # ranking は最低5選
     return f"""
 
 ランキング記事の必須構成:
@@ -3697,12 +3693,10 @@ def validate_generated_article(article, article_type, content, quality=None):
 
     if normalize_article_type(article_type, 'ranking') != 'ranking':
         return ''
-    expected = extract_ranking_count(article)
-    if not expected:
-        return ''
+    expected = extract_ranking_count(article) or 5  # ranking は最低5選
     ranked_count = count_ranked_items_from_text(content)
     if ranked_count < expected:
-        return f'タイトルは{expected}選ですが、個別ランキング見出しが{ranked_count}件しか検出できませんでした。もう一度生成してください。'
+        return f'ランキング記事は{expected}件の個別解説が必要ですが、{ranked_count}件しか検出できませんでした。もう一度生成してください。'
     # 比較表は plugin の compare デザインが代替するため、本文中の <table> 有無は検証しない
     return ''
 
