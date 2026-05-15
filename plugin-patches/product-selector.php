@@ -79,22 +79,25 @@ class AI_PI_Product_Selector {
     }
 
     /**
-     * 候補リストにペア情報を付与（ハイブリッドモード）
+     * 候補リストにペア情報を付与（ハイブリッドモード + D案: 個別再検索）
      *
-     * - merge_duplicates でタイトル類似度ペア化を実行
-     * - ペアが見つかれば Amazon商品に rakuten_pair が紐付く
-     * - フィルタリングはしない（全候補を Claude に渡す）
-     * - 並び順: ペア済 → 単独 の順なので、Claude選定で自然にペア商品が優先される
+     * 1. merge_duplicates で初期ペア化
+     * 2. ペア未成立の Amazon 商品を商品タイトルで楽天個別再検索（最大10件）
+     * 3. 上位3件のうち類似度0.5以上があれば rakuten_pair として紐付け
      *
-     * テンプレ側ではペアあり=直リン、ペア無し=検索URLにフォールバック。
+     * 楽天 API は無料・実質無制限なので個別再検索のコストは時間のみ。
+     * Amazon → 楽天の片方向のみ（PA-APIレート保護）。
      *
      * @param array $candidates fetch_candidates の戻り値
-     * @return array merge_duplicates 適用後の全候補
+     * @return array merge_duplicates + enrich_with_rakuten_pair 適用後
      */
     public static function pair_candidates($candidates) {
         if (empty($candidates)) return [];
 
         $merged = self::merge_duplicates($candidates);
+
+        // D案: ペア未成立のAmazon商品を楽天で個別再検索してペア化を試みる
+        $merged = self::enrich_with_rakuten_pair($merged, 10);
 
         // 統計ログ
         $paired_count = 0;
@@ -106,9 +109,77 @@ class AI_PI_Product_Selector {
                 $unpaired_count++;
             }
         }
-        error_log("[AI_PI] pair_candidates: paired={$paired_count}, unpaired={$unpaired_count} (all kept, paired sorted first)");
+        error_log("[AI_PI] pair_candidates: paired={$paired_count}, unpaired={$unpaired_count} (after enrichment)");
 
         return $merged;
+    }
+
+    /**
+     * D案: ペア未成立の Amazon 商品ごとに、商品タイトルで楽天を個別再検索しペア化
+     *
+     * @param array $merged_candidates merge_duplicates の出力
+     * @param int $max_searches 楽天再検索の上限（API call 保護）
+     * @return array 再検索でペア追加された候補リスト
+     */
+    public static function enrich_with_rakuten_pair($merged_candidates, $max_searches = 10) {
+        if (empty($merged_candidates)) return $merged_candidates;
+
+        $rakuten = new AI_PI_Rakuten_API();
+        if (!$rakuten->is_configured()) {
+            return $merged_candidates;
+        }
+
+        $enriched_count = 0;
+        $searches_done = 0;
+        $count = count($merged_candidates);
+
+        for ($i = 0; $i < $count; $i++) {
+            if (!empty($merged_candidates[$i]['rakuten_pair']['url'])) continue;
+            if (($merged_candidates[$i]['source'] ?? '') !== 'amazon') continue;
+            if ($searches_done >= $max_searches) break;
+
+            $title = $merged_candidates[$i]['title'] ?? '';
+            if (empty($title)) continue;
+
+            $search_term = self::clean_title_for_search($title);
+            if (empty($search_term)) continue;
+
+            $searches_done++;
+            $results = $rakuten->search($search_term, 3);
+            if (is_wp_error($results) || empty($results)) continue;
+
+            foreach ($results as $r) {
+                $r_title_clean = self::clean_rakuten_title($r['title'] ?? '');
+                $similarity = self::title_similarity($title, $r_title_clean);
+                if ($similarity >= 0.5) {
+                    $merged_candidates[$i]['rakuten_pair'] = [
+                        'url' => $r['url'] ?? '',
+                        'price_display' => $r['price_display'] ?? '',
+                    ];
+                    $enriched_count++;
+                    break;
+                }
+            }
+        }
+
+        error_log("[AI_PI] enrich_with_rakuten_pair: searched={$searches_done}, paired={$enriched_count}");
+        return $merged_candidates;
+    }
+
+    /**
+     * 商品タイトルを楽天検索向けにクリーニング
+     * - [ブランド名] (補足) などのカッコ内を削除
+     * - 連続空白を1つに
+     * - 40文字に丸め（楽天検索は長すぎるとヒット率低下）
+     */
+    private static function clean_title_for_search($title) {
+        $cleaned = preg_replace('/[\[\(（【「『][^\]\)）】」』]{1,40}[\]\)）】」』]/u', ' ', $title);
+        $cleaned = preg_replace('/\s+/u', ' ', $cleaned);
+        $cleaned = trim($cleaned);
+        if (mb_strlen($cleaned) > 40) {
+            $cleaned = mb_substr($cleaned, 0, 40);
+        }
+        return $cleaned;
     }
 
     /**
