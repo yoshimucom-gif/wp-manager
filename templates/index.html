@@ -2303,7 +2303,11 @@ function dashboardRewriteCandidates() {
     suggestion: a.score_data?.suggestions?.[0] || '',
     updatedAt: a.generated_at || a.published_at || a.created_at || ''
   }));
-  const rewriteCandidates = rewriteList.map(i => ({
+  // 現在サイトでフィルタ（dashboard 時=全件、サイト選択時=そのサイトのみ）
+  const filteredRewrites = currentSiteId
+    ? rewriteList.filter(i => String(i.site_id || '') === currentSiteId)
+    : rewriteList;
+  const rewriteCandidates = filteredRewrites.map(i => ({
     source: 'rewrite',
     id: i.id,
     title: i.title || '(無題)',
