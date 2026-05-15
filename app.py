@@ -6089,6 +6089,17 @@ def fetch_rewrite_items():
                 )
                 if resp.status_code == 400 and page > 1:
                     break
+                if resp.status_code >= 400:
+                    # 403/401などのエラー詳細をログに残す
+                    body_snippet = resp.text[:500] if resp.text else '(empty body)'
+                    server_hdr = resp.headers.get('server', '?')
+                    cf_hdr = resp.headers.get('cf-ray', '')
+                    waf_hdr = resp.headers.get('x-sucuri-id', '') or resp.headers.get('x-mod-security-id', '')
+                    print(
+                        f'[WP-FETCH] status={resp.status_code} server={server_hdr} '
+                        f'cf-ray={cf_hdr} waf={waf_hdr} body={body_snippet!r}',
+                        flush=True
+                    )
                 resp.raise_for_status()
                 posts = resp.json()
                 if not posts:
@@ -6115,6 +6126,21 @@ def fetch_rewrite_items():
                     }
                     apply_score_fields(item, item['title'], item['content'], '')
                     fetched.append(item)
+    except requests.exceptions.HTTPError as he:
+        # 403等のエラー詳細をユーザーに見せる
+        body_hint = ''
+        if he.response is not None:
+            body_hint = he.response.text[:300] if he.response.text else ''
+            server = he.response.headers.get('server', '')
+            cf = 'Cloudflare ' if he.response.headers.get('cf-ray') else ''
+            waf = ''
+            if he.response.headers.get('x-sucuri-id'):
+                waf = 'Sucuri '
+            if 'wordfence' in body_hint.lower():
+                waf = 'Wordfence '
+            origin = f'[{cf}{waf}server={server}] ' if (cf or waf or server) else ''
+            body_hint = origin + body_hint
+        return jsonify({'error': f'WordPress記事取得エラー: {str(he)} / {body_hint}'.strip()}), 500
     except Exception as e:
         return jsonify({'error': f'WordPress記事取得エラー: {str(e)}'}), 500
 
