@@ -1559,7 +1559,8 @@ def title_generation_prompt(keywords, count_per_keyword, category=''):
 {{
   "ideas": [
     {{
-      "keyword": "対象キーワード",
+      "keyword": "対象キーワード（入力されたKWそのまま）",
+      "keywords": "メインKW, 関連KW1, 関連KW2, 関連KW3",
       "title": "記事タイトル",
       "slug": "english-slug",
       "article_type": "ranking/brand/column のいずれか",
@@ -1569,6 +1570,14 @@ def title_generation_prompt(keywords, count_per_keyword, category=''):
     }}
   ]
 }}
+
+【keywords 生成ルール】
+- `keywords` は **記事のSEOターゲットKWリスト**。カンマ区切りで2〜4個。
+- 1個目は入力された対象キーワード（メインKW）そのままを入れる。
+- 2個目以降は **同じ検索意図に近い関連サジェスト語** を入れる。
+  例: メインKWが「防水バッグ」なら「防水バッグ おすすめ」「防水バッグ 比較」「防水バッグ 安い」など。
+- メインKWの形を活かした複合語（メインKW + 修飾語）を中心に。完全に別ジャンルのKWは入れない。
+- 後で記事生成時にClaudeへ渡されSEO構成のヒントになる。Amazon/楽天検索のヒントにもなる。
 
 【記事種類判定】
 - 広い商品ジャンルの「おすすめ・比較・人気」は ranking。
@@ -1648,8 +1657,29 @@ def coerce_title_ideas(payload, keywords, count_per_keyword):
         if not matched:
             matched = next((kw for kw in keywords if kw in title), '')
         raw_slug = re.sub(r'[^a-z0-9-]', '', normalize_slug(str(item.get('slug') or '').lower()))[:30].strip('-')
+        # keywords は記事のSEOターゲットKWリスト（カンマ区切り）。Claudeが配列or文字列で返してくる可能性に対応。
+        raw_kws = item.get('keywords')
+        if isinstance(raw_kws, list):
+            kw_list = [str(k).strip() for k in raw_kws if str(k).strip()]
+        else:
+            kw_list = [k.strip() for k in re.split(r'[,、]', str(raw_kws or '')) if k.strip()]
+        # 重複除去（順序保持）+ 上限4個
+        seen_kw = set()
+        deduped = []
+        for k in kw_list:
+            kl = k.lower()
+            if kl in seen_kw:
+                continue
+            seen_kw.add(kl)
+            deduped.append(k)
+        main_kw = matched or keyword or (keywords[0] if keywords else '')
+        # メインKWが先頭に無ければ差し込む
+        if main_kw and (not deduped or deduped[0].lower() != main_kw.lower()):
+            deduped = [main_kw] + [k for k in deduped if k.lower() != main_kw.lower()]
+        keywords_csv = ', '.join(deduped[:4])
         idea = {
-            'keyword': matched or keyword or (keywords[0] if keywords else ''),
+            'keyword': main_kw,
+            'keywords': keywords_csv,
             'title': title[:120],
             'slug': raw_slug,
             'search_intent': str(item.get('search_intent') or item.get('intent') or '').strip()[:160],
@@ -1688,11 +1718,13 @@ def enrich_title_ideas(ideas, category='', site_id=''):
             continue
         seen.add(key)
         keyword = str(idea.get('keyword') or '').strip()
+        keywords_csv = str(idea.get('keywords') or '').strip() or keyword
         article_type = coerce_title_article_type(idea.get('article_type'), keyword, title)
         score = score_title_idea(title, keyword, article_type, existing_title_keys)
         enriched.append({
             'id': str(uuid.uuid4()),
             'keyword': keyword,
+            'keywords': keywords_csv,
             'title': title,
             'slug': str(idea.get('slug') or '').strip(),
             'search_intent': str(idea.get('search_intent') or '').strip(),
@@ -4175,7 +4207,9 @@ def save_title_ideas():
         if title_key in existing_title_keys:
             skipped.append({'title': title, 'reason': '既存タイトルと重複'})
             continue
-        keyword = str(idea.get('keyword') or idea.get('keywords') or '').strip()
+        keyword = str(idea.get('keyword') or '').strip()
+        # keywords は SEOターゲットKW（カンマ区切り）。記事生成・Amazon/楽天検索ヒントに使われる。
+        keywords_csv = str(idea.get('keywords') or '').strip() or keyword
         article_type = coerce_title_article_type(idea.get('article_type'), keyword, title)
         now = datetime.now().isoformat()
         memo_parts = ['タイトル案から作成']
@@ -4186,11 +4220,11 @@ def save_title_ideas():
         article = {
             'id': str(uuid.uuid4()),
             'title': title,
-            'keywords': keyword,
+            'keywords': keywords_csv,
             'category': str(idea.get('category') or default_category),
             'slug': normalize_slug(idea.get('slug')),
             'article_type': article_type,
-            'ad_keywords': infer_ad_keywords_from_title(title, keyword, article_type),
+            'ad_keywords': infer_ad_keywords_from_title(title, keywords_csv, article_type),
             'priority': str(idea.get('priority') or ''),
             'schedule_date': '',
             'memo': '\n'.join(memo_parts),
