@@ -154,6 +154,7 @@ QUALITY_FILE = DATA_DIR / 'quality.json'
 SETTINGS_FILE = DATA_DIR / 'settings.json'
 BATCH_JOBS_FILE = DATA_DIR / 'batch_jobs.json'
 TITLE_DEFINITION_FILE = DATA_DIR / 'title_definition.json'
+TITLE_IDEA_JOBS_FILE = DATA_DIR / 'title_idea_jobs.json'
 
 
 DEFAULT_TITLE_DEFINITION = {
@@ -243,6 +244,25 @@ def load_batch_jobs():
 
 def save_batch_jobs(jobs):
     save_json(BATCH_JOBS_FILE, jobs[:50])
+
+
+def load_title_idea_jobs():
+    return load_json(TITLE_IDEA_JOBS_FILE, [])
+
+
+def save_title_idea_jobs(jobs):
+    # 直近20件だけ保持
+    save_json(TITLE_IDEA_JOBS_FILE, jobs[:20])
+
+
+def update_title_idea_job(job_id, **changes):
+    jobs = load_title_idea_jobs()
+    for item in jobs:
+        if item.get('id') == job_id:
+            item.update(changes)
+            item['updated_at'] = datetime.now().isoformat()
+            break
+    save_title_idea_jobs(jobs)
 
 def parse_saved_datetime(value):
     if not value:
@@ -4028,6 +4048,11 @@ def logout():
 @app.route('/api/title-ideas/generate', methods=['POST'])
 @login_required
 def generate_title_ideas():
+    """
+    タイトル案生成をバックグラウンドジョブとして起動する。
+    SSE接続に縛られないため、ページ離脱・30秒タイムアウトの影響を受けない。
+    フロントは job_id でポーリングする。
+    """
     try:
         data = request.get_json(silent=True) or {}
     except Exception:
@@ -4037,152 +4062,144 @@ def generate_title_ideas():
     category = str(data.get('category') or '').strip()
     site_id = data.get('site_id') or ''
 
-    def sse(obj):
-        return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
+    if not keywords:
+        return jsonify({'error': 'キーワードを1行以上入力してください'}), 400
 
-    def stream():
-        if not keywords:
-            yield sse(title_ideas_failure_payload('キーワードを1行以上入力してください', keywords))
-            return
+    try:
+        settings = load_settings()
+    except Exception as e:
+        app.logger.warning('Title idea settings load failed: %s', e)
+        settings = {}
 
+    claude_key = settings.get('claude_api_key')
+    if not claude_key:
+        return jsonify({'error': 'タイトル案生成にはClaude APIキーが必要です。'}), 400
+
+    batches = [keywords[i:i + TITLE_IDEA_BATCH_SIZE] for i in range(0, len(keywords), TITLE_IDEA_BATCH_SIZE)]
+    expected_count = len(keywords) * count_per_keyword
+    now = datetime.now().isoformat()
+    job_id = str(uuid.uuid4())
+    job = {
+        'id': job_id,
+        'type': 'title-ideas',
+        'status': 'running',
+        'keywords': keywords,
+        'count_per_keyword': count_per_keyword,
+        'category': category,
+        'site_id': site_id,
+        'total_batches': len(batches),
+        'completed_batches': 0,
+        'expected_count': expected_count,
+        'ideas': [],
+        'message': f'Claudeでタイトル案を生成中... ({len(keywords)}KW / {len(batches)}バッチ)',
+        'started_at': now,
+        'updated_at': now,
+    }
+    jobs = load_title_idea_jobs()
+    jobs.insert(0, job)
+    save_title_idea_jobs(jobs)
+
+    def worker():
         try:
-            settings = load_settings()
-        except Exception as e:
-            app.logger.warning('Title idea settings load failed: %s', e)
-            settings = {}
-
-        claude_key = settings.get('claude_api_key')
-        if not claude_key:
-            yield sse(title_ideas_failure_payload(
-                'タイトル案生成にはClaude APIキーが必要です。テンプレ生成には切り替えません。',
-                keywords,
-            ))
-            return
-
-        result_queue = queue.Queue()
-        expected_count = len(keywords) * count_per_keyword
-        batches = [keywords[i:i + TITLE_IDEA_BATCH_SIZE] for i in range(0, len(keywords), TITLE_IDEA_BATCH_SIZE)]
-
-        def worker():
-            try:
-                all_ideas = []
-                batch_errors = []
-                model_used = CLAUDE_TITLE_IDEA_MODEL
-                last_error = None
-                completed = 0
-                if len(batches) > 1:
-                    result_queue.put(('progress', f'Claudeでタイトル案を生成中 (0/{len(batches)}バッチ完了)'))
-                max_workers = min(TITLE_IDEA_PARALLEL_BATCHES, len(batches))
-                with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                    future_to_idx = {
-                        executor.submit(generate_claude_title_ideas_once, claude_key, batch, count_per_keyword, category): (idx, batch)
-                        for idx, batch in enumerate(batches, 1)
-                    }
-                    for future in as_completed(future_to_idx):
-                        idx, batch = future_to_idx[future]
-                        completed += 1
-                        try:
-                            batch_ideas, m = future.result()
-                            all_ideas.extend(batch_ideas)
-                            model_used = m
-                        except Exception as e:
-                            last_error = e
-                            batch_errors.append(f'バッチ{idx} ({len(batch)}KW): {compact_ai_error(e, 100)}')
-                            app.logger.warning('Title idea batch %d/%d failed: %s', idx, len(batches), e)
-                        if len(batches) > 1:
-                            result_queue.put(('progress', f'Claudeでタイトル案を生成中 ({completed}/{len(batches)}バッチ完了 / 取得済 {len(all_ideas)}件)'))
-                        if all_ideas:
-                            try:
-                                partial_enriched = enrich_title_ideas(list(all_ideas), category=category, site_id=site_id)
-                                result_queue.put(('partial', {
-                                    'success': True,
-                                    'ai_used': True,
-                                    'source': 'claude',
-                                    'model': model_used,
-                                    'keywords': keywords,
-                                    'ideas': partial_enriched,
-                                    'partial': True,
-                                    'progress': {'completed': completed, 'total': len(batches)},
-                                }))
-                            except Exception as e:
-                                app.logger.warning('Partial enrich failed: %s', e)
-                if not all_ideas:
-                    error_text = ' / '.join(batch_errors) if batch_errors else (compact_ai_error(last_error) if last_error else 'タイトル案を取得できませんでした')
-                    result_queue.put(('err', error_text))
-                    return
-                enriched = enrich_title_ideas(all_ideas, category=category, site_id=site_id)
-                payload = {
-                    'success': True,
-                    'ai_used': True,
-                    'source': 'claude',
-                    'model': model_used,
-                    'keywords': keywords,
-                    'ideas': enriched,
+            all_ideas = []
+            batch_errors = []
+            model_used = CLAUDE_TITLE_IDEA_MODEL
+            last_error = None
+            completed = 0
+            max_workers = min(TITLE_IDEA_PARALLEL_BATCHES, len(batches))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_idx = {
+                    executor.submit(generate_claude_title_ideas_once, claude_key, batch, count_per_keyword, category): (idx, batch)
+                    for idx, batch in enumerate(batches, 1)
                 }
-                warnings = []
-                if batch_errors:
-                    warnings.append(f'{len(batch_errors)}/{len(batches)}バッチが失敗しました。')
-                if len(enriched) < expected_count:
-                    warnings.append(f'AI返却が{len(enriched)}/{expected_count}件でした。足りない分はテンプレ補完していません。')
-                if warnings:
-                    payload['warning'] = ' '.join(warnings)
-                if batch_errors:
-                    payload['provider_warnings'] = batch_errors[-5:]
-                result_queue.put(('ok', payload))
-            except Exception as e:
-                app.logger.warning('Claude title idea generation failed: %s', e)
-                result_queue.put(('err', compact_ai_error(e)))
+                for future in as_completed(future_to_idx):
+                    idx, batch = future_to_idx[future]
+                    completed += 1
+                    try:
+                        batch_ideas, m = future.result()
+                        all_ideas.extend(batch_ideas)
+                        model_used = m
+                    except Exception as e:
+                        last_error = e
+                        batch_errors.append(f'バッチ{idx} ({len(batch)}KW): {compact_ai_error(e, 100)}')
+                        app.logger.warning('Title idea batch %d/%d failed: %s', idx, len(batches), e)
 
-        threading.Thread(target=worker, daemon=True).start()
+                    # 進捗 + 部分結果をジョブに保存
+                    msg = f'Claudeでタイトル案を生成中 ({completed}/{len(batches)}バッチ完了 / 取得済 {len(all_ideas)}件)'
+                    partial_payload = {
+                        'completed_batches': completed,
+                        'message': msg,
+                    }
+                    if all_ideas:
+                        try:
+                            partial_payload['ideas'] = enrich_title_ideas(list(all_ideas), category=category, site_id=site_id)
+                        except Exception as e:
+                            app.logger.warning('Partial enrich failed: %s', e)
+                    update_title_idea_job(job_id, **partial_payload)
 
-        initial_msg = f'Claudeでタイトル案を生成中... ({len(keywords)}KW / {len(batches)}バッチ)' if len(batches) > 1 else 'Claudeでタイトル案を生成中...'
-        yield sse({'type': 'status', 'message': initial_msg})
+            if not all_ideas:
+                error_text = ' / '.join(batch_errors) if batch_errors else (compact_ai_error(last_error) if last_error else 'タイトル案を取得できませんでした')
+                update_title_idea_job(
+                    job_id,
+                    status='error',
+                    error=error_text,
+                    provider_errors=batch_errors[-5:] if batch_errors else [],
+                    message=f'タイトル案生成に失敗しました: {error_text}',
+                    completed_at=datetime.now().isoformat(),
+                )
+                return
 
-        heartbeat_interval = 2
-        idle_timeout = 22
-        idle_elapsed = 0
-        while True:
-            try:
-                kind, payload = result_queue.get(timeout=heartbeat_interval)
-            except queue.Empty:
-                idle_elapsed += heartbeat_interval
-                if idle_elapsed >= idle_timeout:
-                    yield sse(title_ideas_failure_payload(
-                        f'Claudeから{idle_timeout}秒応答がありませんでした。しばらく時間を置いて再試行してください。',
-                        keywords,
-                    ))
-                    return
-                yield f": keepalive {idle_elapsed}s\n\n"
-                continue
-            idle_elapsed = 0
-            if kind == 'progress':
-                yield sse({'type': 'status', 'message': payload})
-                continue
-            if kind == 'partial':
-                yield sse({'type': 'partial', **payload})
-                continue
-            if kind == 'ok':
-                yield sse(payload)
-            else:
-                yield sse(title_ideas_failure_payload(
-                    'ClaudeでのAIタイトル案生成に失敗しました。テンプレ生成には切り替えていません。APIキー・残高・モデル状態を確認してください。',
-                    keywords,
-                    [payload],
-                ))
-            return
-
-    def safe_stream():
-        try:
-            yield from stream()
+            enriched = enrich_title_ideas(all_ideas, category=category, site_id=site_id)
+            warnings = []
+            if batch_errors:
+                warnings.append(f'{len(batch_errors)}/{len(batches)}バッチが失敗しました。')
+            if len(enriched) < expected_count:
+                warnings.append(f'AI返却が{len(enriched)}/{expected_count}件でした。足りない分はテンプレ補完していません。')
+            update_title_idea_job(
+                job_id,
+                status='completed',
+                ideas=enriched,
+                model=model_used,
+                source='claude',
+                ai_used=True,
+                warning=' '.join(warnings) if warnings else '',
+                provider_warnings=batch_errors[-5:] if batch_errors else [],
+                completed_batches=len(batches),
+                message=f'タイトル案 {len(enriched)}件 生成完了',
+                completed_at=datetime.now().isoformat(),
+            )
         except Exception as e:
-            app.logger.error('Title ideas route hard-failed: %s\n%s', e, traceback.format_exc())
-            yield f"data: {json.dumps(title_ideas_failure_payload('タイトル案APIの内部処理で失敗しました。テンプレ生成には切り替えていません。', keywords, [compact_ai_error(e)]), ensure_ascii=False)}\n\n"
+            app.logger.error('Title idea worker hard-failed: %s\n%s', e, traceback.format_exc())
+            update_title_idea_job(
+                job_id,
+                status='error',
+                error=compact_ai_error(e),
+                message=f'タイトル案生成で例外: {compact_ai_error(e)}',
+                completed_at=datetime.now().isoformat(),
+            )
 
-    return Response(
-        stream_with_context(safe_stream()),
-        mimetype='text/event-stream',
-        headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
-    )
+    threading.Thread(target=worker, daemon=True).start()
+    return jsonify({'success': True, 'job_id': job_id, 'message': job['message']})
+
+
+@app.route('/api/title-ideas/jobs/<job_id>', methods=['GET'])
+@login_required
+def get_title_idea_job(job_id):
+    job = next((j for j in load_title_idea_jobs() if j.get('id') == job_id), None)
+    if not job:
+        return jsonify({'error': 'ジョブが見つかりません'}), 404
+    return jsonify(job)
+
+
+@app.route('/api/title-ideas/jobs/latest', methods=['GET'])
+@login_required
+def get_latest_title_idea_job():
+    jobs = load_title_idea_jobs()
+    if not jobs:
+        return jsonify({'job': None})
+    # まず running があればそれを、なければ最新
+    running = next((j for j in jobs if j.get('status') == 'running'), None)
+    return jsonify({'job': running or jobs[0]})
 
 
 @app.route('/api/title-ideas/save', methods=['POST'])
