@@ -3,7 +3,7 @@ import os
 import zipfile
 
 SRC_DIR = r"C:\Users\yoshi\OneDrive\デスクトップ\Codex\plugin-patches\build"
-OUT_ZIP = r"C:\Users\yoshi\Downloads\ai-product-inserter-1.7.2.zip"
+OUT_ZIP = r"C:\Users\yoshi\Downloads\ai-product-inserter-1.7.3.zip"
 
 # Remove existing zip
 if os.path.exists(OUT_ZIP):

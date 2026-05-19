@@ -1,6 +1,16 @@
 <?php
 /**
- * 設定画面
+ * 設定画面（スリム版）
+ *
+ * wp-manager 側がマーカーに「位置・デザイン・件数」を全部埋め込むので、
+ * このプラグインの UI は API認証情報と運用調整値だけに絞る。
+ *
+ * 削除した項目（内部的にはデフォルト固定で動作）:
+ * - default_insert_mode: 常に 'marker' で動く
+ * - default_card_design: マーカーで指定される (vertical / ranking等)
+ * - ranking_count:       マーカーで指定される
+ * - default_position:    wp-manager が決める
+ * - preferred_site:      'both' 固定（v1.7.2 で merge側が Amazon ベースに揃える）
  */
 if (!defined('ABSPATH')) exit;
 
@@ -12,34 +22,29 @@ function ai_pi_register_settings() {
 }
 
 function ai_pi_sanitize_settings($input) {
-    $output = [];
-    $output['claude_api_key'] = sanitize_text_field($input['claude_api_key'] ?? '');
-    $output['claude_model'] = sanitize_text_field($input['claude_model'] ?? 'claude-sonnet-4-6');
-    $output['amazon_access_key'] = sanitize_text_field($input['amazon_access_key'] ?? '');
-    $output['amazon_secret_key'] = sanitize_text_field($input['amazon_secret_key'] ?? '');
-    $output['amazon_partner_tag'] = sanitize_text_field($input['amazon_partner_tag'] ?? '');
-    $output['rakuten_app_id'] = sanitize_text_field($input['rakuten_app_id'] ?? '');
-    $output['rakuten_affiliate_id'] = sanitize_text_field($input['rakuten_affiliate_id'] ?? '');
+    // 既存設定を維持しつつ、UIで触れる項目だけ更新する。
+    $existing = get_option('ai_pi_settings', []);
+    $output = is_array($existing) ? $existing : [];
 
-    $valid_modes = ['marker', 'marker_per_heading', 'auto'];
-    $output['default_insert_mode'] = in_array($input['default_insert_mode'] ?? '', $valid_modes)
-        ? $input['default_insert_mode'] : 'marker';
+    // API系（UIで編集可）
+    $output['claude_api_key']      = sanitize_text_field($input['claude_api_key'] ?? ($existing['claude_api_key'] ?? ''));
+    $output['claude_model']        = sanitize_text_field($input['claude_model'] ?? ($existing['claude_model'] ?? 'claude-sonnet-4-6'));
+    $output['amazon_access_key']   = sanitize_text_field($input['amazon_access_key'] ?? ($existing['amazon_access_key'] ?? ''));
+    $output['amazon_secret_key']   = sanitize_text_field($input['amazon_secret_key'] ?? ($existing['amazon_secret_key'] ?? ''));
+    $output['amazon_partner_tag']  = sanitize_text_field($input['amazon_partner_tag'] ?? ($existing['amazon_partner_tag'] ?? ''));
+    $output['rakuten_app_id']      = sanitize_text_field($input['rakuten_app_id'] ?? ($existing['rakuten_app_id'] ?? ''));
+    $output['rakuten_affiliate_id']= sanitize_text_field($input['rakuten_affiliate_id'] ?? ($existing['rakuten_affiliate_id'] ?? ''));
 
-    $output['default_card_design'] = in_array($input['default_card_design'] ?? '', ['vertical', 'horizontal', 'ranking'])
-        ? $input['default_card_design'] : 'vertical';
+    // 運用調整値（UIで編集可）
+    $output['candidates_per_keyword'] = max(5, min(30, intval($input['candidates_per_keyword'] ?? ($existing['candidates_per_keyword'] ?? 10))));
+    $output['enable_24h_refresh']     = ($input['enable_24h_refresh'] ?? ($existing['enable_24h_refresh'] ?? 'no')) === 'yes' ? 'yes' : 'no';
 
-    $valid_positions = ['top', 'before_first_h2', 'after_first_h2', 'before_last_h2', 'after_last_h2', 'bottom'];
-    $output['default_position'] = in_array($input['default_position'] ?? '', $valid_positions)
-        ? $input['default_position'] : 'bottom';
-
-    $output['products_per_marker'] = intval($input['products_per_marker'] ?? 1);
-    $output['ranking_count'] = max(1, min(10, intval($input['ranking_count'] ?? 3)));
-    $output['candidates_per_keyword'] = max(5, min(30, intval($input['candidates_per_keyword'] ?? 10)));
-
-    $output['preferred_site'] = in_array($input['preferred_site'] ?? '', ['amazon', 'rakuten', 'both'])
-        ? $input['preferred_site'] : 'both';
-
-    $output['enable_24h_refresh'] = ($input['enable_24h_refresh'] ?? 'no') === 'yes' ? 'yes' : 'no';
+    // 内部固定（UIから消したが値は持っておく）
+    $output['default_insert_mode']  = 'marker';
+    $output['default_card_design']  = $existing['default_card_design']  ?? 'vertical';
+    $output['ranking_count']        = isset($existing['ranking_count']) ? intval($existing['ranking_count']) : 3;
+    $output['default_position']     = $existing['default_position']     ?? 'bottom';
+    $output['preferred_site']       = 'both'; // v1.7.2 で merge 側が Amazon ベースに統合する
 
     return $output;
 }
@@ -47,12 +52,6 @@ function ai_pi_sanitize_settings($input) {
 function ai_pi_render_settings_page() {
     if (!current_user_can('manage_options')) return;
     $settings = get_option('ai_pi_settings', []);
-
-    // 旧設定の自動マイグレーション（auto_top3_position → default_position）
-    if (empty($settings['default_position']) && !empty($settings['auto_top3_position'])) {
-        $settings['default_position'] = $settings['auto_top3_position'];
-    }
-
     $preview_url = admin_url('admin.php?page=ai-product-inserter-preview');
     ?>
     <div class="wrap aipi-wrap">
@@ -61,6 +60,14 @@ function ai_pi_render_settings_page() {
         <?php if (isset($_GET['settings-updated'])): ?>
             <div class="notice notice-success is-dismissible"><p>設定を保存しました。</p></div>
         <?php endif; ?>
+
+        <div class="notice notice-info" style="padding:10px 14px">
+            <p style="margin:0">
+                記事本文の <code>&lt;!--ai-product--&gt;</code> マーカー位置に商品カードを自動挿入します。<br>
+                <strong>カードの位置・デザイン・件数は wp-manager 側のマーカーで指定済み</strong>なので、
+                このプラグインで触る項目は API認証情報と運用調整だけです。
+            </p>
+        </div>
 
         <form method="post" action="options.php">
             <?php settings_fields('ai_pi_settings_group'); ?>
@@ -71,7 +78,7 @@ function ai_pi_render_settings_page() {
                     <th><label>Claude APIキー</label></th>
                     <td>
                         <input type="password" name="ai_pi_settings[claude_api_key]" value="<?php echo esc_attr($settings['claude_api_key'] ?? ''); ?>" class="regular-text" autocomplete="off">
-                        <p class="description">Anthropic Consoleで発行</p>
+                        <p class="description">Anthropic Console で発行</p>
                     </td>
                 </tr>
                 <tr>
@@ -112,79 +119,20 @@ function ai_pi_render_settings_page() {
                 </tr>
             </table>
 
-            <h2>挿入動作（3軸で独立指定）</h2>
-
-            <h3>① 挿入方式（どこを挿入位置の起点にするか）</h3>
-            <table class="form-table">
-                <tr>
-                    <th>方式</th>
-                    <td>
-                        <label><input type="radio" name="ai_pi_settings[default_insert_mode]" value="marker" <?php checked($settings['default_insert_mode'] ?? '', 'marker'); ?>> <strong>マーカー方式</strong>　<code>&lt;!--ai-product--&gt;</code> の位置に挿入（記事全体の文脈から関連商品を選定）</label><br>
-                        <label><input type="radio" name="ai_pi_settings[default_insert_mode]" value="marker_per_heading" <?php checked($settings['default_insert_mode'] ?? '', 'marker_per_heading'); ?>> <strong>見出し連動マーカー方式</strong> ⭐　マーカー直前のH2/H3から商品名を抽出して個別検索（5選記事向け）</label><br>
-                        <label><input type="radio" name="ai_pi_settings[default_insert_mode]" value="auto" <?php checked($settings['default_insert_mode'] ?? '', 'auto'); ?>> <strong>自動配置</strong>　マーカー不要、③で指定した位置に自動挿入</label>
-                        <p class="description">投稿ごとに編集画面のメタボックスから切り替え可能</p>
-                    </td>
-                </tr>
-            </table>
-
-            <h3>② デザイン　<a href="<?php echo esc_url($preview_url); ?>" target="_blank" class="button button-secondary">🎨 デザインプレビューを開く</a></h3>
-            <table class="form-table">
-                <tr>
-                    <th>カードデザイン</th>
-                    <td>
-                        <label><input type="radio" name="ai_pi_settings[default_card_design]" value="vertical" <?php checked($settings['default_card_design'] ?? '', 'vertical'); ?>> 縦置きカード（画像大・3ボタン）</label><br>
-                        <label><input type="radio" name="ai_pi_settings[default_card_design]" value="horizontal" <?php checked($settings['default_card_design'] ?? '', 'horizontal'); ?>> 横長カード（軽量・記事に馴染む）</label><br>
-                        <label><input type="radio" name="ai_pi_settings[default_card_design]" value="ranking" <?php checked($settings['default_card_design'] ?? '', 'ranking'); ?>> ランキングカード（複数商品を1ブロックで表示）</label>
-                        <p class="description">プレビューボタンで実際の見た目を確認できます</p>
-                    </td>
-                </tr>
-                <tr>
-                    <th><label>ランキング件数</label></th>
-                    <td>
-                        <input type="number" name="ai_pi_settings[ranking_count]" value="<?php echo esc_attr($settings['ranking_count'] ?? 3); ?>" min="1" max="10" style="width:80px;">
-                        <p class="description">ランキングカードでの商品数（TOP3〜TOP10）</p>
-                    </td>
-                </tr>
-            </table>
-
-            <h3>③ 挿入位置（自動配置モードのときのみ使用）</h3>
-            <table class="form-table">
-                <tr>
-                    <th>位置</th>
-                    <td>
-                        <label><input type="radio" name="ai_pi_settings[default_position]" value="top" <?php checked($settings['default_position'] ?? 'bottom', 'top'); ?>> 記事冒頭</label><br>
-                        <label><input type="radio" name="ai_pi_settings[default_position]" value="before_first_h2" <?php checked($settings['default_position'] ?? '', 'before_first_h2'); ?>> 最初のH2見出しの直前</label><br>
-                        <label><input type="radio" name="ai_pi_settings[default_position]" value="after_first_h2" <?php checked($settings['default_position'] ?? '', 'after_first_h2'); ?>> 最初のH2見出しの直後</label><br>
-                        <label><input type="radio" name="ai_pi_settings[default_position]" value="before_last_h2" <?php checked($settings['default_position'] ?? '', 'before_last_h2'); ?>> 最後のH2見出しの直前</label><br>
-                        <label><input type="radio" name="ai_pi_settings[default_position]" value="after_last_h2" <?php checked($settings['default_position'] ?? '', 'after_last_h2'); ?>> 最後のH2見出しの直後</label><br>
-                        <label><input type="radio" name="ai_pi_settings[default_position]" value="bottom" <?php checked($settings['default_position'] ?? 'bottom', 'bottom'); ?>> 記事末尾</label>
-                        <p class="description">マーカー方式・見出し連動マーカー方式では無視されます（マーカー位置に挿入）</p>
-                    </td>
-                </tr>
-            </table>
-
-            <h2>その他</h2>
+            <h2>運用調整</h2>
             <table class="form-table">
                 <tr>
                     <th><label>候補商品取得数</label></th>
                     <td>
                         <input type="number" name="ai_pi_settings[candidates_per_keyword]" value="<?php echo esc_attr($settings['candidates_per_keyword'] ?? 10); ?>" min="5" max="30" style="width:80px;">
-                        <p class="description">1キーワード/見出しあたりの取得候補数（Amazon・楽天それぞれから）</p>
-                    </td>
-                </tr>
-                <tr>
-                    <th>優先サイト</th>
-                    <td>
-                        <label><input type="radio" name="ai_pi_settings[preferred_site]" value="both" <?php checked($settings['preferred_site'] ?? '', 'both'); ?>> Amazon + 楽天両方</label><br>
-                        <label><input type="radio" name="ai_pi_settings[preferred_site]" value="amazon" <?php checked($settings['preferred_site'] ?? '', 'amazon'); ?>> Amazonのみ</label><br>
-                        <label><input type="radio" name="ai_pi_settings[preferred_site]" value="rakuten" <?php checked($settings['preferred_site'] ?? '', 'rakuten'); ?>> 楽天のみ</label>
+                        <p class="description">1キーワード/見出しあたりに取得する商品候補数（Amazon・楽天それぞれから）。多いほど精度↑だがAPIコール↑。</p>
                     </td>
                 </tr>
                 <tr>
                     <th>24時間ルール</th>
                     <td>
                         <label><input type="checkbox" name="ai_pi_settings[enable_24h_refresh]" value="yes" <?php checked($settings['enable_24h_refresh'] ?? '', 'yes'); ?>> 24時間経過した商品データに期限切れフラグを立てる</label>
-                        <p class="description">⚠️ Amazon PA-APIの規約：取得から24時間以内に表示すること</p>
+                        <p class="description">⚠️ Amazon PA-APIの規約：取得から24時間以内に表示する必要があります</p>
                     </td>
                 </tr>
             </table>
@@ -220,15 +168,9 @@ function ai_pi_render_settings_page() {
         <hr>
 
         <h2>使い方</h2>
-
-        <h3>① マーカー方式（記事全体の文脈から選定）</h3>
-        <p>本文に <code>&lt;!--ai-product--&gt;</code> を置くと、その位置にAIが記事全体の文脈に合う商品を挿入します。マーカー数=挿入数。</p>
-
-        <h3>② 見出し連動マーカー方式 ⭐（5選記事・比較記事向け）</h3>
-        <p>各見出しに商品名（例「第1位 ダイソン V15」）を入れ、見出しの後に <code>&lt;!--ai-product--&gt;</code> を置きます。プラグインが見出しから装飾を自動除去して個別検索 → 指名商品をピンポイントで挿入。</p>
-
-        <h3>③ 自動配置（マーカー不要）</h3>
-        <p>記事本文だけあればOK。指定したデザイン・指定した位置にAIが選んだ商品を挿入します。デザイン「ランキングカード」を選べばTOP3〜10、それ以外は1商品のみ。</p>
+        <p>wp-manager で記事を生成すると、記事本文に <code>&lt;!--ai-product:vertical--&gt;</code> や <code>&lt;!--ai-product:ranking:3--&gt;</code> のようなマーカーが自動で埋め込まれます。記事をWordPressに投稿後、編集画面のメタボックスから <strong>「商品挿入を実行」</strong>を押すと、マーカー位置に商品カードが描画されます。</p>
+        <p style="font-size:12px;color:#666;">※ マーカー1個 = 商品カード1個。位置・デザイン・件数は wp-manager 側の <code>insert_card_markers()</code> で決定されます。</p>
+        <p><a href="<?php echo esc_url($preview_url); ?>" class="button">🎨 デザインプレビューを開く</a></p>
     </div>
     <?php
 }
