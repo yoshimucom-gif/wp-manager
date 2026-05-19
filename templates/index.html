@@ -4471,7 +4471,12 @@ function updateHomePageMode() {
     const titleEl = document.getElementById('workspace-site-title');
     const urlEl = document.getElementById('workspace-site-url');
     if (current && titleEl) titleEl.textContent = '🏠 ' + current.name + ' の作業ホーム';
-    if (current && urlEl) urlEl.textContent = current.wp_url || '';
+    if (current && urlEl) {
+      const url = current.wp_url || '';
+      urlEl.innerHTML = url
+        ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:none">${esc(url)} ↗</a>`
+        : '';
+    }
   }
   // 各フォームの「投稿先サイト」セレクタを現在サイト時は非表示にして自動選択
   applySiteSelectorAutoFill();
