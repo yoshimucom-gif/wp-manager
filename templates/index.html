@@ -1003,6 +1003,11 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <div class="page-subtitle">生成・投稿の記事履歴を管理</div>
         </div>
 
+        <div id="articles-pending-banner" style="display:none;background:rgba(154,103,0,0.08);border:1px solid rgba(154,103,0,0.25);border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--warning)">
+          <span id="articles-pending-banner-text">未生成 0件があります</span>
+          <a href="#" onclick="showPage('batch');return false;" style="color:var(--accent);margin-left:8px;text-decoration:none">→ 一括処理ページで生成する</a>
+        </div>
+
         <div class="toolbar">
           <label class="btn btn-secondary" style="cursor:pointer" id="import-btn-label">
             <span>📥 CSV/Excelインポート</span>
@@ -1027,7 +1032,6 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </select>
           <select id="article-status-filter" style="font-size:12px;" onchange="filterArticles()" title="状態で絞り込み">
             <option value="">全状態</option>
-            <option value="pending">未生成</option>
             <option value="generated">生成済</option>
             <option value="published">PUSH済</option>
             <option value="error">エラー</option>
@@ -2336,19 +2340,28 @@ function filterArticles() {
   const statusFilter = document.getElementById('article-status-filter')?.value || '';
   const sortKey = document.getElementById('article-sort')?.value || 'generated_desc';
 
-  let filtered = allArticles.slice();
+  // 対応履歴ページは「やった結果」のみ。未生成系は常に除外（一括処理ページの担当）。
+  const inflightStatuses = ['pending', 'queued', 'generating', 'publishing', 'repairing'];
+  const pendingLike = allArticles.filter(a => ['pending', 'queued', 'generating'].includes(a.status));
+  let filtered = allArticles.filter(a => !inflightStatuses.includes(a.status));
+
+  // 未生成バナーの表示制御
+  const banner = document.getElementById('articles-pending-banner');
+  const bannerText = document.getElementById('articles-pending-banner-text');
+  if (banner && bannerText) {
+    if (pendingLike.length > 0) {
+      banner.style.display = '';
+      bannerText.textContent = `未生成 ${pendingLike.length}件があります`;
+    } else {
+      banner.style.display = 'none';
+    }
+  }
 
   // 記事種別
   if (typeFilter) filtered = filtered.filter(a => (a.article_type || 'ranking') === typeFilter);
 
-  // 状態（5択）
-  // - pending: pending / queued / generating（未完了グループ）
-  // - generated: generated（生成済・未PUSH）
-  // - published: published / scheduled / updated（PUSH関連）
-  // - error: error
-  if (statusFilter === 'pending') {
-    filtered = filtered.filter(a => ['pending', 'queued', 'generating'].includes(a.status));
-  } else if (statusFilter === 'generated') {
+  // 状態（4択 - 未生成は除外済）
+  if (statusFilter === 'generated') {
     filtered = filtered.filter(a => a.status === 'generated');
   } else if (statusFilter === 'published') {
     filtered = filtered.filter(a => ['published', 'scheduled', 'updated'].includes(a.status));
