@@ -219,44 +219,57 @@ class AI_PI_Product_Selector {
     }
 
     /**
-     * 同一商品の重複統合（Amazonと楽天の同一商品をペア化）
+     * 同一商品の重複統合（Amazonベース固定方針）
+     *
+     * 方針:
+     * - カードのsourceは必ずAmazon
+     * - 楽天で同じ商品が見つかればペア化（楽天ボタン=直リン）
+     * - 楽天で見つからなければカードは出すが楽天ボタンは検索URLフォールバック
+     * - 楽天単独商品（Amazon未マッチ）はカードに出さない
+     *   → Amazonで取得できなかった商品はそもそもアフィ収益機会が薄いため、
+     *     楽天ボタンだけのカードを並べるよりAmazon商品だけに絞る方がCV重視。
      */
     public static function merge_duplicates($candidates) {
         $merged = [];
         $used_amazon = [];
 
+        // 楽天商品ごとに、類似Amazon商品を探してペア化
+        // ペアが見つかった Amazon 商品にだけ rakuten_pair を付与
         foreach ($candidates as $c) {
-            if ($c['source'] === 'rakuten') {
-                $matched_amazon = null;
-                foreach ($candidates as $a) {
-                    if ($a['source'] !== 'amazon') continue;
-                    if (in_array($a['id'], $used_amazon)) continue;
-
-                    if (self::title_similarity($c['title'], $a['title']) > 0.6) {
-                        $matched_amazon = $a;
-                        $used_amazon[] = $a['id'];
-                        break;
-                    }
-                }
-
-                if ($matched_amazon) {
-                    $merged_item = $matched_amazon;
+            if ($c['source'] !== 'rakuten') continue;
+            foreach ($candidates as $a) {
+                if ($a['source'] !== 'amazon') continue;
+                if (in_array($a['id'], $used_amazon)) continue;
+                if (self::title_similarity($c['title'], $a['title']) > 0.6) {
+                    $merged_item = $a;
                     $merged_item['rakuten_pair'] = [
                         'url' => $c['url'],
-                        'price_display' => $c['price_display'],
+                        'price_display' => $c['price_display'] ?? '',
                     ];
                     $merged[] = $merged_item;
-                } else {
-                    $merged[] = $c;
+                    $used_amazon[] = $a['id'];
+                    break;
                 }
             }
         }
 
+        // ペア未成立の Amazon 商品も追加（楽天ボタンは検索URLフォールバックされる）
         foreach ($candidates as $c) {
             if ($c['source'] !== 'amazon') continue;
             if (in_array($c['id'], $used_amazon)) continue;
             $merged[] = $c;
         }
+
+        // 楽天単独はここでドロップ（Amazonに見つからない商品は基本表示しない）
+        $rakuten_total = 0;
+        $amazon_total = 0;
+        foreach ($candidates as $c) {
+            if ($c['source'] === 'rakuten') $rakuten_total++;
+            elseif ($c['source'] === 'amazon') $amazon_total++;
+        }
+        $paired = count($used_amazon);
+        $rakuten_dropped = $rakuten_total - $paired;
+        error_log("[AI_PI] merge_duplicates (amazon-base): merged=" . count($merged) . " amazon_in={$amazon_total} rakuten_in={$rakuten_total} paired={$paired} rakuten_dropped={$rakuten_dropped}");
 
         return $merged;
     }
