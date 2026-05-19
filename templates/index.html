@@ -1003,25 +1003,6 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <div class="page-subtitle">生成・投稿の記事履歴を管理</div>
         </div>
 
-        <div class="stats" id="stats-bar">
-          <div class="stat-card">
-            <div class="stat-value" id="stat-total">0</div>
-            <div class="stat-label">TOTAL</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value" id="stat-pending">0</div>
-            <div class="stat-label">PENDING</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value" id="stat-generated">0</div>
-            <div class="stat-label">GENERATED</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value" id="stat-published">0</div>
-            <div class="stat-label">PUSHED</div>
-          </div>
-        </div>
-
         <div class="toolbar">
           <label class="btn btn-secondary" style="cursor:pointer" id="import-btn-label">
             <span>📥 CSV/Excelインポート</span>
@@ -2135,10 +2116,8 @@ function updateStats() {
   const published = allArticles.filter(a => a.status === 'published').length;
   const lowScore = dashboardCandidates().length;
   const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
-  set('stat-total', allArticles.length);
-  set('stat-pending', pending);
-  set('stat-generated', generated);
-  set('stat-published', published);
+  // 対応履歴ページの stat カード（TOTAL/PENDING/GENERATED/PUSHED）は撤去済み。
+  // ダッシュボード側のカードだけ更新する。
   set('dash-total', allArticles.length);
   set('dash-pending', pending);
   set('dash-generated', generated);
