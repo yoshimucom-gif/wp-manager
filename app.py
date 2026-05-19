@@ -1701,15 +1701,21 @@ def coerce_title_ideas(payload, keywords, count_per_keyword):
     return ideas[:len(keywords) * count_per_keyword]
 
 
-def enrich_title_ideas(ideas, category='', site_id=''):
-    try:
-        articles = load_articles()
-        if not isinstance(articles, list):
+def enrich_title_ideas(ideas, category='', site_id='', existing_title_keys=None):
+    """
+    existing_title_keys: 呼び出し側で事前計算したキーセット（重複チェック用）。
+    None の場合は articles.json をロードして毎回計算する（後方互換）。
+    大量バッチ並列実行時のI/O負荷を避けるため、ワーカーは事前に1度だけ計算して渡す。
+    """
+    if existing_title_keys is None:
+        try:
+            articles = load_articles()
+            if not isinstance(articles, list):
+                articles = []
+        except Exception as e:
+            app.logger.warning('Failed to load articles for title duplicate check: %s', e)
             articles = []
-    except Exception as e:
-        app.logger.warning('Failed to load articles for title duplicate check: %s', e)
-        articles = []
-    existing_title_keys = {normalize_title_key(a.get('title')) for a in articles if isinstance(a, dict)}
+        existing_title_keys = {normalize_title_key(a.get('title')) for a in articles if isinstance(a, dict)}
     enriched = []
     seen = set()
     for idea in ideas:
@@ -4088,11 +4094,29 @@ def generate_title_ideas():
 
     def worker():
         try:
+            # ワーカー起動時に articles.json を1回だけロードしてキーセット化。
+            # 以降の enrich_title_ideas はこのキーセットを使い回し、I/O を激減させる。
+            try:
+                articles_for_dup = load_articles()
+                if not isinstance(articles_for_dup, list):
+                    articles_for_dup = []
+            except Exception as e:
+                app.logger.warning('Worker: load_articles for dup check failed: %s', e)
+                articles_for_dup = []
+            existing_title_keys = {
+                normalize_title_key(a.get('title'))
+                for a in articles_for_dup
+                if isinstance(a, dict)
+            }
+
             all_ideas = []
             batch_errors = []
             model_used = CLAUDE_TITLE_IDEA_MODEL
             last_error = None
             completed = 0
+            # 部分結果の enrich は重い（250KW想定で毎バッチ走らせると Render 単ワーカーが詰まる）。
+            # 5バッチごと or 最後 にのみ enrich + ジョブ保存する。
+            partial_enrich_interval = max(1, min(5, max(1, len(batches) // 10)))
             max_workers = min(TITLE_IDEA_PARALLEL_BATCHES, len(batches))
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_idx = {
@@ -4117,9 +4141,19 @@ def generate_title_ideas():
                         'completed_batches': completed,
                         'message': msg,
                     }
-                    if all_ideas:
+                    # enrich は節約モード: 一定間隔 or 最終バッチ完了時のみ
+                    should_enrich = (
+                        completed == len(batches)
+                        or (completed % partial_enrich_interval == 0)
+                    )
+                    if all_ideas and should_enrich:
                         try:
-                            partial_payload['ideas'] = enrich_title_ideas(list(all_ideas), category=category, site_id=site_id)
+                            partial_payload['ideas'] = enrich_title_ideas(
+                                list(all_ideas),
+                                category=category,
+                                site_id=site_id,
+                                existing_title_keys=existing_title_keys,
+                            )
                         except Exception as e:
                             app.logger.warning('Partial enrich failed: %s', e)
                     update_title_idea_job(job_id, **partial_payload)
@@ -4136,7 +4170,12 @@ def generate_title_ideas():
                 )
                 return
 
-            enriched = enrich_title_ideas(all_ideas, category=category, site_id=site_id)
+            enriched = enrich_title_ideas(
+                all_ideas,
+                category=category,
+                site_id=site_id,
+                existing_title_keys=existing_title_keys,
+            )
             warnings = []
             if batch_errors:
                 warnings.append(f'{len(batch_errors)}/{len(batches)}バッチが失敗しました。')

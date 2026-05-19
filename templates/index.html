@@ -3066,15 +3066,21 @@ async function pollTitleJob(jobId, opts = {}) {
   if (!jobId) return;
   activeTitleJobId = jobId;
   let consecutiveErrors = 0;
+  const MAX_CONSECUTIVE_ERRORS = 20; // 大量KW時は Render 側が一時的に詰まるので寛容に
   const tick = async () => {
     if (activeTitleJobId !== jobId) return; // 別ジョブに切り替わった
     try {
       const res = await fetch(`/api/title-ideas/jobs/${jobId}`);
       if (!res.ok) {
         consecutiveErrors++;
-        if (consecutiveErrors >= 5) {
-          const msg = document.getElementById('title-ideas-msg');
-          if (msg) { msg.style.color = 'var(--error)'; msg.textContent = 'ジョブ状態の取得に失敗しました'; }
+        // UIに途中経過を表示（諦めずに待ってます感を出す）
+        const msg = document.getElementById('title-ideas-msg');
+        if (msg && consecutiveErrors >= 3) {
+          msg.style.color = 'var(--muted)';
+          msg.textContent = `ジョブ状態の取得を再試行中... (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS})`;
+        }
+        if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+          if (msg) { msg.style.color = 'var(--error)'; msg.textContent = 'ジョブ状態の取得に失敗しました（裏側では継続中の可能性があります）'; }
           setTitleGenerateButton(false);
           return;
         }
@@ -3083,7 +3089,7 @@ async function pollTitleJob(jobId, opts = {}) {
         const job = await res.json();
         applyTitleJobToUI(job, opts);
         if (job.status === 'running') {
-          activeTitleJobTimer = setTimeout(tick, 1500);
+          activeTitleJobTimer = setTimeout(tick, 2000);
           return;
         }
         // 完了/エラー時はポーリング終了
@@ -3093,7 +3099,9 @@ async function pollTitleJob(jobId, opts = {}) {
     } catch (e) {
       consecutiveErrors++;
     }
-    activeTitleJobTimer = setTimeout(tick, 2500);
+    // 失敗を重ねるほど間隔を伸ばす（Render負荷時の自爆防止）
+    const backoff = Math.min(8000, 2500 + consecutiveErrors * 500);
+    activeTitleJobTimer = setTimeout(tick, backoff);
   };
   tick();
 }
