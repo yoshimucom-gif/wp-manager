@@ -4187,6 +4187,7 @@ def login_required(f):
 @app.route('/sites')
 @app.route('/api-settings')
 @app.route('/settings')
+@app.route('/plugins')
 def index():
     if not session.get('authenticated'):
         return redirect(url_for('login_page'))

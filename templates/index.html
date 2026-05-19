@@ -899,6 +899,9 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
     <div class="nav-item" onclick="showPage('settings')" id="nav-settings">
       API設定
     </div>
+    <div class="nav-item" onclick="showPage('plugins')" id="nav-plugins">
+      プラグイン
+    </div>
   </nav>
   <div class="header-right">
     <span id="current-site-indicator" style="display:none;color:#fff;font-size:13px;margin-right:14px;padding:4px 10px;background:rgba(255,255,255,0.12);border-radius:4px;">
@@ -1570,6 +1573,122 @@ table { width: 100%; border-collapse: collapse; }"></textarea>
         </div>
       </div>
 
+      <!-- Plugins Page -->
+      <div class="page" id="page-plugins">
+        <div class="page-header">
+          <div class="page-title">プラグイン</div>
+          <div class="page-subtitle">wp_manager と連携する WordPress プラグイン一覧</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px;max-width:1180px">
+
+          <!-- ❶ 商品挿入 -->
+          <div class="settings-section" style="margin:0">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <div style="font-size:22px">🛒</div>
+              <div style="flex:1">
+                <div style="font-weight:700;font-size:14px">❶ AI Product Inserter</div>
+                <div style="font-size:11px;color:var(--muted)">商品挿入 / Amazon・楽天アフィリエイト</div>
+              </div>
+              <div style="font-size:11px;background:rgba(102,210,255,0.18);color:#66d2ff;padding:2px 8px;border-radius:10px">v1.7.3</div>
+            </div>
+            <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:10px">
+              wp_manager が本文内に埋め込む <code style="background:rgba(255,255,255,0.08);padding:1px 4px;border-radius:3px">&lt;!-- ai-product:[...] --&gt;</code>
+              マーカーを置換し、Amazon PA-API / 楽天市場 API から取得した商品で
+              縦型・ランキング・比較カードをサーバーサイドで描画します。
+              <br><strong style="color:#ffb070">Amazonベース固定方針（NON-NEGOTIABLE）</strong>:
+              Amazon に商品が存在する場合のみカードを表示。詳細は
+              <code style="background:rgba(255,255,255,0.08);padding:1px 4px;border-radius:3px">docs/decisions/0001-amazon-base-product-cards.md</code>
+            </div>
+            <div style="font-size:11px;color:var(--muted);background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:6px;margin-bottom:8px">
+              <div>📂 配布物: <code>ai-product-inserter-1.7.3.zip</code></div>
+              <div>🔧 設定: WP管理画面 →「商品挿入設定」</div>
+              <div>📝 必要キー: Amazon PA-API / 楽天アプリID</div>
+            </div>
+            <div style="font-size:11px;color:var(--muted)">
+              主要機能: 縦型カード / ランキングカード / 比較カード / 重複Amazon統合 / 楽天 enrichment / 24時間キャッシュ
+            </div>
+          </div>
+
+          <!-- ❷ 装飾 -->
+          <div class="settings-section" style="margin:0">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <div style="font-size:22px">🎨</div>
+              <div style="flex:1">
+                <div style="font-weight:700;font-size:14px">❷ AIデコレーション</div>
+                <div style="font-size:11px;color:var(--muted)">装飾 / Gutenberg ブロック自動変換</div>
+              </div>
+              <div style="font-size:11px;background:rgba(102,210,255,0.18);color:#66d2ff;padding:2px 8px;border-radius:10px">v1.2.0</div>
+            </div>
+            <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:10px">
+              wp_manager が出力したプレーン HTML を、DBP/Diver テーマの
+              Gutenberg ブロック（box / アコーディオン / ラベル付き引用など）に
+              自動変換するプラグイン。記事保存時に解析が走り、
+              テーマ標準のリッチ装飾が後付けで適用されます。
+            </div>
+            <div style="font-size:11px;color:var(--muted);background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:6px;margin-bottom:8px">
+              <div>📂 配布物: <code>ai-decoration-v1.2.0.zip</code></div>
+              <div>🔧 設定: WP管理画面 →「AIデコレーション」</div>
+              <div>🎯 対象テーマ: DBP / Diver</div>
+            </div>
+            <div style="font-size:11px;color:var(--muted)">
+              主要機能: h2/h3 デザイン適用 / box化 / アコーディオン化 / table 整形
+            </div>
+          </div>
+
+          <!-- ❸ リライト -->
+          <div class="settings-section" style="margin:0">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <div style="font-size:22px">✏️</div>
+              <div style="flex:1">
+                <div style="font-weight:700;font-size:14px">❸ Affiros リライト</div>
+                <div style="font-size:11px;color:var(--muted)">リライト / 既存記事の AI 再生成</div>
+              </div>
+              <div style="font-size:11px;background:rgba(102,210,255,0.18);color:#66d2ff;padding:2px 8px;border-radius:10px">v0.3.0</div>
+            </div>
+            <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:10px">
+              WordPress 管理画面の投稿一覧から、既存記事を Claude API で
+              リライトできるプラグイン。wp_manager の品質定義を引き継ぎ、
+              文体・構成・キーワード密度をリフレッシュします。下書き保存 →
+              本人確認 → 公開の安全フロー。
+            </div>
+            <div style="font-size:11px;color:var(--muted);background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:6px;margin-bottom:8px">
+              <div>📂 配布物: <code>affiros-rewrite-0.3.0.zip</code></div>
+              <div>🔧 設定: WP管理画面 →「Affiros リライト」</div>
+              <div>📝 必要キー: Claude API キー</div>
+            </div>
+            <div style="font-size:11px;color:var(--muted)">
+              主要機能: 単体リライト / 一括リライト / 品質プリセット適用 / 差分プレビュー
+            </div>
+          </div>
+
+          <!-- ❹ カテゴリー自動設定 -->
+          <div class="settings-section" style="margin:0">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <div style="font-size:22px">🗂️</div>
+              <div style="flex:1">
+                <div style="font-weight:700;font-size:14px">❹ カテゴリー自動設定</div>
+                <div style="font-size:11px;color:var(--muted)">カテゴリー / 投稿時の自動分類</div>
+              </div>
+              <div style="font-size:11px;background:rgba(255,200,100,0.18);color:#ffc864;padding:2px 8px;border-radius:10px">準備中</div>
+            </div>
+            <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:10px">
+              wp_manager から投稿される記事のタイトル・本文を解析し、
+              事前定義したカテゴリーマップに従って自動でカテゴリーを
+              紐付ける WordPress 側プラグイン。現在仕様策定中。
+            </div>
+            <div style="font-size:11px;color:var(--muted);background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:6px;margin-bottom:8px">
+              <div>📂 配布物: <em>未配布</em></div>
+              <div>🔧 設定: 未実装</div>
+              <div>🚧 ステータス: 設計フェーズ</div>
+            </div>
+            <div style="font-size:11px;color:var(--muted)">
+              想定機能: キーワードマッチング / 親子カテゴリー判定 / フォールバック「未分類」回避
+            </div>
+          </div>
+
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -1784,7 +1903,8 @@ const pageUrlMap = {
   'title-definition': 'title-definition',
   'ad-insertion': 'ad-insertion',
   sites: 'sites',
-  settings: 'api-settings'
+  settings: 'api-settings',
+  plugins: 'plugins'
 };
 const urlPageMap = Object.entries(pageUrlMap).reduce((acc, [page, slug]) => {
   acc[slug] = page;
