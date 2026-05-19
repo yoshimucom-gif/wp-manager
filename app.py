@@ -4525,70 +4525,563 @@ def set_current_site():
     return jsonify({'success': True, 'site_id': session.get('current_site_id') or ''})
 
 
+def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending_articles):
+    """バッチ生成ワーカーのモジュールレベルエントリポイント。
+
+    呼び出し元:
+    - batch_generate(): 新規ジョブ起動時
+    - resume_orphan_batches_on_startup(): Render再デプロイ後のレジューム時
+
+    前提:
+    - batch_jobs.json にジョブが既に存在し quality_id / batch_article_type / article_ids が
+      保存されていること
+    - pending_articles の各記事は既に status='queued' でディスクに保存されていること
+    """
+    settings = load_settings()
+    quality_list = load_quality()
+    quality_cache = {}
+
+    def resolve_quality_for(art_type):
+        if art_type not in quality_cache:
+            q = select_quality_definition(quality_list, quality_id, art_type)
+            quality_cache[art_type] = (q, build_quality_prompt(q))
+        return quality_cache[art_type]
+
+    style_reference_cache = {}
+
+    def update_job(**changes):
+        jobs = load_batch_jobs()
+        for item in jobs:
+            if item.get('id') == job_id:
+                item.update(changes)
+                item['updated_at'] = now_iso()
+                break
+        save_batch_jobs(jobs)
+
+    def is_cancel_requested():
+        for j in load_batch_jobs():
+            if j.get('id') == job_id:
+                return bool(j.get('cancel_requested'))
+        return False
+
+    def run_batch():
+        # ジョブから現在のカウンタを読む（レジューム時に途中から継続するため）
+        _jobs = load_batch_jobs()
+        _job = next((j for j in _jobs if j.get('id') == job_id), None)
+        completed = int((_job or {}).get('completed') or 0)
+        failed = int((_job or {}).get('failed') or 0)
+        retried = int((_job or {}).get('retried') or 0)
+        total_for_msg = int((_job or {}).get('total') or len(pending_articles))
+
+        client = anthropic.Anthropic(api_key=api_key) if api_key else None
+        attempt_counts = {}
+        queue_articles = list(pending_articles)
+        while queue_articles:
+            if is_cancel_requested():
+                remaining_ids = {a['id'] for a in queue_articles}
+                current_articles = load_articles()
+                for a in current_articles:
+                    if a['id'] in remaining_ids and a.get('status') == 'queued':
+                        a['status'] = 'pending'
+                        a.pop('batch_job_id', None)
+                        a['updated_at'] = now_iso()
+                save_articles(current_articles)
+                update_job(
+                    status='cancelled',
+                    current_title='',
+                    completed=completed,
+                    failed=failed,
+                    retried=retried,
+                    completed_at=now_iso(),
+                    message=f"ユーザーがキャンセル: 成功 {completed}件 / エラー {failed}件 / 残り {len(queue_articles)}件は pending に戻しました"
+                )
+                return
+            article = queue_articles.pop(0)
+            article_id = article.get('id')
+            attempt_counts[article_id] = attempt_counts.get(article_id, 0) + 1
+            attempt_no = attempt_counts[article_id]
+            stage = 'starting'
+            try:
+                stage = 'prepare article'
+                retry_suffix = f"（リトライ{attempt_no - 1}/{BATCH_GENERATION_MAX_RETRIES}）" if attempt_no > 1 else ''
+                update_job(current_title=article.get('title', ''), message=f"生成中{retry_suffix}: {article.get('title', '')}")
+                current_articles = load_articles()
+                for a in current_articles:
+                    if a['id'] == article['id']:
+                        a['status'] = 'generating'
+                        a['updated_at'] = now_iso()
+                        break
+                save_articles(current_articles)
+                article_type = normalize_article_type(article.get('article_type') or batch_article_type, batch_article_type)
+                quality, quality_prompt = resolve_quality_for(article_type)
+                use_generation_extras = False
+                pipeline_warnings = []
+                if not api_key and article_type != 'ranking':
+                    raise ValueError('Claude APIキーが設定されていません')
+                if not str(article.get('ad_keywords') or '').strip():
+                    article['ad_keywords'] = infer_ad_keywords_from_title(
+                        article.get('title', ''),
+                        article.get('keywords', ''),
+                        article_type
+                    )
+                article_type_prompt = build_article_type_prompt(article_type)
+                ranking_count_prompt = (
+                    build_ranking_count_prompt(article, article_type) +
+                    build_ranking_structure_prompt(article, article_type)
+                )
+                regeneration_instruction = build_regeneration_instruction(article.get('content', ''))
+                style_reference_url, style_reference_text = style_reference_cache.get(article_type, ('', ''))
+                if use_generation_extras and article_type not in style_reference_cache:
+                    stage = 'fetch style reference'
+                    try:
+                        style_reference_url, style_reference_text = fetch_quality_style_reference(article_type, settings, quality)
+                    except Exception:
+                        style_reference_url, style_reference_text = '', ''
+                    style_reference_cache[article_type] = (style_reference_url, style_reference_text)
+                stage = 'fetch products'
+                update_job(current_title=article.get('title', ''), message=f"Amazon/楽天で実商品データ取得中: {article.get('title', '')}")
+                products, _ = fetch_product_context(article, settings, limit=15)
+                stage = 'build prompt'
+                update_job(current_title=article.get('title', ''), message=f"プロンプト構築中: {article.get('title', '')}")
+                prompt = f"""以下の情報をもとに、WordPressに投稿する記事を書いてください。
+
+タイトル: {article['title']}
+キーワード: {article['keywords']}
+カテゴリー: {article.get('category', '')}
+
+品質要件:
+{quality_prompt}
+
+{article_type_prompt}
+{ranking_count_prompt}
+
+{article_html_output_rules()}
+{regeneration_instruction}"""
+
+                prompt += build_product_context_prompt(products, article_type)
+
+                if style_reference_text:
+                    prompt += f'''\n\n記事品質の書き方参考:
+- 参考URL: {style_reference_url}
+- この参考記事は内容・事実・固有名詞を流用するためではありません。
+- 文章構成、導入の作り方、権威性の示し方、根拠の置き方、説得力の作り方、CTAまでの流れだけを参考にしてください。
+- テーマや読者に合わない表現は使わず、今回の記事内容に自然に合わせてください。
+
+参考記事テキスト:
+{style_reference_text[:2500]}'''
+
+                prompt += build_quality_structure_html_prompt(quality)
+
+                prompt += build_article_completion_prompt(
+                    quality,
+                    article_type,
+                    has_decoration=False
+                )
+
+                stage = 'generate content'
+                if client and should_use_segmented_generation(article_type, quality, article):
+                    raw_content, usage_parts = generate_segmented_article_sync(
+                        client,
+                        prompt,
+                        article,
+                        article_type,
+                        quality,
+                        on_step=lambda step_index, step_total, step_name: update_job(
+                            current_title=article.get('title', ''),
+                            message=f"分割生成中: {article.get('title', '')} / {step_name} ({step_index}/{step_total})"
+                        )
+                    )
+                else:
+                    update_job(current_title=article.get('title', ''), message=f"Claudeで本文生成中: {article.get('title', '')}")
+                    message = create_claude_message(client, prompt, max_tokens=claude_max_tokens_for_quality(quality))
+                    raw_content = anthropic_message_text(message)
+                    usage_parts = [build_article_usage(prompt, raw_content, message)]
+                stage = 'inject affiliate markers'
+                update_job(current_title=article.get('title', ''), message=f"商品カードマーカー挿入中: {article.get('title', '')}")
+                raw_content, marker_stats = insert_card_markers(raw_content, article_type, title=article.get('title') if isinstance(article, dict) else None)
+                card_stats = {'h3_count': 0, 'matched_count': 0, 'products_available': 0,
+                              'fallback_count': 0, 'marker_count': marker_stats.get('marker_count', 0), 'mode': 'marker_only'}
+                if card_stats.get('h3_count') and not card_stats.get('matched_count'):
+                    update_job(current_title=article.get('title', ''), message=f"商品カード未挿入（取得商品 {card_stats.get('products_available', 0)}件 / 見出し {card_stats.get('h3_count', 0)}件）: {article.get('title', '')}")
+                stage = 'enhance and validate content'
+                update_job(current_title=article.get('title', ''), message=f"本文を整形・検証中: {article.get('title', '')}")
+                content, enhance_warning = safe_enhance_generated_article_html(raw_content, article, article_type)
+                content = strip_summary_table_sections(content)
+                if enhance_warning:
+                    pipeline_warnings.append(enhance_warning)
+                validation_error = validate_generated_article(article, article_type, content, quality)
+                content_chars = len(html_to_text(content))
+                continuation_round = 0
+                while validation_error and continuation_round < CLAUDE_ARTICLE_CONTINUATION_MAX_ROUNDS:
+                    continuation_round += 1
+                    update_job(
+                        current_title=article.get('title', ''),
+                        message=f"本文が短い/未完了のため続きを生成中: {article.get('title', '')} ({continuation_round}回目)"
+                    )
+                    continuation_prompt = build_article_continuation_prompt(
+                        article,
+                        article_type,
+                        quality,
+                        content,
+                        validation_error
+                    )
+                    continuation_message = create_claude_message(client, continuation_prompt, max_tokens=claude_continuation_max_tokens(quality))
+                    continuation_text = anthropic_message_text(continuation_message)
+                    usage_parts.append(build_article_usage(continuation_prompt, continuation_text, continuation_message))
+                    if not html_to_text(continuation_text).strip():
+                        break
+                    raw_content += '\n' + continuation_text
+                    content, enhance_warning = safe_enhance_generated_article_html(raw_content, article, article_type)
+                    if enhance_warning:
+                        pipeline_warnings.append(enhance_warning)
+                    validation_error = validate_generated_article(article, article_type, content, quality)
+                    content_chars = len(html_to_text(content))
+                if not validation_error and content_chars < 500:
+                    validation_error = f'生成結果が短すぎます（{content_chars}文字）。Claude生成が途中で止まった可能性があります。もう一度生成してください。'
+                if validation_error:
+                    if content_chars < 500:
+                        raise ValueError(validation_error)
+                    pipeline_warnings.append(validation_error)
+                generated_at = now_iso()
+                run_id = str(uuid.uuid4())
+
+                stage = 'save generated article'
+                current_articles = load_articles()
+                for a in current_articles:
+                    if a['id'] == article['id']:
+                        a['content'] = content
+                        a['status'] = 'generated'
+                        a.pop('batch_job_id', None)
+                        a.pop('error', None)
+                        a.pop('error_stage', None)
+                        a.pop('error_trace', None)
+                        if pipeline_warnings:
+                            a['generation_warning'] = ' / '.join(dict.fromkeys(pipeline_warnings))
+                        else:
+                            a.pop('generation_warning', None)
+                        a.pop('last_generation_interrupted', None)
+                        a['quality_id'] = quality.get('id') if quality else quality_id
+                        a['article_type'] = article_type
+                        a['ad_keywords'] = article.get('ad_keywords', a.get('ad_keywords', ''))
+                        a['generation_phase'] = 'base_saved'
+                        a['generated_at'] = generated_at
+                        a['updated_at'] = generated_at
+                        a['content_hash'] = content_hash(content)
+                        usage = combine_article_usages(usage_parts)
+                        append_generation_usage(a, usage, run_id, generated_at, content)
+                        apply_score_fields(a)
+                        break
+                save_articles(current_articles)
+                stage = 'postprocess article'
+                postprocess_warnings = []
+                try:
+                    post_content = content
+                    if client:
+                        update_job(current_title=article.get('title', ''), message=f"本文保存済み。品質改善中: {article.get('title', '')}")
+                        polish_prompt = build_article_polish_prompt(
+                            article,
+                            article_type,
+                            quality,
+                            post_content,
+                            ' / '.join(pipeline_warnings)
+                        )
+                        polish_message = create_claude_message(
+                            client,
+                            polish_prompt,
+                            max_tokens=claude_max_tokens_for_quality(quality, floor=2400, ceiling=7000)
+                        )
+                        polished_raw = anthropic_message_text(polish_message)
+                        polished_content, enhance_warning = safe_enhance_generated_article_html(polished_raw, article, article_type)
+                        if enhance_warning:
+                            postprocess_warnings.append(enhance_warning)
+                        if len(html_to_text(polished_content)) >= max(500, int(len(html_to_text(post_content)) * 0.75)):
+                            post_content = polished_content
+                            usage_parts.append(build_article_usage(polish_prompt, polished_raw, polish_message))
+                        else:
+                            postprocess_warnings.append('品質改善後の本文が短すぎたため、本文生成直後の内容を維持しました。')
+
+                    update_job(current_title=article.get('title', ''), message=f"本文保存済み。本文HTMLを整えています: {article.get('title', '')}")
+                    if post_content != content:
+                        post_content, enhance_warning = safe_enhance_generated_article_html(post_content, article, article_type)
+                        if enhance_warning:
+                            postprocess_warnings.append(enhance_warning)
+                        post_content, post_marker_stats = insert_card_markers(
+                            post_content, article_type,
+                            title=article.get('title') if isinstance(article, dict) else None,
+                        )
+                        post_generated_at = now_iso()
+                        current_articles = load_articles()
+                        for a in current_articles:
+                            if a['id'] == article['id']:
+                                a['content'] = post_content
+                                a['generation_phase'] = 'postprocessed'
+                                a['updated_at'] = post_generated_at
+                                a['content_hash'] = content_hash(post_content)
+                                a['last_generation_chars'] = len(html_to_text(post_content))
+                                usage = combine_article_usages(usage_parts)
+                                a['usage'] = usage
+                                a['card_injection_stats'] = {
+                                    'h3_count': 0, 'matched_count': 0, 'products_available': 0,
+                                    'fallback_count': 0,
+                                    'marker_count': post_marker_stats.get('marker_count', 0),
+                                    'mode': 'marker_only',
+                                }
+                                warnings = pipeline_warnings + postprocess_warnings
+                                if warnings:
+                                    a['generation_warning'] = ' / '.join(dict.fromkeys(warnings))
+                                else:
+                                    a.pop('generation_warning', None)
+                                apply_score_fields(a)
+                                break
+                        save_articles(current_articles)
+                except Exception as post_error:
+                    postprocess_warnings.append(f'本文後処理をスキップしました: {post_error}')
+                    current_articles = load_articles()
+                    for a in current_articles:
+                        if a['id'] == article['id']:
+                            warnings = pipeline_warnings + postprocess_warnings
+                            a['generation_warning'] = ' / '.join(dict.fromkeys(warnings))
+                            a['generation_phase'] = 'base_saved_with_postprocess_warning'
+                            a['updated_at'] = now_iso()
+                            break
+                    save_articles(current_articles)
+                completed += 1
+                update_job(completed=completed, failed=failed, retried=retried, message=f"{completed}/{total_for_msg}件生成済み")
+            except Exception as e:
+                trace = traceback.format_exc()
+                error_text = str(e) or e.__class__.__name__
+                error_detail = f'{stage}: {error_text}'
+                if attempt_no <= BATCH_GENERATION_MAX_RETRIES:
+                    retried += 1
+                    current_articles = load_articles()
+                    for a in current_articles:
+                        if a['id'] == article['id']:
+                            a['status'] = 'generating'
+                            a['error'] = f'一時エラーのため自動リトライ待ち: {error_detail}'
+                            a['error_stage'] = stage
+                            a['error_trace'] = trace[-4000:]
+                            a['generation_retry_count'] = attempt_no
+                            a['updated_at'] = now_iso()
+                            break
+                    save_articles(current_articles)
+                    queue_articles.append(article)
+                    update_job(
+                        completed=completed,
+                        failed=failed,
+                        retried=retried,
+                        current_title=article.get('title', ''),
+                        last_error=error_detail,
+                        last_error_stage=stage,
+                        last_error_trace=trace[-4000:],
+                        message=f"一時エラー。後で自動リトライします（{attempt_no}/{BATCH_GENERATION_MAX_RETRIES}）: {error_detail}"
+                    )
+                    time.sleep(min(10, 2 * attempt_no))
+                    continue
+                current_articles = load_articles()
+                for a in current_articles:
+                    if a['id'] == article['id']:
+                        a['status'] = 'error'
+                        a['error'] = error_detail
+                        a['error_stage'] = stage
+                        a['error_trace'] = trace[-4000:]
+                        a.pop('batch_job_id', None)
+                        a['generation_retry_count'] = attempt_no - 1
+                        a['updated_at'] = now_iso()
+                        a['generation_finished_at'] = a['updated_at']
+                        break
+                save_articles(current_articles)
+                failed += 1
+                update_job(
+                    completed=completed,
+                    failed=failed,
+                    retried=retried,
+                    last_error=error_detail,
+                    last_error_stage=stage,
+                    last_error_trace=trace[-4000:],
+                    message=f"{completed}件生成済み / {failed}件エラー / リトライ {retried}回: {error_detail}"
+                )
+        final_status = 'completed' if failed == 0 else 'completed_with_errors'
+        update_job(
+            status=final_status,
+            current_title='',
+            completed=completed,
+            failed=failed,
+            retried=retried,
+            completed_at=now_iso(),
+            message=f"一括生成完了: 成功 {completed}件 / エラー {failed}件 / 自動リトライ {retried}回"
+        )
+
+    def run_batch_safe():
+        try:
+            run_batch()
+        except Exception as outer_e:
+            outer_trace = traceback.format_exc()
+            app.logger.error('Batch worker outer exception: %s\n%s', outer_e, outer_trace)
+            try:
+                current_articles = load_articles()
+                for a in current_articles:
+                    if a.get('batch_job_id') == job_id and a.get('status') in ('queued', 'generating'):
+                        new_status = fallback_article_status(a)
+                        a['status'] = new_status
+                        a.pop('batch_job_id', None)
+                        a['updated_at'] = now_iso()
+                        if new_status == 'generated':
+                            a['generation_warning'] = f'バッチが予期せず終了しましたが、本文は保存済みです: {compact_ai_error(outer_e, 120)}'
+                        else:
+                            a['generation_warning'] = f'バッチが予期せず終了: {compact_ai_error(outer_e, 120)}'
+                save_articles(current_articles)
+            except Exception:
+                pass
+            try:
+                update_job(
+                    status='crashed',
+                    current_title='',
+                    last_error=str(outer_e),
+                    last_error_trace=outer_trace[-4000:],
+                    completed_at=now_iso(),
+                    message=f"バッチが予期せず終了しました: {compact_ai_error(outer_e, 200)}"
+                )
+            except Exception:
+                pass
+
+    thread = threading.Thread(target=run_batch_safe, daemon=True)
+    thread.start()
+    return thread
+
+
 def recover_orphan_batches_on_startup():
-    """アプリ起動時、status='running'/'queued' のまま残ってる「孤児バッチ」を検出して
-    crashed マークし、対象記事を pending に戻す。
-    Render の再デプロイで worker thread が死ぬと job 状態だけ残るのを補正する。
+    """[DEPRECATED] resume_orphan_batches_on_startup() に置き換え済み。
+    互換性のため空関数として残す（後方参照対策）。"""
+    pass
+
+
+def resume_orphan_batches_on_startup():
+    """アプリ起動時、status='running'/'queued' のまま残ってる「孤児バッチ」を検出して、
+    未完了の記事を継続処理する。Render の再デプロイで thread が死んでもジョブが
+    実質的に止まらないようにするための仕組み。
     """
     try:
         jobs = load_batch_jobs()
         articles = load_articles()
+        settings = load_settings()
     except Exception as e:
         try:
-            app.logger.warning('recover_orphan_batches_on_startup: load failed: %s', e)
+            app.logger.warning('resume_orphan_batches_on_startup: load failed: %s', e)
         except Exception:
             pass
         return
+
+    api_key = settings.get('claude_api_key') or os.environ.get('ANTHROPIC_API_KEY', '')
+    article_by_id = {a.get('id'): a for a in articles}
+    now = now_iso()
     changed_jobs = False
     changed_articles = False
-    now = now_iso()
-    recovered_count = 0
+    resumed_count = 0
+
     for j in jobs:
         if j.get('status') not in ('queued', 'running'):
             continue
-        # アプリ起動時点で worker thread は走っていないので、これらは孤児ジョブ
-        j['status'] = 'crashed_on_restart'
-        j['completed_at'] = now
-        j['updated_at'] = now
-        j['message'] = (j.get('message') or '') + ' [アプリ再起動により中断。記事は未生成に戻されました]'
-        changed_jobs = True
-        article_ids = set(j.get('article_ids') or [])
+        if j.get('cancel_requested'):
+            # ユーザーが既にキャンセル要求済 → レジュームしない
+            j['status'] = 'cancelled'
+            j['completed_at'] = now
+            j['updated_at'] = now
+            j['message'] = (j.get('message') or '') + ' [再起動時にキャンセル確定]'
+            changed_jobs = True
+            article_ids = set(j.get('article_ids') or [])
+            for a in articles:
+                if a.get('id') in article_ids and a.get('status') in ('queued', 'generating'):
+                    new_status = fallback_article_status(a)
+                    a['status'] = new_status
+                    a.pop('batch_job_id', None)
+                    a['updated_at'] = now
+                    changed_articles = True
+            continue
+
+        job_id = j.get('id')
+        quality_id = j.get('quality_id')
+        batch_article_type = j.get('batch_article_type') or 'ranking'
+        article_ids = j.get('article_ids') or []
+
+        # 残記事を抽出（既に完了している記事は除外）
+        completed_states = ('generated', 'published', 'scheduled', 'updated')
+        pending_articles = []
+        for aid in article_ids:
+            a = article_by_id.get(aid)
+            if not a:
+                continue
+            if a.get('status') in completed_states:
+                continue
+            pending_articles.append(a)
+
+        if not pending_articles:
+            # 全件処理済 → ジョブを completed マーク
+            j['status'] = 'completed'
+            j['completed_at'] = now
+            j['updated_at'] = now
+            j['message'] = (j.get('message') or '') + ' [再起動時に全件処理済を確認]'
+            changed_jobs = True
+            continue
+
+        # 残記事を 'queued' に揃え直し、batch_job_id を再設定
+        pending_ids_set = {a['id'] for a in pending_articles}
         for a in articles:
-            if a.get('id') in article_ids and a.get('status') in ('queued', 'generating'):
-                # 本文が保存済みなら 'generated' に戻す（後処理だけ中断したケース）。
-                # 本文が無ければ 'pending'（生成すらされてない）。
-                # fallback_article_status は wp_post_id 有 → 'published' / content 有 → 'generated' / それ以外 → 'pending' を返す。
-                new_status = fallback_article_status(a)
-                a['status'] = new_status
-                a.pop('batch_job_id', None)
+            if a.get('id') in pending_ids_set:
+                a['status'] = 'queued'
+                a['batch_job_id'] = job_id
                 a['updated_at'] = now
-                if new_status == 'generated':
-                    # 本文は保存済み。後処理（品質改善・装飾）は完了していないが
-                    # WP投稿は可能。再生成は不要。
-                    a['generation_warning'] = '前回の後処理（品質改善・装飾）がアプリ再起動で中断されましたが、本文は保存済みです。そのまま WP 投稿できます。'
-                else:
-                    a['generation_warning'] = '前回のバッチがアプリ再起動で中断されました。改めて一括処理から生成してください。'
+                a.pop('error', None)
+                a.pop('error_stage', None)
+                a.pop('error_trace', None)
+                # generation_warning は読み手にレジュームを伝えるため上書きしない
                 changed_articles = True
-                recovered_count += 1
+
+        # ジョブのメッセージとステータスを再開モードに
+        j['status'] = 'running'
+        j['updated_at'] = now
+        j['message'] = f'再起動レジューム中: 残り {len(pending_articles)}件を継続処理します'
+        changed_jobs = True
+
+        # 先にディスクへ反映してから worker thread を起動
+        # （worker は load_batch_jobs を読むので保存が先に必要）
+        try:
+            save_batch_jobs(jobs)
+            changed_jobs = False  # 既に保存済みフラグ
+            save_articles(articles)
+            changed_articles = False
+        except Exception as e:
+            try:
+                app.logger.warning('resume_orphan_batches_on_startup: pre-worker save failed: %s', e)
+            except Exception:
+                pass
+
+        # worker thread 起動
+        try:
+            _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending_articles)
+            resumed_count += 1
+            try:
+                app.logger.info('[startup-resume] resumed job %s with %d remaining articles', job_id, len(pending_articles))
+            except Exception:
+                pass
+        except Exception as e:
+            try:
+                app.logger.error('[startup-resume] failed to start worker for job %s: %s', job_id, e)
+            except Exception:
+                pass
+
     if changed_jobs:
         try:
             save_batch_jobs(jobs)
-        except Exception as e:
-            try:
-                app.logger.warning('recover_orphan_batches_on_startup: save_batch_jobs failed: %s', e)
-            except Exception:
-                pass
+        except Exception:
+            pass
     if changed_articles:
         try:
             save_articles(articles)
-        except Exception as e:
-            try:
-                app.logger.warning('recover_orphan_batches_on_startup: save_articles failed: %s', e)
-            except Exception:
-                pass
-    if recovered_count:
+        except Exception:
+            pass
+    if resumed_count:
         try:
-            app.logger.info('[startup-recovery] reverted %d articles from queued/generating to pending', recovered_count)
+            app.logger.info('[startup-resume] total resumed jobs: %d', resumed_count)
         except Exception:
             pass
 
@@ -5491,17 +5984,10 @@ def batch_generate():
     settings = load_settings()
     api_key = settings.get('claude_api_key') or os.environ.get('ANTHROPIC_API_KEY', '')
 
-    quality_list = load_quality()
     batch_article_type = normalize_article_type(data.get('article_type'), 'ranking')
     if not api_key and batch_article_type != 'ranking':
         return jsonify({'error': 'Claude APIキーが設定されていません'}), 400
-    quality_cache = {}
-    def resolve_quality_for(art_type):
-        if art_type not in quality_cache:
-            q = select_quality_definition(quality_list, quality_id, art_type)
-            quality_cache[art_type] = (q, build_quality_prompt(q))
-        return quality_cache[art_type]
-    style_reference_cache = {}
+
     now = now_iso()
     job_id = str(uuid.uuid4())
     job = {
@@ -5515,6 +6001,9 @@ def batch_generate():
         'max_retries': BATCH_GENERATION_MAX_RETRIES,
         'current_title': '',
         'article_ids': [a['id'] for a in pending],
+        # 起動時レジューム用に保存するメタデータ
+        'quality_id': quality_id,
+        'batch_article_type': batch_article_type,
         'started_at': now,
         'updated_at': now,
         'message': '一括生成を開始しました。ページを移動しても処理は継続します。',
@@ -5539,405 +6028,12 @@ def batch_generate():
             a.pop('last_generation_interrupted', None)
     save_articles(articles)
 
-    def update_job(**changes):
-        jobs = load_batch_jobs()
-        for item in jobs:
-            if item.get('id') == job_id:
-                item.update(changes)
-                item['updated_at'] = now_iso()
-                break
-        save_batch_jobs(jobs)
-
-    def is_cancel_requested():
-        """ジョブの cancel_requested フラグを毎回ディスクから確認する。"""
-        for j in load_batch_jobs():
-            if j.get('id') == job_id:
-                return bool(j.get('cancel_requested'))
-        return False
-
-    def run_batch():
-        client = anthropic.Anthropic(api_key=api_key) if api_key else None
-        completed = 0
-        failed = 0
-        retried = 0
-        attempt_counts = {}
-        queue_articles = list(pending)
-        while queue_articles:
-            # キャンセル要求チェック（記事を取り出す前）
-            if is_cancel_requested():
-                # 残りの queued 記事を pending に戻す（再開できるように）
-                remaining_ids = {a['id'] for a in queue_articles}
-                current_articles = load_articles()
-                for a in current_articles:
-                    if a['id'] in remaining_ids and a.get('status') == 'queued':
-                        a['status'] = 'pending'
-                        a.pop('batch_job_id', None)
-                        a['updated_at'] = now_iso()
-                save_articles(current_articles)
-                update_job(
-                    status='cancelled',
-                    current_title='',
-                    completed=completed,
-                    failed=failed,
-                    retried=retried,
-                    completed_at=now_iso(),
-                    message=f"ユーザーがキャンセル: 成功 {completed}件 / エラー {failed}件 / 残り {len(queue_articles)}件は pending に戻しました"
-                )
-                return
-            article = queue_articles.pop(0)
-            article_id = article.get('id')
-            attempt_counts[article_id] = attempt_counts.get(article_id, 0) + 1
-            attempt_no = attempt_counts[article_id]
-            stage = 'starting'
-            try:
-                stage = 'prepare article'
-                retry_suffix = f"（リトライ{attempt_no - 1}/{BATCH_GENERATION_MAX_RETRIES}）" if attempt_no > 1 else ''
-                update_job(current_title=article.get('title', ''), message=f"生成中{retry_suffix}: {article.get('title', '')}")
-                # この記事を 'queued' → 'generating' に切り替え（UI で「処理中」と表示）
-                current_articles = load_articles()
-                for a in current_articles:
-                    if a['id'] == article['id']:
-                        a['status'] = 'generating'
-                        a['updated_at'] = now_iso()
-                        break
-                save_articles(current_articles)
-                article_type = normalize_article_type(article.get('article_type') or batch_article_type, batch_article_type)
-                quality, quality_prompt = resolve_quality_for(article_type)
-                use_generation_extras = False
-                pipeline_warnings = []
-                if not api_key and article_type != 'ranking':
-                    raise ValueError('Claude APIキーが設定されていません')
-                if not str(article.get('ad_keywords') or '').strip():
-                    article['ad_keywords'] = infer_ad_keywords_from_title(
-                        article.get('title', ''),
-                        article.get('keywords', ''),
-                        article_type
-                    )
-                article_type_prompt = build_article_type_prompt(article_type)
-                ranking_count_prompt = (
-                    build_ranking_count_prompt(article, article_type) +
-                    build_ranking_structure_prompt(article, article_type)
-                )
-                regeneration_instruction = build_regeneration_instruction(article.get('content', ''))
-                style_reference_url, style_reference_text = style_reference_cache.get(article_type, ('', ''))
-                if use_generation_extras and article_type not in style_reference_cache:
-                    stage = 'fetch style reference'
-                    try:
-                        style_reference_url, style_reference_text = fetch_quality_style_reference(article_type, settings, quality)
-                    except Exception:
-                        style_reference_url, style_reference_text = '', ''
-                    style_reference_cache[article_type] = (style_reference_url, style_reference_text)
-                stage = 'fetch products'
-                update_job(current_title=article.get('title', ''), message=f"Amazon/楽天で実商品データ取得中: {article.get('title', '')}")
-                products, _ = fetch_product_context(article, settings, limit=15)
-                stage = 'build prompt'
-                update_job(current_title=article.get('title', ''), message=f"プロンプト構築中: {article.get('title', '')}")
-                prompt = f"""以下の情報をもとに、WordPressに投稿する記事を書いてください。
-
-タイトル: {article['title']}
-キーワード: {article['keywords']}
-カテゴリー: {article.get('category', '')}
-
-品質要件:
-{quality_prompt}
-
-{article_type_prompt}
-{ranking_count_prompt}
-
-{article_html_output_rules()}
-{regeneration_instruction}"""
-
-                prompt += build_product_context_prompt(products, article_type)
-
-                if style_reference_text:
-                    prompt += f'''\n\n記事品質の書き方参考:
-- 参考URL: {style_reference_url}
-- この参考記事は内容・事実・固有名詞を流用するためではありません。
-- 文章構成、導入の作り方、権威性の示し方、根拠の置き方、説得力の作り方、CTAまでの流れだけを参考にしてください。
-- テーマや読者に合わない表現は使わず、今回の記事内容に自然に合わせてください。
-
-参考記事テキスト:
-{style_reference_text[:2500]}'''
-
-                prompt += build_quality_structure_html_prompt(quality)
-
-                prompt += build_article_completion_prompt(
-                    quality,
-                    article_type,
-                    has_decoration=False
-                )
-
-                stage = 'generate content'
-                if client and should_use_segmented_generation(article_type, quality, article):
-                    raw_content, usage_parts = generate_segmented_article_sync(
-                        client,
-                        prompt,
-                        article,
-                        article_type,
-                        quality,
-                        on_step=lambda step_index, step_total, step_name: update_job(
-                            current_title=article.get('title', ''),
-                            message=f"分割生成中: {article.get('title', '')} / {step_name} ({step_index}/{step_total})"
-                        )
-                    )
-                else:
-                    update_job(current_title=article.get('title', ''), message=f"Claudeで本文生成中: {article.get('title', '')}")
-                    message = create_claude_message(client, prompt, max_tokens=claude_max_tokens_for_quality(quality))
-                    raw_content = anthropic_message_text(message)
-                    usage_parts = [build_article_usage(prompt, raw_content, message)]
-                stage = 'inject affiliate markers'
-                update_job(current_title=article.get('title', ''), message=f"商品カードマーカー挿入中: {article.get('title', '')}")
-                # プラグイン連携前提でマーカー挿入に固定（UIセレクタ廃止）
-                raw_content, marker_stats = insert_card_markers(raw_content, article_type, title=article.get('title') if isinstance(article, dict) else None)
-                card_stats = {'h3_count': 0, 'matched_count': 0, 'products_available': 0,
-                              'fallback_count': 0, 'marker_count': marker_stats.get('marker_count', 0), 'mode': 'marker_only'}
-                if card_stats.get('h3_count') and not card_stats.get('matched_count'):
-                    update_job(current_title=article.get('title', ''), message=f"商品カード未挿入（取得商品 {card_stats.get('products_available', 0)}件 / 見出し {card_stats.get('h3_count', 0)}件）: {article.get('title', '')}")
-                stage = 'enhance and validate content'
-                update_job(current_title=article.get('title', ''), message=f"本文を整形・検証中: {article.get('title', '')}")
-                content, enhance_warning = safe_enhance_generated_article_html(raw_content, article, article_type)
-                content = strip_summary_table_sections(content)
-                if enhance_warning:
-                    pipeline_warnings.append(enhance_warning)
-                validation_error = validate_generated_article(article, article_type, content, quality)
-                content_chars = len(html_to_text(content))
-                continuation_round = 0
-                while validation_error and continuation_round < CLAUDE_ARTICLE_CONTINUATION_MAX_ROUNDS:
-                    continuation_round += 1
-                    update_job(
-                        current_title=article.get('title', ''),
-                        message=f"本文が短い/未完了のため続きを生成中: {article.get('title', '')} ({continuation_round}回目)"
-                    )
-                    continuation_prompt = build_article_continuation_prompt(
-                        article,
-                        article_type,
-                        quality,
-                        content,
-                        validation_error
-                    )
-                    continuation_message = create_claude_message(client, continuation_prompt, max_tokens=claude_continuation_max_tokens(quality))
-                    continuation_text = anthropic_message_text(continuation_message)
-                    usage_parts.append(build_article_usage(continuation_prompt, continuation_text, continuation_message))
-                    if not html_to_text(continuation_text).strip():
-                        break
-                    raw_content += '\n' + continuation_text
-                    content, enhance_warning = safe_enhance_generated_article_html(raw_content, article, article_type)
-                    if enhance_warning:
-                        pipeline_warnings.append(enhance_warning)
-                    validation_error = validate_generated_article(article, article_type, content, quality)
-                    content_chars = len(html_to_text(content))
-                if not validation_error and content_chars < 500:
-                    validation_error = f'生成結果が短すぎます（{content_chars}文字）。Claude生成が途中で止まった可能性があります。もう一度生成してください。'
-                if validation_error:
-                    if content_chars < 500:
-                        raise ValueError(validation_error)
-                    pipeline_warnings.append(validation_error)
-                generated_at = now_iso()
-                run_id = str(uuid.uuid4())
-
-                stage = 'save generated article'
-                current_articles = load_articles()
-                for a in current_articles:
-                    if a['id'] == article['id']:
-                        a['content'] = content
-                        a['status'] = 'generated'
-                        a.pop('batch_job_id', None)
-                        a.pop('error', None)
-                        a.pop('error_stage', None)
-                        a.pop('error_trace', None)
-                        if pipeline_warnings:
-                            a['generation_warning'] = ' / '.join(dict.fromkeys(pipeline_warnings))
-                        else:
-                            a.pop('generation_warning', None)
-                        a.pop('last_generation_interrupted', None)
-                        a['quality_id'] = quality.get('id') if quality else quality_id
-                        a['article_type'] = article_type
-                        a['ad_keywords'] = article.get('ad_keywords', a.get('ad_keywords', ''))
-                        a['generation_phase'] = 'base_saved'
-                        a['generated_at'] = generated_at
-                        a['updated_at'] = generated_at
-                        a['content_hash'] = content_hash(content)
-                        usage = combine_article_usages(usage_parts)
-                        append_generation_usage(a, usage, run_id, generated_at, content)
-                        apply_score_fields(a)
-                        break
-                save_articles(current_articles)
-                stage = 'postprocess article'
-                postprocess_warnings = []
-                try:
-                    post_content = content
-                    if client:
-                        update_job(current_title=article.get('title', ''), message=f"本文保存済み。品質改善中: {article.get('title', '')}")
-                        polish_prompt = build_article_polish_prompt(
-                            article,
-                            article_type,
-                            quality,
-                            post_content,
-                            ' / '.join(pipeline_warnings)
-                        )
-                        polish_message = create_claude_message(
-                            client,
-                            polish_prompt,
-                            max_tokens=claude_max_tokens_for_quality(quality, floor=2400, ceiling=7000)
-                        )
-                        polished_raw = anthropic_message_text(polish_message)
-                        polished_content, enhance_warning = safe_enhance_generated_article_html(polished_raw, article, article_type)
-                        if enhance_warning:
-                            postprocess_warnings.append(enhance_warning)
-                        if len(html_to_text(polished_content)) >= max(500, int(len(html_to_text(post_content)) * 0.75)):
-                            post_content = polished_content
-                            usage_parts.append(build_article_usage(polish_prompt, polished_raw, polish_message))
-                        else:
-                            postprocess_warnings.append('品質改善後の本文が短すぎたため、本文生成直後の内容を維持しました。')
-
-                    update_job(current_title=article.get('title', ''), message=f"本文保存済み。本文HTMLを整えています: {article.get('title', '')}")
-                    if post_content != content:
-                        post_content, enhance_warning = safe_enhance_generated_article_html(post_content, article, article_type)
-                        if enhance_warning:
-                            postprocess_warnings.append(enhance_warning)
-                        # ★ polish 後にマーカーを再挿入する（Claude polish は HTMLコメントを保持しない）
-                        post_content, post_marker_stats = insert_card_markers(
-                            post_content, article_type,
-                            title=article.get('title') if isinstance(article, dict) else None,
-                        )
-                        post_generated_at = now_iso()
-                        current_articles = load_articles()
-                        for a in current_articles:
-                            if a['id'] == article['id']:
-                                a['content'] = post_content
-                                a['generation_phase'] = 'postprocessed'
-                                a['updated_at'] = post_generated_at
-                                a['content_hash'] = content_hash(post_content)
-                                a['last_generation_chars'] = len(html_to_text(post_content))
-                                usage = combine_article_usages(usage_parts)
-                                a['usage'] = usage
-                                # polish 後の marker_stats で card_injection_stats を更新
-                                a['card_injection_stats'] = {
-                                    'h3_count': 0, 'matched_count': 0, 'products_available': 0,
-                                    'fallback_count': 0,
-                                    'marker_count': post_marker_stats.get('marker_count', 0),
-                                    'mode': 'marker_only',
-                                }
-                                warnings = pipeline_warnings + postprocess_warnings
-                                if warnings:
-                                    a['generation_warning'] = ' / '.join(dict.fromkeys(warnings))
-                                else:
-                                    a.pop('generation_warning', None)
-                                apply_score_fields(a)
-                                break
-                        save_articles(current_articles)
-                except Exception as post_error:
-                    postprocess_warnings.append(f'本文後処理をスキップしました: {post_error}')
-                    current_articles = load_articles()
-                    for a in current_articles:
-                        if a['id'] == article['id']:
-                            warnings = pipeline_warnings + postprocess_warnings
-                            a['generation_warning'] = ' / '.join(dict.fromkeys(warnings))
-                            a['generation_phase'] = 'base_saved_with_postprocess_warning'
-                            a['updated_at'] = now_iso()
-                            break
-                    save_articles(current_articles)
-                completed += 1
-                update_job(completed=completed, failed=failed, retried=retried, message=f"{completed}/{len(pending)}件生成済み")
-            except Exception as e:
-                trace = traceback.format_exc()
-                error_text = str(e) or e.__class__.__name__
-                error_detail = f'{stage}: {error_text}'
-                if attempt_no <= BATCH_GENERATION_MAX_RETRIES:
-                    retried += 1
-                    current_articles = load_articles()
-                    for a in current_articles:
-                        if a['id'] == article['id']:
-                            a['status'] = 'generating'
-                            a['error'] = f'一時エラーのため自動リトライ待ち: {error_detail}'
-                            a['error_stage'] = stage
-                            a['error_trace'] = trace[-4000:]
-                            a['generation_retry_count'] = attempt_no
-                            a['updated_at'] = now_iso()
-                            break
-                    save_articles(current_articles)
-                    queue_articles.append(article)
-                    update_job(
-                        completed=completed,
-                        failed=failed,
-                        retried=retried,
-                        current_title=article.get('title', ''),
-                        last_error=error_detail,
-                        last_error_stage=stage,
-                        last_error_trace=trace[-4000:],
-                        message=f"一時エラー。後で自動リトライします（{attempt_no}/{BATCH_GENERATION_MAX_RETRIES}）: {error_detail}"
-                    )
-                    time.sleep(min(10, 2 * attempt_no))
-                    continue
-                current_articles = load_articles()
-                for a in current_articles:
-                    if a['id'] == article['id']:
-                        a['status'] = 'error'
-                        a['error'] = error_detail
-                        a['error_stage'] = stage
-                        a['error_trace'] = trace[-4000:]
-                        a.pop('batch_job_id', None)
-                        a['generation_retry_count'] = attempt_no - 1
-                        a['updated_at'] = now_iso()
-                        a['generation_finished_at'] = a['updated_at']
-                        break
-                save_articles(current_articles)
-                failed += 1
-                update_job(
-                    completed=completed,
-                    failed=failed,
-                    retried=retried,
-                    last_error=error_detail,
-                    last_error_stage=stage,
-                    last_error_trace=trace[-4000:],
-                    message=f"{completed}件生成済み / {failed}件エラー / リトライ {retried}回: {error_detail}"
-                )
-        final_status = 'completed' if failed == 0 else 'completed_with_errors'
-        update_job(
-            status=final_status,
-            current_title='',
-            completed=completed,
-            failed=failed,
-            retried=retried,
-            completed_at=now_iso(),
-            message=f"一括生成完了: 成功 {completed}件 / エラー {failed}件 / 自動リトライ {retried}回"
-        )
-
-    def run_batch_safe():
-        """run_batch の外側に大外 try/except を被せる。
-        想定外の例外で thread が黙って死ぬのを防ぎ、必ず job 状態を残す。"""
-        try:
-            run_batch()
-        except Exception as outer_e:
-            outer_trace = traceback.format_exc()
-            app.logger.error('Batch worker outer exception: %s\n%s', outer_e, outer_trace)
-            try:
-                # 未処理の queued/generating 記事を pending に戻す
-                current_articles = load_articles()
-                for a in current_articles:
-                    if a.get('batch_job_id') == job_id and a.get('status') in ('queued', 'generating'):
-                        a['status'] = 'pending'
-                        a.pop('batch_job_id', None)
-                        a['updated_at'] = now_iso()
-                        a['generation_warning'] = f'バッチが予期せず終了: {compact_ai_error(outer_e, 120)}'
-                save_articles(current_articles)
-            except Exception:
-                pass
-            try:
-                update_job(
-                    status='crashed',
-                    current_title='',
-                    last_error=str(outer_e),
-                    last_error_trace=outer_trace[-4000:],
-                    completed_at=now_iso(),
-                    message=f"バッチが予期せず終了しました: {compact_ai_error(outer_e, 200)}"
-                )
-            except Exception:
-                pass
-
-    thread = threading.Thread(target=run_batch_safe, daemon=True)
-    thread.start()
+    # モジュールレベルの worker を起動。
+    # この関数は startup-resume からも呼ばれる共通エントリポイント。
+    _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending)
     return jsonify({'success': True, 'job_id': job_id, 'message': f'{len(pending)}件の記事生成を開始しました'})
+
+
 
 
 # WordPress publish
@@ -6812,8 +6908,9 @@ def search_products():
 # --- Startup hooks ---
 # モジュールロード時に1度だけ実行される。
 # Render の場合 gunicorn worker が起動した時にここが走るので、
-# 前回の dyno で残った孤児バッチを必ず復旧してから処理を受け付ける。
-recover_orphan_batches_on_startup()
+# 前回の dyno で残った孤児バッチがあれば自動的にレジュームして処理を継続する。
+# （これでデプロイ・dyno再起動でもバッチが完走する）
+resume_orphan_batches_on_startup()
 
 
 if __name__ == '__main__':
