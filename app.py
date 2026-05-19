@@ -4386,6 +4386,65 @@ def set_current_site():
     return jsonify({'success': True, 'site_id': session.get('current_site_id') or ''})
 
 
+def recover_orphan_batches_on_startup():
+    """アプリ起動時、status='running'/'queued' のまま残ってる「孤児バッチ」を検出して
+    crashed マークし、対象記事を pending に戻す。
+    Render の再デプロイで worker thread が死ぬと job 状態だけ残るのを補正する。
+    """
+    try:
+        jobs = load_batch_jobs()
+        articles = load_articles()
+    except Exception as e:
+        try:
+            app.logger.warning('recover_orphan_batches_on_startup: load failed: %s', e)
+        except Exception:
+            pass
+        return
+    changed_jobs = False
+    changed_articles = False
+    now = datetime.now().isoformat()
+    recovered_count = 0
+    for j in jobs:
+        if j.get('status') not in ('queued', 'running'):
+            continue
+        # アプリ起動時点で worker thread は走っていないので、これらは孤児ジョブ
+        j['status'] = 'crashed_on_restart'
+        j['completed_at'] = now
+        j['updated_at'] = now
+        j['message'] = (j.get('message') or '') + ' [アプリ再起動により中断。記事は未生成に戻されました]'
+        changed_jobs = True
+        article_ids = set(j.get('article_ids') or [])
+        for a in articles:
+            if a.get('id') in article_ids and a.get('status') in ('queued', 'generating'):
+                a['status'] = 'pending'
+                a.pop('batch_job_id', None)
+                a['updated_at'] = now
+                a['generation_warning'] = '前回のバッチがアプリ再起動で中断されました。再生成してください。'
+                changed_articles = True
+                recovered_count += 1
+    if changed_jobs:
+        try:
+            save_batch_jobs(jobs)
+        except Exception as e:
+            try:
+                app.logger.warning('recover_orphan_batches_on_startup: save_batch_jobs failed: %s', e)
+            except Exception:
+                pass
+    if changed_articles:
+        try:
+            save_articles(articles)
+        except Exception as e:
+            try:
+                app.logger.warning('recover_orphan_batches_on_startup: save_articles failed: %s', e)
+            except Exception:
+                pass
+    if recovered_count:
+        try:
+            app.logger.info('[startup-recovery] reverted %d articles from queued/generating to pending', recovered_count)
+        except Exception:
+            pass
+
+
 def recover_stale_batch_jobs(jobs, articles):
     """ステータス running/queued なのに対象記事が全部処理完了してるジョブを finished に矯正。
     Render の再起動などで thread が落ちて job 状態だけ残ってる時の保険。
@@ -6565,6 +6624,13 @@ def search_products():
         elif provider == 'amazon':
             return jsonify({'error': 'Amazon PA-API の設定が不完全です'}), 400
     return jsonify(result)
+
+
+# --- Startup hooks ---
+# モジュールロード時に1度だけ実行される。
+# Render の場合 gunicorn worker が起動した時にここが走るので、
+# 前回の dyno で残った孤児バッチを必ず復旧してから処理を受け付ける。
+recover_orphan_batches_on_startup()
 
 
 if __name__ == '__main__':
