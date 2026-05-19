@@ -83,6 +83,12 @@ try:
     TITLE_IDEA_PARALLEL_BATCHES = max(1, int(os.environ.get('TITLE_IDEA_PARALLEL_BATCHES', '5')))
 except ValueError:
     TITLE_IDEA_PARALLEL_BATCHES = 5
+# Render Starter（単ワーカー）で安定稼働 + タイトル品質を担保できる上限
+# 30KW × 3案/KW = 90タイトル/回。10バッチ並列5本で実測30〜45秒程度。
+try:
+    TITLE_IDEA_MAX_KEYWORDS = max(1, int(os.environ.get('TITLE_IDEA_MAX_KEYWORDS', '30')))
+except ValueError:
+    TITLE_IDEA_MAX_KEYWORDS = 30
 try:
     CLAUDE_ARTICLE_MAX_TOKENS = int(os.environ.get('CLAUDE_ARTICLE_MAX_TOKENS', '20000'))
 except ValueError:
@@ -4068,6 +4074,11 @@ def generate_title_ideas():
 
     if not keywords:
         return jsonify({'error': 'キーワードを1行以上入力してください'}), 400
+    if len(keywords) > TITLE_IDEA_MAX_KEYWORDS:
+        return jsonify({
+            'error': f'キーワードは1回に最大 {TITLE_IDEA_MAX_KEYWORDS} 件まで（現在 {len(keywords)} 件）。'
+                     f'それ以上は分割して実行してください。'
+        }), 400
 
     try:
         settings = load_settings()

@@ -1154,10 +1154,11 @@ tr.selected td { background: var(--accent-dim); }
               <div class="section-header">// 生成条件</div>
               <div class="form-group">
                 <label class="form-label">キーワード（1行1件）</label>
-                <textarea id="title-keywords" class="form-control" rows="10" placeholder="例:
+                <textarea id="title-keywords" class="form-control" rows="10" oninput="updateTitleKeywordCount()" placeholder="例:
 ネックウォーマー おすすめ
 電熱ベスト 口コミ
 防寒手袋 比較"></textarea>
+                <div id="title-keyword-count" style="font-size:11px;color:var(--muted);margin-top:4px">0 / 30 件（品質と安定性を担保する上限）</div>
               </div>
               <div class="form-group">
                 <label class="form-label">1キーワードあたりのタイトル案数</label>
@@ -1809,7 +1810,7 @@ function showPage(name, opts = {}) {
   if (!opts.skipLoad) {
     if (pageName === 'articles') loadArticles();
     if (pageName === 'generate') { loadQualitySelects(); updateSiteSelects(); populateGenSelect(); }
-    if (pageName === 'title-ideas') { updateSiteSelects(); renderTitleIdeas(); resumeTitleIdeaJobIfAny(); }
+    if (pageName === 'title-ideas') { updateSiteSelects(); renderTitleIdeas(); updateTitleKeywordCount(); }
     if (pageName === 'batch') { loadQualitySelects(); initBatchScheduleDefaults(); loadArticles(); loadLatestBatchJob(); }
     if (pageName === 'quality') loadQuality();
     if (pageName === 'title-definition') loadTitleDefinition();
@@ -3014,6 +3015,25 @@ async function readTitleIdeaJson(res, label) {
   return data;
 }
 
+// タイトル案生成の上限。サーバ側 TITLE_IDEA_MAX_KEYWORDS と揃える。
+const TITLE_IDEA_MAX_KEYWORDS = 30;
+
+function updateTitleKeywordCount() {
+  const ta = document.getElementById('title-keywords');
+  const countEl = document.getElementById('title-keyword-count');
+  const btn = document.getElementById('title-generate-btn');
+  if (!ta || !countEl) return;
+  const lines = ta.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const n = lines.length;
+  const over = n > TITLE_IDEA_MAX_KEYWORDS;
+  countEl.textContent = `${n} / ${TITLE_IDEA_MAX_KEYWORDS} 件（品質と安定性を担保する上限）`;
+  countEl.style.color = over ? 'var(--error)' : 'var(--muted)';
+  if (btn) {
+    btn.disabled = over;
+    btn.title = over ? `${TITLE_IDEA_MAX_KEYWORDS}件以下にしてください` : '';
+  }
+}
+
 // アクティブなタイトル案ジョブ。ページ遷移しても継続するためグローバル保持。
 let activeTitleJobId = null;
 let activeTitleJobTimer = null;
@@ -3117,6 +3137,11 @@ async function generateTitleIdeas() {
     toast('キーワードを1行以上入力してください', 'error');
     return;
   }
+  const kwLines = keywordsRaw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  if (kwLines.length > TITLE_IDEA_MAX_KEYWORDS) {
+    toast(`キーワードは ${TITLE_IDEA_MAX_KEYWORDS} 件まで（現在 ${kwLines.length} 件）。分割してください。`, 'error');
+    return;
+  }
 
   setTitleGenerateButton(true);
   if (msg) {
@@ -3148,29 +3173,6 @@ async function generateTitleIdeas() {
     const reason = `タイトル案ジョブの起動に失敗しました。${e.message ? ` ${e.message}` : ''}`;
     if (msg) { msg.style.color = 'var(--error)'; msg.textContent = reason; }
     toast(reason, 'error');
-  }
-}
-
-// ページ表示時に進行中ジョブがあれば復帰する
-async function resumeTitleIdeaJobIfAny() {
-  try {
-    const res = await fetch('/api/title-ideas/jobs/latest');
-    if (!res.ok) return;
-    const { job } = await res.json();
-    if (!job) return;
-    // 既にUI側で同じジョブをポーリング中ならスキップ
-    if (activeTitleJobId === job.id && activeTitleJobTimer) return;
-    if (job.status === 'running') {
-      applyTitleJobToUI(job);
-      pollTitleJob(job.id, { toastOnDone: true });
-    } else if (job.status === 'completed' && Array.isArray(job.ideas) && job.ideas.length) {
-      // 直近の完了ジョブを復元（titleIdeaListが空のときだけ上書き）
-      if (!titleIdeaList || !titleIdeaList.length) {
-        applyTitleJobToUI(job);
-      }
-    }
-  } catch (e) {
-    // 失敗しても致命的ではないので無視
   }
 }
 
