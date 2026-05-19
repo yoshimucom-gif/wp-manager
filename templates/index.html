@@ -695,6 +695,25 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
 }
 
 .dashboard-hero { margin-bottom: 22px; }
+
+/* 一括処理ページの記事種類タブ */
+.batch-tab {
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  margin-bottom: -1px;
+}
+.batch-tab:hover { color: var(--text); }
+.batch-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
 .dashboard-title {
   font-size: 24px;
   font-weight: 500;
@@ -1237,15 +1256,6 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
               <div class="form-help">空欄なら記事種類ごとに対応する品質定義を自動選択。固定したい時だけ選択。</div>
             </div>
             <div class="form-group">
-              <label class="form-label">記事種類</label>
-              <select id="batch-article-type-filter" class="form-control" onchange="updateDefinitionDefaultsForCurrentContext(); loadBatchArticles()">
-                <option value="">全記事種類</option>
-                <option value="ranking">ランキング記事</option>
-                <option value="brand">商標記事</option>
-                <option value="column">コラム記事</option>
-              </select>
-            </div>
-            <div class="form-group">
               <label class="form-label">カテゴリー</label>
               <select id="batch-category-filter" class="form-control" onchange="loadBatchArticles()">
                 <option value="">全カテゴリー</option>
@@ -1280,6 +1290,12 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
                 <button class="btn btn-danger btn-sm" onclick="deleteBatchSelected()">🗑 選択を削除</button>
               </div>
               <div style="font-size:11px;color:var(--muted);margin-top:6px">生成済み記事のWP投稿は <strong>「対応履歴」</strong>ページから実行してください。</div>
+              <div id="batch-type-tabs" class="batch-tabs" style="display:flex;gap:0;margin-top:8px;border-bottom:1px solid var(--border)">
+                <button type="button" class="batch-tab active" data-type="" onclick="setBatchTypeTab('')">すべて</button>
+                <button type="button" class="batch-tab" data-type="ranking" onclick="setBatchTypeTab('ranking')">ランキング</button>
+                <button type="button" class="batch-tab" data-type="brand" onclick="setBatchTypeTab('brand')">商標</button>
+                <button type="button" class="batch-tab" data-type="column" onclick="setBatchTypeTab('column')">コラム</button>
+              </div>
             </div>
             <div id="batch-top-scroll" style="overflow-x:auto;overflow-y:hidden;height:14px;margin:8px 0 2px;border:1px solid var(--border);border-radius:4px;background:var(--surface)">
               <div id="batch-top-scroll-inner" style="height:1px;width:1180px"></div>
@@ -1699,6 +1715,15 @@ const usageEstimateConfig = {
   outputCharsPerToken: 2,
 };
 let batchPollTimer = null;
+let currentBatchTypeTab = ''; // 一括処理ページの記事種類タブ ('' | 'ranking' | 'brand' | 'column')
+
+function setBatchTypeTab(type) {
+  currentBatchTypeTab = type || '';
+  document.querySelectorAll('#batch-type-tabs .batch-tab').forEach(btn => {
+    btn.classList.toggle('active', (btn.dataset.type || '') === currentBatchTypeTab);
+  });
+  loadBatchArticles();
+}
 let currentGenArticleId = null;
 let currentArticleType = 'ranking';
 
@@ -3236,9 +3261,7 @@ async function saveSelectedTitleIdeas() {
     toast(`${data.created}件を一括処理へ送りました`, 'success');
     await loadArticles();
     showPage('batch');
-    const typeFilter = document.getElementById('batch-article-type-filter');
-    if (typeFilter) typeFilter.value = '';
-    loadBatchArticles();
+    setBatchTypeTab('');
   } catch (e) {
     toast(e.message || '一括処理への送信に失敗しました', 'error');
     if (msg) msg.textContent = e.message || '一括処理への送信に失敗しました';
@@ -3956,7 +3979,7 @@ function renderBatchJobStatus(job) {
 function loadBatchArticles() {
   // 一括処理ページは「これから生成する対象」のみ。
   // pending / queued / generating / error を固定表示（生成済 / PUSH済 は対応履歴へ）
-  const typeFilter = document.getElementById('batch-article-type-filter')?.value || '';
+  const typeFilter = currentBatchTypeTab || '';
   const category = document.getElementById('batch-category-filter')?.value || '';
   let targets = allArticles.filter(a => ['pending', 'queued', 'generating', 'error'].includes(a.status));
   if (typeFilter) targets = targets.filter(a => (a.article_type || 'ranking') === typeFilter);
@@ -4037,7 +4060,7 @@ async function startBatchGenerate() {
   if (!ids.length) { toast('記事を選択してください', 'error'); return; }
   setArticlesLocalStatus(ids, 'generating', '一括生成中です。完了後に点数を更新します。');
   const qualityId = document.getElementById('batch-quality').value;
-  const articleType = document.getElementById('batch-article-type-filter').value || currentArticleType;
+  const articleType = currentBatchTypeTab || currentArticleType;
   const res = await fetch('/api/batch-generate', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
