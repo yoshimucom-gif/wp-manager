@@ -1849,13 +1849,8 @@ function updateDefinitionDefaultsForCurrentContext() {
 }
 
 function updateQualityDefaultsForCurrentContext() {
-  const gen = document.getElementById('gen-quality');
-  if (gen) gen.value = defaultQualityId(currentArticleType) || gen.value;
-  const batch = document.getElementById('batch-quality');
-  if (batch) {
-    const articleType = document.getElementById('batch-article-type-filter')?.value || currentArticleType;
-    batch.value = defaultQualityId(articleType) || batch.value;
-  }
+  // 品質定義は「自動」をデフォルトにする方針。ユーザーが明示的に選んだ値があれば残し、
+  // 何も選ばれていない場合は空（自動）のままにする。
 }
 
 // ---- Toast ----
@@ -4128,24 +4123,18 @@ function renderQuality() {
 }
 
 function loadQualitySelects() {
-  const defaultOpt = '<option value="">-- 品質定義を選択 --</option>';
-  const batchOpt = '<option value="">自動（記事種類ごとに割り当て）</option>';
+  const placeholderOpt = '<option value="">-- 品質定義を選択 --</option>';
+  const autoOpt = '<option value="">自動（記事種類に合わせる）</option>';
   const qualityOpts = qualityList.map(q => `<option value="${q.id}">${esc(q.name)}</option>`).join('');
   ['quality-filter', 'gen-quality', 'batch-quality', 's-default-quality'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) {
-      const prev = el.value;
-      el.innerHTML = (id === 'batch-quality' ? batchOpt : defaultOpt) + qualityOpts;
-      if (id === 'quality-filter') {
-        el.value = qualityList.some(q => q.id === prev) ? prev : '';
-      } else if (id === 'batch-quality') {
-        el.value = qualityList.some(q => q.id === prev) ? prev : '';
-      } else {
-        const articleType = currentArticleType;
-        const fallback = defaultQualityId(articleType);
-        el.value = qualityList.some(q => q.id === prev) ? prev : (fallback || '');
-      }
-    }
+    if (!el) return;
+    const prev = el.value;
+    // gen-quality / batch-quality は「自動」、それ以外は単なるプレースホルダ
+    const firstOpt = (id === 'gen-quality' || id === 'batch-quality') ? autoOpt : placeholderOpt;
+    el.innerHTML = firstOpt + qualityOpts;
+    // 既存の選択値を保持。無ければ空（=自動）。
+    el.value = qualityList.some(q => q.id === prev) ? prev : '';
   });
 }
 
