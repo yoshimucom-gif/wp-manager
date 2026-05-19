@@ -4081,7 +4081,7 @@ def generate_title_ideas():
     except Exception:
         data = {}
     keywords = split_title_keywords(data.get('keywords', ''))
-    count_per_keyword = clamp_int(data.get('count_per_keyword'), 1, 1, 5)
+    count_per_keyword = clamp_int(data.get('count_per_keyword'), 3, 1, 5)
     category = str(data.get('category') or '').strip()
     site_id = data.get('site_id') or ''
 
