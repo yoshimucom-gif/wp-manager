@@ -1286,14 +1286,16 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             </div>
           </div>
           <div class="batch-main">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
-              <label class="form-label" style="margin:0;flex:1">対象記事 (<span id="batch-count">0</span>件)</label>
-              <button class="btn btn-primary btn-sm" onclick="startBatchGenerate()">⚡ 一括生成開始</button>
-              <button class="btn btn-success btn-sm" onclick="startBatchPublish()">🚀 一括WP投稿</button>
-              <button class="btn btn-secondary btn-sm" onclick="loadBatchArticles()">↻ 状態更新</button>
-              <button class="btn btn-danger btn-sm" onclick="deleteBatchSelected()">🗑 選択を削除</button>
+            <div style="position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0;margin-bottom:0;border-bottom:1px solid var(--border)">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <label class="form-label" style="margin:0;flex:1">対象記事 (<span id="batch-count">0</span>件)</label>
+                <button class="btn btn-primary btn-sm" onclick="startBatchGenerate()">⚡ 一括生成開始</button>
+                <button class="btn btn-success btn-sm" onclick="startBatchPublish()">🚀 一括WP投稿</button>
+                <button class="btn btn-secondary btn-sm" onclick="loadBatchArticles()">↻ 状態更新</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteBatchSelected()">🗑 選択を削除</button>
+              </div>
             </div>
-            <div id="batch-top-scroll" style="overflow-x:auto;overflow-y:hidden;height:14px;margin-bottom:2px;border:1px solid var(--border);border-radius:4px;background:var(--surface)">
+            <div id="batch-top-scroll" style="overflow-x:auto;overflow-y:hidden;height:14px;margin:8px 0 2px;border:1px solid var(--border);border-radius:4px;background:var(--surface)">
               <div id="batch-top-scroll-inner" style="height:1px;width:1180px"></div>
             </div>
             <div id="batch-table-wrap" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;overflow:auto;">
@@ -1301,13 +1303,13 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
                 <thead>
                   <tr>
                     <th><input type="checkbox" class="check-all" id="batch-check-all" onchange="toggleBatchAll(this)"></th>
+                    <th>ステータス</th>
                     <th>タイトル</th>
                     <th>記事種類</th>
                     <th>スラッグ</th>
                     <th>カテゴリー</th>
                     <th>スコア</th>
                     <th>サイト</th>
-                    <th>ステータス</th>
                   </tr>
                 </thead>
                 <tbody id="batch-body"></tbody>
@@ -3874,13 +3876,13 @@ function loadBatchArticles() {
   document.getElementById('batch-body').innerHTML = targets.map(a => `
     <tr>
       <td><input type="checkbox" class="check-row" value="${a.id}" ${batchRowSelectable(a, filter) ? 'checked' : 'disabled'}></td>
+      <td>${statusBadge(a.status)}${a.processing_message ? `<div style="font-size:10px;color:var(--muted);margin-top:4px">${esc(a.processing_message)}</div>` : ''}</td>
       <td style="font-size:12px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.title)}</td>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${esc(articleTypeLabel(a.article_type || 'ranking'))}</td>
       <td><input type="text" class="form-control" value="${esc(a.slug || '')}" placeholder="自動" style="font-size:11px;height:28px" onchange="saveBatchField('${a.id}', 'slug', this.value)"></td>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${esc(a.category || '—')}</td>
       <td>${scoreBadge(a)}</td>
       <td>${getSiteName(a.site_id)}</td>
-      <td>${statusBadge(a.status)}${a.processing_message ? `<div style="font-size:10px;color:var(--muted);margin-top:4px">${esc(a.processing_message)}</div>` : ''}</td>
     </tr>
   `).join('');
   syncBatchTopScroll();
