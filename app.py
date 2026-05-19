@@ -1867,7 +1867,10 @@ def non_retryable_ai_error(error):
 
 
 def title_idea_max_tokens(keyword_count, count_per_keyword):
-    return min(8000, max(800, keyword_count * count_per_keyword * 160))
+    # idea 1件あたり目安250トークン（title + keyword + target_keywords + slug +
+    # article_type + search_intent + reason + priority + JSON構造）
+    # 余裕を持って最小2000、最大8000に抑える
+    return min(8000, max(2000, keyword_count * count_per_keyword * 250))
 
 
 def claude_title_idea_models():
@@ -1897,11 +1900,19 @@ def generate_claude_title_ideas_once(api_key, keywords, count_per_keyword, categ
                 model=model,
             )
             text = anthropic_message_text(message)
+            stop_reason = getattr(message, 'stop_reason', None) or (
+                message.get('stop_reason') if isinstance(message, dict) else None
+            )
             ideas = coerce_title_ideas(extract_title_ideas_payload(text), keywords, count_per_keyword)
             if not ideas:
-                # デバッグ用：Claudeの応答先頭500字をログに残す（フィールド名違い・スキーマ崩れの早期発見用）
-                snippet = (text or '')[:500].replace('\n', ' ')
-                app.logger.warning('[TITLE-IDEA] no usable ideas. model=%s kw_count=%d response_snippet=%r', model, len(keywords), snippet)
+                # デバッグ用：失敗時に stop_reason と Claudeの応答先頭/末尾をログに残す。
+                # max_tokens で切れている場合は length-truncated と分かる。
+                snippet_head = (text or '')[:300].replace('\n', ' ')
+                snippet_tail = (text or '')[-200:].replace('\n', ' ')
+                app.logger.warning(
+                    '[TITLE-IDEA] no usable ideas. model=%s stop_reason=%s text_len=%d kw_count=%d head=%r tail=%r',
+                    model, stop_reason, len(text or ''), len(keywords), snippet_head, snippet_tail
+                )
                 raise ValueError('Claude returned no usable title ideas')
             return ideas, model
         except Exception as e:
