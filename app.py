@@ -1545,7 +1545,91 @@ def score_title_idea(title, keyword, article_type, existing_title_keys):
     return max(1, min(100, score))
 
 
-def title_generation_prompt(keywords, count_per_keyword, category='', preferred_type=''):
+def classify_keyword_intent(keyword):
+    """
+    KW文字列からヒューリスティックに記事種類候補を推定。
+    返り値: ('ranking' | 'brand' | 'column', signal_strength: int)
+    signal_strength が大きいほど強い意図。バランス再配分時に強信号を優先で守る。
+    """
+    kw = str(keyword or '').strip()
+    if not kw:
+        return ('column', 0)
+    # brand: 個別商品レビュー系の表現がある
+    brand_terms = ['口コミ', '評判', 'レビュー', '感想', '使ってみた', '本音']
+    if any(t in kw for t in brand_terms):
+        return ('brand', 3)
+    # 商品名らしさ（カタカナ + 英数字混在 or 型番っぽい桁数字）は brand 候補
+    if re.search(r'[A-Za-z][A-Za-z0-9\-]{2,}', kw) and re.search(r'[ぁ-んァ-ヶー一-龥]', kw):
+        return ('brand', 2)
+    # column を先に判定（「選び方」が ranking の「○選」と紛らわしいため）
+    # column: 〇〇とは・選び方・違い・原因・対策・方法・使い方・効果・メリット
+    column_terms = ['とは', '選び方', '違い', '原因', '対策', '方法', '使い方', '効果', 'メリット', 'デメリット', '理由', 'なぜ', '何歳', '何年', 'いつ', '注意']
+    if any(t in kw for t in column_terms):
+        return ('column', 3)
+    # ranking: おすすめ・比較・人気・○選 / Nまでの選択肢系
+    ranking_terms = ['おすすめ', 'お勧め', 'オススメ', '比較', 'ランキング', '人気', 'コスパ', '安い順']
+    if any(t in kw for t in ranking_terms):
+        return ('ranking', 3)
+    # N選パターン（5選, 10選 など）を別途検出
+    if re.search(r'\d+\s*選', kw):
+        return ('ranking', 3)
+    # デフォルト: 単発KWは column 寄り（新規サイトに優しい）
+    return ('column', 1)
+
+
+def assign_balanced_article_types(keywords, ratios=None):
+    """
+    KW群を コラム:ランキング:商標 = 7:2:1 比で配分する。
+    強い意図シグナル（brand/ranking/column のキーワード明示）は優先で守り、
+    シグナルの弱い KW で目標比率に近づくよう調整する。
+    返り値: dict {keyword: 'ranking'|'brand'|'column'}
+    """
+    if ratios is None:
+        ratios = {'column': 0.7, 'ranking': 0.2, 'brand': 0.1}
+    total = len(keywords)
+    if total == 0:
+        return {}
+    target = {t: max(1 if r > 0 else 0, round(total * r)) for t, r in ratios.items()}
+    # 端数調整: 合計を total に揃える
+    diff = total - sum(target.values())
+    if diff != 0:
+        # column に過不足を寄せる（最も多い枠なので吸収できる）
+        target['column'] = max(0, target['column'] + diff)
+
+    # まず強信号を確定割当、弱信号は仮割当
+    classified = [(kw, *classify_keyword_intent(kw)) for kw in keywords]
+    assignment = {}
+    counts = {'column': 0, 'ranking': 0, 'brand': 0}
+    weak = []
+    for kw, t, sig in classified:
+        if sig >= 3:  # 強信号は守る
+            assignment[kw] = t
+            counts[t] += 1
+        else:
+            weak.append((kw, t))
+
+    # 不足タイプから順に弱信号KWを充てていく
+    def deficit(t):
+        return target[t] - counts[t]
+
+    # 弱信号を不足の大きいタイプへ割り当て
+    weak_pool = list(weak)
+    while weak_pool:
+        # 不足が最大のタイプ
+        ordering = sorted(['column', 'ranking', 'brand'], key=lambda t: -deficit(t))
+        chosen = ordering[0]
+        if deficit(chosen) <= 0:
+            # 全タイプ充足。残りは column に流す
+            chosen = 'column'
+        kw, _ = weak_pool.pop(0)
+        assignment[kw] = chosen
+        counts[chosen] += 1
+
+    # 強信号で過剰になった分は… 守る（ユーザー意図が明確だから）。比率は近似で OK。
+    return assignment
+
+
+def title_generation_prompt(keywords, count_per_keyword, category='', preferred_type='', type_assignment=None):
     d = load_title_definition()
     forbidden_list = '、'.join(d.get('forbidden_phrases') or [])
     angles = d.get('angle_categories') or []
@@ -1558,7 +1642,23 @@ def title_generation_prompt(keywords, count_per_keyword, category='', preferred_
         'column': 'コラム記事（とは・選び方・使い方・原因・対策・違い）',
     }.get(preferred_type, '')
     preferred_block = ''
-    if preferred_label:
+    if type_assignment:
+        # バランス配分モード: KWごとに記事種類が事前割当されている
+        type_lines = '\n'.join(
+            f'- {kw} → {type_assignment.get(kw, "column")}'
+            for kw in keywords
+        )
+        preferred_block = f"""
+【今回の記事種類割当（バランス配分モード: コラム7 / ランキング2 / 商標1）】
+サイト全体のSEO最適化（カニバリ回避・E-E-A-T 蓄積）のため、各KWに記事種類を事前割当しています。
+基本は割当通りに生成してください。
+
+{type_lines}
+
+ただしKWの検索意図が明らかに割当と矛盾する場合（例: 「○○ おすすめ」を column に割り当てているのにKWが明確にランキング意図）は、自然な種類を採用してください。
+変更した場合は reason フィールドに「KW意図に合わせて○○に変更」と短く書いてください。
+"""
+    elif preferred_label:
         preferred_block = f"""
 【優先する記事種類】
 ユーザーは「{preferred_label}」を優先的に生成したいです。
@@ -1907,8 +2007,8 @@ def is_model_not_found_error(error):
     return 'not_found' in text or 'model' in text and '404' in text
 
 
-def generate_claude_title_ideas_once(api_key, keywords, count_per_keyword, category, preferred_type=''):
-    prompt = title_generation_prompt(keywords, count_per_keyword, category, preferred_type=preferred_type)
+def generate_claude_title_ideas_once(api_key, keywords, count_per_keyword, category, preferred_type='', type_assignment=None):
+    prompt = title_generation_prompt(keywords, count_per_keyword, category, preferred_type=preferred_type, type_assignment=type_assignment)
     client = anthropic.Anthropic(api_key=api_key)
     last_error = None
     for model in claude_title_idea_models():
@@ -4087,7 +4187,7 @@ def generate_title_ideas():
     category = str(data.get('category') or '').strip()
     site_id = data.get('site_id') or ''
     preferred_type_raw = str(data.get('preferred_type') or '').strip().lower()
-    preferred_type = preferred_type_raw if preferred_type_raw in ('ranking', 'brand', 'column') else ''
+    preferred_type = preferred_type_raw if preferred_type_raw in ('ranking', 'brand', 'column', 'balanced') else ''
 
     if not keywords:
         return jsonify({'error': 'キーワードを1行以上入力してください'}), 400
@@ -4109,6 +4209,16 @@ def generate_title_ideas():
 
     batches = [keywords[i:i + TITLE_IDEA_BATCH_SIZE] for i in range(0, len(keywords), TITLE_IDEA_BATCH_SIZE)]
     expected_count = len(keywords) * count_per_keyword
+
+    # バランス配分モード: KW全体で記事種類を事前割当（コラム7 / ランキング2 / 商標1）
+    full_type_assignment = {}
+    if preferred_type == 'balanced':
+        full_type_assignment = assign_balanced_article_types(keywords)
+        balance_summary = {}
+        for t in full_type_assignment.values():
+            balance_summary[t] = balance_summary.get(t, 0) + 1
+        app.logger.info('[TITLE-IDEA] balanced assignment: %s', balance_summary)
+
     now = datetime.now().isoformat()
     job_id = str(uuid.uuid4())
     job = {
@@ -4159,10 +4269,18 @@ def generate_title_ideas():
             partial_enrich_interval = max(1, min(5, max(1, len(batches) // 10)))
             max_workers = min(TITLE_IDEA_PARALLEL_BATCHES, len(batches))
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                future_to_idx = {
-                    executor.submit(generate_claude_title_ideas_once, claude_key, batch, count_per_keyword, category, preferred_type): (idx, batch)
-                    for idx, batch in enumerate(batches, 1)
-                }
+                future_to_idx = {}
+                for idx, batch in enumerate(batches, 1):
+                    # バランス配分モード時は、このバッチのKWだけの割当辞書を抽出して渡す
+                    batch_assignment = (
+                        {kw: full_type_assignment[kw] for kw in batch if kw in full_type_assignment}
+                        if full_type_assignment else None
+                    )
+                    future = executor.submit(
+                        generate_claude_title_ideas_once,
+                        claude_key, batch, count_per_keyword, category, preferred_type, batch_assignment
+                    )
+                    future_to_idx[future] = (idx, batch)
                 for future in as_completed(future_to_idx):
                     idx, batch = future_to_idx[future]
                     completed += 1

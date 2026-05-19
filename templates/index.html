@@ -1168,12 +1168,13 @@ tr.selected td { background: var(--accent-dim); }
               <div class="form-group">
                 <label class="form-label">優先する記事ジャンル</label>
                 <select id="title-preferred-type" class="form-control">
+                  <option value="balanced">バランス配分（コラム7 / ランキング2 / 商標1）</option>
                   <option value="">自動判定（KWの検索意図に合わせる）</option>
                   <option value="ranking">ランキング記事を優先</option>
                   <option value="brand">商標記事を優先</option>
                   <option value="column">コラム記事を優先</option>
                 </select>
-                <div style="font-size:11px;color:var(--muted);margin-top:4px">KWが明らかに別ジャンル向きなら Claude が自然な種類を採用します。</div>
+                <div style="font-size:11px;color:var(--muted);margin-top:4px">バランス配分: サイト全体のSEO最適化（カニバリ回避・E-E-A-T蓄積）に推奨。</div>
               </div>
               <div class="form-group site-selector-group" id="title-site-group">
                 <label class="form-label">投稿先サイト</label>
