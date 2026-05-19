@@ -5663,7 +5663,39 @@ def batch_generate():
             message=f"一括生成完了: 成功 {completed}件 / エラー {failed}件 / 自動リトライ {retried}回"
         )
 
-    thread = threading.Thread(target=run_batch, daemon=True)
+    def run_batch_safe():
+        """run_batch の外側に大外 try/except を被せる。
+        想定外の例外で thread が黙って死ぬのを防ぎ、必ず job 状態を残す。"""
+        try:
+            run_batch()
+        except Exception as outer_e:
+            outer_trace = traceback.format_exc()
+            app.logger.error('Batch worker outer exception: %s\n%s', outer_e, outer_trace)
+            try:
+                # 未処理の queued/generating 記事を pending に戻す
+                current_articles = load_articles()
+                for a in current_articles:
+                    if a.get('batch_job_id') == job_id and a.get('status') in ('queued', 'generating'):
+                        a['status'] = 'pending'
+                        a.pop('batch_job_id', None)
+                        a['updated_at'] = datetime.now().isoformat()
+                        a['generation_warning'] = f'バッチが予期せず終了: {compact_ai_error(outer_e, 120)}'
+                save_articles(current_articles)
+            except Exception:
+                pass
+            try:
+                update_job(
+                    status='crashed',
+                    current_title='',
+                    last_error=str(outer_e),
+                    last_error_trace=outer_trace[-4000:],
+                    completed_at=datetime.now().isoformat(),
+                    message=f"バッチが予期せず終了しました: {compact_ai_error(outer_e, 200)}"
+                )
+            except Exception:
+                pass
+
+    thread = threading.Thread(target=run_batch_safe, daemon=True)
     thread.start()
     return jsonify({'success': True, 'job_id': job_id, 'message': f'{len(pending)}件の記事生成を開始しました'})
 
