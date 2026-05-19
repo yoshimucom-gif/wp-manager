@@ -1036,9 +1036,6 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <select id="site-filter" style="font-size:12px;" onchange="loadArticles()">
             <option value="">全サイト</option>
           </select>
-          <select id="quality-filter" style="font-size:12px;" onchange="filterArticles()">
-            <option value="">全品質</option>
-          </select>
           <select id="category-filter" style="font-size:12px;" onchange="filterArticles()">
             <option value="">全カテゴリー</option>
           </select>
@@ -2346,11 +2343,9 @@ function renderSeoNews(data = {}) {
 function filterArticles() {
   const q = document.getElementById('search-input').value.toLowerCase();
   const siteId = document.getElementById('site-filter').value;
-  const qualityId = document.getElementById('quality-filter').value;
   const category = document.getElementById('category-filter')?.value || '';
   let filtered = allArticles;
   if (siteId) filtered = filtered.filter(a => a.site_id === siteId);
-  if (qualityId) filtered = filtered.filter(a => a.quality_id === qualityId);
   if (category) filtered = filtered.filter(a => (a.category || '') === category);
   if (q) filtered = filtered.filter(a => a.title.toLowerCase().includes(q) || (a.keywords || '').toLowerCase().includes(q));
   // 並び順: 生成日時が新しい順。未生成は created_at をフォールバックに。
@@ -4119,7 +4114,7 @@ function loadQualitySelects() {
   const placeholderOpt = '<option value="">-- 品質定義を選択 --</option>';
   const autoOpt = '<option value="">自動（記事種類に合わせる）</option>';
   const qualityOpts = qualityList.map(q => `<option value="${q.id}">${esc(q.name)}</option>`).join('');
-  ['quality-filter', 'gen-quality', 'batch-quality', 's-default-quality'].forEach(id => {
+  ['gen-quality', 'batch-quality', 's-default-quality'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     const prev = el.value;
