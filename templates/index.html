@@ -1037,13 +1037,27 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <button class="btn btn-danger" onclick="deleteSelected()">🗑 選択を削除</button>
           <button class="btn btn-secondary" onclick="rescoreArticles()">↯ スコア再計算</button>
           <div style="flex:1"></div>
-          <select id="site-filter" style="font-size:12px;" onchange="loadArticles()">
-            <option value="">全サイト</option>
+          <select id="article-type-filter" style="font-size:12px;" onchange="filterArticles()" title="記事種類で絞り込み">
+            <option value="">全種類</option>
+            <option value="ranking">ランキング記事</option>
+            <option value="brand">商標記事</option>
+            <option value="column">コラム記事</option>
           </select>
-          <select id="category-filter" style="font-size:12px;" onchange="filterArticles()">
-            <option value="">全カテゴリー</option>
+          <select id="article-status-filter" style="font-size:12px;" onchange="filterArticles()" title="状態で絞り込み">
+            <option value="">全状態</option>
+            <option value="pending">未生成</option>
+            <option value="generated">生成済</option>
+            <option value="published">PUSH済</option>
+            <option value="error">エラー</option>
           </select>
-          <input type="text" id="search-input" placeholder="検索..." style="width:160px;font-size:12px;" oninput="filterArticles()">
+          <select id="article-sort" style="font-size:12px;" onchange="filterArticles()" title="並び順">
+            <option value="generated_desc">生成日時↓</option>
+            <option value="generated_asc">生成日時↑</option>
+            <option value="score_desc">スコア↓</option>
+            <option value="score_asc">スコア↑</option>
+            <option value="title_asc">タイトル順</option>
+          </select>
+          <input type="text" id="search-input" placeholder="検索..." style="width:140px;font-size:12px;" oninput="filterArticles()">
           <button class="btn btn-secondary btn-sm" onclick="loadArticles()">↻ 更新</button>
         </div>
 
@@ -1977,11 +1991,8 @@ function renderSites() {
 }
 
 function updateSiteSelects() {
-  const opts = '<option value="">全サイト</option>' +
-    siteList.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
-  const filterEl = document.getElementById('site-filter');
-  if (filterEl) { const v = filterEl.value; filterEl.innerHTML = opts; filterEl.value = v; }
-
+  // 対応履歴ページの site-filter は撤去済み（サイドバーで切替するため）。
+  // モーダル・フォーム類のサイトセレクタだけ更新する。
   const modalOpts = '<option value="">-- サイトを選択 --</option>' +
     siteList.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
   const modalEl = document.getElementById('modal-site-id');
@@ -2340,22 +2351,48 @@ function renderSeoNews(data = {}) {
 
 function filterArticles() {
   const q = document.getElementById('search-input').value.toLowerCase();
-  const siteId = document.getElementById('site-filter').value;
-  const category = document.getElementById('category-filter')?.value || '';
-  // 対応履歴 = 「やり終わった結果」だけ表示。
-  // pending / queued / generating / publishing / repairing （在庫・処理中）は除外。
-  // これらは「一括処理」ページで管理する。
-  const inflightStatuses = ['pending', 'queued', 'generating', 'publishing', 'repairing'];
-  let filtered = allArticles.filter(a => !inflightStatuses.includes(a.status));
-  if (siteId) filtered = filtered.filter(a => a.site_id === siteId);
-  if (category) filtered = filtered.filter(a => (a.category || '') === category);
+  const typeFilter = document.getElementById('article-type-filter')?.value || '';
+  const statusFilter = document.getElementById('article-status-filter')?.value || '';
+  const sortKey = document.getElementById('article-sort')?.value || 'generated_desc';
+
+  let filtered = allArticles.slice();
+
+  // 記事種別
+  if (typeFilter) filtered = filtered.filter(a => (a.article_type || 'ranking') === typeFilter);
+
+  // 状態（5択）
+  // - pending: pending / queued / generating（未完了グループ）
+  // - generated: generated（生成済・未PUSH）
+  // - published: published / scheduled / updated（PUSH関連）
+  // - error: error
+  if (statusFilter === 'pending') {
+    filtered = filtered.filter(a => ['pending', 'queued', 'generating'].includes(a.status));
+  } else if (statusFilter === 'generated') {
+    filtered = filtered.filter(a => a.status === 'generated');
+  } else if (statusFilter === 'published') {
+    filtered = filtered.filter(a => ['published', 'scheduled', 'updated'].includes(a.status));
+  } else if (statusFilter === 'error') {
+    filtered = filtered.filter(a => a.status === 'error');
+  }
+
+  // 検索（タイトル / キーワード）
   if (q) filtered = filtered.filter(a => a.title.toLowerCase().includes(q) || (a.keywords || '').toLowerCase().includes(q));
-  // 並び順: 生成日時が新しい順。
-  filtered = filtered.slice().sort((a, b) => {
-    const aKey = a.generated_at || a.updated_at || a.created_at || '';
-    const bKey = b.generated_at || b.updated_at || b.created_at || '';
-    return bKey.localeCompare(aKey);
+
+  // ソート
+  const scoreOf = a => (typeof a.seo_score === 'number' ? a.seo_score : (parseInt(a.seo_score, 10) || -1));
+  const dateOf = a => a.generated_at || a.updated_at || a.created_at || '';
+  const titleOf = a => String(a.title || '');
+  filtered.sort((a, b) => {
+    switch (sortKey) {
+      case 'generated_asc': return dateOf(a).localeCompare(dateOf(b));
+      case 'score_desc':    return scoreOf(b) - scoreOf(a);
+      case 'score_asc':     return scoreOf(a) - scoreOf(b);
+      case 'title_asc':     return titleOf(a).localeCompare(titleOf(b), 'ja');
+      case 'generated_desc':
+      default:              return dateOf(b).localeCompare(dateOf(a));
+    }
   });
+
   renderArticles(filtered);
 }
 
@@ -2377,11 +2414,10 @@ function categoryOptions(source) {
 }
 
 function updateCategorySelects() {
+  // 対応履歴の category-filter は撤去済み。一括処理の batch-category-filter のみ更新。
   const articleOpts = categoryOptions(allArticles);
-  ['category-filter', 'batch-category-filter'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) { const v = el.value; el.innerHTML = articleOpts; el.value = v; }
-  });
+  const el = document.getElementById('batch-category-filter');
+  if (el) { const v = el.value; el.innerHTML = articleOpts; el.value = v; }
 }
 
 function renderArticles(articles) {
@@ -2509,7 +2545,8 @@ function downloadSampleCsv() {
 async function importExcel(input) {
   const file = input.files[0];
   if (!file) return;
-  const siteId = document.getElementById('site-filter').value;
+  // サイトはサイドバーの選択を使う（対応履歴の site-filter は撤去済み）
+  const siteId = currentSiteId || '';
   const fd = new FormData();
   fd.append('file', file);
   if (siteId) fd.append('site_id', siteId);
