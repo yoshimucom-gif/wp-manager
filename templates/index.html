@@ -1445,6 +1445,16 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
               <label class="form-label">APIキー</label>
               <input type="password" id="s-claude-key" class="form-control" placeholder="sk-ant-...">
             </div>
+            <div class="form-group">
+              <label class="form-label">記事生成モデル</label>
+              <select id="s-article-model" class="form-control">
+                <option value="claude-sonnet-4-6">Sonnet 4.6（推奨・コスパ良）</option>
+                <option value="claude-opus-4-7">Opus 4.7（最高品質・コスト高）</option>
+              </select>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">
+                Sonnet 4.6: 1記事 約13円 / Opus 4.7: 1記事 約65円。最高品質運用したい時だけ Opus に切替。
+              </div>
+            </div>
           </div>
           <div class="settings-section">
             <div class="section-header">// 商品カード挿入ルール</div>
@@ -4290,6 +4300,7 @@ function settingHasValue(value) {
 function collectSettingsFormData() {
   return {
     claude_api_key: document.getElementById('s-claude-key').value,
+    claude_article_model: document.getElementById('s-article-model').value,
     default_quality_id: document.getElementById('s-default-quality').value,
     article_css: document.getElementById('s-article-css').value,
     amazon_access_key: document.getElementById('s-amazon-access-key').value,
@@ -4332,6 +4343,7 @@ async function loadSettings() {
   let s = await res.json();
   s = await restoreSettingsFromBrowserBackup(s);
   document.getElementById('s-claude-key').value = s.claude_api_key || '';
+  document.getElementById('s-article-model').value = s.claude_article_model || 'claude-sonnet-4-6';
   document.getElementById('s-article-css').value = s.article_css || '';
   document.getElementById('s-amazon-access-key').value = s.amazon_access_key || '';
   document.getElementById('s-amazon-secret-key').value = s.amazon_secret_key || '';

@@ -117,6 +117,25 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
+
+CLAUDE_ARTICLE_MODEL_PRICING = {
+    'claude-sonnet-4-6': {'input_usd_per_mtok': 3.0, 'output_usd_per_mtok': 15.0},
+    'claude-opus-4-7':   {'input_usd_per_mtok': 15.0, 'output_usd_per_mtok': 75.0},
+}
+
+
+def get_article_model(settings=None):
+    """設定から記事生成モデル名を読み取る。未設定なら Sonnet 4.6（デフォルト）。
+    ホワイトリスト外の値は無視してデフォルトを返す。"""
+    if settings is None:
+        try:
+            settings = load_settings()
+        except Exception:
+            settings = {}
+    value = str((settings or {}).get('claude_article_model') or '').strip()
+    if value in CLAUDE_ARTICLE_MODEL_PRICING:
+        return value
+    return CLAUDE_ARTICLE_MODEL
 APP_STARTED_AT = datetime.now()
 STALE_ARTICLE_STATUS_MINUTES = {
     'queued': 60,  # 待機中は1時間以上動きが無ければ強制復旧
@@ -1794,6 +1813,10 @@ def extract_usage_value(usage, name):
 
 
 def build_article_usage(prompt, content, message=None):
+    model_id = get_article_model()
+    pricing = CLAUDE_ARTICLE_MODEL_PRICING.get(model_id, CLAUDE_ARTICLE_MODEL_PRICING['claude-sonnet-4-6'])
+    in_rate = pricing['input_usd_per_mtok']
+    out_rate = pricing['output_usd_per_mtok']
     usage = getattr(message, 'usage', None) if message else None
     input_tokens = extract_usage_value(usage, 'input_tokens')
     output_tokens = extract_usage_value(usage, 'output_tokens')
@@ -1804,17 +1827,17 @@ def build_article_usage(prompt, content, message=None):
     if output_tokens is None:
         output_tokens = estimate_tokens_from_text(content)
         estimated = True
-    cost_usd = (input_tokens / 1_000_000 * SONNET_INPUT_USD_PER_MTOK) + (output_tokens / 1_000_000 * SONNET_OUTPUT_USD_PER_MTOK)
+    cost_usd = (input_tokens / 1_000_000 * in_rate) + (output_tokens / 1_000_000 * out_rate)
     return {
-        'model': CLAUDE_ARTICLE_MODEL,
+        'model': model_id,
         'input_tokens': int(input_tokens),
         'output_tokens': int(output_tokens),
         'cost_usd': round(cost_usd, 6),
         'cost_yen': round(cost_usd * USAGE_ESTIMATE_USD_JPY, 2),
         'estimated': estimated,
         'pricing': {
-            'input_usd_per_mtok': SONNET_INPUT_USD_PER_MTOK,
-            'output_usd_per_mtok': SONNET_OUTPUT_USD_PER_MTOK,
+            'input_usd_per_mtok': in_rate,
+            'output_usd_per_mtok': out_rate,
             'usd_jpy': USAGE_ESTIMATE_USD_JPY,
         }
     }
@@ -1824,11 +1847,15 @@ def combine_article_usages(usages):
     valid = [u for u in (usages or []) if isinstance(u, dict)]
     if not valid:
         return build_article_usage('', '')
+    model_id = get_article_model()
+    pricing = CLAUDE_ARTICLE_MODEL_PRICING.get(model_id, CLAUDE_ARTICLE_MODEL_PRICING['claude-sonnet-4-6'])
+    in_rate = pricing['input_usd_per_mtok']
+    out_rate = pricing['output_usd_per_mtok']
     input_tokens = sum(int(u.get('input_tokens') or 0) for u in valid)
     output_tokens = sum(int(u.get('output_tokens') or 0) for u in valid)
-    cost_usd = (input_tokens / 1_000_000 * SONNET_INPUT_USD_PER_MTOK) + (output_tokens / 1_000_000 * SONNET_OUTPUT_USD_PER_MTOK)
+    cost_usd = (input_tokens / 1_000_000 * in_rate) + (output_tokens / 1_000_000 * out_rate)
     return {
-        'model': CLAUDE_ARTICLE_MODEL,
+        'model': model_id,
         'input_tokens': int(input_tokens),
         'output_tokens': int(output_tokens),
         'cost_usd': round(cost_usd, 6),
@@ -1836,8 +1863,8 @@ def combine_article_usages(usages):
         'estimated': any(bool(u.get('estimated')) for u in valid),
         'calls': len(valid),
         'pricing': {
-            'input_usd_per_mtok': SONNET_INPUT_USD_PER_MTOK,
-            'output_usd_per_mtok': SONNET_OUTPUT_USD_PER_MTOK,
+            'input_usd_per_mtok': in_rate,
+            'output_usd_per_mtok': out_rate,
             'usd_jpy': USAGE_ESTIMATE_USD_JPY,
         }
     }
@@ -1849,7 +1876,7 @@ def create_claude_message(client, prompt, max_tokens=None, timeout=None, model=N
     if not callable(create):
         raise RuntimeError('Claude API client is not ready: messages.create is unavailable')
     kwargs = {
-        'model': model or CLAUDE_ARTICLE_MODEL,
+        'model': model or get_article_model(),
         'max_tokens': max_tokens or CLAUDE_ARTICLE_MAX_TOKENS,
         'messages': [{'role': 'user', 'content': prompt}],
     }
@@ -3749,7 +3776,7 @@ def stream_claude_sse(client, prompt, wait_message='Claudeの応答を待って�
     def worker():
         try:
             with client.messages.stream(
-                model=CLAUDE_ARTICLE_MODEL,
+                model=get_article_model(),
                 max_tokens=max_tokens or CLAUDE_ARTICLE_MAX_TOKENS,
                 messages=[{"role": "user", "content": prompt}]
             ) as stream:
@@ -6463,6 +6490,7 @@ def get_settings():
     settings = load_settings()
     safe = {
         'claude_api_key': mask_secret(settings.get('claude_api_key', '')),
+        'claude_article_model': settings.get('claude_article_model', 'claude-sonnet-4-6'),
         'default_quality_id': settings.get('default_quality_id', 'default'),
         'article_css': settings.get('article_css', ''),
         'amazon_access_key': mask_secret(settings.get('amazon_access_key', '')),
@@ -6480,6 +6508,11 @@ def update_settings():
     settings = load_settings()
     if 'default_quality_id' in data:
         settings['default_quality_id'] = data['default_quality_id']
+    if 'claude_article_model' in data:
+        # ホワイトリスト検証
+        model_val = str(data.get('claude_article_model') or '').strip()
+        if model_val in ('claude-sonnet-4-6', 'claude-opus-4-7'):
+            settings['claude_article_model'] = model_val
     if data.get('claude_api_key') and not is_masked_value(data['claude_api_key']):
         settings['claude_api_key'] = data['claude_api_key']
     if 'article_css' in data:
