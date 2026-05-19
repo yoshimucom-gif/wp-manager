@@ -381,6 +381,7 @@ tr.selected td { background: var(--accent-dim); }
   white-space: nowrap;
 }
 .badge-pending { background: rgba(87,96,106,0.1); color: var(--muted); border: 1px solid rgba(87,96,106,0.2); }
+.badge-queued { background: rgba(154,103,0,0.1); color: var(--warning); border: 1px solid rgba(154,103,0,0.2); }
 .badge-generating { background: rgba(9,105,218,0.1); color: var(--accent); border: 1px solid rgba(9,105,218,0.2); }
 .badge-generated { background: rgba(26,127,55,0.1); color: var(--success); border: 1px solid rgba(26,127,55,0.2); }
 .badge-published { background: rgba(154,103,0,0.1); color: var(--warning); border: 1px solid rgba(154,103,0,0.2); }
@@ -2103,7 +2104,7 @@ async function loadArticles() {
 }
 
 function isArticleBusy(status) {
-  return ['generating', 'publishing', 'repairing'].includes(status);
+  return ['queued', 'generating', 'publishing', 'repairing'].includes(status);
 }
 
 function setArticleLocalStatus(id, status, message = '') {
@@ -2460,7 +2461,8 @@ function renderArticles(articles) {
 function statusBadge(status) {
   const map = {
     pending: ['⊙', '未生成'],
-    generating: ['◌', '再生成中'],
+    queued: ['…', '待機中'],
+    generating: ['◌', '処理中'],
     generated: ['✓', '生成済'],
     publishing: ['◌', 'PUSH中'],
     published: ['★', 'PUSH済'],
@@ -3863,26 +3865,28 @@ function renderBatchJobStatus(job) {
   const currentEl = document.getElementById('batch-progress-current');
   if (!el) return;
   const generatingCount = allArticles.filter(a => a.status === 'generating').length;
-  if (!job && !generatingCount) {
+  const queuedCount = allArticles.filter(a => a.status === 'queued').length;
+  if (!job && !generatingCount && !queuedCount) {
     el.textContent = '';
     if (progress) progress.style.display = 'none';
     stopBatchPolling();
     return;
   }
-  const isRunning = job?.status === 'running' || generatingCount > 0;
+  const isRunning = job?.status === 'running' || generatingCount > 0 || queuedCount > 0;
   const completed = Number(job?.completed || 0);
   const failed = Number(job?.failed || 0);
   const retried = Number(job?.retried || 0);
-  const total = Number(job?.total || generatingCount);
+  const total = Number(job?.total || (generatingCount + queuedCount));
   const done = Math.min(total, completed + failed);
   const percent = total ? Math.round((done / total) * 100) : 0;
-  if (progress) progress.style.display = job || generatingCount ? 'block' : 'none';
+  if (progress) progress.style.display = job || generatingCount || queuedCount ? 'block' : 'none';
   if (fill) fill.style.width = `${percent}%`;
   if (percentEl) percentEl.textContent = `${percent}%`;
   if (countEl) countEl.textContent = `${done}/${total}件`;
   if (currentEl) currentEl.textContent = job?.current_title ? `処理中: ${job.current_title}` : '';
   if (isRunning) {
-    el.innerHTML = `一括生成中: ${completed}/${total}件完了${failed ? ` / エラー ${failed}件` : ''}${retried ? ` / 自動リトライ ${retried}回` : ''}<br>${esc(job?.message || 'ページを移動しても処理は継続します。戻ってきたら自動で状況を更新します。')}`;
+    const queueInfo = queuedCount ? ` / 待機 ${queuedCount}件` : '';
+    el.innerHTML = `一括生成中: ${completed}/${total}件完了${queueInfo}${failed ? ` / エラー ${failed}件` : ''}${retried ? ` / 自動リトライ ${retried}回` : ''}<br>${esc(job?.message || 'ページを移動しても処理は継続します。戻ってきたら自動で状況を更新します。')}`;
     startBatchPolling();
     return;
   }

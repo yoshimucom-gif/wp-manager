@@ -119,6 +119,7 @@ SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
 APP_STARTED_AT = datetime.now()
 STALE_ARTICLE_STATUS_MINUTES = {
+    'queued': 60,  # 待機中は1時間以上動きが無ければ強制復旧
     'generating': 30,
     'publishing': 15,
     'repairing': 15,
@@ -4392,7 +4393,7 @@ def recover_stale_batch_jobs(jobs, articles):
     Render の再起動などで thread が落ちて job 状態だけ残ってる時の保険。
     """
     article_by_id = {a.get('id'): a for a in articles}
-    pending_states = ('pending', 'generating')
+    pending_states = ('pending', 'queued', 'generating')
     changed = False
     now_iso = datetime.now().isoformat()
     for j in jobs:
@@ -4427,7 +4428,7 @@ def get_sites_dashboard():
     jobs = load_batch_jobs()
     # 古い running ジョブを自動復旧
     recover_stale_batch_jobs(jobs, articles)
-    pending_states = ('pending', 'generating')
+    pending_states = ('pending', 'queued', 'generating')
     result = []
     for site in sites:
         sid = site.get('id')
@@ -5242,9 +5243,13 @@ def batch_generate():
     jobs = load_batch_jobs()
     jobs.insert(0, job)
     save_batch_jobs(jobs)
+    # バッチ開始時: 全件を 'queued'（待機中）にする。ワーカーが各記事を取り出した時に
+    # 'generating'（処理中）に書き換える。これで「いま実際に処理されている1件」と
+    # 「待機中の残り」をUIで明確に区別できる。
+    pending_ids_set = set(job['article_ids'])
     for a in articles:
-        if a['id'] in job['article_ids']:
-            a['status'] = 'generating'
+        if a['id'] in pending_ids_set:
+            a['status'] = 'queued'
             a['batch_job_id'] = job_id
             a['generation_started_at'] = now
             a['updated_at'] = now
@@ -5281,6 +5286,14 @@ def batch_generate():
                 stage = 'prepare article'
                 retry_suffix = f"（リトライ{attempt_no - 1}/{BATCH_GENERATION_MAX_RETRIES}）" if attempt_no > 1 else ''
                 update_job(current_title=article.get('title', ''), message=f"生成中{retry_suffix}: {article.get('title', '')}")
+                # この記事を 'queued' → 'generating' に切り替え（UI で「処理中」と表示）
+                current_articles = load_articles()
+                for a in current_articles:
+                    if a['id'] == article['id']:
+                        a['status'] = 'generating'
+                        a['updated_at'] = datetime.now().isoformat()
+                        break
+                save_articles(current_articles)
                 article_type = normalize_article_type(article.get('article_type') or batch_article_type, batch_article_type)
                 quality, quality_prompt = resolve_quality_for(article_type)
                 use_generation_extras = False
