@@ -3893,10 +3893,22 @@ function renderBatchJobStatus(job) {
     delete startBtn.dataset.batchRunning;
   }
   stopBatchPolling();
-  if (job?.status) {
+  // 終了済みジョブの表示: クラッシュ/キャンセル/強制終了/再起動中断は進捗バーを隠す。
+  // 正常完了だけ 100% で完了メッセージを表示する。
+  const terminalNonSuccess = ['crashed', 'crashed_on_restart', 'cancelled', 'terminated'].includes(job?.status);
+  if (terminalNonSuccess) {
+    // 進捗バー本体は隠し、メッセージだけ残す
+    if (progress) progress.style.display = 'none';
+    if (el && job?.message) {
+      el.style.color = 'var(--warning)';
+      el.textContent = job.message;
+    }
+  } else if (job?.status) {
     if (fill) fill.style.width = '100%';
     if (percentEl) percentEl.textContent = '100%';
-    el.textContent = job.message || `一括生成完了: 成功 ${job.completed || 0}件 / エラー ${job.failed || 0}件`;
+    if (countEl) countEl.textContent = `${job.completed || 0}/${job.total || 0}件`;
+    if (currentEl) currentEl.textContent = '';
+    if (el) el.textContent = job.message || `一括生成完了: 成功 ${job.completed || 0}件 / エラー ${job.failed || 0}件`;
   }
 }
 
