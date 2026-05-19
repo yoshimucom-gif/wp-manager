@@ -1781,35 +1781,6 @@ def enrich_title_ideas(ideas, category='', site_id='', existing_title_keys=None)
     return enriched
 
 
-def build_schedule_datetime(index, schedule_data, date_override=None, slot_override=None):
-    daily_limit = clamp_int(schedule_data.get('daily_limit'), 20, 1, 20)
-    interval_minutes = clamp_int(schedule_data.get('interval_minutes'), 30, 1, 180)
-    start_date = str(date_override or schedule_data.get('start_date') or '').strip()
-    start_time = str(schedule_data.get('start_time') or '09:00').strip()
-    try:
-        base = datetime.strptime(start_date, '%Y-%m-%d')
-    except ValueError:
-        base = datetime.now() + timedelta(days=1)
-        base = base.replace(hour=0, minute=0, second=0, microsecond=0)
-    match = re.match(r'^(\d{1,2}):(\d{2})$', start_time)
-    hour = clamp_int(match.group(1), 9, 0, 23) if match else 9
-    minute = clamp_int(match.group(2), 0, 0, 59) if match else 0
-    base = base.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    minimum = datetime.now() + timedelta(minutes=10)
-    if base < minimum:
-        base = minimum.replace(second=0, microsecond=0)
-    day_offset = 0 if date_override else index // daily_limit
-    slot_offset = slot_override if slot_override is not None else index % daily_limit
-    return base + timedelta(days=day_offset, minutes=interval_minutes * slot_offset)
-
-
-def normalize_schedule_date_key(value, fallback):
-    try:
-        return datetime.strptime(str(value or '').strip(), '%Y-%m-%d').strftime('%Y-%m-%d')
-    except ValueError:
-        return fallback
-
-
 def estimate_tokens_from_text(text):
     return max(1, math.ceil(len(str(text or '')) / 2))
 
@@ -5780,10 +5751,6 @@ def publish_article(article_id):
     slug = normalize_slug(article.get('slug'))
     if slug:
         post_payload['slug'] = slug
-    if data.get('scheduled_at'):
-        scheduled_at = str(data.get('scheduled_at')).strip()
-        post_payload['date'] = scheduled_at
-        post_payload['status'] = 'future'
     category_ids = resolve_wp_category_ids(wp_url, wp_user, wp_password, article.get('category', ''))
     if category_ids:
         post_payload['categories'] = category_ids
@@ -5805,10 +5772,6 @@ def publish_article(article_id):
                 a['wp_post_id'] = post_data['id']
                 a['wp_url'] = post_data.get('link', '')
                 a['published_at'] = datetime.now().isoformat()
-                if data.get('scheduled_at'):
-                    a['status'] = 'scheduled'
-                    a['scheduled_at'] = data.get('scheduled_at')
-                    a['schedule_date'] = str(data.get('scheduled_at'))[:10]
                 break
         save_articles(articles)
         return jsonify({'success': True, 'wp_url': post_data.get('link', ''), 'wp_post_id': post_data['id']})
@@ -6111,22 +6074,15 @@ def batch_publish():
     data = request.get_json(silent=True) or {}
     article_ids = data.get('article_ids', [])
     post_status = data.get('post_status', 'draft')
-    schedule_enabled = bool(data.get('schedule_enabled'))
-    schedule_data = data.get('schedule') or {}
 
     settings = load_settings()
     articles = load_articles()
     quality_list = load_quality()
     article_lookup = {a['id']: a for a in articles}
     targets = [article_lookup[i] for i in article_ids if i in article_lookup and article_lookup[i].get('content')]
-    if post_status == 'publish' and not schedule_enabled and len(targets) > 20:
-        return jsonify({'error': '即時公開は1日20件までです。21件以上は予約投稿を有効にしてください。'}), 400
 
     results = {'success': 0, 'error': 0, 'errors': []}
-    daily_limit = clamp_int(schedule_data.get('daily_limit'), 20, 1, 20)
-    schedule_start_key = normalize_schedule_date_key(schedule_data.get('start_date'), (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d'))
-    schedule_day_counts = {}
-    for index, article in enumerate(targets):
+    for article in targets:
         quality = select_quality_definition(
             quality_list,
             article.get('quality_id'),
@@ -6151,23 +6107,10 @@ def batch_publish():
             results['errors'].append({'title': article['title'], 'error': 'サイト未設定'})
             continue
         content = prepare_article_content_for_publish(article['content'], settings)
-        scheduled_at = None
-        payload_status = post_status
-        if schedule_enabled:
-            date_key = normalize_schedule_date_key(article.get('schedule_date'), schedule_start_key)
-            while schedule_day_counts.get(date_key, 0) >= daily_limit:
-                date_key = (datetime.strptime(date_key, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
-            slot_index = schedule_day_counts.get(date_key, 0)
-            schedule_day_counts[date_key] = slot_index + 1
-            scheduled_dt = build_schedule_datetime(index, schedule_data, date_override=date_key, slot_override=slot_index)
-            scheduled_at = scheduled_dt.strftime('%Y-%m-%dT%H:%M:%S')
-            payload_status = 'future'
-        post_payload = {'title': article['title'], 'content': content, 'status': payload_status}
+        post_payload = {'title': article['title'], 'content': content, 'status': post_status}
         slug = normalize_slug(article.get('slug'))
         if slug:
             post_payload['slug'] = slug
-        if scheduled_at:
-            post_payload['date'] = scheduled_at
         category_ids = resolve_wp_category_ids(wp_url, wp_user, wp_password, article.get('category', ''))
         if category_ids:
             post_payload['categories'] = category_ids
@@ -6183,13 +6126,10 @@ def batch_publish():
             post_data = response.json()
             for a in articles:
                 if a['id'] == article['id']:
-                    a['status'] = 'scheduled' if scheduled_at else 'published'
+                    a['status'] = 'published'
                     a['wp_post_id'] = post_data['id']
                     a['wp_url'] = post_data.get('link', '')
                     a['published_at'] = datetime.now().isoformat()
-                    if scheduled_at:
-                        a['scheduled_at'] = scheduled_at
-                        a['schedule_date'] = scheduled_at[:10]
                     break
             results['success'] += 1
         except Exception as e:

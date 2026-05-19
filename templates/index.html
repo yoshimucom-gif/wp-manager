@@ -1241,28 +1241,6 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
                 <option value="publish">公開</option>
               </select>
             </div>
-            <div class="form-group" style="border-top:1px solid var(--border);padding-top:12px">
-              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted);margin-bottom:8px">
-                <input type="checkbox" id="batch-use-schedule" style="accent-color:var(--accent)">
-                予約投稿にする（1日20記事まで）
-              </label>
-              <label class="form-label">投稿開始日</label>
-              <input type="date" id="batch-schedule-start" class="form-control">
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-              <div class="form-group">
-                <label class="form-label">開始時刻</label>
-                <input type="time" id="batch-schedule-time" class="form-control" value="09:00">
-              </div>
-              <div class="form-group">
-                <label class="form-label">1日の上限</label>
-                <input type="number" id="batch-daily-limit" class="form-control" value="20" min="1" max="20">
-              </div>
-            </div>
-            <div class="form-group">
-              <label class="form-label">投稿間隔（分）</label>
-              <input type="number" id="batch-interval-minutes" class="form-control" value="30" min="1" max="180">
-            </div>
             <div class="form-group">
               <label class="form-label">対象フィルター</label>
               <select id="batch-filter" class="form-control" onchange="loadBatchArticles()">
@@ -1312,7 +1290,6 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
               <label class="form-label" style="margin:0;flex:1">対象記事 (<span id="batch-count">0</span>件)</label>
               <button class="btn btn-primary btn-sm" onclick="startBatchGenerate()">⚡ 一括生成開始</button>
               <button class="btn btn-success btn-sm" onclick="startBatchPublish()">🚀 一括WP投稿</button>
-              <button class="btn btn-secondary btn-sm" onclick="assignBatchScheduleDates()">📅 予定日を割当</button>
               <button class="btn btn-secondary btn-sm" onclick="loadBatchArticles()">↻ 状態更新</button>
               <button class="btn btn-danger btn-sm" onclick="deleteBatchSelected()">🗑 選択を削除</button>
             </div>
@@ -1328,7 +1305,6 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
                     <th>記事種類</th>
                     <th>スラッグ</th>
                     <th>カテゴリー</th>
-                    <th>投稿予定</th>
                     <th>スコア</th>
                     <th>サイト</th>
                     <th>ステータス</th>
@@ -1664,15 +1640,9 @@ table { width: 100%; border-collapse: collapse; }"></textarea>
       <label class="form-label">カテゴリー</label>
       <input type="text" id="modal-category" class="form-control" placeholder="カテゴリー名（任意・複数はカンマ区切り）">
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="form-group">
-        <label class="form-label">スラッグ</label>
-        <input type="text" id="modal-slug" class="form-control" placeholder="例: waterproof-bag-ranking">
-      </div>
-      <div class="form-group">
-        <label class="form-label">投稿予定日</label>
-        <input type="date" id="modal-schedule-date" class="form-control">
-      </div>
+    <div class="form-group">
+      <label class="form-label">スラッグ</label>
+      <input type="text" id="modal-slug" class="form-control" placeholder="例: waterproof-bag-ranking">
     </div>
     <div class="form-group">
       <label class="form-label">投稿先サイト</label>
@@ -1817,7 +1787,7 @@ function showPage(name, opts = {}) {
     if (pageName === 'articles') loadArticles();
     if (pageName === 'generate') { loadQualitySelects(); updateSiteSelects(); populateGenSelect(); }
     if (pageName === 'title-ideas') { updateSiteSelects(); renderTitleIdeas(); updateTitleKeywordCount(); }
-    if (pageName === 'batch') { loadQualitySelects(); initBatchScheduleDefaults(); loadArticles(); loadLatestBatchJob(); }
+    if (pageName === 'batch') { loadQualitySelects(); loadArticles(); loadLatestBatchJob(); }
     if (pageName === 'quality') loadQuality();
     if (pageName === 'title-definition') loadTitleDefinition();
     if (pageName === 'sites') loadSites();
@@ -2714,7 +2684,6 @@ async function openArticleModal(id) {
   document.getElementById('modal-article-type').value = article.article_type || 'ranking';
   document.getElementById('modal-category').value = article.category || '';
   document.getElementById('modal-slug').value = article.slug || '';
-  document.getElementById('modal-schedule-date').value = article.schedule_date || '';
   document.getElementById('modal-content').value = article.content || '';
   updateSiteSelects();
   document.getElementById('modal-site-id').value = article.site_id || '';
@@ -2738,7 +2707,6 @@ async function saveArticleModal() {
         article_type: document.getElementById('modal-article-type').value,
         category: document.getElementById('modal-category').value,
         slug: document.getElementById('modal-slug').value,
-        schedule_date: document.getElementById('modal-schedule-date').value,
         content: document.getElementById('modal-content').value,
       })
     }),
@@ -3763,26 +3731,6 @@ function toDateInputValue(date) {
   return `${y}-${m}-${d}`;
 }
 
-function initBatchScheduleDefaults() {
-  const start = document.getElementById('batch-schedule-start');
-  if (start && !start.value) {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    start.value = toDateInputValue(tomorrow);
-  }
-}
-
-function getBatchScheduleConfig() {
-  initBatchScheduleDefaults();
-  const dailyLimit = Math.min(20, Math.max(1, parseInt(document.getElementById('batch-daily-limit')?.value || '20', 10) || 20));
-  return {
-    start_date: document.getElementById('batch-schedule-start')?.value || '',
-    start_time: document.getElementById('batch-schedule-time')?.value || '09:00',
-    daily_limit: dailyLimit,
-    interval_minutes: Math.max(1, Math.min(180, parseInt(document.getElementById('batch-interval-minutes')?.value || '30', 10) || 30))
-  };
-}
-
 async function saveBatchField(id, field, value) {
   const article = allArticles.find(a => a.id === id);
   if (article) article[field] = value;
@@ -3793,28 +3741,6 @@ async function saveBatchField(id, field, value) {
   });
   const data = await res.json();
   if (!data.success) toast(data.error || '保存に失敗しました', 'error');
-}
-
-async function assignBatchScheduleDates() {
-  const ids = getBatchSelectedIds();
-  if (!ids.length) { toast('記事を選択してください', 'error'); return; }
-  const config = getBatchScheduleConfig();
-  const start = new Date(`${config.start_date}T00:00:00`);
-  const updates = ids.map((id, index) => {
-    const date = new Date(start);
-    date.setDate(start.getDate() + Math.floor(index / config.daily_limit));
-    const scheduleDate = toDateInputValue(date);
-    const article = allArticles.find(a => a.id === id);
-    if (article) article.schedule_date = scheduleDate;
-    return fetch(`/api/articles/${id}`, {
-      method: 'PUT',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({schedule_date: scheduleDate})
-    });
-  });
-  await Promise.all(updates);
-  loadBatchArticles();
-  toast(`${ids.length}件に投稿予定日を割り当てました`, 'success');
 }
 
 function startBatchPolling() {
@@ -3952,7 +3878,6 @@ function loadBatchArticles() {
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${esc(articleTypeLabel(a.article_type || 'ranking'))}</td>
       <td><input type="text" class="form-control" value="${esc(a.slug || '')}" placeholder="自動" style="font-size:11px;height:28px" onchange="saveBatchField('${a.id}', 'slug', this.value)"></td>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${esc(a.category || '—')}</td>
-      <td><input type="date" class="form-control" value="${esc(a.schedule_date || '')}" style="font-size:11px;height:28px" onchange="saveBatchField('${a.id}', 'schedule_date', this.value)"></td>
       <td>${scoreBadge(a)}</td>
       <td>${getSiteName(a.site_id)}</td>
       <td>${statusBadge(a.status)}${a.processing_message ? `<div style="font-size:10px;color:var(--muted);margin-top:4px">${esc(a.processing_message)}</div>` : ''}</td>
@@ -4037,16 +3962,11 @@ async function startBatchPublish() {
   const ids = getBatchSelectedIds();
   if (!ids.length) { toast('記事を選択してください', 'error'); return; }
   const postStatus = document.getElementById('batch-post-status').value;
-  const useSchedule = document.getElementById('batch-use-schedule').checked;
-  const schedule = getBatchScheduleConfig();
-  const message = useSchedule
-    ? `${ids.length}件を1日${schedule.daily_limit}件まででWordPress予約投稿しますか?`
-    : `${ids.length}件をWordPressに投稿しますか?`;
-  if (!confirm(message)) return;
+  if (!confirm(`${ids.length}件をWordPressに投稿しますか?`)) return;
   const res = await fetch('/api/batch-publish', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({article_ids: ids, post_status: postStatus, schedule_enabled: useSchedule, schedule})
+    body: JSON.stringify({article_ids: ids, post_status: postStatus})
   });
   const data = await res.json();
   if (data.error && data.success === undefined) {
