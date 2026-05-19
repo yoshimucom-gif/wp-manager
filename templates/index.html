@@ -2354,11 +2354,15 @@ function filterArticles() {
   const q = document.getElementById('search-input').value.toLowerCase();
   const siteId = document.getElementById('site-filter').value;
   const category = document.getElementById('category-filter')?.value || '';
-  let filtered = allArticles;
+  // 対応履歴 = 「やり終わった結果」だけ表示。
+  // pending / queued / generating / publishing / repairing （在庫・処理中）は除外。
+  // これらは「一括処理」ページで管理する。
+  const inflightStatuses = ['pending', 'queued', 'generating', 'publishing', 'repairing'];
+  let filtered = allArticles.filter(a => !inflightStatuses.includes(a.status));
   if (siteId) filtered = filtered.filter(a => a.site_id === siteId);
   if (category) filtered = filtered.filter(a => (a.category || '') === category);
   if (q) filtered = filtered.filter(a => a.title.toLowerCase().includes(q) || (a.keywords || '').toLowerCase().includes(q));
-  // 並び順: 生成日時が新しい順。未生成は created_at をフォールバックに。
+  // 並び順: 生成日時が新しい順。
   filtered = filtered.slice().sort((a, b) => {
     const aKey = a.generated_at || a.updated_at || a.created_at || '';
     const bKey = b.generated_at || b.updated_at || b.created_at || '';

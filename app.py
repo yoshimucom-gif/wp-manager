@@ -355,7 +355,11 @@ def recover_stale_article_statuses(articles, jobs=None):
             continue
 
         article['status'] = fallback_article_status(article)
-        article['generation_warning'] = '前回の処理が途中で止まったため、操作できる状態に戻しました。必要なら再生成してください。'
+        # コンテンツ有無で文言を分ける（無いものに「再生成」は誤解を招く）
+        if article.get('content'):
+            article['generation_warning'] = '前回の再生成が中断されましたが、本文は保存されています。必要なら再実行してください。'
+        else:
+            article['generation_warning'] = '前回の生成が中断されました。改めて一括処理を実行してください（初回生成のため課金されます）。'
         article['last_generation_interrupted'] = True
         article['updated_at'] = now.isoformat()
         article['generation_finished_at'] = now.isoformat()
