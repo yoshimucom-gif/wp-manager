@@ -2396,6 +2396,12 @@ function renderArticles(articles) {
     return;
   }
   empty.style.display = 'none';
+  // 書き換え前にチェック状態をキャプチャ（再レンダリングで選択が消えるのを防ぐ）
+  const previouslyChecked = new Set(
+    [...document.querySelectorAll('#articles-body .check-row')]
+      .filter(c => c.checked)
+      .map(c => c.value)
+  );
   tbody.innerHTML = articles.map((a, i) => {
     const busy = isArticleBusy(a.status);
     const disabled = busy ? 'disabled' : '';
@@ -2410,9 +2416,10 @@ function renderArticles(articles) {
       ? `<button class="btn btn-secondary btn-sm" ${disabled} title="ランキング記事で紹介した商品から商標記事の未生成下書きを作成" onclick="openBrandExpansionModal('${a.id}')">商標記事化</button>`
       : '';
     const rowClass = ['published', 'scheduled', 'updated'].includes(a.status) ? 'row-completed' : '';
+    const checkedAttr = previouslyChecked.has(a.id) ? 'checked' : '';
     return `
     <tr id="row-${a.id}" class="${rowClass}">
-      <td><input type="checkbox" class="check-row" value="${a.id}"></td>
+      <td><input type="checkbox" class="check-row" value="${a.id}" ${checkedAttr}></td>
       <td style="color:var(--muted);font-size:11px">${i + 1}</td>
       <td style="font-size:11px;color:var(--accent);white-space:nowrap">${articleTypeLabel(a.article_type || 'ranking')}</td>
       <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.title)}">${esc(a.title)}</td>
@@ -3879,9 +3886,19 @@ function loadBatchArticles() {
   if (category) targets = targets.filter(a => (a.category || '') === category);
 
   document.getElementById('batch-count').textContent = targets.length;
-  document.getElementById('batch-body').innerHTML = targets.map(a => `
+  // 書き換え前にチェック状態をキャプチャ（再レンダリングで選択が消えるのを防ぐ）。
+  // 初回レンダ時（チェックボックスがまだDOMに無い）は対象全件をデフォルトで選択する。
+  const existingCheckboxes = document.querySelectorAll('#batch-body .check-row');
+  const isFirstRender = existingCheckboxes.length === 0;
+  const previouslyChecked = new Set(
+    [...existingCheckboxes].filter(c => c.checked).map(c => c.value)
+  );
+  document.getElementById('batch-body').innerHTML = targets.map(a => {
+    const selectable = batchRowSelectable(a, filter);
+    const shouldCheck = selectable && (isFirstRender || previouslyChecked.has(a.id));
+    return `
     <tr>
-      <td><input type="checkbox" class="check-row" value="${a.id}" ${batchRowSelectable(a, filter) ? 'checked' : 'disabled'}></td>
+      <td><input type="checkbox" class="check-row" value="${a.id}" ${shouldCheck ? 'checked' : ''} ${selectable ? '' : 'disabled'}></td>
       <td>${statusBadge(a.status)}${a.processing_message ? `<div style="font-size:10px;color:var(--muted);margin-top:4px">${esc(a.processing_message)}</div>` : ''}</td>
       <td style="font-size:12px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.title)}</td>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${esc(articleTypeLabel(a.article_type || 'ranking'))}</td>
@@ -3890,7 +3907,8 @@ function loadBatchArticles() {
       <td>${scoreBadge(a)}</td>
       <td>${getSiteName(a.site_id)}</td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
   syncBatchTopScroll();
 }
 
