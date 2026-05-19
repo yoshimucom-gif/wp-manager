@@ -1555,13 +1555,13 @@ def title_generation_prompt(keywords, count_per_keyword, category=''):
 キーワード:
 {chr(10).join(f'- {kw}' for kw in keywords)}
 
-出力形式:
+出力形式（全フィールド必須・特に title は必ず入れる）:
 {{
   "ideas": [
     {{
+      "title": "記事タイトル（必須・最重要・絶対に省略しない）",
       "keyword": "対象キーワード（入力されたKWそのまま）",
-      "keywords": "メインKW, 関連KW1, 関連KW2, 関連KW3",
-      "title": "記事タイトル",
+      "target_keywords": "メインKW, 関連KW1, 関連KW2, 関連KW3",
       "slug": "english-slug",
       "article_type": "ranking/brand/column のいずれか",
       "search_intent": "読者の検索意図を短く",
@@ -1571,8 +1571,8 @@ def title_generation_prompt(keywords, count_per_keyword, category=''):
   ]
 }}
 
-【keywords 生成ルール】
-- `keywords` は **記事のSEOターゲットKWリスト**。カンマ区切りで2〜4個。
+【target_keywords 生成ルール】
+- `target_keywords` は **記事のSEOターゲットKWリスト**。カンマ区切りで2〜4個。
 - 1個目は入力された対象キーワード（メインKW）そのままを入れる。
 - 2個目以降は **同じ検索意図に近い関連サジェスト語** を入れる。
   例: メインKWが「防水バッグ」なら「防水バッグ おすすめ」「防水バッグ 比較」「防水バッグ 安い」など。
@@ -1657,8 +1657,11 @@ def coerce_title_ideas(payload, keywords, count_per_keyword):
         if not matched:
             matched = next((kw for kw in keywords if kw in title), '')
         raw_slug = re.sub(r'[^a-z0-9-]', '', normalize_slug(str(item.get('slug') or '').lower()))[:30].strip('-')
-        # keywords は記事のSEOターゲットKWリスト（カンマ区切り）。Claudeが配列or文字列で返してくる可能性に対応。
-        raw_kws = item.get('keywords')
+        # target_keywords は記事のSEOターゲットKWリスト（カンマ区切り）。
+        # Claudeが配列or文字列で返してくる可能性に対応。古い `keywords` フィールドもフォールバックで受ける。
+        raw_kws = item.get('target_keywords')
+        if raw_kws is None:
+            raw_kws = item.get('keywords')
         if isinstance(raw_kws, list):
             kw_list = [str(k).strip() for k in raw_kws if str(k).strip()]
         else:
@@ -1890,6 +1893,9 @@ def generate_claude_title_ideas_once(api_key, keywords, count_per_keyword, categ
             text = anthropic_message_text(message)
             ideas = coerce_title_ideas(extract_title_ideas_payload(text), keywords, count_per_keyword)
             if not ideas:
+                # デバッグ用：Claudeの応答先頭500字をログに残す（フィールド名違い・スキーマ崩れの早期発見用）
+                snippet = (text or '')[:500].replace('\n', ' ')
+                app.logger.warning('[TITLE-IDEA] no usable ideas. model=%s kw_count=%d response_snippet=%r', model, len(keywords), snippet)
                 raise ValueError('Claude returned no usable title ideas')
             return ideas, model
         except Exception as e:
