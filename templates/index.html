@@ -4448,15 +4448,31 @@ function renderSidebarSites() {
     const batchBadge = site.active_batch_count > 0
       ? `<span class="site-card__batch-badge" title="バッチ進行中">${site.active_batch_count}</span>`
       : '';
+    const icon = siteFaviconHtml(site.wp_url);
     return `
       <a class="sidebar-link ${isActive ? 'active' : ''}" onclick="switchToSite('${esc(site.id)}')" title="${esc(site.wp_url)}">
-        <span>🏠</span>
+        ${icon}
         <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${esc(site.name)}</span>
         ${batchBadge}
         ${isActive ? '<span class="check">✓</span>' : ''}
       </a>
     `;
   }).join('');
+}
+
+// サイトの WP URL から favicon を取る。Google の S2 サービスを使うのでホストが
+// 自前で favicon を吐いていなくても表示される。取得失敗時は家アイコンにフォールバック。
+function siteFaviconHtml(wpUrl) {
+  if (!wpUrl) return '<span>🏠</span>';
+  let host = '';
+  try {
+    host = new URL(wpUrl).hostname;
+  } catch (_) {
+    return '<span>🏠</span>';
+  }
+  if (!host) return '<span>🏠</span>';
+  const src = `https://www.google.com/s2/favicons?sz=32&domain=${encodeURIComponent(host)}`;
+  return `<img src="${esc(src)}" alt="" width="16" height="16" style="vertical-align:middle;border-radius:3px;flex-shrink:0" onerror="this.outerHTML='<span>🏠</span>'">`;
 }
 
 function updateHomePageMode() {
