@@ -1017,7 +1017,8 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </select>
           <button class="btn btn-danger" onclick="deleteSelected()">🗑 選択を削除</button>
           <button class="btn btn-secondary" onclick="rescoreArticles()">↯ スコア再計算</button>
-          <div style="flex:1"></div>
+        </div>
+        <div class="toolbar" style="margin-top:-8px">
           <select id="article-type-filter" style="font-size:12px;" onchange="filterArticles()" title="記事種類で絞り込み">
             <option value="">全種類</option>
             <option value="ranking">ランキング記事</option>
@@ -1038,7 +1039,8 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             <option value="score_asc">スコア↑</option>
             <option value="title_asc">タイトル順</option>
           </select>
-          <input type="text" id="search-input" placeholder="検索..." style="width:140px;font-size:12px;" oninput="filterArticles()">
+          <input type="text" id="search-input" placeholder="検索..." style="width:160px;font-size:12px;" oninput="filterArticles()">
+          <div style="flex:1"></div>
           <button class="btn btn-secondary btn-sm" onclick="loadArticles()">↻ 更新</button>
         </div>
 
