@@ -13,7 +13,8 @@ import hmac
 import difflib
 import time
 import traceback
-from datetime import datetime, timedelta
+import unicodedata
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from functools import wraps
 from html import escape, unescape
@@ -183,6 +184,20 @@ TITLE_DEFINITION_FILE = DATA_DIR / 'title_definition.json'
 TITLE_IDEA_JOBS_FILE = DATA_DIR / 'title_idea_jobs.json'
 AD_INSERTION_FILE = DATA_DIR / 'ad_insertion.json'
 
+# 日本時間 (JST = UTC+9) のタイムゾーン定数。
+# 全てのタイムスタンプはJST固定でISO文字列化する（+09:00 サフィックス付き）。
+# Render は UTC で動くので、もしこれを使わず datetime.now() を使うと UTC が保存される。
+JST_TZ = timezone(timedelta(hours=9))
+
+def now_iso():
+    """現在時刻をJST + ISO8601 で返す。
+    例: '2026-05-19T10:30:00+09:00'
+    全ての保存タイムスタンプは必ずこの関数で生成する。
+    フロント側は new Date(...) でこの文字列を解釈すれば、ブラウザTZに
+    関わらず JST の絶対時刻として扱われる。
+    """
+    return datetime.now(JST_TZ).isoformat(timespec='seconds')
+
 
 DEFAULT_TITLE_DEFINITION = {
     'version': 1,
@@ -294,7 +309,7 @@ def update_title_idea_job(job_id, **changes):
     for item in jobs:
         if item.get('id') == job_id:
             item.update(changes)
-            item['updated_at'] = datetime.now().isoformat()
+            item['updated_at'] = now_iso()
             break
     save_title_idea_jobs(jobs)
 
@@ -317,7 +332,9 @@ def fallback_article_status(article):
     return 'pending'
 
 def recover_stale_article_statuses(articles, jobs=None):
-    now = datetime.now()
+    # parse_saved_datetime は tzinfo を剥がして naive を返すため、
+    # 比較側も naive JST に揃える（aware と naive は減算できない制約）
+    now = datetime.now(JST_TZ).replace(tzinfo=None)
     jobs_by_id = {job.get('id'): job for job in (jobs or []) if job.get('id')}
     changed = False
 
@@ -362,8 +379,8 @@ def recover_stale_article_statuses(articles, jobs=None):
         else:
             article['generation_warning'] = '前回の生成が中断されました。改めて一括処理を実行してください（初回生成のため課金されます）。'
         article['last_generation_interrupted'] = True
-        article['updated_at'] = now.isoformat()
-        article['generation_finished_at'] = now.isoformat()
+        article['updated_at'] = now_iso()
+        article['generation_finished_at'] = now_iso()
         article.pop('batch_job_id', None)
         article.pop('processing_message', None)
         article.pop('error', None)
@@ -582,7 +599,7 @@ def storage_status():
 def build_data_snapshot():
     return {
         'version': 1,
-        'exported_at': datetime.now().isoformat(),
+        'exported_at': now_iso(),
         'storage': storage_status(),
         'settings': load_settings(),
         'articles': load_articles(),
@@ -1509,6 +1526,33 @@ def normalize_slug(value):
     return slug
 
 
+def auto_slug_from_brand_name(product_name):
+    """商品名から英字 slug を自動生成（商標記事用）。
+
+    商品名の英字・数字トークンを抽出してハイフン連結し、末尾に '-review' を付ける。
+    例:
+      'Andeor ネックウォーマー'        → 'andeor-review'
+      'CHIC DIARY バラクラバ'          → 'chic-diary-review'
+      'Odejaa 360°フェイスカバー'      → 'odejaa-360-review'
+    英字トークンが全く無い場合は空文字（呼び出し側でフォールバックを判断）。
+    """
+    raw = str(product_name or '')
+    if not raw.strip():
+        return ''
+    # 全角英数字を半角化
+    normalized = unicodedata.normalize('NFKC', raw).lower()
+    # 英数字トークン抽出
+    tokens = re.findall(r'[a-z0-9]+', normalized)
+    if not tokens:
+        return ''
+    # 各トークンを15字以内に、全体40字以内に
+    tokens = [t[:15] for t in tokens if t][:5]
+    base = re.sub(r'-{2,}', '-', '-'.join(tokens)).strip('-')[:40].strip('-')
+    if not base:
+        return ''
+    return f'{base}-review'
+
+
 def normalize_title_key(value):
     return re.sub(r'\s+', '', str(value or '').strip()).lower()
 
@@ -2019,7 +2063,7 @@ def title_ideas_failure_payload(error, keywords=None, provider_errors=None):
 def append_generation_usage(article, usage, run_id=None, generated_at=None, content=''):
     if not isinstance(usage, dict):
         return
-    generated_at = generated_at or datetime.now().isoformat()
+    generated_at = generated_at or now_iso()
     run_id = run_id or str(uuid.uuid4())
     event = dict(usage)
     event.update({
@@ -2248,7 +2292,7 @@ def score_article_content(title, content, keywords=''):
             'score_version': SCORE_VERSION,
         },
         'score_version': SCORE_VERSION,
-        'scored_at': datetime.now().isoformat(),
+        'scored_at': now_iso(),
     }
 
 
@@ -4212,7 +4256,7 @@ def generate_title_ideas():
     batches = [keywords[i:i + TITLE_IDEA_BATCH_SIZE] for i in range(0, len(keywords), TITLE_IDEA_BATCH_SIZE)]
     expected_count = len(keywords) * count_per_keyword
 
-    now = datetime.now().isoformat()
+    now = now_iso()
     job_id = str(uuid.uuid4())
     job = {
         'id': job_id,
@@ -4308,7 +4352,7 @@ def generate_title_ideas():
                     error=error_text,
                     provider_errors=batch_errors[-5:] if batch_errors else [],
                     message=f'タイトル案生成に失敗しました: {error_text}',
-                    completed_at=datetime.now().isoformat(),
+                    completed_at=now_iso(),
                 )
                 return
 
@@ -4334,7 +4378,7 @@ def generate_title_ideas():
                 provider_warnings=batch_errors[-5:] if batch_errors else [],
                 completed_batches=len(batches),
                 message=f'タイトル案 {len(enriched)}件 生成完了',
-                completed_at=datetime.now().isoformat(),
+                completed_at=now_iso(),
             )
         except Exception as e:
             app.logger.error('Title idea worker hard-failed: %s\n%s', e, traceback.format_exc())
@@ -4343,7 +4387,7 @@ def generate_title_ideas():
                 status='error',
                 error=compact_ai_error(e),
                 message=f'タイトル案生成で例外: {compact_ai_error(e)}',
-                completed_at=datetime.now().isoformat(),
+                completed_at=now_iso(),
             )
 
     threading.Thread(target=worker, daemon=True).start()
@@ -4398,7 +4442,7 @@ def save_title_ideas():
         # keywords は SEOターゲットKW（カンマ区切り）。記事生成・Amazon/楽天検索ヒントに使われる。
         keywords_csv = str(idea.get('keywords') or '').strip() or keyword
         article_type = coerce_title_article_type(idea.get('article_type'), keyword, title)
-        now = datetime.now().isoformat()
+        now = now_iso()
         memo_parts = ['タイトル案から作成']
         if idea.get('search_intent'):
             memo_parts.append(f"検索意図: {idea.get('search_intent')}")
@@ -4497,7 +4541,7 @@ def recover_orphan_batches_on_startup():
         return
     changed_jobs = False
     changed_articles = False
-    now = datetime.now().isoformat()
+    now = now_iso()
     recovered_count = 0
     for j in jobs:
         if j.get('status') not in ('queued', 'running'):
@@ -4547,7 +4591,7 @@ def recover_stale_batch_jobs(jobs, articles):
     article_by_id = {a.get('id'): a for a in articles}
     pending_states = ('pending', 'queued', 'generating')
     changed = False
-    now_iso = datetime.now().isoformat()
+    now_iso = now_iso()
     for j in jobs:
         if j.get('status') not in ('queued', 'running'):
             continue
@@ -4634,12 +4678,18 @@ def create_article():
     article_type = normalize_article_type(data.get('article_type'), 'ranking')
     keywords = data.get('keywords', '')
     ad_keywords = str(data.get('ad_keywords') or '').strip() or infer_ad_keywords_from_title(title, keywords, article_type)
+    # 商標記事はランキング記事から自動生成されるケースが多く、フロントは slug を送ってこない。
+    # source_product_name から英字 slug を自動生成する（'andeor-review' のような形）。
+    slug = normalize_slug(data.get('slug'))
+    if not slug and article_type == 'brand':
+        source_name = data.get('source_product_name') or ''
+        slug = auto_slug_from_brand_name(source_name) or auto_slug_from_brand_name(title)
     article = {
         'id': str(uuid.uuid4()),
         'title': title,
         'keywords': keywords,
         'category': data.get('category', ''),
-        'slug': normalize_slug(data.get('slug')),
+        'slug': slug,
         'article_type': article_type,
         'ad_keywords': ad_keywords,
         'priority': data.get('priority', ''),
@@ -4647,7 +4697,7 @@ def create_article():
         'memo': data.get('memo', ''),
         'status': 'pending',
         'content': data.get('content', ''),
-        'created_at': datetime.now().isoformat(),
+        'created_at': now_iso(),
         'quality_id': data.get('quality_id') or None,
         'site_id': data.get('site_id') or None,
         'parent_article_id': data.get('parent_article_id') or None,
@@ -4657,7 +4707,7 @@ def create_article():
     }
     if article.get('content'):
         article['status'] = 'generated'
-        article['generated_at'] = datetime.now().isoformat()
+        article['generated_at'] = now_iso()
         apply_score_fields(article)
     articles = load_articles()
     articles.append(article)
@@ -4753,7 +4803,7 @@ def recover_generated_content(article_id):
             if key in data:
                 article[key] = data.get(key) or None
 
-        now = datetime.now().isoformat()
+        now = now_iso()
         new_hash = content_hash(clean_content)
         article['content'] = clean_content
         article['status'] = 'generated'
@@ -4842,7 +4892,7 @@ def cancel_batch_job(job_id):
     if target.get('status') not in ('queued', 'running'):
         return jsonify({'error': f'このジョブは既に終了状態です（status={target.get("status")}）'}), 400
     target['cancel_requested'] = True
-    target['updated_at'] = datetime.now().isoformat()
+    target['updated_at'] = now_iso()
     target['message'] = (target.get('message') or '') + ' [キャンセル要求受信。次の記事を取り出す前に停止します]'
     save_batch_jobs(jobs)
     return jsonify({'success': True, 'message': 'キャンセル要求を送信しました。間もなく停止します。'})
@@ -4868,7 +4918,7 @@ def force_terminate_batch_job(job_id):
         return jsonify({'error': 'ジョブが見つかりません'}), 404
     target['cancel_requested'] = True
     target['status'] = 'terminated'
-    target['updated_at'] = datetime.now().isoformat()
+    target['updated_at'] = now_iso()
     target['completed_at'] = target.get('completed_at') or target['updated_at']
     target['message'] = (target.get('message') or '') + ' [強制終了]'
     save_batch_jobs(jobs)
@@ -4880,7 +4930,7 @@ def force_terminate_batch_job(job_id):
         if a.get('id') in article_ids and a.get('status') in ('queued', 'generating'):
             a['status'] = 'pending'
             a.pop('batch_job_id', None)
-            a['updated_at'] = datetime.now().isoformat()
+            a['updated_at'] = now_iso()
             a['generation_warning'] = '一括処理を強制終了しました。必要なら再生成してください。'
             changed += 1
     if changed:
@@ -4995,7 +5045,7 @@ def import_excel():
             'memo': cell(row, 'memo'),
             'status': 'pending',
             'content': content,
-            'created_at': datetime.now().isoformat(),
+            'created_at': now_iso(),
             'quality_id': resolve_id(cell(row, 'quality'), quality_list),
             'site_id': resolve_id(cell(row, 'site'), sites) or site_fallback,
             'wp_post_id': None,
@@ -5003,7 +5053,7 @@ def import_excel():
         }
         if content:
             article['status'] = 'generated'
-            article['generated_at'] = datetime.now().isoformat()
+            article['generated_at'] = now_iso()
             apply_score_fields(article)
         articles.append(article)
         imported += 1
@@ -5040,7 +5090,7 @@ def generate_article(article_id):
             article_work.get('keywords', ''),
             article_type
         )
-    now = datetime.now().isoformat()
+    now = now_iso()
     generation_run_id = str(uuid.uuid4())
     previous_content = article.get('content', '')
     previous_content_hash = content_hash(previous_content)
@@ -5200,12 +5250,12 @@ def generate_article(article_id):
                     if validation_error:
                         a['status'] = 'error'
                         a['error'] = validation_error
-                        a['updated_at'] = datetime.now().isoformat()
+                        a['updated_at'] = now_iso()
                         a['generation_finished_at'] = a['updated_at']
                         save_articles(current_articles)
                         yield f"data: {json.dumps({'error': validation_error})}\n\n"
                         return
-                    generated_at = datetime.now().isoformat()
+                    generated_at = now_iso()
                     new_content_hash = content_hash(clean_content)
                     changed = new_content_hash != previous_content_hash
                     a['content'] = clean_content
@@ -5246,7 +5296,7 @@ def generate_article(article_id):
                 if a['id'] == article_id:
                     a['status'] = 'error'
                     a['error'] = str(e)
-                    a['updated_at'] = datetime.now().isoformat()
+                    a['updated_at'] = now_iso()
                     a['generation_finished_at'] = a['updated_at']
                     break
             save_articles(current_articles)
@@ -5288,7 +5338,7 @@ def generate_article_direct(article_id):
 
     quality_id = data.get('quality_id') or article.get('quality_id')
     quality = select_quality_definition(load_quality(), quality_id, article_type)
-    now = datetime.now().isoformat()
+    now = now_iso()
     for a in articles:
         if a['id'] == article_id:
             for key in ('title', 'keywords', 'category', 'ad_keywords', 'site_id', 'slug'):
@@ -5354,7 +5404,7 @@ def generate_article_direct(article_id):
 
         current_articles = load_articles()
         saved_article = None
-        generated_at = datetime.now().isoformat()
+        generated_at = now_iso()
         similarity = content_similarity(previous_content, clean_content) if is_regeneration else 0
         changed = content_hash(clean_content) != previous_content_hash
         usage = combine_article_usages(usage_parts)
@@ -5405,7 +5455,7 @@ def generate_article_direct(article_id):
             if a['id'] == article_id:
                 a['status'] = 'error'
                 a['error'] = str(e)
-                a['updated_at'] = datetime.now().isoformat()
+                a['updated_at'] = now_iso()
                 a['generation_finished_at'] = a['updated_at']
                 break
         save_articles(current_articles)
@@ -5443,7 +5493,7 @@ def batch_generate():
             quality_cache[art_type] = (q, build_quality_prompt(q))
         return quality_cache[art_type]
     style_reference_cache = {}
-    now = datetime.now().isoformat()
+    now = now_iso()
     job_id = str(uuid.uuid4())
     job = {
         'id': job_id,
@@ -5485,7 +5535,7 @@ def batch_generate():
         for item in jobs:
             if item.get('id') == job_id:
                 item.update(changes)
-                item['updated_at'] = datetime.now().isoformat()
+                item['updated_at'] = now_iso()
                 break
         save_batch_jobs(jobs)
 
@@ -5513,7 +5563,7 @@ def batch_generate():
                     if a['id'] in remaining_ids and a.get('status') == 'queued':
                         a['status'] = 'pending'
                         a.pop('batch_job_id', None)
-                        a['updated_at'] = datetime.now().isoformat()
+                        a['updated_at'] = now_iso()
                 save_articles(current_articles)
                 update_job(
                     status='cancelled',
@@ -5521,7 +5571,7 @@ def batch_generate():
                     completed=completed,
                     failed=failed,
                     retried=retried,
-                    completed_at=datetime.now().isoformat(),
+                    completed_at=now_iso(),
                     message=f"ユーザーがキャンセル: 成功 {completed}件 / エラー {failed}件 / 残り {len(queue_articles)}件は pending に戻しました"
                 )
                 return
@@ -5539,7 +5589,7 @@ def batch_generate():
                 for a in current_articles:
                     if a['id'] == article['id']:
                         a['status'] = 'generating'
-                        a['updated_at'] = datetime.now().isoformat()
+                        a['updated_at'] = now_iso()
                         break
                 save_articles(current_articles)
                 article_type = normalize_article_type(article.get('article_type') or batch_article_type, batch_article_type)
@@ -5673,7 +5723,7 @@ def batch_generate():
                     if content_chars < 500:
                         raise ValueError(validation_error)
                     pipeline_warnings.append(validation_error)
-                generated_at = datetime.now().isoformat()
+                generated_at = now_iso()
                 run_id = str(uuid.uuid4())
 
                 stage = 'save generated article'
@@ -5741,7 +5791,7 @@ def batch_generate():
                             post_content, article_type,
                             title=article.get('title') if isinstance(article, dict) else None,
                         )
-                        post_generated_at = datetime.now().isoformat()
+                        post_generated_at = now_iso()
                         current_articles = load_articles()
                         for a in current_articles:
                             if a['id'] == article['id']:
@@ -5775,7 +5825,7 @@ def batch_generate():
                             warnings = pipeline_warnings + postprocess_warnings
                             a['generation_warning'] = ' / '.join(dict.fromkeys(warnings))
                             a['generation_phase'] = 'base_saved_with_postprocess_warning'
-                            a['updated_at'] = datetime.now().isoformat()
+                            a['updated_at'] = now_iso()
                             break
                     save_articles(current_articles)
                 completed += 1
@@ -5794,7 +5844,7 @@ def batch_generate():
                             a['error_stage'] = stage
                             a['error_trace'] = trace[-4000:]
                             a['generation_retry_count'] = attempt_no
-                            a['updated_at'] = datetime.now().isoformat()
+                            a['updated_at'] = now_iso()
                             break
                     save_articles(current_articles)
                     queue_articles.append(article)
@@ -5819,7 +5869,7 @@ def batch_generate():
                         a['error_trace'] = trace[-4000:]
                         a.pop('batch_job_id', None)
                         a['generation_retry_count'] = attempt_no - 1
-                        a['updated_at'] = datetime.now().isoformat()
+                        a['updated_at'] = now_iso()
                         a['generation_finished_at'] = a['updated_at']
                         break
                 save_articles(current_articles)
@@ -5840,7 +5890,7 @@ def batch_generate():
             completed=completed,
             failed=failed,
             retried=retried,
-            completed_at=datetime.now().isoformat(),
+            completed_at=now_iso(),
             message=f"一括生成完了: 成功 {completed}件 / エラー {failed}件 / 自動リトライ {retried}回"
         )
 
@@ -5859,7 +5909,7 @@ def batch_generate():
                     if a.get('batch_job_id') == job_id and a.get('status') in ('queued', 'generating'):
                         a['status'] = 'pending'
                         a.pop('batch_job_id', None)
-                        a['updated_at'] = datetime.now().isoformat()
+                        a['updated_at'] = now_iso()
                         a['generation_warning'] = f'バッチが予期せず終了: {compact_ai_error(outer_e, 120)}'
                 save_articles(current_articles)
             except Exception:
@@ -5870,7 +5920,7 @@ def batch_generate():
                     current_title='',
                     last_error=str(outer_e),
                     last_error_trace=outer_trace[-4000:],
-                    completed_at=datetime.now().isoformat(),
+                    completed_at=now_iso(),
                     message=f"バッチが予期せず終了しました: {compact_ai_error(outer_e, 200)}"
                 )
             except Exception:
@@ -6032,7 +6082,7 @@ def publish_article(article_id):
                 a['status'] = 'published'
                 a['wp_post_id'] = post_data['id']
                 a['wp_url'] = post_data.get('link', '')
-                a['published_at'] = datetime.now().isoformat()
+                a['published_at'] = now_iso()
                 break
         save_articles(articles)
         return jsonify({'success': True, 'wp_url': post_data.get('link', ''), 'wp_post_id': post_data['id']})
@@ -6055,7 +6105,7 @@ def unlink_wp_post(article_id):
             a.pop('repaired_at', None)
             if a.get('status') in ('published', 'scheduled'):
                 a['status'] = 'generated' if a.get('content') else 'pending'
-            a['updated_at'] = datetime.now().isoformat()
+            a['updated_at'] = now_iso()
             break
     if not target:
         return jsonify({'error': '記事が見つかりません'}), 404
@@ -6109,7 +6159,7 @@ def apply_cards_to_existing_article(article_id):
         if a['id'] == article_id:
             a['content'] = new_content
             a['card_injection_stats'] = stats
-            a['updated_at'] = datetime.now().isoformat()
+            a['updated_at'] = now_iso()
             break
     save_articles(articles)
 
@@ -6181,7 +6231,7 @@ def bulk_apply_cards():
                 continue
             a['content'] = new_content
             a['card_injection_stats'] = stats
-            a['updated_at'] = datetime.now().isoformat()
+            a['updated_at'] = now_iso()
             results['inserted'] += 1
             results['details'].append({'id': a['id'], 'title': title_short, 'status': 'inserted', 'matched_count': stats.get('matched_count'), 'h3_count': stats.get('h3_count')})
         except Exception as e:
@@ -6265,8 +6315,8 @@ def repair_article_post(article_id):
                 if a.get('status') != 'scheduled':
                     a['status'] = 'published'
                 a['wp_url'] = post_data.get('link', a.get('wp_url', ''))
-                a['repaired_at'] = datetime.now().isoformat()
-                a['updated_at'] = datetime.now().isoformat()
+                a['repaired_at'] = now_iso()
+                a['updated_at'] = now_iso()
                 apply_score_fields(a)
                 break
         save_articles(articles)
@@ -6301,7 +6351,7 @@ def bulk_repair_article_posts():
     articles = load_articles()
     settings = load_settings()
     results = {'success': 0, 'unchanged': 0, 'mismatch': 0, 'error': 0, 'errors': []}
-    now = datetime.now().isoformat()
+    now = now_iso()
 
     for article in articles:
         if article.get('id') not in ids:
@@ -6390,7 +6440,7 @@ def batch_publish():
                     a['status'] = 'published'
                     a['wp_post_id'] = post_data['id']
                     a['wp_url'] = post_data.get('link', '')
-                    a['published_at'] = datetime.now().isoformat()
+                    a['published_at'] = now_iso()
                     break
             results['success'] += 1
         except Exception as e:
@@ -6412,7 +6462,7 @@ def get_seo_news():
             'source': 'Google 検索セントラル ブログ',
             'feed_url': SEO_NEWS_PAGE_URL,
             'items': items,
-            'fetched_at': datetime.now().isoformat()
+            'fetched_at': now_iso()
         })
     except Exception as e:
         return jsonify({
@@ -6421,7 +6471,7 @@ def get_seo_news():
             'feed_url': SEO_NEWS_PAGE_URL,
             'items': SEO_NEWS_FALLBACK[:limit],
             'error': str(e)[:160],
-            'fetched_at': datetime.now().isoformat()
+            'fetched_at': now_iso()
         })
 
 
