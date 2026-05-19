@@ -1873,10 +1873,10 @@ def non_retryable_ai_error(error):
 
 
 def title_idea_max_tokens(keyword_count, count_per_keyword):
-    # idea 1件あたり目安250トークン（title + keyword + target_keywords + slug +
-    # article_type + search_intent + reason + priority + JSON構造）
-    # 余裕を持って最小2000、最大8000に抑える
-    return min(8000, max(2000, keyword_count * count_per_keyword * 250))
+    # max_tokens は「安全上限」であって課金基準ではない（Anthropic は実際の出力分だけ課金）。
+    # Haiku 4.5 / Sonnet どちらも余裕で対応できる 8000 固定にして、
+    # 出力途中切れ（stop_reason=max_tokens → JSON 不完全 → coerce 空）を根絶する。
+    return 8000
 
 
 def claude_title_idea_models():
