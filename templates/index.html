@@ -1030,6 +1030,10 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <button class="btn btn-secondary" onclick="downloadSampleCsv()">サンプルCSV</button>
           <button class="btn btn-primary" onclick="generateSelected()">⚡ 選択を生成</button>
           <button class="btn btn-success" onclick="publishSelected()">🚀 選択をWP投稿</button>
+          <select id="articles-post-status" style="font-size:12px" title="WP投稿時のステータス">
+            <option value="draft">下書き</option>
+            <option value="publish">公開</option>
+          </select>
           <button class="btn btn-danger" onclick="deleteSelected()">🗑 選択を削除</button>
           <button class="btn btn-secondary" onclick="rescoreArticles()">↯ スコア再計算</button>
           <div style="flex:1"></div>
@@ -1232,22 +1236,6 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
               <div class="form-help">空欄なら記事種類ごとに対応する品質定義を自動選択。固定したい時だけ選択。</div>
             </div>
             <div class="form-group">
-              <label class="form-label">投稿ステータス</label>
-              <select id="batch-post-status" class="form-control">
-                <option value="draft">下書き</option>
-                <option value="publish">公開</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">対象フィルター</label>
-              <select id="batch-filter" class="form-control" onchange="loadBatchArticles()">
-                <option value="pending">一括生成対象（未生成・エラー）</option>
-                <option value="generated">WP投稿対象（生成済）</option>
-                <option value="all">全記事（確認用）</option>
-              </select>
-              <div class="form-help">過去に作成済みの記事は「WP投稿対象」または「全記事」で確認できます。</div>
-            </div>
-            <div class="form-group">
               <label class="form-label">記事種類</label>
               <select id="batch-article-type-filter" class="form-control" onchange="updateDefinitionDefaultsForCurrentContext(); loadBatchArticles()">
                 <option value="">全記事種類</option>
@@ -1287,10 +1275,10 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 <label class="form-label" style="margin:0;flex:1">対象記事 (<span id="batch-count">0</span>件)</label>
                 <button class="btn btn-primary btn-sm" onclick="startBatchGenerate()">⚡ 一括生成開始</button>
-                <button class="btn btn-success btn-sm" onclick="startBatchPublish()">🚀 一括WP投稿</button>
                 <button class="btn btn-secondary btn-sm" onclick="loadBatchArticles()">↻ 状態更新</button>
                 <button class="btn btn-danger btn-sm" onclick="deleteBatchSelected()">🗑 選択を削除</button>
               </div>
+              <div style="font-size:11px;color:var(--muted);margin-top:6px">生成済み記事のWP投稿は <strong>「対応履歴」</strong>ページから実行してください。</div>
             </div>
             <div id="batch-top-scroll" style="overflow-x:auto;overflow-y:hidden;height:14px;margin:8px 0 2px;border:1px solid var(--border);border-radius:4px;background:var(--surface)">
               <div id="batch-top-scroll-inner" style="height:1px;width:1180px"></div>
@@ -2577,18 +2565,30 @@ function generateSelected() {
   }, 300);
 }
 
-function publishSelected() {
+async function publishSelected() {
   const ids = getSelectedIds();
   if (!ids.length) { toast('記事を選択してください', 'error'); return; }
-  showPage('batch');
-  document.getElementById('batch-filter').value = 'generated';
-  loadBatchArticles();
-  setTimeout(() => {
-    ids.forEach(id => {
-      const cb = document.querySelector(`#batch-body input[value="${id}"]`);
-      if (cb) cb.checked = true;
-    });
-  }, 300);
+  // 生成済み記事のみが対象。allArticles から content の有無で絞る。
+  const eligible = ids.filter(id => {
+    const a = allArticles.find(x => x.id === id);
+    return a && a.content;
+  });
+  if (!eligible.length) { toast('本文が生成済みの記事を選択してください', 'error'); return; }
+  const postStatus = document.getElementById('articles-post-status')?.value || 'draft';
+  const label = postStatus === 'publish' ? '公開' : '下書き';
+  if (!confirm(`${eligible.length}件をWordPressに${label}投稿しますか?`)) return;
+  const res = await fetch('/api/batch-publish', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({article_ids: eligible, post_status: postStatus})
+  });
+  const data = await res.json();
+  if (data.error && data.success === undefined) {
+    toast(data.error, 'error');
+    return;
+  }
+  toast(`成功: ${data.success}件 / エラー: ${data.error}件`, data.error ? 'error' : 'success');
+  await loadArticles();
 }
 
 async function repairSelected() {
@@ -3197,8 +3197,6 @@ async function saveSelectedTitleIdeas() {
     toast(`${data.created}件を一括処理へ送りました`, 'success');
     await loadArticles();
     showPage('batch');
-    const filter = document.getElementById('batch-filter');
-    if (filter) filter.value = 'pending';
     const typeFilter = document.getElementById('batch-article-type-filter');
     if (typeFilter) typeFilter.value = '';
     loadBatchArticles();
@@ -3917,13 +3915,11 @@ function renderBatchJobStatus(job) {
 }
 
 function loadBatchArticles() {
-  const filter = document.getElementById('batch-filter')?.value || 'pending';
+  // 一括処理ページは「これから生成する対象」のみ。
+  // pending / queued / generating / error を固定表示（生成済 / PUSH済 は対応履歴へ）
   const typeFilter = document.getElementById('batch-article-type-filter')?.value || '';
   const category = document.getElementById('batch-category-filter')?.value || '';
-  let targets;
-  if (filter === 'pending') targets = allArticles.filter(a => ['pending', 'queued', 'generating', 'error'].includes(a.status));
-  else if (filter === 'generated') targets = allArticles.filter(a => a.status === 'generated');
-  else targets = allArticles;
+  let targets = allArticles.filter(a => ['pending', 'queued', 'generating', 'error'].includes(a.status));
   if (typeFilter) targets = targets.filter(a => (a.article_type || 'ranking') === typeFilter);
   if (category) targets = targets.filter(a => (a.category || '') === category);
 
@@ -3936,7 +3932,7 @@ function loadBatchArticles() {
     [...existingCheckboxes].filter(c => c.checked).map(c => c.value)
   );
   document.getElementById('batch-body').innerHTML = targets.map(a => {
-    const selectable = batchRowSelectable(a, filter);
+    const selectable = batchRowSelectable(a);
     const shouldCheck = selectable && (isFirstRender || previouslyChecked.has(a.id));
     return `
     <tr>
@@ -3982,12 +3978,11 @@ function syncBatchTopScroll() {
   }
 }
 
-function batchRowSelectable(article, filter) {
-  // 進行中（queued/generating/publishing/repairing）の記事は選択不可
+function batchRowSelectable(article) {
+  // 一括処理ページで選択可能なのは pending / error のみ。
+  // queued / generating / publishing / repairing は進行中なので選択不可。
   if (isArticleBusy(article.status)) return false;
-  if (filter === 'pending') return ['pending', 'error'].includes(article.status);
-  if (filter === 'generated') return article.status === 'generated';
-  return ['pending', 'error', 'generated'].includes(article.status);
+  return ['pending', 'error'].includes(article.status);
 }
 
 function toggleBatchAll(cb) {
@@ -4024,26 +4019,6 @@ async function startBatchGenerate() {
     toast(data.error || '失敗', 'error');
     await loadArticles();
   }
-}
-
-async function startBatchPublish() {
-  const ids = getBatchSelectedIds();
-  if (!ids.length) { toast('記事を選択してください', 'error'); return; }
-  const postStatus = document.getElementById('batch-post-status').value;
-  if (!confirm(`${ids.length}件をWordPressに投稿しますか?`)) return;
-  const res = await fetch('/api/batch-publish', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({article_ids: ids, post_status: postStatus})
-  });
-  const data = await res.json();
-  if (data.error && data.success === undefined) {
-    toast(data.error, 'error');
-    return;
-  }
-  toast(`成功: ${data.success}件 / エラー: ${data.error}件`, data.error ? 'error' : 'success');
-  loadArticles();
-  loadBatchArticles();
 }
 
 // ---- Title Definition ----
