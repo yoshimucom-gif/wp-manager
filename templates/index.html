@@ -2957,6 +2957,7 @@ function renderTitleIdeas() {
         <td class="title-idea-title">
           <input type="text" class="form-control" value="${esc(idea.title)}" onchange="updateTitleIdea(${i}, 'title', this.value)" style="font-size:12px;height:32px">
           <div class="title-idea-meta">
+            ${idea.slug ? `スラッグ: <code style="font-size:11px">${esc(idea.slug)}</code><br>` : ''}
             ${idea.search_intent ? `検索意図: ${esc(idea.search_intent)}<br>` : ''}
             ${idea.reason ? `理由: ${esc(idea.reason)}` : ''}
           </div>
