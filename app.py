@@ -4138,6 +4138,7 @@ def login_required(f):
 @app.route('/articles')
 @app.route('/quality')
 @app.route('/title-definition')
+@app.route('/ad-insertion')
 @app.route('/ads')
 @app.route('/sites')
 @app.route('/api-settings')
