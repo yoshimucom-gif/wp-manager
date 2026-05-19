@@ -187,7 +187,7 @@ DEFAULT_TITLE_DEFINITION = {
         '条件絞り込み系',
         'ベネフィット明示系',
     ],
-    'symbol_rules': 'タイトル中に区切り記号（縦棒「｜」「|」、コロン「：」「:」、ダッシュ「ー」「-」「—」など）は使用禁止。自然な日本語の流れで一文で書く。【】は1タイトル最大1箇所、本当に強調したいときだけ。',
+    'symbol_rules': 'タイトル内の縦棒（｜・|）は最大1個まで。2個以上は絶対に使わない。「タイトル本題｜サブタイトル」のような形は OK だが、「本題｜カウント｜説明」のような3分割は禁止。【】は1タイトル最大1箇所、本当に強調したいときだけ。',
     'ranking_default_count': 5,
     'ranking_max_count': 7,
     'additional_instructions': '',
@@ -204,9 +204,12 @@ def load_title_definition():
     for key in ('forbidden_phrases', 'angle_categories'):
         if not isinstance(merged.get(key), list):
             merged[key] = list(DEFAULT_TITLE_DEFINITION[key])
-    # 旧 symbol_rules（区切りに ｜ を許可）を保存していた場合、新ルールに自動移行。
-    # 「区切りは｜」を含む旧ルール文言を検知して、現行デフォルトに差し替える。
-    if '区切りは｜' in str(merged.get('symbol_rules') or ''):
+    # 旧 symbol_rules を保存していた場合、現行デフォルトに自動移行。
+    # 検知対象:
+    #   - 「区切りは｜」: 最初期の許可ルール
+    #   - 「区切り記号」「使用禁止」: 一時的に縦棒禁止だったルール
+    current_rule = str(merged.get('symbol_rules') or '')
+    if '区切りは｜' in current_rule or ('区切り記号' in current_rule and '使用禁止' in current_rule):
         merged['symbol_rules'] = DEFAULT_TITLE_DEFINITION['symbol_rules']
     return merged
 
@@ -1675,9 +1678,10 @@ def coerce_title_ideas(payload, keywords, count_per_keyword):
         title = str(item.get('title') or '').strip()
         if not title:
             continue
-        # 区切り記号の保険除去：プロンプトで禁止しているが Claude が混入させたケースの保険。
-        # 「クールアームスリーブ|5選」のような ｜/| の中黒挿入を削除し、連続スペースを整える。
-        title = re.sub(r'\s*[｜|]\s*', '', title)
+        # 縦棒は1タイトル最大1個まで。2個目以降の縦棒があったら、その位置でカット。
+        pipe_positions = [m.start() for m in re.finditer(r'[｜|]', title)]
+        if len(pipe_positions) >= 2:
+            title = title[:pipe_positions[1]].rstrip()
         title = re.sub(r'\s+', ' ', title).strip()
         keyword = str(item.get('keyword') or '').strip()
         matched = keyword_set.get(normalize_title_key(keyword))
