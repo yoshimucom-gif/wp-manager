@@ -4672,6 +4672,30 @@ def get_batch_job(job_id):
     return jsonify(job)
 
 
+@app.route('/api/batch-jobs/<job_id>/cancel', methods=['POST'])
+@login_required
+def cancel_batch_job(job_id):
+    """一括処理にキャンセルフラグを立てる。
+    ワーカーは次の記事を取り出す前にこのフラグを確認し、true なら停止する。
+    停止時、残り queued 記事は pending に戻され、ジョブ status は cancelled になる。
+    """
+    jobs = load_batch_jobs()
+    target = None
+    for j in jobs:
+        if j.get('id') == job_id:
+            target = j
+            break
+    if not target:
+        return jsonify({'error': 'ジョブが見つかりません'}), 404
+    if target.get('status') not in ('queued', 'running'):
+        return jsonify({'error': f'このジョブは既に終了状態です（status={target.get("status")}）'}), 400
+    target['cancel_requested'] = True
+    target['updated_at'] = datetime.now().isoformat()
+    target['message'] = (target.get('message') or '') + ' [キャンセル要求受信。次の記事を取り出す前に停止します]'
+    save_batch_jobs(jobs)
+    return jsonify({'success': True, 'message': 'キャンセル要求を送信しました。間もなく停止します。'})
+
+
 # Import
 @app.route('/api/import', methods=['POST'])
 @login_required
@@ -5269,6 +5293,13 @@ def batch_generate():
                 break
         save_batch_jobs(jobs)
 
+    def is_cancel_requested():
+        """ジョブの cancel_requested フラグを毎回ディスクから確認する。"""
+        for j in load_batch_jobs():
+            if j.get('id') == job_id:
+                return bool(j.get('cancel_requested'))
+        return False
+
     def run_batch():
         client = anthropic.Anthropic(api_key=api_key) if api_key else None
         completed = 0
@@ -5277,6 +5308,27 @@ def batch_generate():
         attempt_counts = {}
         queue_articles = list(pending)
         while queue_articles:
+            # キャンセル要求チェック（記事を取り出す前）
+            if is_cancel_requested():
+                # 残りの queued 記事を pending に戻す（再開できるように）
+                remaining_ids = {a['id'] for a in queue_articles}
+                current_articles = load_articles()
+                for a in current_articles:
+                    if a['id'] in remaining_ids and a.get('status') == 'queued':
+                        a['status'] = 'pending'
+                        a.pop('batch_job_id', None)
+                        a['updated_at'] = datetime.now().isoformat()
+                save_articles(current_articles)
+                update_job(
+                    status='cancelled',
+                    current_title='',
+                    completed=completed,
+                    failed=failed,
+                    retried=retried,
+                    completed_at=datetime.now().isoformat(),
+                    message=f"ユーザーがキャンセル: 成功 {completed}件 / エラー {failed}件 / 残り {len(queue_articles)}件は pending に戻しました"
+                )
+                return
             article = queue_articles.pop(0)
             article_id = article.get('id')
             attempt_counts[article_id] = attempt_counts.get(article_id, 0) + 1

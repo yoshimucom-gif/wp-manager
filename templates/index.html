@@ -3831,6 +3831,26 @@ function stopBatchPolling() {
   batchPollTimer = null;
 }
 
+async function cancelBatchJob(jobId) {
+  if (!jobId) return;
+  if (!confirm('実行中の一括処理を中止しますか？\n\n・処理中の1件はそのまま続行されます\n・待機中の記事は「未生成」に戻り、後で再実行できます')) {
+    return;
+  }
+  try {
+    const res = await fetch(`/api/batch-jobs/${jobId}/cancel`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast(data.error || '中止に失敗しました', 'error');
+      return;
+    }
+    toast(data.message || 'キャンセル要求を送信しました', 'success');
+    await loadLatestBatchJob();
+    await loadArticles();
+  } catch (e) {
+    toast(`中止リクエストに失敗: ${e.message || e}`, 'error');
+  }
+}
+
 async function loadLatestBatchJob() {
   try {
     const res = await fetch('/api/batch-jobs/latest');
@@ -3886,9 +3906,24 @@ function renderBatchJobStatus(job) {
   if (currentEl) currentEl.textContent = job?.current_title ? `処理中: ${job.current_title}` : '';
   if (isRunning) {
     const queueInfo = queuedCount ? ` / 待機 ${queuedCount}件` : '';
-    el.innerHTML = `一括生成中: ${completed}/${total}件完了${queueInfo}${failed ? ` / エラー ${failed}件` : ''}${retried ? ` / 自動リトライ ${retried}回` : ''}<br>${esc(job?.message || 'ページを移動しても処理は継続します。戻ってきたら自動で状況を更新します。')}`;
+    const cancelBtn = job?.id
+      ? `<button class="btn btn-secondary btn-sm" style="margin-left:8px" onclick="cancelBatchJob('${esc(job.id)}')">⏹ 一括処理を中止</button>`
+      : '';
+    el.innerHTML = `<div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px"><span>一括生成中: ${completed}/${total}件完了${queueInfo}${failed ? ` / エラー ${failed}件` : ''}${retried ? ` / 自動リトライ ${retried}回` : ''}</span>${cancelBtn}</div><div style="margin-top:4px">${esc(job?.message || 'ページを移動しても処理は継続します。戻ってきたら自動で状況を更新します。')}</div>`;
+    // 一括生成開始ボタンを無効化（並行起動防止）
+    const startBtn = document.querySelector('button[onclick="startBatchGenerate()"]');
+    if (startBtn) {
+      startBtn.disabled = true;
+      startBtn.dataset.batchRunning = '1';
+    }
     startBatchPolling();
     return;
+  }
+  // running ではない場合、開始ボタンを戻す
+  const startBtn = document.querySelector('button[onclick="startBatchGenerate()"]');
+  if (startBtn && startBtn.dataset.batchRunning === '1') {
+    startBtn.disabled = false;
+    delete startBtn.dataset.batchRunning;
   }
   stopBatchPolling();
   if (job?.status) {
@@ -3903,7 +3938,7 @@ function loadBatchArticles() {
   const typeFilter = document.getElementById('batch-article-type-filter')?.value || '';
   const category = document.getElementById('batch-category-filter')?.value || '';
   let targets;
-  if (filter === 'pending') targets = allArticles.filter(a => ['pending', 'generating', 'error'].includes(a.status));
+  if (filter === 'pending') targets = allArticles.filter(a => ['pending', 'queued', 'generating', 'error'].includes(a.status));
   else if (filter === 'generated') targets = allArticles.filter(a => a.status === 'generated');
   else targets = allArticles;
   if (typeFilter) targets = targets.filter(a => (a.article_type || 'ranking') === typeFilter);
@@ -3955,6 +3990,8 @@ function syncBatchTopScroll() {
 }
 
 function batchRowSelectable(article, filter) {
+  // 進行中（queued/generating/publishing/repairing）の記事は選択不可
+  if (isArticleBusy(article.status)) return false;
   if (filter === 'pending') return ['pending', 'error'].includes(article.status);
   if (filter === 'generated') return article.status === 'generated';
   return ['pending', 'error', 'generated'].includes(article.status);
