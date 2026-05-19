@@ -2994,8 +2994,9 @@ DEFAULT_CARD_INSERTION_PATTERNS = {
         {'position': 'after_matome_h2', 'design': 'ranking', 'count': 3},
     ],
     'brand': [
+        # 商標記事は1つの商品を深掘りする構造なので、マーカーは1つだけ。
+        # 最初のH2直後（冒頭近く）に置いてCV機会を最大化する。
         {'position': 'after_first_h2', 'design': 'vertical'},
-        {'position': 'before_matome_h2', 'design': 'vertical'},
     ],
     'column': [
         {'position': 'before_first_h2', 'design': 'vertical', 'repeat': 3},
