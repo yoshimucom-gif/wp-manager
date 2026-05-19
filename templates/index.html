@@ -696,24 +696,25 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
 
 .dashboard-hero { margin-bottom: 22px; }
 
-/* 一括処理ページの記事種類タブ */
+/* 一括処理ページの記事種類タブ（ピル型ボタン） */
 .batch-tab {
-  background: transparent;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  padding: 8px 14px;
-  font-size: 13px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 16px;
+  font-size: 12px;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--text);
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-  margin-bottom: -1px;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
-.batch-tab:hover { color: var(--text); }
+.batch-tab:hover { background: var(--surface2); }
 .batch-tab.active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
 }
+.batch-tab.active:hover { background: var(--accent-hover); }
 .dashboard-title {
   font-size: 24px;
   font-weight: 500;
@@ -1282,7 +1283,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             </div>
           </div>
           <div class="batch-main">
-            <div style="position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0;margin-bottom:0;border-bottom:1px solid var(--border)">
+            <div style="position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0">
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 <label class="form-label" style="margin:0;flex:1">対象記事 (<span id="batch-count">0</span>件)</label>
                 <button class="btn btn-primary btn-sm" onclick="startBatchGenerate()">⚡ 一括生成開始</button>
@@ -1290,14 +1291,14 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
                 <button class="btn btn-danger btn-sm" onclick="deleteBatchSelected()">🗑 選択を削除</button>
               </div>
               <div style="font-size:11px;color:var(--muted);margin-top:6px">生成済み記事のWP投稿は <strong>「対応履歴」</strong>ページから実行してください。</div>
-              <div id="batch-type-tabs" class="batch-tabs" style="display:flex;gap:0;margin-top:8px;border-bottom:1px solid var(--border)">
+              <div id="batch-type-tabs" class="batch-tabs" style="display:flex;gap:6px;margin-top:10px">
                 <button type="button" class="batch-tab active" data-type="" onclick="setBatchTypeTab('')">すべて</button>
                 <button type="button" class="batch-tab" data-type="ranking" onclick="setBatchTypeTab('ranking')">ランキング</button>
                 <button type="button" class="batch-tab" data-type="brand" onclick="setBatchTypeTab('brand')">商標</button>
                 <button type="button" class="batch-tab" data-type="column" onclick="setBatchTypeTab('column')">コラム</button>
               </div>
             </div>
-            <div id="batch-top-scroll" style="overflow-x:auto;overflow-y:hidden;height:14px;margin:8px 0 2px;border:1px solid var(--border);border-radius:4px;background:var(--surface)">
+            <div id="batch-top-scroll" style="overflow-x:auto;overflow-y:hidden;height:14px;margin:8px 0 2px;background:var(--surface);border-radius:4px">
               <div id="batch-top-scroll-inner" style="height:1px;width:1180px"></div>
             </div>
             <div id="batch-table-wrap" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;overflow:auto;">
