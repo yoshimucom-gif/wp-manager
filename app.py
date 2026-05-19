@@ -5093,7 +5093,8 @@ def recover_stale_batch_jobs(jobs, articles):
     article_by_id = {a.get('id'): a for a in articles}
     pending_states = ('pending', 'queued', 'generating')
     changed = False
-    now_iso = now_iso()
+    # ⚠️ ローカル変数名は関数 now_iso() と被らないように now_iso_str にする
+    now_iso_str = now_iso()
     for j in jobs:
         if j.get('status') not in ('queued', 'running'):
             continue
@@ -5108,7 +5109,7 @@ def recover_stale_batch_jobs(jobs, articles):
                 break
         if not still_running:
             j['status'] = 'completed_stale_recovered'
-            j['completed_at'] = j.get('completed_at') or now_iso
+            j['completed_at'] = j.get('completed_at') or now_iso_str
             j['message'] = j.get('message', '') + ' [自動復旧: 対象記事が全て処理完了状態のため終了マーク]'
             changed = True
     if changed:
