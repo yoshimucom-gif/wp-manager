@@ -4555,10 +4555,19 @@ def recover_orphan_batches_on_startup():
         article_ids = set(j.get('article_ids') or [])
         for a in articles:
             if a.get('id') in article_ids and a.get('status') in ('queued', 'generating'):
-                a['status'] = 'pending'
+                # 本文が保存済みなら 'generated' に戻す（後処理だけ中断したケース）。
+                # 本文が無ければ 'pending'（生成すらされてない）。
+                # fallback_article_status は wp_post_id 有 → 'published' / content 有 → 'generated' / それ以外 → 'pending' を返す。
+                new_status = fallback_article_status(a)
+                a['status'] = new_status
                 a.pop('batch_job_id', None)
                 a['updated_at'] = now
-                a['generation_warning'] = '前回のバッチがアプリ再起動で中断されました。再生成してください。'
+                if new_status == 'generated':
+                    # 本文は保存済み。後処理（品質改善・装飾）は完了していないが
+                    # WP投稿は可能。再生成は不要。
+                    a['generation_warning'] = '前回の後処理（品質改善・装飾）がアプリ再起動で中断されましたが、本文は保存済みです。そのまま WP 投稿できます。'
+                else:
+                    a['generation_warning'] = '前回のバッチがアプリ再起動で中断されました。改めて一括処理から生成してください。'
                 changed_articles = True
                 recovered_count += 1
     if changed_jobs:
