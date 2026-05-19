@@ -890,6 +890,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
       <div class="nav-menu">
         <div class="nav-link" onclick="showPage('quality')" id="nav-quality">品質定義</div>
         <div class="nav-link" onclick="showPage('title-definition')" id="nav-title-definition">タイトル定義</div>
+        <div class="nav-link" onclick="showPage('ad-insertion')" id="nav-ad-insertion">広告挿入定義</div>
       </div>
     </div>
     <div class="nav-item" onclick="showPage('sites')" id="nav-sites">
@@ -1421,6 +1422,49 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         </div>
       </div>
 
+      <!-- Ad Insertion Page -->
+      <div class="page" id="page-ad-insertion">
+        <div class="page-header">
+          <div class="page-title">広告挿入定義</div>
+          <div class="page-subtitle">記事種類ごとの広告マーカー <code style="font-size:11px">&lt;!--ai-product:...--&gt;</code> をどこに何個入れるかのルール</div>
+        </div>
+        <div style="max-width:880px">
+          <div class="settings-section">
+            <div class="section-header">// ランキング記事</div>
+            <div id="ad-rules-ranking" class="ad-rules-list"></div>
+            <button class="btn btn-secondary btn-sm" onclick="addAdRule('ranking')" style="margin-top:8px">+ ルールを追加</button>
+          </div>
+
+          <div class="settings-section">
+            <div class="section-header">// コラム記事</div>
+            <div id="ad-rules-column" class="ad-rules-list"></div>
+            <button class="btn btn-secondary btn-sm" onclick="addAdRule('column')" style="margin-top:8px">+ ルールを追加</button>
+          </div>
+
+          <div class="settings-section">
+            <div class="section-header">// 商標記事</div>
+            <div id="ad-rules-brand" class="ad-rules-list"></div>
+            <button class="btn btn-secondary btn-sm" onclick="addAdRule('brand')" style="margin-top:8px">+ ルールを追加</button>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">商標記事は1商品を深掘りする構造なので、マーカー1個推奨。</div>
+          </div>
+
+          <div style="font-size:11px;color:var(--muted);margin:8px 0 16px;line-height:1.7">
+            <strong>挿入位置の意味</strong>:<br>
+            ・記事冒頭 / 記事末尾<br>
+            ・最初のH2の直前 / 直後<br>
+            ・各「N位」H3の直後（ランキング記事用：第1位／第2位… の各H3後ろにカード挿入）<br>
+            ・まとめH2の直前 / 直後（「まとめ」「結論」等を含むH2）<br>
+            <strong>デザイン</strong>: <code>vertical</code>=縦置きカード（画像大）／<code>ranking</code>=ランキングカード（複数商品を1ブロック、件数指定可）
+          </div>
+
+          <div style="display:flex;gap:10px;margin-top:20px">
+            <button class="btn btn-primary" onclick="saveAdInsertion()">💾 保存</button>
+            <button class="btn btn-secondary" onclick="resetAdInsertion()">デフォルトに戻す</button>
+          </div>
+          <div id="ad-insertion-msg" style="margin-top:10px;font-size:12px;color:var(--muted)"></div>
+        </div>
+      </div>
+
       <!-- Sites Page -->
       <div class="page" id="page-sites">
         <div class="page-header">
@@ -1738,6 +1782,7 @@ const pageUrlMap = {
   articles: 'history',
   quality: 'quality',
   'title-definition': 'title-definition',
+  'ad-insertion': 'ad-insertion',
   sites: 'sites',
   settings: 'api-settings'
 };
@@ -1801,7 +1846,7 @@ function showPage(name, opts = {}) {
   const nav = document.getElementById('nav-' + name);
   if (nav) nav.classList.add('active');
   if (isArticleType) document.getElementById('nav-create')?.classList.add('active');
-  if (['quality', 'title-definition'].includes(name)) document.getElementById('nav-definitions')?.classList.add('active');
+  if (['quality', 'title-definition', 'ad-insertion'].includes(name)) document.getElementById('nav-definitions')?.classList.add('active');
   localStorage.setItem('currentPage', name);
   if (isArticleType) {
     currentArticleType = name;
@@ -1814,6 +1859,7 @@ function showPage(name, opts = {}) {
     if (pageName === 'batch') { loadQualitySelects(); loadArticles(); loadLatestBatchJob(); }
     if (pageName === 'quality') loadQuality();
     if (pageName === 'title-definition') loadTitleDefinition();
+    if (pageName === 'ad-insertion') loadAdInsertion();
     if (pageName === 'sites') loadSites();
     if (pageName === 'settings') loadSettings();
   }
@@ -4152,6 +4198,125 @@ async function resetTitleDefinition() {
     const data = await res.json();
     if (!res.ok || !data.success) throw new Error(data.error || 'リセット失敗');
     await loadTitleDefinition();
+    toast('デフォルトに戻しました', 'success');
+  } catch (e) {
+    toast('リセットに失敗しました: ' + e.message, 'error');
+  }
+}
+
+// ---- Ad Insertion Definition ----
+let adInsertionState = { ranking: [], brand: [], column: [] };
+const AD_POSITION_LABELS = {
+  'top':                '記事冒頭',
+  'before_first_h2':    '最初のH2の直前',
+  'after_first_h2':     '最初のH2の直後',
+  'after_each_h3_rank': '各「N位」H3の直後',
+  'before_matome_h2':   'まとめH2の直前',
+  'after_matome_h2':    'まとめH2の直後',
+  'bottom':             '記事末尾',
+};
+const AD_DESIGN_LABELS = { 'vertical': '縦置きカード', 'ranking': 'ランキングカード' };
+
+function renderAdRules(articleType) {
+  const container = document.getElementById('ad-rules-' + articleType);
+  if (!container) return;
+  const rules = adInsertionState[articleType] || [];
+  if (!rules.length) {
+    container.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">ルール無し（マーカーは挿入されない）</div>';
+    return;
+  }
+  container.innerHTML = rules.map((r, i) => {
+    const posOpts = Object.entries(AD_POSITION_LABELS).map(([v, l]) =>
+      `<option value="${v}" ${r.position === v ? 'selected' : ''}>${esc(l)}</option>`
+    ).join('');
+    const designOpts = Object.entries(AD_DESIGN_LABELS).map(([v, l]) =>
+      `<option value="${v}" ${r.design === v ? 'selected' : ''}>${esc(l)}</option>`
+    ).join('');
+    const showCount = r.design === 'ranking';
+    const showRepeat = r.design === 'vertical';
+    return `
+      <div class="ad-rule-row" style="display:grid;grid-template-columns:2fr 1.4fr 1fr 1fr auto;gap:8px;align-items:center;margin-bottom:6px;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:4px">
+        <select class="form-control" onchange="updateAdRule('${articleType}', ${i}, 'position', this.value)" style="font-size:12px;height:32px">${posOpts}</select>
+        <select class="form-control" onchange="updateAdRule('${articleType}', ${i}, 'design', this.value); renderAdRules('${articleType}')" style="font-size:12px;height:32px">${designOpts}</select>
+        <div style="font-size:11px;color:var(--muted)">
+          ${showCount ? `件数: <input type="number" min="1" max="10" value="${r.count || 3}" onchange="updateAdRule('${articleType}', ${i}, 'count', parseInt(this.value, 10))" style="width:50px;font-size:11px">` : '—'}
+        </div>
+        <div style="font-size:11px;color:var(--muted)">
+          ${showRepeat ? `連続: <input type="number" min="1" max="5" value="${r.repeat || 1}" onchange="updateAdRule('${articleType}', ${i}, 'repeat', parseInt(this.value, 10))" style="width:50px;font-size:11px">` : '—'}
+        </div>
+        <button class="btn btn-danger btn-sm" onclick="removeAdRule('${articleType}', ${i})">🗑</button>
+      </div>
+    `;
+  }).join('');
+}
+
+function updateAdRule(articleType, index, key, value) {
+  if (!adInsertionState[articleType] || !adInsertionState[articleType][index]) return;
+  if (key === 'repeat' && value <= 1) {
+    delete adInsertionState[articleType][index].repeat;
+  } else if (key === 'count' && (!value || isNaN(value))) {
+    delete adInsertionState[articleType][index].count;
+  } else {
+    adInsertionState[articleType][index][key] = value;
+  }
+}
+
+function addAdRule(articleType) {
+  if (!adInsertionState[articleType]) adInsertionState[articleType] = [];
+  adInsertionState[articleType].push({ position: 'after_first_h2', design: 'vertical' });
+  renderAdRules(articleType);
+}
+
+function removeAdRule(articleType, index) {
+  if (!adInsertionState[articleType]) return;
+  adInsertionState[articleType].splice(index, 1);
+  renderAdRules(articleType);
+}
+
+async function loadAdInsertion() {
+  const msg = document.getElementById('ad-insertion-msg');
+  try {
+    const res = await fetch('/api/ad-insertion');
+    if (!res.ok) throw new Error('読み込みに失敗しました');
+    const data = await res.json();
+    adInsertionState = data.definition || { ranking: [], brand: [], column: [] };
+    ['ranking', 'brand', 'column'].forEach(t => {
+      if (!Array.isArray(adInsertionState[t])) adInsertionState[t] = [];
+      renderAdRules(t);
+    });
+    if (msg) { msg.style.color = 'var(--muted)'; msg.textContent = '広告挿入定義を読み込みました。'; }
+  } catch (e) {
+    if (msg) { msg.style.color = 'var(--error)'; msg.textContent = '読み込みエラー: ' + e.message; }
+  }
+}
+
+async function saveAdInsertion() {
+  const msg = document.getElementById('ad-insertion-msg');
+  try {
+    const res = await fetch('/api/ad-insertion', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ definition: adInsertionState }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || '保存失敗');
+    adInsertionState = data.definition;
+    ['ranking', 'brand', 'column'].forEach(t => renderAdRules(t));
+    toast('広告挿入定義を保存しました', 'success');
+    if (msg) { msg.style.color = 'var(--success)'; msg.textContent = '保存しました（' + new Date().toLocaleTimeString() + '）'; }
+  } catch (e) {
+    toast('保存に失敗しました: ' + e.message, 'error');
+    if (msg) { msg.style.color = 'var(--error)'; msg.textContent = '保存エラー: ' + e.message; }
+  }
+}
+
+async function resetAdInsertion() {
+  if (!confirm('広告挿入定義をデフォルトに戻しますか？\n（現在の設定は失われます）')) return;
+  try {
+    const res = await fetch('/api/ad-insertion/reset', {method: 'POST'});
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || 'リセット失敗');
+    await loadAdInsertion();
     toast('デフォルトに戻しました', 'success');
   } catch (e) {
     toast('リセットに失敗しました: ' + e.message, 'error');

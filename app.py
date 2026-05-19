@@ -181,6 +181,7 @@ SETTINGS_FILE = DATA_DIR / 'settings.json'
 BATCH_JOBS_FILE = DATA_DIR / 'batch_jobs.json'
 TITLE_DEFINITION_FILE = DATA_DIR / 'title_definition.json'
 TITLE_IDEA_JOBS_FILE = DATA_DIR / 'title_idea_jobs.json'
+AD_INSERTION_FILE = DATA_DIR / 'ad_insertion.json'
 
 
 DEFAULT_TITLE_DEFINITION = {
@@ -3004,6 +3005,74 @@ DEFAULT_CARD_INSERTION_PATTERNS = {
     ],
 }
 
+# 広告挿入定義 UI のホワイトリスト
+AD_INSERTION_ALLOWED_POSITIONS = (
+    'top',
+    'before_first_h2',
+    'after_first_h2',
+    'after_each_h3_rank',
+    'before_matome_h2',
+    'after_matome_h2',
+    'bottom',
+)
+AD_INSERTION_ALLOWED_DESIGNS = ('vertical', 'ranking')
+AD_INSERTION_ALLOWED_TYPES = ('ranking', 'brand', 'column')
+
+
+def _sanitize_ad_insertion_rules(rules):
+    """ユーザー入力された rules リストをサニタイズして返す。"""
+    if not isinstance(rules, list):
+        return []
+    clean = []
+    for r in rules:
+        if not isinstance(r, dict):
+            continue
+        position = str(r.get('position') or '').strip()
+        design = str(r.get('design') or 'vertical').strip()
+        if position not in AD_INSERTION_ALLOWED_POSITIONS:
+            continue
+        if design not in AD_INSERTION_ALLOWED_DESIGNS:
+            design = 'vertical'
+        item = {'position': position, 'design': design}
+        # count（rankingデザインのみ意味あり、1〜10）
+        try:
+            count = int(r.get('count'))
+            if 1 <= count <= 10:
+                item['count'] = count
+        except (TypeError, ValueError):
+            pass
+        # repeat（縦置きデザインで同じ位置に何個並べるか、1〜5）
+        try:
+            repeat = int(r.get('repeat'))
+            if 2 <= repeat <= 5:
+                item['repeat'] = repeat
+        except (TypeError, ValueError):
+            pass
+        clean.append(item)
+    return clean
+
+
+def load_ad_insertion_patterns():
+    """広告挿入定義をディスクから読み込む。未保存時はデフォルトを返す。"""
+    raw = load_json(AD_INSERTION_FILE, None)
+    if not isinstance(raw, dict):
+        return {k: [dict(r) for r in v] for k, v in DEFAULT_CARD_INSERTION_PATTERNS.items()}
+    merged = {}
+    for t in AD_INSERTION_ALLOWED_TYPES:
+        if t in raw and isinstance(raw[t], list):
+            merged[t] = _sanitize_ad_insertion_rules(raw[t])
+        else:
+            merged[t] = [dict(r) for r in DEFAULT_CARD_INSERTION_PATTERNS.get(t, [])]
+    return merged
+
+
+def save_ad_insertion_patterns(patterns):
+    clean = {}
+    for t in AD_INSERTION_ALLOWED_TYPES:
+        clean[t] = _sanitize_ad_insertion_rules((patterns or {}).get(t, []))
+    save_json(AD_INSERTION_FILE, clean)
+    return clean
+
 
 def _build_marker(design='vertical', count=None):
     """プラグイン用のマーカー文字列を組み立てる。
@@ -3047,7 +3116,14 @@ def insert_card_markers(html, article_type='ranking', patterns=None, title=None)
     stats = {'marker_count': 0, 'rules_applied': 0, 'positions': []}
     if not html:
         return html, stats
-    rules = (patterns or DEFAULT_CARD_INSERTION_PATTERNS).get(article_type) or []
+    # patterns 未指定なら 永続化された広告挿入定義 をロードする
+    # （UI から編集された設定があればそれを優先、無ければDEFAULT）
+    if patterns is None:
+        try:
+            patterns = load_ad_insertion_patterns()
+        except Exception:
+            patterns = DEFAULT_CARD_INSERTION_PATTERNS
+    rules = patterns.get(article_type) or []
     if not rules:
         return html, stats
 
@@ -6370,6 +6446,35 @@ def update_title_definition():
 @login_required
 def reset_title_definition():
     saved = save_title_definition(dict(DEFAULT_TITLE_DEFINITION))
+    return jsonify({'success': True, 'definition': saved})
+
+
+# Ad insertion definition (記事種類ごとの広告マーカー挿入ルール)
+@app.route('/api/ad-insertion', methods=['GET'])
+@login_required
+def get_ad_insertion():
+    return jsonify({
+        'definition': load_ad_insertion_patterns(),
+        'defaults': {k: [dict(r) for r in v] for k, v in DEFAULT_CARD_INSERTION_PATTERNS.items()},
+        'allowed_positions': list(AD_INSERTION_ALLOWED_POSITIONS),
+        'allowed_designs': list(AD_INSERTION_ALLOWED_DESIGNS),
+    })
+
+
+@app.route('/api/ad-insertion', methods=['PUT'])
+@login_required
+def update_ad_insertion():
+    data = request.get_json(silent=True) or {}
+    saved = save_ad_insertion_patterns(data.get('definition') or data)
+    return jsonify({'success': True, 'definition': saved})
+
+
+@app.route('/api/ad-insertion/reset', methods=['POST'])
+@login_required
+def reset_ad_insertion():
+    saved = save_ad_insertion_patterns(
+        {k: [dict(r) for r in v] for k, v in DEFAULT_CARD_INSERTION_PATTERNS.items()}
+    )
     return jsonify({'success': True, 'definition': saved})
 
 
