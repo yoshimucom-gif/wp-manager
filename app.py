@@ -4667,6 +4667,50 @@ def cancel_batch_job(job_id):
     return jsonify({'success': True, 'message': 'キャンセル要求を送信しました。間もなく停止します。'})
 
 
+@app.route('/api/batch-jobs/<job_id>/force-terminate', methods=['POST'])
+@login_required
+def force_terminate_batch_job(job_id):
+    """ジョブを強制終了マークする。
+    ワーカースレッドは Python から強制停止できないため:
+    - ジョブ status を 'terminated' に矯正
+    - 該当ジョブの queued / generating 記事を pending に戻す
+    - 進行中の thread は最後の API 呼出が終わるまで動き続けるが、結果は反映されない
+      （save_articles 時に既に pending なので衝突しても上書きされるだけ）
+    """
+    jobs = load_batch_jobs()
+    target = None
+    for j in jobs:
+        if j.get('id') == job_id:
+            target = j
+            break
+    if not target:
+        return jsonify({'error': 'ジョブが見つかりません'}), 404
+    target['cancel_requested'] = True
+    target['status'] = 'terminated'
+    target['updated_at'] = datetime.now().isoformat()
+    target['completed_at'] = target.get('completed_at') or target['updated_at']
+    target['message'] = (target.get('message') or '') + ' [強制終了]'
+    save_batch_jobs(jobs)
+
+    article_ids = set(target.get('article_ids') or [])
+    articles = load_articles()
+    changed = 0
+    for a in articles:
+        if a.get('id') in article_ids and a.get('status') in ('queued', 'generating'):
+            a['status'] = 'pending'
+            a.pop('batch_job_id', None)
+            a['updated_at'] = datetime.now().isoformat()
+            a['generation_warning'] = '一括処理を強制終了しました。必要なら再生成してください。'
+            changed += 1
+    if changed:
+        save_articles(articles)
+    return jsonify({
+        'success': True,
+        'reset_count': changed,
+        'message': f'強制終了しました。{changed}件の記事を未生成に戻しました。',
+    })
+
+
 # Import
 @app.route('/api/import', methods=['POST'])
 @login_required
@@ -5347,6 +5391,7 @@ def batch_generate():
                 update_job(current_title=article.get('title', ''), message=f"Amazon/楽天で実商品データ取得中: {article.get('title', '')}")
                 products, _ = fetch_product_context(article, settings, limit=15)
                 stage = 'build prompt'
+                update_job(current_title=article.get('title', ''), message=f"プロンプト構築中: {article.get('title', '')}")
                 prompt = f"""以下の情報をもとに、WordPressに投稿する記事を書いてください。
 
 タイトル: {article['title']}
@@ -5396,10 +5441,12 @@ def batch_generate():
                         )
                     )
                 else:
+                    update_job(current_title=article.get('title', ''), message=f"Claudeで本文生成中: {article.get('title', '')}")
                     message = create_claude_message(client, prompt, max_tokens=claude_max_tokens_for_quality(quality))
                     raw_content = anthropic_message_text(message)
                     usage_parts = [build_article_usage(prompt, raw_content, message)]
                 stage = 'inject affiliate markers'
+                update_job(current_title=article.get('title', ''), message=f"商品カードマーカー挿入中: {article.get('title', '')}")
                 # プラグイン連携前提でマーカー挿入に固定（UIセレクタ廃止）
                 raw_content, marker_stats = insert_card_markers(raw_content, article_type, title=article.get('title') if isinstance(article, dict) else None)
                 card_stats = {'h3_count': 0, 'matched_count': 0, 'products_available': 0,
@@ -5407,6 +5454,7 @@ def batch_generate():
                 if card_stats.get('h3_count') and not card_stats.get('matched_count'):
                     update_job(current_title=article.get('title', ''), message=f"商品カード未挿入（取得商品 {card_stats.get('products_available', 0)}件 / 見出し {card_stats.get('h3_count', 0)}件）: {article.get('title', '')}")
                 stage = 'enhance and validate content'
+                update_job(current_title=article.get('title', ''), message=f"本文を整形・検証中: {article.get('title', '')}")
                 content, enhance_warning = safe_enhance_generated_article_html(raw_content, article, article_type)
                 content = strip_summary_table_sections(content)
                 if enhance_warning:

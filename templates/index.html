@@ -3787,6 +3787,26 @@ async function cancelBatchJob(jobId) {
   }
 }
 
+async function forceTerminateBatchJob(jobId) {
+  if (!jobId) return;
+  if (!confirm('一括処理を強制終了します。\n\n・処理中の記事のAPI呼び出しは裏側で動き続けますが、結果は記事に反映されません\n・待機中/処理中の記事は全て「未生成」に戻ります\n・stuckしている時の最終手段です。本当に実行しますか？')) {
+    return;
+  }
+  try {
+    const res = await fetch(`/api/batch-jobs/${jobId}/force-terminate`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast(data.error || '強制終了に失敗しました', 'error');
+      return;
+    }
+    toast(data.message || '強制終了しました', 'success');
+    await loadLatestBatchJob();
+    await loadArticles();
+  } catch (e) {
+    toast(`強制終了リクエストに失敗: ${e.message || e}`, 'error');
+  }
+}
+
 async function loadLatestBatchJob() {
   try {
     const res = await fetch('/api/batch-jobs/latest');
@@ -3843,7 +3863,8 @@ function renderBatchJobStatus(job) {
   if (isRunning) {
     const queueInfo = queuedCount ? ` / 待機 ${queuedCount}件` : '';
     const cancelBtn = job?.id
-      ? `<button class="btn btn-secondary btn-sm" style="margin-left:8px" onclick="cancelBatchJob('${esc(job.id)}')">⏹ 一括処理を中止</button>`
+      ? `<button class="btn btn-secondary btn-sm" style="margin-left:8px" onclick="cancelBatchJob('${esc(job.id)}')">⏹ 一括処理を中止</button>
+         <button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="forceTerminateBatchJob('${esc(job.id)}')" title="現在の記事のAPI呼び出しを待たずにジョブを終了マーク。stuckしてる時用">✕ 強制終了</button>`
       : '';
     el.innerHTML = `<div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px"><span>一括生成中: ${completed}/${total}件完了${queueInfo}${failed ? ` / エラー ${failed}件` : ''}${retried ? ` / 自動リトライ ${retried}回` : ''}</span>${cancelBtn}</div><div style="margin-top:4px">${esc(job?.message || 'ページを移動しても処理は継続します。戻ってきたら自動で状況を更新します。')}</div>`;
     // 一括生成開始ボタンを無効化（並行起動防止）
