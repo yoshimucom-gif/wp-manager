@@ -1545,13 +1545,27 @@ def score_title_idea(title, keyword, article_type, existing_title_keys):
     return max(1, min(100, score))
 
 
-def title_generation_prompt(keywords, count_per_keyword, category=''):
+def title_generation_prompt(keywords, count_per_keyword, category='', preferred_type=''):
     d = load_title_definition()
     forbidden_list = '、'.join(d.get('forbidden_phrases') or [])
     angles = d.get('angle_categories') or []
     angles_text = '「' + '」「'.join(angles) + '」' if angles else ''
     additional = (d.get('additional_instructions') or '').strip()
     additional_block = f'\n【追加指示（運用ルール）】\n{additional}\n' if additional else ''
+    preferred_label = {
+        'ranking': 'ランキング記事（おすすめ・比較・○選）',
+        'brand': '商標記事（具体的な商品名・サービス名の口コミ/評判/レビュー）',
+        'column': 'コラム記事（とは・選び方・使い方・原因・対策・違い）',
+    }.get(preferred_type, '')
+    preferred_block = ''
+    if preferred_label:
+        preferred_block = f"""
+【優先する記事種類】
+ユーザーは「{preferred_label}」を優先的に生成したいです。
+- 入力KWがこの種類で自然に成立するなら、必ずこの種類を採用してください。
+- ただしKWの検索意図が明らかに別種類でしか成立しない場合（例: brand指定だが広いジャンルKWで個別商品名が含まれない、column指定だが「○○ おすすめ」のような明確なランキング意図、など）は、無理に合わせず自然な種類を採用してください。
+- 自然な記事種類を採用した場合は、reason フィールドで「KWの意図に合わせて○○記事に変更」と簡潔に書いてください。
+"""
 
     return f"""あなたはSEO記事の編集者です。検索順位とクリック率（CTR）の両方を最大化する記事タイトルを設計してください。
 
@@ -1590,6 +1604,7 @@ def title_generation_prompt(keywords, count_per_keyword, category=''):
 - 「とは・選び方・使い方・原因・対策・違い」は column。
 - 具体的な商品名・サービス名・型番の口コミ/評判/レビューは brand。
 - 広いジャンル名だけで brand にはしない。
+{preferred_block}
 
 【SEO 観点 ─ 検索される & 評価される】
 - メインキーワードは **タイトルの先頭〜中盤** に置く。末尾に流さない。
@@ -1892,8 +1907,8 @@ def is_model_not_found_error(error):
     return 'not_found' in text or 'model' in text and '404' in text
 
 
-def generate_claude_title_ideas_once(api_key, keywords, count_per_keyword, category):
-    prompt = title_generation_prompt(keywords, count_per_keyword, category)
+def generate_claude_title_ideas_once(api_key, keywords, count_per_keyword, category, preferred_type=''):
+    prompt = title_generation_prompt(keywords, count_per_keyword, category, preferred_type=preferred_type)
     client = anthropic.Anthropic(api_key=api_key)
     last_error = None
     for model in claude_title_idea_models():
@@ -4068,9 +4083,11 @@ def generate_title_ideas():
     except Exception:
         data = {}
     keywords = split_title_keywords(data.get('keywords', ''))
-    count_per_keyword = clamp_int(data.get('count_per_keyword'), 3, 1, 5)
+    count_per_keyword = clamp_int(data.get('count_per_keyword'), 1, 1, 5)
     category = str(data.get('category') or '').strip()
     site_id = data.get('site_id') or ''
+    preferred_type_raw = str(data.get('preferred_type') or '').strip().lower()
+    preferred_type = preferred_type_raw if preferred_type_raw in ('ranking', 'brand', 'column') else ''
 
     if not keywords:
         return jsonify({'error': 'キーワードを1行以上入力してください'}), 400
@@ -4102,6 +4119,7 @@ def generate_title_ideas():
         'count_per_keyword': count_per_keyword,
         'category': category,
         'site_id': site_id,
+        'preferred_type': preferred_type,
         'total_batches': len(batches),
         'completed_batches': 0,
         'expected_count': expected_count,
@@ -4142,7 +4160,7 @@ def generate_title_ideas():
             max_workers = min(TITLE_IDEA_PARALLEL_BATCHES, len(batches))
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_idx = {
-                    executor.submit(generate_claude_title_ideas_once, claude_key, batch, count_per_keyword, category): (idx, batch)
+                    executor.submit(generate_claude_title_ideas_once, claude_key, batch, count_per_keyword, category, preferred_type): (idx, batch)
                     for idx, batch in enumerate(batches, 1)
                 }
                 for future in as_completed(future_to_idx):
