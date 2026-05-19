@@ -390,6 +390,10 @@ tr.selected td { background: var(--accent-dim); }
 .badge-scheduled { background: rgba(111,66,193,0.1); color: #6f42c1; border: 1px solid rgba(111,66,193,0.2); }
 .badge-error { background: rgba(207,34,46,0.1); color: var(--error); border: 1px solid rgba(207,34,46,0.2); }
 
+/* 対応完了済み（PUSH済 / 予約済 / 更新完了）の行は背景をうっすら緑にして識別しやすくする */
+tr.row-completed > td { background: rgba(26,127,55,0.04); }
+tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
+
 .score-pill {
   display: inline-flex;
   align-items: center;
@@ -2426,8 +2430,9 @@ function renderArticles(articles) {
     const brandExpansionButton = (a.article_type || 'ranking') === 'ranking' && a.content
       ? `<button class="btn btn-secondary btn-sm" ${disabled} title="ランキング記事で紹介した商品から商標記事の未生成下書きを作成" onclick="openBrandExpansionModal('${a.id}')">商標記事化</button>`
       : '';
+    const rowClass = ['published', 'scheduled', 'updated'].includes(a.status) ? 'row-completed' : '';
     return `
-    <tr id="row-${a.id}">
+    <tr id="row-${a.id}" class="${rowClass}">
       <td><input type="checkbox" class="check-row" value="${a.id}"></td>
       <td style="color:var(--muted);font-size:11px">${i + 1}</td>
       <td style="font-size:11px;color:var(--accent);white-space:nowrap">${articleTypeLabel(a.article_type || 'ranking')}</td>
