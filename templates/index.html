@@ -2434,7 +2434,15 @@ function renderArticles(articles) {
     const disabled = busy ? 'disabled' : '';
     const generateLabel = a.status === 'generating' ? '再生成中...' : (a.content ? '再生成' : '生成');
     const publishLabel = a.status === 'publishing' ? '投稿中...' : 'WP下書き投稿';
-    const statusDetailText = a.processing_message || a.generation_warning || (a.status === 'error' ? a.error : '');
+    // 警告表示は「致命的なもの」だけ。成功している記事に非致命的な装飾スキップ警告
+    // （HTML整形をスキップ、本文後処理をスキップ等）を出すとノイズになるので隠す。
+    const isSuccessful = ['generated', 'published', 'scheduled', 'updated'].includes(a.status);
+    const nonCriticalPatterns = ['HTML整形をスキップ', '本文後処理をスキップ', 'AI返却が'];
+    let warningText = a.generation_warning || '';
+    if (isSuccessful && warningText && nonCriticalPatterns.some(p => warningText.includes(p))) {
+      warningText = '';
+    }
+    const statusDetailText = a.processing_message || warningText || (a.status === 'error' ? a.error : '');
     const statusDetailColor = a.status === 'error' ? 'var(--danger)' : 'var(--muted)';
     const statusDetail = statusDetailText
       ? `<div style="font-size:10px;color:${statusDetailColor};margin-top:4px">${esc(statusDetailText)}</div>`

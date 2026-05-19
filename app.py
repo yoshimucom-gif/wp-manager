@@ -1273,8 +1273,21 @@ def safe_enhance_generated_article_html(content, article, article_type):
     try:
         return enhance_generated_article_html(content, article, article_type), ''
     except Exception as e:
+        # 装飾後処理は致命的ではない（本文は保存される）。
+        # ユーザーに見せない代わりに Render ログに traceback を残して原因究明できるように。
+        try:
+            app.logger.warning(
+                '[enhance-skip] article=%s type=%s err=%s\n%s',
+                (article or {}).get('id', '?'),
+                article_type,
+                e,
+                traceback.format_exc(),
+            )
+        except Exception:
+            pass
         html = sanitize_generated_html(content)
-        return format_block_html(html), f'HTML整形をスキップしました: {e}'
+        # 警告は記事に保存しない（ユーザー側でノイズになるため）
+        return format_block_html(html), ''
 
 
 def block_attrs(attrs=None):
