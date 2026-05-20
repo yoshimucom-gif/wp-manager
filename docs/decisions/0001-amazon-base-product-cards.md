@@ -58,5 +58,5 @@
 ## 関連ファイル
 
 - `plugin-patches/product-selector.php` (master)
-- `plugin-patches/build/ai-product-inserter/includes/product-selector.php` (build copy)
-- `plugin-patches/build/ai-product-inserter/templates/card-vertical.php` (card-side fallback logic)
+- `plugin-patches/build/affiros-product-inserter/includes/product-selector.php` (build copy)
+- `plugin-patches/build/affiros-product-inserter/templates/card-vertical.php` (card-side fallback logic)

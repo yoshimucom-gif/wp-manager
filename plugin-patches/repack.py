@@ -1,9 +1,9 @@
-"""Re-pack ai-product-inserter using forward-slash paths (WordPress-compatible)."""
+"""Re-pack affiros-product-inserter using forward-slash paths (WordPress-compatible)."""
 import os
 import zipfile
 
 SRC_DIR = r"C:\Users\yoshi\OneDrive\デスクトップ\Codex\plugin-patches\build"
-OUT_ZIP = r"C:\Users\yoshi\Downloads\ai-product-inserter-1.7.3.zip"
+OUT_ZIP = r"C:\Users\yoshi\Downloads\affiros-product-inserter-1.7.3.zip"
 
 # Remove existing zip
 if os.path.exists(OUT_ZIP):

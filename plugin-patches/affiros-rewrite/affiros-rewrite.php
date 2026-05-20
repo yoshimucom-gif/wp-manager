@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: AIリライター
+ * Plugin Name: Affiros リライター
  * Description: WordPress記事をClaude APIでリライトする。WP_Queryで内部処理するためホスティングWAFの影響を受けない（403回避）。
  * Version: 0.3.0
  * Author: Affiros
