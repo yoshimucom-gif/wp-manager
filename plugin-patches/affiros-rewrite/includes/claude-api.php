@@ -15,7 +15,7 @@ class Affiros_Rewrite_Claude_API {
     public function __construct() {
         $settings = affiros_rewrite_get_settings();
         $this->api_key = $settings['claude_api_key'] ?? '';
-        $this->model = $settings['claude_model'] ?? 'claude-sonnet-4-5-20250929';
+        $this->model = $settings['claude_model'] ?? 'claude-sonnet-4-6';
     }
 
     public function is_configured() {

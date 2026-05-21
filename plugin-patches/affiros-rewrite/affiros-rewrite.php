@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros リライター
  * Description: WordPress記事をClaude APIでリライトする。WP_Queryで内部処理するためホスティングWAFの影響を受けない（403回避）。
- * Version: 0.3.0
+ * Version: 0.3.1
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-rewrite
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('AFFIROS_REWRITE_VERSION', '0.3.0');
+define('AFFIROS_REWRITE_VERSION', '0.3.1');
 define('AFFIROS_REWRITE_PATH', plugin_dir_path(__FILE__));
 define('AFFIROS_REWRITE_URL', plugin_dir_url(__FILE__));
 
@@ -36,7 +36,7 @@ require_once AFFIROS_REWRITE_PATH . 'admin/ajax-handler.php';
 function affiros_rewrite_default_settings() {
     return [
         'claude_api_key' => '',
-        'claude_model' => 'claude-sonnet-4-5-20250929',
+        'claude_model' => 'claude-sonnet-4-6',
         'rewrite_mode' => 'seo',          // seo / readability / freshness
         'emphasis_level' => 'standard',   // light / standard / strong
         'tone' => 'natural',              // natural / professional / casual
@@ -46,11 +46,32 @@ function affiros_rewrite_default_settings() {
 }
 
 /**
+ * 旧モデルID → 現行モデルID のマイグレーションマップ
+ *
+ * v0.3.0 以前を入れていた環境は DB に旧モデルIDが保存されたままになる。
+ * 旧IDのまま API を叩くとリタイア済みモデルで失敗するため、設定読み込み時に
+ * 現行IDへ寄せる。
+ */
+function affiros_rewrite_migrate_model_id($model) {
+    $map = [
+        'claude-sonnet-4-5-20250929' => 'claude-sonnet-4-6',
+        'claude-sonnet-4-5'          => 'claude-sonnet-4-6',
+        'claude-opus-4-1-20250805'   => 'claude-opus-4-7',
+        'claude-opus-4-1'            => 'claude-opus-4-7',
+        'claude-3-5-haiku-20241022'  => 'claude-haiku-4-5',
+        'claude-3-5-haiku'           => 'claude-haiku-4-5',
+    ];
+    return $map[$model] ?? $model;
+}
+
+/**
  * 設定取得
  */
 function affiros_rewrite_get_settings() {
     $saved = get_option(AFFIROS_REWRITE_OPTION_KEY, []);
-    return array_merge(affiros_rewrite_default_settings(), is_array($saved) ? $saved : []);
+    $settings = array_merge(affiros_rewrite_default_settings(), is_array($saved) ? $saved : []);
+    $settings['claude_model'] = affiros_rewrite_migrate_model_id($settings['claude_model'] ?? '');
+    return $settings;
 }
 
 /**

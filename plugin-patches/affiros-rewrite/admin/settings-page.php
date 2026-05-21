@@ -90,10 +90,11 @@ function affiros_rewrite_render_settings_page() {
                     <th><label for="claude_model">Claude モデル</label></th>
                     <td>
                         <select id="claude_model" name="affiros_rewrite[claude_model]">
-                            <option value="claude-sonnet-4-5-20250929" <?php selected($settings['claude_model'], 'claude-sonnet-4-5-20250929'); ?>>Claude Sonnet 4.5（推奨）</option>
-                            <option value="claude-opus-4-1-20250805" <?php selected($settings['claude_model'], 'claude-opus-4-1-20250805'); ?>>Claude Opus 4.1（最高品質・高コスト）</option>
-                            <option value="claude-3-5-haiku-20241022" <?php selected($settings['claude_model'], 'claude-3-5-haiku-20241022'); ?>>Claude Haiku 3.5（低コスト・速度優先）</option>
+                            <option value="claude-sonnet-4-6" <?php selected($settings['claude_model'], 'claude-sonnet-4-6'); ?>>Claude Sonnet 4.6（推奨・コスパ良）</option>
+                            <option value="claude-opus-4-7" <?php selected($settings['claude_model'], 'claude-opus-4-7'); ?>>Claude Opus 4.7（最高品質・高コスト）</option>
+                            <option value="claude-haiku-4-5" <?php selected($settings['claude_model'], 'claude-haiku-4-5'); ?>>Claude Haiku 4.5（低コスト・速度優先）</option>
                         </select>
+                        <p class="description">wp_manager 本体の記事生成モデルと揃えています。</p>
                     </td>
                 </tr>
             </table>

@@ -34,7 +34,12 @@ Affiros（外部 SaaS）から WP REST API 経由でリライトしようとす�
 - 記事タイプ別の規則: ranking / brand / column
 - 位置: each_h3 / after_first_h2 / before_first_h2 / after_matome_h2 / before_matome_h2
 - デザイン: vertical / ranking(count)
-- ai-product-inserter プラグインがマーカーを実際の商品カードに置換
+- Affiros プロダクトインサーター（affiros-product-inserter）プラグインが
+  `<!--ai-product:...-->` マーカーを実際の商品カードに置換
+
+### v0.3.1
+- Claude モデルIDを wp_manager 本体と統一（Sonnet 4.6 / Opus 4.7 / Haiku 4.5）
+- 旧モデルID（Sonnet 4.5 / Opus 4.1 / Haiku 3.5）は読み込み時に自動マイグレーション
 
 ## インストール
 
