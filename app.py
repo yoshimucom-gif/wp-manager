@@ -150,6 +150,17 @@ try:
     CLAUDE_SEGMENT_CONTINUATION_MAX_ROUNDS = int(os.environ.get('CLAUDE_SEGMENT_CONTINUATION_MAX_ROUNDS', '2'))
 except ValueError:
     CLAUDE_SEGMENT_CONTINUATION_MAX_ROUNDS = 2
+# 品質ゲート（#7）: 生成記事の SEO スコアがこの点数未満なら、不足点を
+# フィードバックして品質改善（作り直し）を最大 QUALITY_GATE_MAX_POLISH 回まで試みる。
+# 各試行を採点し最高スコア版を採用するため、改善が無ければ早期打ち切り。
+try:
+    QUALITY_GATE_MIN_SCORE = int(os.environ.get('QUALITY_GATE_MIN_SCORE', '60'))
+except ValueError:
+    QUALITY_GATE_MIN_SCORE = 60
+try:
+    QUALITY_GATE_MAX_POLISH = max(1, int(os.environ.get('QUALITY_GATE_MAX_POLISH', '2')))
+except ValueError:
+    QUALITY_GATE_MAX_POLISH = 2
 DEFAULT_ARTICLE_TARGET_CHARS = 3000
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
@@ -4996,28 +5007,65 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                 try:
                     post_content = content
                     if client:
-                        update_job(current_title=article.get('title', ''), message=f"本文保存済み。品質改善中: {article.get('title', '')}")
-                        polish_prompt = build_article_polish_prompt(
-                            article,
-                            article_type,
-                            quality,
-                            post_content,
-                            ' / '.join(pipeline_warnings)
-                        )
-                        polish_message = create_claude_message(
-                            client,
-                            polish_prompt,
-                            max_tokens=claude_max_tokens_for_quality(quality, floor=2400, ceiling=7000)
-                        )
-                        polished_raw = anthropic_message_text(polish_message)
-                        polished_content, enhance_warning = safe_enhance_generated_article_html(polished_raw, article, article_type)
-                        if enhance_warning:
-                            postprocess_warnings.append(enhance_warning)
-                        if len(html_to_text(polished_content)) >= max(500, int(len(html_to_text(post_content)) * 0.75)):
-                            post_content = polished_content
+                        # ── 品質ゲート (#7) ──────────────────────────────────
+                        # SEOスコアを機械採点し、不足点をフィードバックして品質改善
+                        # （作り直し）を最大 QUALITY_GATE_MAX_POLISH 回まで試みる。
+                        # 各試行を採点し「最もスコアが高い版」を必ず採用する
+                        # （品質改善で悪化した版は捨て、初回生成を下回らせない）。
+                        best_content = content
+                        best_score_data = score_article_content(
+                            article.get('title', ''), best_content, article.get('keywords', ''))
+                        base_gate_score = best_score_data['score']
+                        for polish_round in range(1, QUALITY_GATE_MAX_POLISH + 1):
+                            update_job(
+                                current_title=article.get('title', ''),
+                                message=f"品質改善 {polish_round}/{QUALITY_GATE_MAX_POLISH}（現在 {best_score_data['score']}点）: {article.get('title', '')}"
+                            )
+                            feedback = ' / '.join(dict.fromkeys(
+                                pipeline_warnings + (best_score_data.get('suggestions') or [])
+                            ))
+                            polish_prompt = build_article_polish_prompt(
+                                article, article_type, quality, best_content, feedback
+                            )
+                            polish_message = create_claude_message(
+                                client, polish_prompt,
+                                max_tokens=claude_max_tokens_for_quality(quality, floor=2400, ceiling=7000)
+                            )
+                            polished_raw = anthropic_message_text(polish_message)
+                            polished_content, enhance_warning = safe_enhance_generated_article_html(
+                                polished_raw, article, article_type
+                            )
+                            if enhance_warning:
+                                postprocess_warnings.append(enhance_warning)
                             usage_parts.append(build_article_usage(polish_prompt, polished_raw, polish_message))
-                        else:
-                            postprocess_warnings.append('品質改善後の本文が短すぎたため、本文生成直後の内容を維持しました。')
+                            long_enough = len(html_to_text(polished_content)) >= max(
+                                500, int(len(html_to_text(best_content)) * 0.75)
+                            )
+                            polished_valid = validate_generated_article(
+                                article, article_type, polished_content, quality
+                            )
+                            polished_score_data = score_article_content(
+                                article.get('title', ''), polished_content, article.get('keywords', '')
+                            )
+                            improved = (
+                                long_enough and not polished_valid
+                                and polished_score_data['score'] > best_score_data['score']
+                            )
+                            if improved:
+                                best_content = polished_content
+                                best_score_data = polished_score_data
+                            # 基準達成 or 今回改善しなかった → これ以上回さず打ち切り
+                            if best_score_data['score'] >= QUALITY_GATE_MIN_SCORE or not improved:
+                                break
+                        post_content = best_content
+                        if best_score_data['score'] > base_gate_score:
+                            postprocess_warnings.append(
+                                f'品質ゲート: スコアを {base_gate_score}→{best_score_data["score"]}点 に改善しました。'
+                            )
+                        elif best_score_data['score'] < QUALITY_GATE_MIN_SCORE:
+                            postprocess_warnings.append(
+                                f'品質スコア {best_score_data["score"]}点 が基準({QUALITY_GATE_MIN_SCORE})に届きませんでした。手動での見直しを推奨します。'
+                            )
 
                     update_job(current_title=article.get('title', ''), message=f"本文保存済み。本文HTMLを整えています: {article.get('title', '')}")
                     if post_content != content:

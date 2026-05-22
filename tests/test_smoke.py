@@ -250,6 +250,42 @@ def test_articles_persist_through_db():
 
 
 # ─────────────────────────────────────────────
+# 記事品質スコアリング・品質ゲート（ロードマップ #7）
+# ─────────────────────────────────────────────
+def test_score_article_content_structure():
+    html = (
+        '<h2>選び方</h2><p>' + 'あ' * 400 + '</p>'
+        '<h3>ポイント</h3><ul><li>項目</li></ul>'
+        '<h2>まとめ</h2><p>結論</p>'
+    )
+    sd = app.score_article_content('テスト記事 おすすめ', html, 'テスト')
+    assert 0 <= sd['score'] <= 100
+    assert sd['grade'] in ('A', 'B', 'C', 'D')
+    assert isinstance(sd['suggestions'], list)
+    assert 'metrics' in sd
+
+
+def test_score_article_content_rich_beats_empty():
+    sd_empty = app.score_article_content('', '', '')
+    sd_rich = app.score_article_content(
+        'ネッククーラー おすすめ',
+        '<h2>選び方</h2><p>' + 'x' * 600 + '</p>'
+        '<h2>比較</h2><table><tr><td>A</td></tr></table>'
+        '<h3>詳細</h3><ul><li>1</li><li>2</li></ul>'
+        '<h2>まとめ</h2><p>結論</p>',
+        'ネッククーラー',
+    )
+    # 充実した記事のほうが空記事よりスコアが高い
+    assert sd_rich['score'] > sd_empty['score']
+
+
+def test_quality_gate_config_is_sane():
+    assert isinstance(app.QUALITY_GATE_MIN_SCORE, int)
+    assert 0 <= app.QUALITY_GATE_MIN_SCORE <= 100
+    assert app.QUALITY_GATE_MAX_POLISH >= 1
+
+
+# ─────────────────────────────────────────────
 # Flask ルート疎通
 # ─────────────────────────────────────────────
 def test_unauthenticated_api_is_blocked():
