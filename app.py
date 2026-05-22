@@ -4382,8 +4382,10 @@ def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if not session.get('authenticated'):
-            if request.is_json or request.headers.get('Accept') == 'text/event-stream':
-                return jsonify({'error': '認証が必要です'}), 401
+            if (request.is_json
+                    or request.headers.get('Accept') == 'text/event-stream'
+                    or request.path.startswith('/api/')):
+                return jsonify({'error': '認証が必要です', 'login_required': True}), 401
             return redirect(url_for('login_page'))
         return f(*args, **kwargs)
     return decorated
