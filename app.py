@@ -3298,17 +3298,21 @@ def strip_summary_table_sections(html):
 DEFAULT_CARD_INSERTION_PATTERNS = {
     'ranking': [
         {'position': 'after_each_h3_rank', 'design': 'vertical'},
-        {'position': 'after_matome_h2', 'design': 'ranking', 'count': 3},
+        {'position': 'after_last_h2', 'design': 'ranking', 'count': 3},
     ],
     'brand': [
-        # 商標記事は1つの商品を深掘りする構造なので、マーカーは1つだけ。
-        # 最初のH2直後（冒頭近く）に置いてCV機会を最大化する。
+        # 商標記事は1商品深掘り構造。
+        # after_first_h2: 冒頭近くでCV機会を最大化。
+        # after_last_h2: キーワード依存なし・記事末尾確定位置（最後のH2直後）。
+        #   intro H2 が strip されて after_first_h2 が失敗しても、
+        #   after_last_h2 で必ず1つ以上挿入される。
         {'position': 'after_first_h2', 'design': 'vertical'},
+        {'position': 'after_last_h2', 'design': 'vertical'},
     ],
     'column': [
         {'position': 'before_first_h2', 'design': 'vertical', 'repeat': 3},
         # after_last_h2: キーワードに依存しない確定位置。
-        # after_matome_h2 はFAQ等のH2が記事末尾にある場合まとめと誤解離するため、
+        # after_matome_h2 はFAQ等のH2が記事末尾にある場合まとめから離れるため、
         # 無条件に「記事内の最後のH2直後」を使う方が安定。
         {'position': 'after_last_h2', 'design': 'ranking', 'count': 3},
     ],
@@ -3363,7 +3367,13 @@ def _sanitize_ad_insertion_rules(rules):
 
 
 def load_ad_insertion_patterns():
-    """広告挿入定義をディスクから読み込む。未保存時はデフォルトを返す。"""
+    """広告挿入定義をディスクから読み込む。未保存時はデフォルトを返す。
+
+    マイグレーション:
+      after_matome_h2 はキーワード依存のため brand/column で不安定だった。
+      after_last_h2 と置き換えることで確実にマーカーが挿入される。
+      ロード時に自動マイグレーションし、変更があれば上書き保存する。
+    """
     raw = load_doc('ad_insertion', None)
     if not isinstance(raw, dict):
         return {k: [dict(r) for r in v] for k, v in DEFAULT_CARD_INSERTION_PATTERNS.items()}
@@ -3373,6 +3383,36 @@ def load_ad_insertion_patterns():
             merged[t] = _sanitize_ad_insertion_rules(raw[t])
         else:
             merged[t] = [dict(r) for r in DEFAULT_CARD_INSERTION_PATTERNS.get(t, [])]
+
+    # ── after_matome_h2 → after_last_h2 自動マイグレーション ──────────────
+    # brand / column の after_matome_h2 はキーワード検出が失敗すると last H2 に
+    # フォールバックするが、そもそも after_last_h2 を直接使う方が確実。
+    # ranking は after_matome_h2 の「まとめ狙い」に意図がある場合があるので残す。
+    _MIGRATE_TYPES = ('brand', 'column')
+    migrated = False
+    for t in _MIGRATE_TYPES:
+        for rule in merged.get(t, []):
+            if rule.get('position') == 'after_matome_h2':
+                rule['position'] = 'after_last_h2'
+                migrated = True
+    if migrated:
+        try:
+            save_ad_insertion_patterns(merged)
+            print('[AD-MIGRATION] after_matome_h2 → after_last_h2 applied and saved', flush=True)
+        except Exception as _e:
+            print(f'[AD-MIGRATION] save failed: {_e}', flush=True)
+    # ──────────────────────────────────────────────────────────────────────
+
+    # brand: after_last_h2 が1つも無い場合はデフォルトルールを追加
+    brand_has_last = any(r.get('position') == 'after_last_h2' for r in merged.get('brand', []))
+    if not brand_has_last:
+        merged['brand'] = merged.get('brand', []) + [{'position': 'after_last_h2', 'design': 'vertical'}]
+        try:
+            save_ad_insertion_patterns(merged)
+            print('[AD-MIGRATION] brand: after_last_h2 added as fallback', flush=True)
+        except Exception:
+            pass
+
     return merged
 
 
@@ -3587,6 +3627,19 @@ def insert_card_markers(html, article_type='ranking', patterns=None, title=None)
     insertions.sort(key=lambda x: x[0], reverse=True)
     for pos, marker_text in insertions:
         text = text[:pos] + marker_text + text[pos:]
+
+    # ── 絶対フォールバック ─────────────────────────────────────────────────
+    # 全ルール適用後にマーカーが1つも挿入できていない場合（H2なし等の構造的理由）、
+    # 記事末尾に必ず1つ挿入する。WPプラグインの「マーカーが見つかりません」エラーを
+    # 根絶するための最終安全網。
+    if stats['marker_count'] == 0 and rules:
+        fallback_marker = _build_marker('vertical', brand=(article_type == 'brand'))
+        text = text + '\n' + fallback_marker
+        stats['marker_count'] += 1
+        stats['rules_applied'] += 1
+        stats['positions'].append('bottom_fallback')
+        print(f'[MARKER] fallback: article_type={article_type}, all rules failed → inserted at bottom', flush=True)
+    # ──────────────────────────────────────────────────────────────────────
 
     print(f'[MARKER] inserted: article_type={article_type}, stats={stats}', flush=True)
     return text, stats
