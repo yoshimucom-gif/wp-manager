@@ -1,0 +1,6 @@
+# 開発・テスト用の追加依存（本番 requirements.txt には含めない）
+# 使い方:
+#   pip install -r requirements.txt -r requirements-dev.txt
+#   pytest
+-r requirements.txt
+pytest>=8.0.0
