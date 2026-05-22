@@ -5311,7 +5311,7 @@ function renderSidebarSites() {
   container.innerHTML = sitesDashboardData.map(site => {
     const isActive = String(site.id) === currentSiteId;
     const batchBadge = site.active_batch_count > 0
-      ? `<span class="site-card__batch-badge" title="一括処理が${site.active_batch_count}件 実行中">⚡${site.active_batch_count}</span>`
+      ? `<span class="site-card__batch-badge" title="記事生成バッチが${site.active_batch_count}件 実行中">生成中 ${site.active_batch_count}</span>`
       : '';
     const icon = siteFaviconHtml(site.wp_url);
     return `
@@ -5405,7 +5405,7 @@ function renderSiteCardsOnHome() {
     const c = site.counts || {};
     const generatingHi = (c.generating || 0) > 0 ? 'active' : '';
     const batchBadge = site.active_batch_count > 0
-      ? `<span class="site-card__batch-badge">バッチ進行中 ${site.active_batch_count}件</span>`
+      ? `<span class="site-card__batch-badge">記事生成中 ${site.active_batch_count}件</span>`
       : '<span></span>';
     const lastPub = site.last_published_at
       ? `最終投稿: ${esc(formatDateShort(site.last_published_at))}`
