@@ -1296,12 +1296,6 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
               </select>
               <div class="form-help">空欄なら記事種類ごとに対応する品質定義を自動選択。固定したい時だけ選択。</div>
             </div>
-            <div class="form-group">
-              <label class="form-label">カテゴリー</label>
-              <select id="batch-category-filter" class="form-control" onchange="loadBatchArticles()">
-                <option value="">全カテゴリー</option>
-              </select>
-            </div>
             <div id="batch-msg" style="margin-top:12px;font-size:12px;color:var(--muted)"></div>
             <div id="batch-progress" class="batch-progress" style="display:none">
               <div class="batch-progress-meta">
@@ -1343,7 +1337,6 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
                     <th>タイトル</th>
                     <th>記事種類</th>
                     <th>スラッグ</th>
-                    <th>カテゴリー</th>
                     <th>スコア</th>
                     <th>サイト</th>
                   </tr>
@@ -2706,10 +2699,7 @@ function categoryOptions(source) {
 }
 
 function updateCategorySelects() {
-  // 対応履歴の category-filter は撤去済み。一括処理の batch-category-filter のみ更新。
-  const articleOpts = categoryOptions(allArticles);
-  const el = document.getElementById('batch-category-filter');
-  if (el) { const v = el.value; el.innerHTML = articleOpts; el.value = v; }
+  // カテゴリーフィルタは撤去済み。関数は呼び出し元との互換のため残す。
 }
 
 function renderArticles(articles) {
@@ -4475,10 +4465,8 @@ function loadBatchArticles() {
   // 一括処理ページは「これから生成する対象」のみ。
   // pending / queued / generating / error を固定表示（生成済 / PUSH済 は対応履歴へ）
   const typeFilter = currentBatchTypeTab || '';
-  const category = document.getElementById('batch-category-filter')?.value || '';
   let targets = allArticles.filter(a => ['pending', 'queued', 'generating', 'error'].includes(a.status));
   if (typeFilter) targets = targets.filter(a => (a.article_type || 'ranking') === typeFilter);
-  if (category) targets = targets.filter(a => (a.category || '') === category);
   // 新着が上に来るよう作成日時降順で並べる（商標化した記事がすぐ上に現れる）
   targets.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
 
@@ -4498,7 +4486,6 @@ function loadBatchArticles() {
       <td style="font-size:12px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.title)}</td>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${esc(articleTypeLabel(a.article_type || 'ranking'))}</td>
       <td><input type="text" class="form-control" value="${esc(a.slug || '')}" placeholder="自動" style="font-size:11px;height:28px" onchange="saveBatchField('${a.id}', 'slug', this.value)"></td>
-      <td style="font-size:11px;color:var(--muted);white-space:nowrap">${esc(a.category || '—')}</td>
       <td>${scoreBadge(a)}</td>
       <td>${getSiteName(a.site_id)}</td>
     </tr>
