@@ -135,6 +135,36 @@ def test_sanitize_ad_insertion_rules_count_and_repeat():
     assert 'count' not in clean[2]  # 1〜10外は付与されない
 
 
+def test_find_h2_range_includes_gutenberg_wrapper():
+    # wp:heading ラッパーごと範囲に含む → マーカーがブロック内側に入らない
+    html = '<p>intro</p><!-- wp:heading --><h2>セクション1</h2><!-- /wp:heading --><p>x</p>'
+    rng = app._find_first_h2_range(html)
+    assert rng is not None
+    seg = html[rng[0]:rng[1]]
+    assert seg.startswith('<!-- wp:heading')
+    assert seg.rstrip().endswith('/wp:heading -->')
+
+
+def test_find_matome_range_keywords_broadened():
+    for kw in ['まとめ', 'おわりに', '最後に', '結論']:
+        assert app._find_matome_h2_range(f'<h2>{kw}</h2><p>x</p>') is not None, kw
+    assert app._find_matome_h2_range('<h2>選び方のコツ</h2>') is None
+
+
+def test_insert_card_markers_outside_heading_blocks():
+    # 広告マーカーが Gutenberg heading ブロックの内側に混入しないこと
+    html = (
+        '<p>導入文</p>'
+        '<!-- wp:heading --><h2>選び方</h2><!-- /wp:heading --><p>本文</p>'
+        '<!-- wp:heading --><h2>まとめ</h2><!-- /wp:heading --><p>結び</p>'
+    )
+    out, _ = app.insert_card_markers(html, 'column')
+    assert 'ai-product' in out
+    import re as _re
+    for m in _re.finditer(r'<!--\s*wp:heading[^>]*-->[\s\S]*?<!--\s*/wp:heading\s*-->', out):
+        assert 'ai-product' not in m.group(0), 'マーカーが heading ブロック内に混入'
+
+
 def test_insert_card_markers_embeds_markers():
     html = (
         '<h2>はじめに</h2><p>導入文</p>'

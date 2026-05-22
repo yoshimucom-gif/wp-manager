@@ -3366,9 +3366,16 @@ def _build_marker(design='vertical', count=None):
 
 
 def _find_matome_h2_range(html):
-    """「まとめ」を含むH2の位置 (start, end_of_h2) を返す。無ければ None。"""
+    """「まとめ」系H2のブロック範囲 (start, end) を返す。無ければ None。
+
+    ⚠️ Gutenberg の <!--wp:heading--> / <!--/wp:heading--> ラッパーを範囲に含める。
+    これを含めないと、マーカーが heading ブロックの内側に挿入されてブロックが
+    壊れ、カードが意図しない位置に描画される（広告位置がめちゃくちゃになる主因）。
+    """
     pattern = re.compile(
-        r'<h2[^>]*>(?:(?!</h2>)[\s\S])*?(?:まとめ|総まとめ|結論|要点)(?:(?!</h2>)[\s\S])*?</h2>',
+        r'(?:<!--\s*wp:heading[^>]*-->\s*)?'
+        r'<h2[^>]*>(?:(?!</h2>)[\s\S])*?(?:まとめ|総まとめ|結論|要点|おわりに|最後に)(?:(?!</h2>)[\s\S])*?</h2>'
+        r'(?:\s*<!--\s*/wp:heading\s*-->)?',
         re.IGNORECASE
     )
     m = pattern.search(html)
@@ -3378,8 +3385,17 @@ def _find_matome_h2_range(html):
 
 
 def _find_first_h2_range(html):
-    """記事の最初のH2の (start, end) を返す。無ければ None。"""
-    m = re.search(r'<h2[^>]*>(?:(?!</h2>)[\s\S])*?</h2>', html, re.IGNORECASE)
+    """記事の最初のH2のブロック範囲 (start, end) を返す。無ければ None。
+
+    ⚠️ Gutenberg の <!--wp:heading--> ラッパーを範囲に含める（理由は
+    _find_matome_h2_range のコメント参照）。
+    """
+    m = re.search(
+        r'(?:<!--\s*wp:heading[^>]*-->\s*)?'
+        r'<h2[^>]*>(?:(?!</h2>)[\s\S])*?</h2>'
+        r'(?:\s*<!--\s*/wp:heading\s*-->)?',
+        html, re.IGNORECASE
+    )
     if not m:
         return None
     return m.start(), m.end()
