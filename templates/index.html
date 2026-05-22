@@ -1218,6 +1218,15 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
                 <label class="form-label">カテゴリー</label>
                 <input type="text" id="title-category" class="form-control" placeholder="例: 防寒グッズ">
               </div>
+              <div class="form-group">
+                <label class="form-label">記事種別</label>
+                <select id="title-type-filter" class="form-control">
+                  <option value="">自動振り分け（ランキング／コラム）</option>
+                  <option value="ranking">ランキング記事に固定</option>
+                  <option value="column">コラム記事に固定</option>
+                </select>
+                <div style="font-size:11px;color:var(--muted);margin-top:4px">固定するとプロンプトでも強制指示し、振り分け結果も上書きします。</div>
+              </div>
               <div class="title-ideas-actions">
                 <button class="btn btn-primary" id="title-generate-btn" onclick="generateTitleIdeas()">タイトル案を生成</button>
                 <button class="btn btn-success" id="title-save-btn" onclick="saveSelectedTitleIdeas()" disabled>選択を一括処理へ送る</button>
@@ -3628,6 +3637,7 @@ async function generateFromStock() {
   const site_id = document.getElementById('title-site').value || null;
   const category = document.getElementById('title-category').value;
   const count_per_keyword = document.getElementById('title-count').value;
+  const article_type_filter = document.getElementById('title-type-filter')?.value || '';
 
   let batch = 0, totalGen = 0;
   while (kwStock.length > 0 && !_stockStop) {
@@ -3640,7 +3650,7 @@ async function generateFromStock() {
       const res = await fetch('/api/title-ideas/generate', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ keywords: chunk.join('\n'), count_per_keyword, site_id, category }),
+        body: JSON.stringify({ keywords: chunk.join('\n'), count_per_keyword, site_id, category, article_type_filter }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -3682,6 +3692,7 @@ async function generateTitleIdeas() {
   const count_per_keyword = document.getElementById('title-count').value;
   const site_id = document.getElementById('title-site').value || null;
   const category = document.getElementById('title-category').value;
+  const article_type_filter = document.getElementById('title-type-filter')?.value || '';
 
   if (!keywordsRaw.trim()) {
     toast('キーワードを1行以上入力してください', 'error');
@@ -3703,7 +3714,7 @@ async function generateTitleIdeas() {
     const res = await fetch('/api/title-ideas/generate', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ keywords: keywordsRaw, count_per_keyword, site_id, category }),
+      body: JSON.stringify({ keywords: keywordsRaw, count_per_keyword, site_id, category, article_type_filter }),
     });
     if (!res.ok) {
       const text = await res.text().catch(()=>'');

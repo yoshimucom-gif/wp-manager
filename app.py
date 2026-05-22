@@ -1873,7 +1873,7 @@ def score_title_idea(title, keyword, article_type, existing_title_keys):
     return max(1, min(100, score))
 
 
-def title_generation_prompt(keywords, count_per_keyword, category=''):
+def title_generation_prompt(keywords, count_per_keyword, category='', article_type_filter=None):
     d = load_title_definition()
     forbidden_list = '、'.join(d.get('forbidden_phrases') or [])
     angles = d.get('angle_categories') or []
@@ -1881,9 +1881,37 @@ def title_generation_prompt(keywords, count_per_keyword, category=''):
     additional = (d.get('additional_instructions') or '').strip()
     additional_block = f'\n【追加指示（運用ルール）】\n{additional}\n' if additional else ''
 
+    if article_type_filter == 'ranking':
+        type_intro = f'以下のキーワードごとに、**ランキング記事**のタイトル案を{count_per_keyword}個ずつ作ってください。'
+        article_type_field = '"ランキング"（固定・変更禁止）'
+        type_rule_block = (
+            '【記事種別固定: ランキング記事（ranking）】\n'
+            '全てのタイトル案を ranking として生成してください。\n'
+            'article_type フィールドは必ず "ranking" を返すこと。column や brand は絶対に返さないこと。'
+        )
+    elif article_type_filter == 'column':
+        type_intro = f'以下のキーワードごとに、**コラム記事**のタイトル案を{count_per_keyword}個ずつ作ってください。'
+        article_type_field = '"コラム"（固定・変更禁止）'
+        type_rule_block = (
+            '【記事種別固定: コラム記事（column）】\n'
+            '全てのタイトル案を column（解説・情報・ハウツー記事）として生成してください。\n'
+            'article_type フィールドは必ず "column" を返すこと。ranking や brand は絶対に返さないこと。'
+        )
+    else:
+        type_intro = f'以下のキーワードごとに、検索意図に合うタイトル案を{count_per_keyword}個ずつ作り、記事種類も自動分類してください。'
+        article_type_field = '"ranking または column のいずれか（brand は禁止）"'
+        type_rule_block = (
+            '【記事種類判定】\n'
+            '- 広い商品ジャンルの「おすすめ・比較・人気」は ranking。\n'
+            '- 「とは・選び方・使い方・原因・対策・違い」は column。\n'
+            '- **brand（商標記事）は絶対に生成しない**。商標記事は別ワークフロー（ランキング記事 → 商品抽出）で作るため、ここでは brand を返さないでください。\n'
+            '- 具体的な商品名・型番が含まれるKWでも、ここでは ranking か column のどちらかに振り分けてください\n'
+            '  （例: 「Andeor 防水バッグ 口コミ」のような商品名KWでも、ここでは無理に取り扱わず column 扱いで構いません）。'
+        )
+
     return f"""あなたはSEO記事の編集者です。検索順位とクリック率（CTR）の両方を最大化する記事タイトルを設計してください。
 
-以下のキーワードごとに、検索意図に合うタイトル案を{count_per_keyword}個ずつ作り、記事種類も自動分類してください。
+{type_intro}
 
 カテゴリー: {category or '未指定'}
 キーワード:
@@ -1897,7 +1925,7 @@ def title_generation_prompt(keywords, count_per_keyword, category=''):
       "keyword": "対象キーワード（入力されたKWそのまま）",
       "target_keywords": "メインKW, 関連KW1, 関連KW2, 関連KW3",
       "slug": "english-slug",
-      "article_type": "ranking または column のいずれか（brand は禁止）",
+      "article_type": {article_type_field},
       "search_intent": "読者の検索意図を短く",
       "reason": "このタイトルにした理由を短く",
       "priority": "高/中/低"
@@ -1913,12 +1941,7 @@ def title_generation_prompt(keywords, count_per_keyword, category=''):
 - メインKWの形を活かした複合語（メインKW + 修飾語）を中心に。完全に別ジャンルのKWは入れない。
 - 後で記事生成時にClaudeへ渡されSEO構成のヒントになる。Amazon/楽天検索のヒントにもなる。
 
-【記事種類判定】
-- 広い商品ジャンルの「おすすめ・比較・人気」は ranking。
-- 「とは・選び方・使い方・原因・対策・違い」は column。
-- **brand（商標記事）は絶対に生成しない**。商標記事は別ワークフロー（ランキング記事 → 商品抽出）で作るため、ここでは brand を返さないでください。
-- 具体的な商品名・型番が含まれるKWでも、ここでは ranking か column のどちらかに振り分けてください
-  （例: 「Andeor 防水バッグ 口コミ」のような商品名KWでも、ここでは無理に取り扱わず column 扱いで構いません）。
+{type_rule_block}
 
 【SEO 観点 ─ 検索される & 評価される】
 - メインキーワードは **タイトルの先頭〜中盤** に置く。末尾に流さない。
@@ -1974,7 +1997,7 @@ def extract_title_ideas_payload(text):
     return {}
 
 
-def coerce_title_ideas(payload, keywords, count_per_keyword):
+def coerce_title_ideas(payload, keywords, count_per_keyword, article_type_filter=None):
     raw_ideas = payload.get('ideas') if isinstance(payload, dict) else []
     if not isinstance(raw_ideas, list):
         raw_ideas = []
@@ -2028,7 +2051,7 @@ def coerce_title_ideas(payload, keywords, count_per_keyword):
             'search_intent': str(item.get('search_intent') or item.get('intent') or '').strip()[:160],
             'reason': str(item.get('reason') or '').strip()[:220],
             'priority': str(item.get('priority') or '中').strip()[:10],
-            'article_type': coerce_title_article_type(item.get('article_type'), matched or keyword, title),
+            'article_type': article_type_filter or coerce_title_article_type(item.get('article_type'), matched or keyword, title),
         }
         if matched:
             grouped[matched].append(idea)
@@ -2215,8 +2238,8 @@ def is_model_not_found_error(error):
     return 'not_found' in text or 'model' in text and '404' in text
 
 
-def generate_claude_title_ideas_once(api_key, keywords, count_per_keyword, category):
-    prompt = title_generation_prompt(keywords, count_per_keyword, category)
+def generate_claude_title_ideas_once(api_key, keywords, count_per_keyword, category, article_type_filter=None):
+    prompt = title_generation_prompt(keywords, count_per_keyword, category, article_type_filter)
     client = anthropic.Anthropic(api_key=api_key)
     last_error = None
     for model in claude_title_idea_models():
@@ -2232,7 +2255,7 @@ def generate_claude_title_ideas_once(api_key, keywords, count_per_keyword, categ
             stop_reason = getattr(message, 'stop_reason', None) or (
                 message.get('stop_reason') if isinstance(message, dict) else None
             )
-            ideas = coerce_title_ideas(extract_title_ideas_payload(text), keywords, count_per_keyword)
+            ideas = coerce_title_ideas(extract_title_ideas_payload(text), keywords, count_per_keyword, article_type_filter)
             if not ideas:
                 # デバッグ用：失敗時に stop_reason と Claudeの応答先頭/末尾をログに残す。
                 # max_tokens で切れている場合は length-truncated と分かる。
@@ -4450,6 +4473,8 @@ def generate_title_ideas():
     count_per_keyword = clamp_int(data.get('count_per_keyword'), 3, 1, 5)
     category = str(data.get('category') or '').strip()
     site_id = data.get('site_id') or ''
+    _atf = str(data.get('article_type_filter') or '').strip().lower()
+    article_type_filter = _atf if _atf in ('ranking', 'column') else None
 
     if not keywords:
         return jsonify({'error': 'キーワードを1行以上入力してください'}), 400
@@ -4487,6 +4512,7 @@ def generate_title_ideas():
         'expected_count': expected_count,
         'ideas': [],
         'message': f'Claudeでタイトル案を生成中... ({len(keywords)}KW / {len(batches)}バッチ)',
+        'article_type_filter': article_type_filter or '',
         'started_at': now,
         'updated_at': now,
     }
@@ -4523,7 +4549,7 @@ def generate_title_ideas():
             max_workers = min(TITLE_IDEA_PARALLEL_BATCHES, len(batches))
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_idx = {
-                    executor.submit(generate_claude_title_ideas_once, claude_key, batch, count_per_keyword, category): (idx, batch)
+                    executor.submit(generate_claude_title_ideas_once, claude_key, batch, count_per_keyword, category, article_type_filter): (idx, batch)
                     for idx, batch in enumerate(batches, 1)
                 }
                 for future in as_completed(future_to_idx):
