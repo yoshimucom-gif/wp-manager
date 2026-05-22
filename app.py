@@ -139,6 +139,38 @@ WP_REQUEST_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     'Accept': 'application/json',
 }
+
+
+def describe_wp_request_error(e):
+    """WordPress REST 呼び出しの例外から、診断に役立つメッセージを組み立てる。
+
+    requests の素の例外は「403 Client Error: Forbidden for url: ...」としか
+    出ないが、403/401 の本当の理由はレスポンス body に入っていることが多い:
+      - WordPress 自身のJSONエラー → {"code":"rest_...","message":"..."}
+      - WAF / SiteGuard / セキュリティプラグイン → HTMLのブロックページ
+    これを拾って原因切り分けできるメッセージにする。
+    """
+    import re as _re
+    resp = getattr(e, 'response', None)
+    if resp is None:
+        return str(e)
+    status = resp.status_code
+    # WordPress のJSONエラーなら message / code を優先表示
+    try:
+        data = resp.json()
+        if isinstance(data, dict) and (data.get('message') or data.get('code')):
+            return f"HTTP {status}: {data.get('message') or ''}（code: {data.get('code') or '-'}）"
+    except Exception:
+        pass
+    # JSONでない（WAF等のHTMLブロックページ）→ タグを除いて短く添える
+    snippet = _re.sub(r'<[^>]+>', ' ', resp.text or '')
+    snippet = _re.sub(r'\s+', ' ', snippet).strip()[:300]
+    hint = ''
+    if status == 401:
+        hint = ' ／ アプリケーションパスワードが誤っている可能性'
+    elif status == 403:
+        hint = ' ／ 認証情報の誤り or セキュリティプラグイン・WAFによるブロックの可能性'
+    return f"HTTP {status}: {snippet or 'Forbidden'}{hint}"
 try:
     CLAUDE_ARTICLE_CONTINUATION_MAX_ROUNDS = int(os.environ.get('CLAUDE_ARTICLE_CONTINUATION_MAX_ROUNDS', '4'))
 except ValueError:
@@ -6559,7 +6591,7 @@ def publish_article(article_id):
         save_articles(articles)
         return jsonify({'success': True, 'wp_url': post_data.get('link', ''), 'wp_post_id': post_data['id']})
     except requests.exceptions.RequestException as e:
-        return jsonify({'error': f'WordPress投稿エラー: {str(e)}'}), 500
+        return jsonify({'error': f'WordPress投稿エラー: {describe_wp_request_error(e)}'}), 500
 
 
 @app.route('/api/articles/<article_id>/unlink-wp', methods=['POST'])
@@ -6921,6 +6953,9 @@ def batch_publish():
                     a['published_at'] = now_iso()
                     break
             results['success'] += 1
+        except requests.exceptions.RequestException as e:
+            results['error'] += 1
+            results['errors'].append({'title': article['title'], 'error': describe_wp_request_error(e)})
         except Exception as e:
             results['error'] += 1
             results['errors'].append({'title': article['title'], 'error': str(e)})
