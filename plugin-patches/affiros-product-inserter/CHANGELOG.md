@@ -9,6 +9,22 @@ Affiros プロダクトインサーター の改修履歴。新しいバージ�
 
 ---
 
+## [1.9.0] - 2026-05-22
+
+### 追加
+- **API接続テスト機能。** 設定画面に「🔌 接続テスト（API有効性チェック）」ボタンを追加。
+  入力中の値（保存前でも可）で Claude / Amazon PA-API / 楽天市場API へ実際に接続し、
+  キーの有効性を ✅／❌／➖（未入力）で表示する。打ち間違い・無効キーのまま運用するのを防ぐ。
+  - `admin/ajax-handler.php` — `ai_pi_test_credentials` AJAXハンドラを追加
+  - `includes/{claude,amazon,rakuten}-api.php` — コンストラクタに設定オーバーライド引数
+    （`$config`）を追加。保存前のフォーム入力値でテストできるようにした。
+    `AI_PI_Claude_API::test_connection()` を新設
+  - 楽天はアフィリエイトID込みで失敗した場合、ID無しで再試行して
+    「アプリID／アフィリエイトID のどちらが原因か」を切り分けて表示
+  - `admin/settings.php` / `assets/admin.js` / `assets/admin.css` — ボタン・結果表示UI
+
+---
+
 ## [1.8.0] - 2026-05-22
 
 ### 追加

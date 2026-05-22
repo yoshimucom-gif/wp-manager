@@ -11,10 +11,27 @@ class AI_PI_Claude_API {
     private $model;
     private $api_url = 'https://api.anthropic.com/v1/messages';
 
-    public function __construct() {
-        $settings = get_option('ai_pi_settings', []);
+    /**
+     * @param array|null $config 指定時はこの配列を設定値として使う（接続テスト用）。
+     *                           null なら保存済みオプションを読む。
+     */
+    public function __construct($config = null) {
+        $settings = is_array($config) ? $config : get_option('ai_pi_settings', []);
         $this->api_key = $settings['claude_api_key'] ?? '';
         $this->model = $settings['claude_model'] ?? 'claude-sonnet-4-6';
+    }
+
+    /**
+     * APIキー・モデルの有効性チェック（最小リクエストを1回投げる）
+     * @return true|WP_Error
+     */
+    public function test_connection() {
+        $result = $this->call_api(
+            'You are a connectivity test endpoint.',
+            'Reply with the single word: OK'
+        );
+        if (is_wp_error($result)) return $result;
+        return true;
     }
 
     /**

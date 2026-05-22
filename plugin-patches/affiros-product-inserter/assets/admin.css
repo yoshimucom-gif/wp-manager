@@ -202,3 +202,38 @@
     .aipi-log-summary { flex-wrap: wrap; }
     .aipi-stat { min-width: 45%; }
 }
+
+/* 接続テスト結果 */
+.aipi-test-results {
+    margin: 12px 0 20px;
+    max-width: 700px;
+}
+.aipi-test-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.aipi-test-item {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 4px;
+    margin-bottom: 6px;
+    font-size: 13px;
+    border-left: 4px solid #ccc;
+    background: #f6f7f7;
+}
+.aipi-test-item--ok   { border-left-color: #27ae60; background: #e8f5e9; }
+.aipi-test-item--ng   { border-left-color: #e74c3c; background: #fdecea; }
+.aipi-test-item--skip { border-left-color: #b0b0b0; background: #f1f1f1; }
+.aipi-test-icon { font-size: 15px; flex: 0 0 auto; }
+.aipi-test-label { font-weight: 700; flex: 0 0 130px; }
+.aipi-test-msg { color: #555; word-break: break-word; }
+.aipi-test-item--ng .aipi-test-msg { color: #c0392b; }
+
+@media (max-width: 600px) {
+    .aipi-test-item { flex-wrap: wrap; }
+    .aipi-test-label { flex-basis: auto; }
+    .aipi-test-msg { flex-basis: 100%; }
+}

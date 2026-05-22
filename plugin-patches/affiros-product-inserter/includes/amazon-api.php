@@ -15,8 +15,12 @@ class AI_PI_Amazon_API {
     private $region = 'us-west-2';
     private $marketplace = 'www.amazon.co.jp';
 
-    public function __construct() {
-        $settings = get_option('ai_pi_settings', []);
+    /**
+     * @param array|null $config 指定時はこの配列を設定値として使う（接続テスト用）。
+     *                           null なら保存済みオプションを読む。
+     */
+    public function __construct($config = null) {
+        $settings = is_array($config) ? $config : get_option('ai_pi_settings', []);
         $this->access_key = $settings['amazon_access_key'] ?? '';
         $this->secret_key = $settings['amazon_secret_key'] ?? '';
         $this->partner_tag = $settings['amazon_partner_tag'] ?? '';

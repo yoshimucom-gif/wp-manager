@@ -128,6 +128,60 @@
             });
         });
 
+        // === 設定画面：API接続テスト ===
+        $('.aipi-test-credentials').on('click', function() {
+            const $btn = $(this);
+            const $spinner = $('.aipi-test-spinner');
+            const $results = $('.aipi-test-results');
+
+            function fieldVal(key) {
+                return $('[name="ai_pi_settings[' + key + ']"]').val() || '';
+            }
+
+            $btn.prop('disabled', true);
+            $spinner.css('display', 'inline-block').addClass('is-active');
+            $results.hide().html('');
+
+            $.post(aiPI.ajaxUrl, {
+                action: 'ai_pi_test_credentials',
+                nonce: aiPI.nonce,
+                claude_api_key: fieldVal('claude_api_key'),
+                claude_model: fieldVal('claude_model'),
+                amazon_access_key: fieldVal('amazon_access_key'),
+                amazon_secret_key: fieldVal('amazon_secret_key'),
+                amazon_partner_tag: fieldVal('amazon_partner_tag'),
+                rakuten_app_id: fieldVal('rakuten_app_id'),
+                rakuten_affiliate_id: fieldVal('rakuten_affiliate_id'),
+            }).done(function(response) {
+                $btn.prop('disabled', false);
+                $spinner.hide().removeClass('is-active');
+
+                if (response.success && response.data && response.data.results) {
+                    let html = '<ul class="aipi-test-list">';
+                    response.data.results.forEach(function(r) {
+                        let icon, cls;
+                        if (r.status === 'ok') { icon = '✅'; cls = 'ok'; }
+                        else if (r.status === 'skip') { icon = '➖'; cls = 'skip'; }
+                        else { icon = '❌'; cls = 'ng'; }
+                        html += '<li class="aipi-test-item aipi-test-item--' + cls + '">'
+                            + '<span class="aipi-test-icon">' + icon + '</span>'
+                            + '<span class="aipi-test-label">' + escapeHtml(r.label) + '</span>'
+                            + '<span class="aipi-test-msg">' + escapeHtml(r.message) + '</span>'
+                            + '</li>';
+                    });
+                    html += '</ul>';
+                    $results.html(html).show();
+                } else {
+                    const msg = (response.data && response.data.message) || '不明なエラー';
+                    $results.html('<div class="notice notice-error" style="margin:0;padding:8px 12px;"><p>テストに失敗しました: ' + escapeHtml(msg) + '</p></div>').show();
+                }
+            }).fail(function(xhr) {
+                $btn.prop('disabled', false);
+                $spinner.hide().removeClass('is-active');
+                $results.html('<div class="notice notice-error" style="margin:0;padding:8px 12px;"><p>通信エラー: ' + escapeHtml(xhr.statusText) + '</p></div>').show();
+            });
+        });
+
         // === 一括処理：対象記事カウント ===
         $('.aipi-count-targets').on('click', function() {
             const categories = $('.aipi-cat:checked').map(function() { return $(this).val(); }).get();

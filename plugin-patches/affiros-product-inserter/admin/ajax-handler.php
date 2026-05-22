@@ -157,3 +157,83 @@ function ai_pi_ajax_bulk_process_one() {
         'edit_url' => get_edit_post_link($post_id, ''),
     ]);
 }
+
+/**
+ * API認証情報の有効性チェック（接続テスト）
+ *
+ * 設定画面のフォームに入力中の値で実際に各APIを叩き、保存前に
+ * 打ち間違い・無効キーを検出する。値は保存しない。
+ */
+add_action('wp_ajax_ai_pi_test_credentials', 'ai_pi_ajax_test_credentials');
+function ai_pi_ajax_test_credentials() {
+    check_ajax_referer('ai_pi_nonce', 'nonce');
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(['message' => '権限がありません']);
+    }
+
+    $config = [
+        'claude_api_key'       => sanitize_text_field($_POST['claude_api_key'] ?? ''),
+        'claude_model'         => sanitize_text_field($_POST['claude_model'] ?? 'claude-sonnet-4-6'),
+        'amazon_access_key'    => sanitize_text_field($_POST['amazon_access_key'] ?? ''),
+        'amazon_secret_key'    => sanitize_text_field($_POST['amazon_secret_key'] ?? ''),
+        'amazon_partner_tag'   => sanitize_text_field($_POST['amazon_partner_tag'] ?? ''),
+        'rakuten_app_id'       => sanitize_text_field($_POST['rakuten_app_id'] ?? ''),
+        'rakuten_affiliate_id' => sanitize_text_field($_POST['rakuten_affiliate_id'] ?? ''),
+    ];
+
+    $results = [];
+
+    // --- Claude API ---
+    if (empty($config['claude_api_key'])) {
+        $results[] = ['service' => 'claude', 'label' => 'Claude API', 'status' => 'skip', 'message' => 'APIキー未入力'];
+    } else {
+        $claude = new AI_PI_Claude_API($config);
+        $r = $claude->test_connection();
+        if (is_wp_error($r)) {
+            $results[] = ['service' => 'claude', 'label' => 'Claude API', 'status' => 'ng', 'message' => $r->get_error_message()];
+        } else {
+            $results[] = ['service' => 'claude', 'label' => 'Claude API', 'status' => 'ok', 'message' => '接続成功（モデル: ' . $config['claude_model'] . '）'];
+        }
+    }
+
+    // --- Amazon PA-API ---
+    $amazon = new AI_PI_Amazon_API($config);
+    if (!$amazon->is_configured()) {
+        $results[] = ['service' => 'amazon', 'label' => 'Amazon PA-API', 'status' => 'skip', 'message' => 'Access Key / Secret Key / アソシエイトタグ のいずれか未入力'];
+    } else {
+        $r = $amazon->search('ボールペン', 1);
+        if (is_wp_error($r)) {
+            $results[] = ['service' => 'amazon', 'label' => 'Amazon PA-API', 'status' => 'ng', 'message' => $r->get_error_message()];
+        } else {
+            $results[] = ['service' => 'amazon', 'label' => 'Amazon PA-API', 'status' => 'ok', 'message' => '接続成功（' . count($r) . '件取得）'];
+        }
+    }
+
+    // --- 楽天市場API ---
+    $rakuten = new AI_PI_Rakuten_API($config);
+    if (!$rakuten->is_configured()) {
+        $results[] = ['service' => 'rakuten', 'label' => '楽天市場API', 'status' => 'skip', 'message' => 'アプリID未入力'];
+    } else {
+        $r = $rakuten->search('ボールペン', 1);
+        if (!is_wp_error($r)) {
+            $msg = !empty($config['rakuten_affiliate_id'])
+                ? '接続成功（アフィリエイトID込みで検証）'
+                : '接続成功（アフィリエイトID未設定）';
+            $results[] = ['service' => 'rakuten', 'label' => '楽天市場API', 'status' => 'ok', 'message' => $msg];
+        } else {
+            // アフィリエイトID込みで失敗した場合、ID無しで再試行して原因を切り分ける
+            $msg = $r->get_error_message();
+            if (!empty($config['rakuten_affiliate_id'])) {
+                $config_no_aff = $config;
+                $config_no_aff['rakuten_affiliate_id'] = '';
+                $r2 = (new AI_PI_Rakuten_API($config_no_aff))->search('ボールペン', 1);
+                if (!is_wp_error($r2)) {
+                    $msg = 'アプリIDは有効ですが、アフィリエイトIDが不正の可能性があります（' . $msg . '）';
+                }
+            }
+            $results[] = ['service' => 'rakuten', 'label' => '楽天市場API', 'status' => 'ng', 'message' => $msg];
+        }
+    }
+
+    wp_send_json_success(['results' => $results]);
+}

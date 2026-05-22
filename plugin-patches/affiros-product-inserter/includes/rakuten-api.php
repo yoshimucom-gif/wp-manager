@@ -12,8 +12,12 @@ class AI_PI_Rakuten_API {
     private $affiliate_id;
     private $api_url = 'https://app.rakuten.co.jp/services/api/IchibaItem/Search/20220601';
 
-    public function __construct() {
-        $settings = get_option('ai_pi_settings', []);
+    /**
+     * @param array|null $config 指定時はこの配列を設定値として使う（接続テスト用）。
+     *                           null なら保存済みオプションを読む。
+     */
+    public function __construct($config = null) {
+        $settings = is_array($config) ? $config : get_option('ai_pi_settings', []);
         $this->app_id = $settings['rakuten_app_id'] ?? '';
         $this->affiliate_id = $settings['rakuten_affiliate_id'] ?? '';
     }

@@ -119,6 +119,13 @@ function ai_pi_render_settings_page() {
                 </tr>
             </table>
 
+            <p>
+                <button type="button" class="button button-secondary aipi-test-credentials">🔌 接続テスト（API有効性チェック）</button>
+                <span class="spinner aipi-test-spinner" style="float:none;display:none;margin:0 0 0 6px;"></span>
+            </p>
+            <p class="description">入力中の値で実際に各APIへ接続し、キーが有効か確認します（保存前でも実行可）。Claude と Amazon は少量のAPIコールが発生します。</p>
+            <div class="aipi-test-results" style="display:none;"></div>
+
             <h2>運用調整</h2>
             <table class="form-table">
                 <tr>
