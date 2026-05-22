@@ -1044,6 +1044,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             <option value="draft">下書き</option>
             <option value="publish">公開</option>
           </select>
+          <button class="btn btn-secondary" onclick="openSchedulePublishModal()" title="選択記事をWordPressの予約投稿として割り当て">📅 予約投稿割り当て</button>
           <button class="btn btn-danger" onclick="deleteSelected()">🗑 選択を削除</button>
           <button class="btn btn-secondary" onclick="rescoreArticles()">↯ スコア再計算</button>
         </div>
@@ -1577,6 +1578,11 @@ table { width: 100%; border-collapse: collapse; }"></textarea>
               <label class="form-label">デフォルト品質定義</label>
               <select id="s-default-quality" class="form-control"></select>
             </div>
+            <div class="form-group">
+              <label class="form-label">予約投稿 1日あたりの上限件数（既定20）</label>
+              <input type="number" id="s-schedule-daily-cap" class="form-control" min="1" max="200" value="20" style="width:100px">
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">対応履歴の「予約投稿割り当て」で使用。1〜200の整数。</div>
+            </div>
           </div>
           <button class="btn btn-primary" onclick="saveSettings()">💾 設定を保存</button>
           <div id="settings-msg" style="margin-top:10px;font-size:12px;color:var(--muted)"></div>
@@ -1862,6 +1868,33 @@ table { width: 100%; border-collapse: collapse; }"></textarea>
       <button class="btn btn-secondary" onclick="closeArticleModal()">閉じる</button>
       <button class="btn btn-secondary" onclick="saveArticleModal()">手直しを保存</button>
       <button class="btn btn-primary" onclick="regenerateFromArticleModal()">⚡ 再生成</button>
+    </div>
+  </div>
+</div>
+
+<!-- Schedule Publish Modal -->
+<div class="modal-overlay" id="schedule-publish-modal">
+  <div class="modal" style="width:460px">
+    <div class="modal-title">// 予約投稿 割り当て</div>
+    <div id="schedule-publish-summary" style="font-size:13px;margin-bottom:16px;color:var(--muted)"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group">
+        <label class="form-label">開始日</label>
+        <input type="date" id="sched-start-date" class="form-control" oninput="updateSchedPreview()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">開始時刻</label>
+        <input type="time" id="sched-start-time" class="form-control" value="10:00" oninput="updateSchedPreview()">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">1日の上限件数</label>
+      <input type="number" id="sched-daily-cap" class="form-control" min="1" max="200" value="20" style="width:100px" oninput="updateSchedPreview()">
+    </div>
+    <div id="sched-preview" style="font-size:12px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px;margin-top:4px;line-height:1.8"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeSchedulePublishModal()">キャンセル</button>
+      <button class="btn btn-primary" id="sched-exec-btn" onclick="execSchedulePublish()">📅 予約投稿を実行</button>
     </div>
   </div>
 </div>
@@ -2952,6 +2985,111 @@ async function quickPublish(id) {
   } catch (e) {
     toast('投稿エラー: ' + e.message, 'error');
     await loadArticles();
+  }
+}
+
+// ---- Schedule Publish ----
+let _scheduleTargetIds = [];
+
+function openSchedulePublishModal() {
+  const ids = getSelectedIds();
+  const targets = ids.filter(id => {
+    const a = allArticles.find(x => x.id === id);
+    return a && a.content;
+  });
+  if (!targets.length) {
+    toast('生成済み本文のある記事を選択してください', 'error');
+    return;
+  }
+  _scheduleTargetIds = targets;
+
+  // 開始日のデフォルト = 明日
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+  document.getElementById('sched-start-date').value = tomorrowStr;
+  document.getElementById('sched-start-time').value = '10:00';
+
+  // 1日上限を設定値から読む
+  const capEl = document.getElementById('s-schedule-daily-cap');
+  const cap = parseInt(capEl?.value, 10) || 20;
+  document.getElementById('sched-daily-cap').value = cap;
+
+  const summaryEl = document.getElementById('schedule-publish-summary');
+  summaryEl.textContent = `選択中: ${targets.length} 件（生成済み本文あり）`;
+
+  updateSchedPreview();
+  document.getElementById('schedule-publish-modal').classList.add('open');
+}
+
+function updateSchedPreview() {
+  const count = _scheduleTargetIds.length;
+  const cap = Math.max(1, parseInt(document.getElementById('sched-daily-cap').value, 10) || 20);
+  const days = Math.ceil(count / cap);
+  const startDate = document.getElementById('sched-start-date').value;
+  const startTime = document.getElementById('sched-start-time').value || '10:00';
+  const spacingMin = Math.max(5, Math.floor(720 / cap));
+
+  let preview = `${count} 件を ${days} 日間で投稿（1日最大 ${cap} 件）\n`;
+  preview += `開始: ${startDate} ${startTime} ／ 投稿間隔: 約 ${spacingMin} 分\n`;
+
+  // 終了日を計算
+  if (startDate) {
+    const endD = new Date(startDate);
+    endD.setDate(endD.getDate() + days - 1);
+    preview += `終了予定: ${endD.toISOString().slice(0, 10)}`;
+  }
+
+  document.getElementById('sched-preview').textContent = preview;
+}
+
+function closeSchedulePublishModal() {
+  document.getElementById('schedule-publish-modal').classList.remove('open');
+  _scheduleTargetIds = [];
+}
+
+async function execSchedulePublish() {
+  const startDate = document.getElementById('sched-start-date').value;
+  if (!startDate) { toast('開始日を入力してください', 'error'); return; }
+
+  const timeVal = document.getElementById('sched-start-time').value || '10:00';
+  const startHour = parseInt(timeVal.split(':')[0], 10) || 10;
+  const dailyCap = Math.max(1, parseInt(document.getElementById('sched-daily-cap').value, 10) || 20);
+  const count = _scheduleTargetIds.length;
+
+  if (!confirm(`${count} 件を ${startDate} から予約投稿として割り当てます。よろしいですか？`)) return;
+
+  const btn = document.getElementById('sched-exec-btn');
+  btn.disabled = true;
+  btn.textContent = '送信中...';
+
+  try {
+    const res = await fetch('/api/schedule-publish', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        article_ids: _scheduleTargetIds,
+        start_date: startDate,
+        start_hour: startHour,
+        daily_cap: dailyCap,
+      }),
+    });
+    const data = await res.json();
+    if (data.error && data.success === undefined) {
+      toast(data.error, 'error');
+    } else {
+      toast(`予約投稿完了: 成功 ${data.success} 件 / エラー ${data.error} 件`, data.error ? 'warning' : 'success');
+      closeSchedulePublishModal();
+      await loadArticles();
+    }
+    if (data.errors && data.errors.length) {
+      console.warn('スケジュール投稿エラー詳細:', data.errors);
+    }
+  } catch (e) {
+    toast('予約投稿エラー: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📅 予約投稿を実行';
   }
 }
 
@@ -4728,6 +4866,7 @@ function collectSettingsFormData() {
     amazon_partner_tag: document.getElementById('s-amazon-partner-tag').value,
     rakuten_app_id: document.getElementById('s-rakuten-app-id').value,
     rakuten_affiliate_id: document.getElementById('s-rakuten-affiliate-id').value,
+    schedule_daily_cap: parseInt(document.getElementById('s-schedule-daily-cap').value, 10) || 20,
   };
 }
 
@@ -4810,6 +4949,7 @@ async function loadSettings() {
   document.getElementById('s-amazon-partner-tag').value = s.amazon_partner_tag || '';
   document.getElementById('s-rakuten-app-id').value = s.rakuten_app_id || '';
   document.getElementById('s-rakuten-affiliate-id').value = s.rakuten_affiliate_id || '';
+  document.getElementById('s-schedule-daily-cap').value = s.schedule_daily_cap || 20;
   // 秘匿フィールドは再読み込み時に「隠す」状態へ戻す（表示中だった欄の取り残しを防ぐ）
   document.querySelectorAll('input[data-secret-field]').forEach(inp => {
     inp.type = 'password';
@@ -4848,7 +4988,7 @@ async function saveSettings() {
 // Close modals on overlay click
 // mousedown と mouseup が両方 overlay 上の時だけ閉じる。
 // （input 選択中にドラッグで外に出てもモーダルが閉じないように）
-['quality-modal','site-modal','article-modal','brand-expansion-modal'].forEach(id => {
+['quality-modal','site-modal','article-modal','brand-expansion-modal','schedule-publish-modal'].forEach(id => {
   const el = document.getElementById(id);
   if (!el) return;
   let mouseDownOnOverlay = false;

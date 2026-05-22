@@ -6709,6 +6709,115 @@ def batch_publish():
     return jsonify(results)
 
 
+# Scheduled (future) publish
+@app.route('/api/schedule-publish', methods=['POST'])
+@login_required
+@with_data_lock
+def schedule_publish():
+    """生成済み記事を WordPress の予約投稿（status=future）として送信する。
+
+    リクエスト JSON:
+      article_ids: list[str]   — 対象記事 ID
+      start_date:  str         — 開始日 YYYY-MM-DD（当日以降）
+      start_hour:  int         — 開始時刻（0〜23、既定10）
+      daily_cap:   int         — 1日の最大投稿件数（1〜200、既定20）
+
+    日時計算:
+      i 番目の記事 → day = i // daily_cap, slot = i % daily_cap
+      間隔 = max(5, floor(720 / daily_cap)) 分（12時間内に均等分散）
+      時刻がオーバーフローしたら 23:59 にクランプ
+    """
+    from datetime import date as _date
+    data = request.get_json(silent=True) or {}
+    article_ids = data.get('article_ids') or []
+    start_date_str = str(data.get('start_date') or '').strip()
+    start_hour = clamp_int(data.get('start_hour', 10), 10, 0, 23)
+    daily_cap = clamp_int(data.get('daily_cap', 20), 20, 1, 200)
+
+    try:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        start_date = _date.today() + timedelta(days=1)
+
+    spacing_minutes = max(5, (12 * 60) // daily_cap)
+
+    settings = load_settings()
+    articles = load_articles()
+    article_lookup = {a['id']: a for a in articles}
+    quality_list = load_quality()
+
+    targets = [article_lookup[i] for i in article_ids
+               if i in article_lookup and article_lookup[i].get('content')]
+    if not targets:
+        return jsonify({'error': '生成済み本文のある記事を選択してください'}), 400
+
+    results = {'success': 0, 'error': 0, 'errors': [], 'scheduled': []}
+
+    for idx, article in enumerate(targets):
+        day_offset = idx // daily_cap
+        slot = idx % daily_cap
+
+        total_minutes = start_hour * 60 + slot * spacing_minutes
+        total_minutes = min(total_minutes, 23 * 60 + 59)
+        sched_hour = total_minutes // 60
+        sched_min = total_minutes % 60
+        sched_date = start_date + timedelta(days=day_offset)
+        sched_dt = datetime(sched_date.year, sched_date.month, sched_date.day,
+                            sched_hour, sched_min, 0)
+        # WordPress date パラメータはサイトのローカルタイム（タイムゾーンなし）
+        sched_dt_str = sched_dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+        wp_url, wp_user, wp_password = get_site_credentials(article, settings)
+        if not all([wp_url, wp_user, wp_password]):
+            results['error'] += 1
+            results['errors'].append({'title': article.get('title', ''), 'error': 'サイト未設定'})
+            continue
+
+        content = prepare_article_content_for_publish(article['content'], settings)
+        post_payload = {
+            'title': article['title'],
+            'content': content,
+            'status': 'future',
+            'date': sched_dt_str,
+        }
+        slug = normalize_slug(article.get('slug'))
+        if slug:
+            post_payload['slug'] = slug
+        category_ids = resolve_wp_category_ids(wp_url, wp_user, wp_password, article.get('category', ''))
+        if category_ids:
+            post_payload['categories'] = category_ids
+
+        try:
+            resp = requests.post(
+                f"{wp_url}/wp-json/wp/v2/posts",
+                auth=(wp_user, wp_password),
+                json=post_payload,
+                headers=WP_REQUEST_HEADERS,
+                timeout=30,
+            )
+            resp.raise_for_status()
+            post_data = resp.json()
+            for a in articles:
+                if a['id'] == article['id']:
+                    a['status'] = 'scheduled'
+                    a['wp_post_id'] = post_data['id']
+                    a['wp_url'] = post_data.get('link', '')
+                    a['scheduled_at'] = sched_dt_str
+                    a['published_at'] = now_iso()
+                    break
+            results['success'] += 1
+            results['scheduled'].append({'title': article['title'], 'date': sched_dt_str})
+        except requests.exceptions.RequestException as e:
+            results['error'] += 1
+            results['errors'].append({'title': article.get('title', ''), 'error': describe_wp_request_error(e)})
+        except Exception as e:
+            results['error'] += 1
+            results['errors'].append({'title': article.get('title', ''), 'error': str(e)})
+
+    save_articles(articles)
+    return jsonify(results)
+
+
 @app.route('/api/seo-news', methods=['GET'])
 @login_required
 def get_seo_news():
@@ -7004,6 +7113,7 @@ def get_settings():
         'amazon_partner_tag': settings.get('amazon_partner_tag', ''),
         'rakuten_app_id': mask_secret(settings.get('rakuten_app_id', ''), 10),
         'rakuten_affiliate_id': settings.get('rakuten_affiliate_id', ''),
+        'schedule_daily_cap': int(settings.get('schedule_daily_cap') or 20),
     }
     return jsonify(safe)
 
@@ -7060,6 +7170,8 @@ def update_settings():
     for key in ('amazon_partner_tag', 'rakuten_affiliate_id'):
         if key in data:
             settings[key] = str(data.get(key) or '').strip()
+    if 'schedule_daily_cap' in data:
+        settings['schedule_daily_cap'] = clamp_int(data['schedule_daily_cap'], 20, 1, 200)
     # card_insertion_mode はUIから廃止。マーカー挿入固定なので保存しない
     save_settings(settings)
     return jsonify({'success': True})
