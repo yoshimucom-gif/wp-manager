@@ -1496,7 +1496,10 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             <div class="section-header">// Claude API 設定</div>
             <div class="form-group">
               <label class="form-label">APIキー</label>
-              <input type="password" id="s-claude-key" class="form-control" placeholder="sk-ant-...">
+              <div style="position:relative">
+                <input type="password" id="s-claude-key" class="form-control" placeholder="sk-ant-..." style="padding-right:62px">
+                <button type="button" onclick="toggleKeyVisibility(this)" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.12);border:none;color:var(--muted);font-size:11px;padding:4px 9px;border-radius:4px;cursor:pointer">表示</button>
+              </div>
             </div>
             <div class="form-group">
               <label class="form-label">記事生成モデル</label>
@@ -1528,11 +1531,17 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             <div class="form-help" style="margin-bottom:8px">Amazonアソシエイト商品検索用。<strong>設定するとAmazonが優先で使われます</strong>（CV率重視）。楽天はフォールバックとして使用。</div>
             <div class="form-group">
               <label class="form-label">Access Key ID</label>
-              <input type="password" id="s-amazon-access-key" class="form-control" autocomplete="off">
+              <div style="position:relative">
+                <input type="password" id="s-amazon-access-key" class="form-control" autocomplete="off" style="padding-right:62px">
+                <button type="button" onclick="toggleKeyVisibility(this)" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.12);border:none;color:var(--muted);font-size:11px;padding:4px 9px;border-radius:4px;cursor:pointer">表示</button>
+              </div>
             </div>
             <div class="form-group">
               <label class="form-label">Secret Access Key</label>
-              <input type="password" id="s-amazon-secret-key" class="form-control" autocomplete="off">
+              <div style="position:relative">
+                <input type="password" id="s-amazon-secret-key" class="form-control" autocomplete="off" style="padding-right:62px">
+                <button type="button" onclick="toggleKeyVisibility(this)" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.12);border:none;color:var(--muted);font-size:11px;padding:4px 9px;border-radius:4px;cursor:pointer">表示</button>
+              </div>
             </div>
             <div class="form-group">
               <label class="form-label">Partner Tag（アソシエイトID）</label>
@@ -1544,7 +1553,10 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             <div class="form-help" style="margin-bottom:8px">楽天ウェブサービスの商品検索用。Amazonが未設定 or 検索失敗時のフォールバックとして使用。アフィリエイトIDを併設すると参照リンクが自動でアフィリエイト化されます。</div>
             <div class="form-group">
               <label class="form-label">アプリケーションID</label>
-              <input type="password" id="s-rakuten-app-id" class="form-control" autocomplete="off">
+              <div style="position:relative">
+                <input type="password" id="s-rakuten-app-id" class="form-control" autocomplete="off" style="padding-right:62px">
+                <button type="button" onclick="toggleKeyVisibility(this)" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.12);border:none;color:var(--muted);font-size:11px;padding:4px 9px;border-radius:4px;cursor:pointer">表示</button>
+              </div>
             </div>
             <div class="form-group">
               <label class="form-label">アフィリエイトID（任意）</label>
@@ -1795,7 +1807,10 @@ table { width: 100%; border-collapse: collapse; }"></textarea>
     </div>
     <div class="form-group">
       <label class="form-label">アプリケーションパスワード</label>
-      <input type="password" id="site-wp-password" class="form-control" placeholder="xxxx xxxx xxxx xxxx xxxx xxxx">
+      <div style="position:relative">
+        <input type="password" id="site-wp-password" class="form-control" placeholder="xxxx xxxx xxxx xxxx xxxx xxxx" style="padding-right:62px">
+        <button type="button" onclick="toggleKeyVisibility(this)" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.12);border:none;color:var(--muted);font-size:11px;padding:4px 9px;border-radius:4px;cursor:pointer">表示</button>
+      </div>
       <div class="form-help" id="site-password-help">WordPressのユーザー設定で発行したアプリケーションパスワードを入力してください。</div>
     </div>
     <div class="modal-footer">
@@ -4699,6 +4714,19 @@ async function restoreSettingsFromBrowserBackup(settings) {
   const fresh = await fetch('/api/settings');
   toast('ブラウザのバックアップからAPI設定を復元しました', 'success');
   return await fresh.json();
+}
+
+// APIキー等のパスワード入力欄の表示/非表示を個別に切り替える
+function toggleKeyVisibility(btn) {
+  const input = btn.parentElement.querySelector('input');
+  if (!input) return;
+  if (input.type === 'password') {
+    input.type = 'text';
+    btn.textContent = '隠す';
+  } else {
+    input.type = 'password';
+    btn.textContent = '表示';
+  }
 }
 
 async function loadSettings() {

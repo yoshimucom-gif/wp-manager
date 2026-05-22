@@ -17,6 +17,9 @@ data/
 .env
 .env.local
 
+# Logs (ローカル実行時のFlaskログなどはGit管理しない)
+*.log
+
 # IDE
 .vscode/
 .idea/
