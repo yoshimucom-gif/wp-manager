@@ -1225,6 +1225,25 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
               </div>
               <div id="title-ideas-msg" style="margin-top:12px;font-size:12px;color:var(--muted)"></div>
             </div>
+
+            <!-- KWストック -->
+            <div class="settings-section" style="margin-top:12px">
+              <div class="section-header">// KWストック（大量処理）</div>
+              <div class="form-group">
+                <label class="form-label">キーワードをまとめて追加（1行1件・件数制限なし）</label>
+                <textarea id="kw-stock-input" class="form-control" rows="7" placeholder="500件でもOK。ここに貼り付けて「ストックに追加」。&#10;生成は30件ずつ自動で回します。"></textarea>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+                <button class="btn btn-secondary btn-sm" onclick="addToKwStock()">＋ ストックに追加</button>
+                <button class="btn btn-danger btn-sm" onclick="clearKwStock()">クリア</button>
+                <span id="kw-stock-status" style="font-size:12px;color:var(--muted)">ストック: 0件</span>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <button class="btn btn-primary" id="stock-generate-btn" onclick="generateFromStock()" disabled>🔄 ストックから連続生成</button>
+                <button class="btn btn-danger btn-sm" id="stock-stop-btn" onclick="stopStockGeneration()" style="display:none">⏹ 中止</button>
+              </div>
+              <div id="kw-stock-progress" style="font-size:11px;color:var(--muted);margin-top:8px"></div>
+            </div>
           </div>
           <div>
             <div class="toolbar">
@@ -2043,7 +2062,7 @@ function showPage(name, opts = {}) {
   if (!opts.skipLoad) {
     if (pageName === 'articles') loadArticles();
     if (pageName === 'generate') { loadQualitySelects(); updateSiteSelects(); populateGenSelect(); }
-    if (pageName === 'title-ideas') { updateSiteSelects(); renderTitleIdeas(); updateTitleKeywordCount(); }
+    if (pageName === 'title-ideas') { updateSiteSelects(); renderTitleIdeas(); updateTitleKeywordCount(); loadKwStock(); updateKwStockDisplay(); }
     if (pageName === 'batch') { batchSelectedIds = null; loadQualitySelects(); loadArticles(); loadLatestBatchJob(); }
     if (pageName === 'quality') loadQuality();
     if (pageName === 'title-definition') loadTitleDefinition();
@@ -3524,6 +3543,141 @@ async function pollTitleJob(jobId, opts = {}) {
     activeTitleJobTimer = setTimeout(tick, backoff);
   };
   tick();
+}
+
+// ---- KWストック（大量タイトル案連続生成） ----
+const KW_STOCK_KEY = 'affiros9_kw_stock';
+let kwStock = [];
+let _stockRunning = false;
+let _stockStop = false;
+
+function loadKwStock() {
+  try { kwStock = JSON.parse(localStorage.getItem(KW_STOCK_KEY) || '[]'); }
+  catch (e) { kwStock = []; }
+}
+
+function saveKwStock() {
+  localStorage.setItem(KW_STOCK_KEY, JSON.stringify(kwStock));
+}
+
+function updateKwStockDisplay() {
+  const el = document.getElementById('kw-stock-status');
+  const btn = document.getElementById('stock-generate-btn');
+  if (el) el.textContent = `ストック: ${kwStock.length} 件`;
+  if (btn) btn.disabled = kwStock.length === 0 || _stockRunning;
+}
+
+function addToKwStock() {
+  const ta = document.getElementById('kw-stock-input');
+  if (!ta) return;
+  const lines = ta.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  if (!lines.length) { toast('キーワードを入力してください', 'error'); return; }
+  const existing = new Set(kwStock);
+  const added = lines.filter(l => !existing.has(l));
+  kwStock.push(...added);
+  saveKwStock();
+  ta.value = '';
+  updateKwStockDisplay();
+  toast(`${added.length} 件追加（重複 ${lines.length - added.length} 件スキップ）`, 'success');
+}
+
+function clearKwStock() {
+  if (!kwStock.length) return;
+  if (!confirm(`ストックの ${kwStock.length} 件をすべて削除しますか？`)) return;
+  kwStock = [];
+  saveKwStock();
+  updateKwStockDisplay();
+  document.getElementById('kw-stock-progress').textContent = '';
+  toast('ストックをクリアしました', 'info');
+}
+
+function stopStockGeneration() {
+  _stockStop = true;
+  const btn = document.getElementById('stock-stop-btn');
+  if (btn) btn.textContent = '中止リクエスト済み...';
+}
+
+// ジョブが complete/error になるまでポーリングして結果を返す
+function _waitTitleJob(jobId, onMsg) {
+  return new Promise((resolve) => {
+    let errs = 0;
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/title-ideas/jobs/${jobId}`);
+        if (!res.ok) { errs++; }
+        else {
+          const job = await res.json();
+          if (onMsg && job.message) onMsg(job.message);
+          if (job.status === 'completed') { resolve(job); return; }
+          if (job.status === 'error')     { resolve(null); return; }
+          errs = 0;
+        }
+      } catch (e) { errs++; }
+      if (errs > 20) { resolve(null); return; }
+      setTimeout(tick, 2000);
+    };
+    tick();
+  });
+}
+
+async function generateFromStock() {
+  if (_stockRunning || !kwStock.length) return;
+  _stockRunning = true;
+  _stockStop = false;
+  document.getElementById('stock-generate-btn').disabled = true;
+  const stopBtn = document.getElementById('stock-stop-btn');
+  if (stopBtn) { stopBtn.style.display = ''; stopBtn.textContent = '⏹ 中止'; }
+  const progressEl = document.getElementById('kw-stock-progress');
+
+  const site_id = document.getElementById('title-site').value || null;
+  const category = document.getElementById('title-category').value;
+  const count_per_keyword = document.getElementById('title-count').value;
+
+  let batch = 0, totalGen = 0;
+  while (kwStock.length > 0 && !_stockStop) {
+    const chunk = kwStock.slice(0, TITLE_IDEA_MAX_KEYWORDS);
+    batch++;
+    const remaining = kwStock.length;
+    const totalBatches = Math.ceil(remaining / TITLE_IDEA_MAX_KEYWORDS) + (batch - 1);
+    if (progressEl) progressEl.textContent = `バッチ ${batch}/${totalBatches} 処理中... (ストック残 ${remaining} 件)`;
+    try {
+      const res = await fetch('/api/title-ideas/generate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ keywords: chunk.join('\n'), count_per_keyword, site_id, category }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!data.job_id) throw new Error('job_idが返されませんでした');
+
+      const job = await _waitTitleJob(data.job_id, (m) => {
+        if (progressEl) progressEl.textContent = `バッチ ${batch}: ${m} (残 ${kwStock.length} 件)`;
+      });
+      if (job && Array.isArray(job.ideas) && job.ideas.length) {
+        titleIdeaList = [...titleIdeaList, ...job.ideas]; // 追記（クリアしない）
+        renderTitleIdeas();
+        totalGen += job.ideas.length;
+      }
+      kwStock = kwStock.slice(chunk.length);
+      saveKwStock();
+      updateKwStockDisplay();
+    } catch (e) {
+      toast(`バッチ ${batch} 失敗: ${e.message}`, 'error');
+      break;
+    }
+    if (kwStock.length > 0 && !_stockStop) await new Promise(r => setTimeout(r, 1500));
+  }
+
+  _stockRunning = false;
+  if (stopBtn) stopBtn.style.display = 'none';
+  updateKwStockDisplay();
+  if (progressEl) {
+    progressEl.style.color = _stockStop ? 'var(--warning)' : 'var(--success)';
+    progressEl.textContent = _stockStop
+      ? `中止しました（${totalGen} 件生成済み・ストック残 ${kwStock.length} 件）`
+      : `✓ 完了！合計 ${totalGen} 件のタイトル案を生成しました`;
+  }
+  if (!_stockStop) toast(`ストック処理完了: ${totalGen} 件生成`, 'success');
 }
 
 async function generateTitleIdeas() {
