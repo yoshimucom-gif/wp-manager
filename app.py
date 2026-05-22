@@ -3346,13 +3346,23 @@ def save_ad_insertion_patterns(patterns):
     return clean
 
 
-def _build_marker(design='vertical', count=None):
+def _build_marker(design='vertical', count=None, brand=False):
     """プラグイン用のマーカー文字列を組み立てる。
-    例: '<!--ai-product:vertical-->' / '<!--ai-product:ranking:3-->'"""
+
+    Examples:
+      _build_marker('vertical')          → <!--ai-product:vertical-->
+      _build_marker('ranking', count=3)  → <!--ai-product:ranking:3-->
+      _build_marker('vertical', brand=True) → <!--ai-product:vertical:brand-->
+
+    brand=True: 商標記事モード。プラグインはこのマーカーを見たら
+    商品選定を1回だけ行い、記事内の全 :brand マーカーに同一商品を配置する。
+    """
     if not design or design == 'default':
         return '<!--ai-product-->'
     if design == 'ranking' and count:
         return f'<!--ai-product:ranking:{int(count)}-->'
+    if brand:
+        return f'<!--ai-product:{design}:brand-->'
     return f'<!--ai-product:{design}-->'
 
 
@@ -3445,12 +3455,16 @@ def insert_card_markers(html, article_type='ranking', patterns=None, title=None)
     # 各位置への挿入を後ろから処理（インデックス保持のため）
     insertions = []  # [(insert_pos, marker_text)]
 
+    # 商標記事は1商品深掘り構造なので、全マーカーに :brand サフィックスを付ける。
+    # プラグイン側でこの印を見たら商品選定を1回だけ実施し全マーカーに同一商品を配置する。
+    is_brand = (article_type == 'brand')
+
     for rule in rules:
         pos = rule.get('position')
         design = rule.get('design', 'vertical')
         count = rule.get('count')
         repeat = max(1, int(rule.get('repeat', 1)))
-        marker = _build_marker(design, count)
+        marker = _build_marker(design, count, brand=is_brand)
         marker_block = ('\n' + marker) * repeat
 
         if pos == 'top':
@@ -4366,9 +4380,9 @@ def favicon():
 PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugin-downloads')
 PLUGIN_DOWNLOADS = {
     'product-inserter': {
-        'file': 'affiros-product-inserter-1.9.0.zip',
+        'file': 'affiros-product-inserter-1.9.1.zip',
         'name': 'Affiros プロダクトインサーター',
-        'version': '1.9.0',
+        'version': '1.9.1',
     },
     'decoration': {
         'file': 'affiros-decoration-1.2.1.zip',

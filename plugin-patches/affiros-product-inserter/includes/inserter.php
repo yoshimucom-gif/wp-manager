@@ -95,15 +95,37 @@ class AI_PI_Inserter {
 
     /**
      * マーカーモード（記事全体の文脈から関連商品を選定）
+     *
+     * ブランド記事モード (v1.9.1):
+     *   マーカーに :brand サフィックスが付いている場合
+     *   (例: <!--ai-product:vertical:brand-->)、商品選定を1回だけ行い、
+     *   記事内の全ブランドマーカーに同一商品を配置する。
+     *   商標記事は1商品を深掘りする構造のため、複数回選定すると
+     *   異なる商品が混入するバグを防ぐ。
      */
     private static function process_marker_mode($post_id, $content, $design) {
-        $marker_pattern = '/<!--\s*ai-product(?::([a-z]+)(?::(\d+))?)?\s*-->/i';
+        // :brand サフィックスに対応するため modifier を \w+ に拡張
+        $marker_pattern = '/<!--\s*ai-product(?::([a-z]+)(?::([a-z0-9]+))?)?\s*-->/i';
         preg_match_all($marker_pattern, $content, $markers, PREG_SET_ORDER);
         $marker_count = count($markers);
 
         if ($marker_count === 0) {
             return new WP_Error('no_markers', '記事本文に <!--ai-product--> マーカーが見つかりません');
         }
+
+        // ── ブランド記事モード ──────────────────────────────────────────────
+        // :brand サフィックス付きマーカーが1つでもあれば商標記事モードで処理する。
+        // 商品選定を1回だけ行い、全ブランドマーカーに同一商品を配置する。
+        $brand_marker_count = 0;
+        foreach ($markers as $m) {
+            if (!empty($m[2]) && strtolower($m[2]) === 'brand') {
+                $brand_marker_count++;
+            }
+        }
+        if ($brand_marker_count > 0) {
+            return self::process_brand_mode($post_id, $content, $design, $marker_pattern);
+        }
+        // ────────────────────────────────────────────────────────────────────
 
         // 単体マーカー(vertical/proscons等)と多商品マーカー(ranking/compare)を分けてカウント
         // 多商品マーカーは「単体マーカーで選定された商品」を流用するため、Claudeへは単体分だけ依頼する
@@ -235,10 +257,93 @@ class AI_PI_Inserter {
     }
 
     /**
+     * ブランド記事モード (v1.9.1)
+     *
+     * 商標記事は「1商品を深掘りする」構造なので、記事内のすべての :brand マーカーに
+     * 同一商品を配置する。商品選定は記事全体の文脈から1回だけ行う。
+     *
+     * @param int    $post_id
+     * @param string $content        記事本文（:brand マーカー含む）
+     * @param string $design         フォールバックデザイン
+     * @param string $marker_pattern マーカー正規表現
+     */
+    private static function process_brand_mode($post_id, $content, $design, $marker_pattern) {
+        $settings  = get_option('ai_pi_settings', []);
+        $claude    = new AI_PI_Claude_API();
+        $total_usage = ['input_tokens' => 0, 'output_tokens' => 0];
+
+        // キーワード抽出（1商品分）
+        $kw_result = $claude->extract_keywords($content, 1);
+        if (is_wp_error($kw_result)) return $kw_result;
+        $keywords = $kw_result['keywords'];
+        self::accumulate_usage($total_usage, $kw_result['usage']);
+
+        $per_keyword = intval($settings['candidates_per_keyword'] ?? 10);
+        $all_candidates = [];
+        foreach ($keywords as $kw) {
+            $cands = AI_PI_Product_Selector::fetch_candidates($kw, $per_keyword);
+            foreach ($cands as $c) {
+                $all_candidates[$c['id']] = $c;
+            }
+        }
+        $all_candidates = array_values($all_candidates);
+
+        if (empty($all_candidates)) {
+            $errs   = AI_PI_Product_Selector::get_last_api_errors();
+            $detail = !empty($errs) ? '  詳細: ' . implode(' / ', array_slice($errs, 0, 3)) : '';
+            return new WP_Error('no_candidates', '商品候補が取得できませんでした。' . $detail);
+        }
+
+        $all_candidates = AI_PI_Product_Selector::pair_candidates($all_candidates);
+
+        // 商品選定：1商品だけ
+        $sel_result = $claude->select_products_marker($content, $all_candidates, 1);
+        if (is_wp_error($sel_result)) return $sel_result;
+        self::accumulate_usage($total_usage, $sel_result['usage']);
+
+        // 選定された商品を取得（フォールバック: 候補の先頭）
+        $brand_product = null;
+        foreach ($sel_result['selections'] as $sel) {
+            $p = AI_PI_Product_Selector::find_by_id($all_candidates, $sel['product_id'] ?? '');
+            if ($p) { $brand_product = $p; break; }
+        }
+        if (!$brand_product && !empty($all_candidates)) {
+            $brand_product = $all_candidates[0];
+        }
+        if (!$brand_product) {
+            return new WP_Error('no_valid_selection', 'ブランド記事向けの商品選定に失敗しました');
+        }
+
+        // 全 :brand マーカーを同一商品で置換
+        $selected_products = [];
+        $new_content = preg_replace_callback(
+            $marker_pattern,
+            function($match) use ($brand_product, $design, &$selected_products) {
+                $marker_design = !empty($match[1]) ? strtolower($match[1]) : $design;
+                $modifier      = !empty($match[2]) ? strtolower($match[2]) : '';
+                if ($modifier === 'brand') {
+                    $selected_products[] = $brand_product;
+                    return AI_PI_Card_Renderer::render($brand_product, $marker_design);
+                }
+                // :brand 以外のマーカーが混在している場合はそのまま返す
+                return $match[0];
+            },
+            $content
+        );
+
+        return [
+            'new_content' => $new_content,
+            'products'    => $selected_products,
+            'keywords'    => $keywords,
+            'usage'       => $total_usage,
+        ];
+    }
+
+    /**
      * 見出し連動マーカーモード
      */
     private static function process_marker_per_heading_mode($post_id, $content, $design) {
-        $marker_pattern = '/<!--\s*ai-product(?::([a-z]+)(?::(\d+))?)?\s*-->/i';
+        $marker_pattern = '/<!--\s*ai-product(?::([a-z]+)(?::([a-z0-9]+))?)?\s*-->/i';
         preg_match_all($marker_pattern, $content, $markers);
         $marker_count = count($markers[0]);
 
@@ -532,7 +637,7 @@ class AI_PI_Inserter {
      */
     private static function extract_marker_headings($content, $fallback = '') {
         preg_match_all(
-            '/(<h([234])[^>]*>(.*?)<\/h\2>)|(<!--\s*ai-product(?::[a-z]+(?::\d+)?)?\s*-->)/is',
+            '/(<h([234])[^>]*>(.*?)<\/h\2>)|(<!--\s*ai-product(?::[a-z]+(?::[a-z0-9]+)?)?\s*-->)/is',
             $content,
             $matches,
             PREG_SET_ORDER
