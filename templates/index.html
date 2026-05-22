@@ -1033,20 +1033,15 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         </div>
 
         <div class="toolbar">
-          <label class="btn btn-secondary" style="cursor:pointer" id="import-btn-label">
-            <span>📥 CSV/Excelインポート</span>
-            <input type="file" accept=".csv,.xlsx,.xls" style="display:none" onchange="importExcel(this)">
-          </label>
-          <button class="btn btn-secondary" onclick="downloadSampleCsv()">サンプルCSV</button>
-          <button class="btn btn-primary" onclick="generateSelected()">⚡ 選択を生成</button>
-          <button class="btn btn-success" onclick="publishSelected()">🚀 選択をWP投稿</button>
-          <select id="articles-post-status" style="font-size:12px" title="WP投稿時のステータス">
-            <option value="draft">下書き</option>
-            <option value="publish">公開</option>
+          <button class="btn btn-primary" onclick="generateSelected()">⚡ 選択を再生成</button>
+          <button class="btn btn-success" onclick="publishSelected()">🚀 WP投稿</button>
+          <select id="articles-post-status" style="font-size:12px" title="WP投稿時のステータス（WP投稿ボタンに適用）">
+            <option value="draft">下書き投稿</option>
+            <option value="publish">公開投稿</option>
           </select>
           <button class="btn btn-secondary" onclick="openSchedulePublishModal()" title="選択記事をWordPressの予約投稿として割り当て">📅 予約投稿割り当て</button>
           <button class="btn btn-danger" onclick="deleteSelected()">🗑 選択を削除</button>
-          <button class="btn btn-secondary" onclick="rescoreArticles()">↯ スコア再計算</button>
+          <button class="btn btn-secondary" onclick="rescoreArticles()" title="記事スコアを再計算">↯ スコア再計算</button>
         </div>
         <div class="toolbar" style="margin-top:-8px">
           <select id="article-type-filter" style="font-size:12px;" onchange="filterArticles()" title="記事種類で絞り込み">
