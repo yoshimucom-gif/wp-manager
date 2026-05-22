@@ -1128,7 +1128,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
               <select id="gen-article-select" class="form-control" onchange="onArticleSelect()">
                 <option value="">-- インポート済み/作成済みの記事を選択 --</option>
               </select>
-              <div style="font-size:11px;color:var(--muted);margin-top:4px">CSVインポートや対応履歴にある記事情報を生成対象として呼び出します。タイトル等を編集してから生成できます。</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">対応履歴にある記事情報を生成対象として呼び出します。タイトル等を編集してから生成できます。</div>
             </div>
             <div class="form-group site-selector-group" id="gen-site-group">
               <label class="form-label">投稿先サイト</label>
@@ -1261,7 +1261,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
       <div class="page" id="page-batch">
         <div class="page-header">
           <div class="page-title">一括処理</div>
-          <div class="page-subtitle">CSV/Excelで取り込んだ記事や選択した記事をまとめて生成・投稿</div>
+          <div class="page-subtitle">対応履歴の記事をまとめて生成・投稿</div>
         </div>
         <div class="batch-layout">
           <div class="batch-side">
@@ -1277,13 +1277,6 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
               <select id="batch-category-filter" class="form-control" onchange="loadBatchArticles()">
                 <option value="">全カテゴリー</option>
               </select>
-            </div>
-            <div class="toolbar" style="flex-direction:column;align-items:stretch;gap:8px;margin-bottom:0">
-              <label class="btn btn-secondary" style="cursor:pointer">
-                <span>CSV/Excelインポート</span>
-                <input type="file" accept=".csv,.xlsx,.xls" style="display:none" onchange="importExcel(this)">
-              </label>
-              <button class="btn btn-secondary" onclick="downloadSampleCsv()">サンプルCSV</button>
             </div>
             <div id="batch-msg" style="margin-top:12px;font-size:12px;color:var(--muted)"></div>
             <div id="batch-progress" class="batch-progress" style="display:none">
@@ -2817,44 +2810,7 @@ function getSelectedIds() {
   return [...document.querySelectorAll('#articles-body .check-row:checked')].map(c => c.value);
 }
 
-function downloadSampleCsv() {
-  const rows = [
-    ['記事タイトル', 'キーワード', 'カテゴリー', 'スラッグ', '記事種別', '投稿先サイト', '品質定義', '優先度', '執筆予定日', 'メモ', '記事本文'],
-    ['【サンプル1】おすすめ防水バッグ比較ランキング', '防水バッグ おすすめ,防水バッグ 比較', 'アウトドア', 'waterproof-bag-ranking', 'ランキング記事', 'メインブログ', 'ランキング記事品質（SEO強化）', '10', '2026-05-15', '商品名や比較軸を実案件に置き換えてください。', ''],
-    ['【サンプル2】〇〇防水バッグの口コミレビュー', '〇〇防水バッグ 口コミ,〇〇防水バッグ 評判', 'レビュー', 'sample-waterproof-bag-review', '商標記事', 'メインブログ', '商標記事品質（SEO強化）', '20', '2026-05-16', '商品名を実案件に置き換えてください。', ''],
-    ['【サンプル3】雨の日の荷物を守る防水グッズの選び方', '防水グッズ 選び方,雨の日 荷物 防水', 'コラム', 'rainy-day-waterproof-goods', 'コラム記事', 'メインブログ', 'コラム記事品質（SEO強化）', '30', '2026-05-17', '記事本文を空にすると未生成として取り込まれます。本文を入れると生成済として取り込まれます。', ''],
-  ];
-  const csv = '\uFEFF' + rows
-    .map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(','))
-    .join('\r\n');
-  const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'affiros9_articles_sample.csv';
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-  toast('サンプルCSVをダウンロードしました', 'success');
-}
 
-async function importExcel(input) {
-  const file = input.files[0];
-  if (!file) return;
-  // サイトはサイドバーの選択を使う（対応履歴の site-filter は撤去済み）
-  const siteId = currentSiteId || '';
-  const fd = new FormData();
-  fd.append('file', file);
-  if (siteId) fd.append('site_id', siteId);
-  const res = await fetch('/api/import', {method:'POST', body:fd});
-  const data = await res.json();
-  if (data.success) {
-    toast(`${data.imported}件インポートしました${siteId ? '' : '（サイト未設定）'}`, 'success');
-    loadArticles();
-  } else {
-    toast(data.error || 'CSV/Excelインポート失敗', 'error');
-  }
   input.value = '';
 }
 
