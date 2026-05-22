@@ -2829,10 +2829,6 @@ function getSelectedIds() {
   return [...document.querySelectorAll('#articles-body .check-row:checked')].map(c => c.value);
 }
 
-
-  input.value = '';
-}
-
 async function rescoreArticles() {
   const res = await fetch('/api/articles/score', {method:'POST'});
   const data = await res.json();
