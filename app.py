@@ -10,6 +10,7 @@ import io
 import math
 import hashlib
 import hmac
+import sqlite3
 import difflib
 import time
 import traceback
@@ -234,6 +235,94 @@ def now_iso():
     return datetime.now(JST_TZ).isoformat(timespec='seconds')
 
 
+# ───────────────────────────────────────────────────────────────────────────
+# SQLite ドキュメントストア（永続化レイヤ / ロードマップ #2）
+#
+# articles / settings / quality / batch_jobs / title_definition /
+# title_idea_jobs / ad_insertion を、ばらばらの JSON ファイルではなく
+# 1つの SQLite DB (wpmanager.db) の documents テーブルに JSON 値として持つ。
+#
+# 旧 JSON ファイル方式の問題:
+#   - tmp ファイル + os.replace は「アトミックなファイル置換」ではあるが、
+#     ディスクや OS レベルの中断・並行 tmp 衝突に対し SQLite ほど堅くない
+#   - バックアップ＝ディレクトリ内の複数 JSON を集める必要があった
+# SQLite の利点:
+#   - WAL モードで ACID。書き込み中クラッシュでも DB は壊れない
+#   - バックアップは wpmanager.db 1ファイルをコピーするだけ
+#
+# 注意: これは「ドキュメント丸ごと1行」の KV ストア。read-modify-write の
+#       ロスト・アップデート対策は引き続き _DATA_LOCK が担う（SQLite 化だけでは
+#       解決しない）。--workers 1 制約も _DATA_LOCK がプロセス内ロックである限り継続。
+# ───────────────────────────────────────────────────────────────────────────
+DB_FILE = DATA_DIR / 'wpmanager.db'
+
+
+def _db_connect():
+    conn = sqlite3.connect(str(DB_FILE), timeout=30.0)
+    conn.execute('PRAGMA journal_mode=WAL')
+    conn.execute('PRAGMA synchronous=NORMAL')
+    return conn
+
+
+def _db_init():
+    """documents テーブルを用意する（冪等）。"""
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+    conn = _db_connect()
+    try:
+        with conn:
+            conn.execute(
+                'CREATE TABLE IF NOT EXISTS documents ('
+                ' key TEXT PRIMARY KEY,'
+                ' value TEXT NOT NULL,'
+                ' updated_at TEXT)'
+            )
+    finally:
+        conn.close()
+
+
+_db_init()
+
+
+def load_doc(key, default):
+    """ドキュメント(JSON値)を SQLite から読む。未保存・破損時は default。"""
+    try:
+        conn = _db_connect()
+        try:
+            row = conn.execute(
+                'SELECT value FROM documents WHERE key=?', (key,)
+            ).fetchone()
+        finally:
+            conn.close()
+    except Exception:
+        return default
+    if row is None:
+        return default
+    try:
+        return json.loads(row[0])
+    except (ValueError, TypeError):
+        return default
+
+
+def save_doc(key, data):
+    """ドキュメント(JSON値)を SQLite に保存（UPSERT / トランザクション）。"""
+    payload = json.dumps(data, ensure_ascii=False)
+    ts = now_iso()
+    conn = _db_connect()
+    try:
+        with conn:
+            conn.execute(
+                'INSERT INTO documents(key, value, updated_at) VALUES(?,?,?) '
+                'ON CONFLICT(key) DO UPDATE SET '
+                'value=excluded.value, updated_at=excluded.updated_at',
+                (key, payload, ts)
+            )
+    finally:
+        conn.close()
+
+
 DEFAULT_TITLE_DEFINITION = {
     'version': 1,
     'char_basic_min': 28,
@@ -266,7 +355,7 @@ DEFAULT_TITLE_DEFINITION = {
 
 
 def load_title_definition():
-    raw = load_json(TITLE_DEFINITION_FILE, None)
+    raw = load_doc('title_definition', None)
     if not isinstance(raw, dict):
         return dict(DEFAULT_TITLE_DEFINITION)
     merged = dict(DEFAULT_TITLE_DEFINITION)
@@ -300,7 +389,7 @@ def save_title_definition(definition):
                 pass
         else:
             clean[k] = str(v or '').strip()
-    save_json(TITLE_DEFINITION_FILE, clean)
+    save_doc('title_definition', clean)
     return clean
 
 
@@ -317,26 +406,76 @@ def save_json(path, data):
         json.dump(data, f, ensure_ascii=False, indent=2)
     os.replace(tmp_path, path)
 
+
+# 旧 JSON ファイル → SQLite documents テーブル の対応表
+_DOC_FILE_MAP = {
+    'articles': ARTICLES_FILE,
+    'quality': QUALITY_FILE,
+    'settings': SETTINGS_FILE,
+    'batch_jobs': BATCH_JOBS_FILE,
+    'title_definition': TITLE_DEFINITION_FILE,
+    'title_idea_jobs': TITLE_IDEA_JOBS_FILE,
+    'ad_insertion': AD_INSERTION_FILE,
+}
+
+
+def _migrate_json_files_to_db():
+    """旧 JSON ファイルが残っていて DB に未取り込みなら、一度だけ取り込む。
+
+    起動時に1回呼ぶ。DB に既に該当キーがあればスキップするので冪等。
+    旧ファイル自体は削除せず残す（移行前状態のバックアップとして）。
+    """
+    for key, path in _DOC_FILE_MAP.items():
+        try:
+            conn = _db_connect()
+            try:
+                exists = conn.execute(
+                    'SELECT 1 FROM documents WHERE key=?', (key,)
+                ).fetchone()
+            finally:
+                conn.close()
+            if exists:
+                continue
+            if not path.exists():
+                continue
+            data = load_json(path, None)
+            if data is None:
+                continue
+            save_doc(key, data)
+            try:
+                app.logger.info('[db-migrate] %s を %s から取り込みました', key, path.name)
+            except Exception:
+                pass
+        except Exception as e:
+            try:
+                app.logger.warning('[db-migrate] %s の取り込みに失敗: %s', key, e)
+            except Exception:
+                pass
+
+
+_migrate_json_files_to_db()
+
+
 def load_articles():
-    return load_json(ARTICLES_FILE, [])
+    return load_doc('articles', [])
 
 def save_articles(articles):
-    save_json(ARTICLES_FILE, articles)
+    save_doc('articles', articles)
 
 def load_batch_jobs():
-    return load_json(BATCH_JOBS_FILE, [])
+    return load_doc('batch_jobs', [])
 
 def save_batch_jobs(jobs):
-    save_json(BATCH_JOBS_FILE, jobs[:50])
+    save_doc('batch_jobs', jobs[:50])
 
 
 def load_title_idea_jobs():
-    return load_json(TITLE_IDEA_JOBS_FILE, [])
+    return load_doc('title_idea_jobs', [])
 
 
 def save_title_idea_jobs(jobs):
     # 直近20件だけ保持
-    save_json(TITLE_IDEA_JOBS_FILE, jobs[:20])
+    save_doc('title_idea_jobs', jobs[:20])
 
 
 def update_title_idea_job(job_id, **changes):
@@ -548,7 +687,7 @@ H2: まとめ
 
 def load_quality():
     presets = default_quality_presets()
-    quality = load_json(QUALITY_FILE, presets)
+    quality = load_doc('quality', presets)
     existing_ids = {q.get('id') for q in quality}
     changed = False
     for preset in presets:
@@ -590,13 +729,13 @@ def load_quality():
             changed = True
     if changed:
         try:
-            save_json(QUALITY_FILE, quality)
+            save_doc('quality', quality)
         except Exception as e:
             app.logger.warning('Failed to persist quality presets: %s', e)
     return quality
 
 def save_quality(quality):
-    save_json(QUALITY_FILE, quality)
+    save_doc('quality', quality)
 
 def first_env(*names):
     for name in names:
@@ -668,7 +807,7 @@ def restore_data_snapshot(snapshot):
         save_quality(snapshot['quality'])
 
 def load_settings():
-    settings = load_json(SETTINGS_FILE, {
+    settings = load_doc('settings', {
         "sites": [],
         "claude_api_key": "",
         "default_quality_id": "default",
@@ -3134,7 +3273,7 @@ def _sanitize_ad_insertion_rules(rules):
 
 def load_ad_insertion_patterns():
     """広告挿入定義をディスクから読み込む。未保存時はデフォルトを返す。"""
-    raw = load_json(AD_INSERTION_FILE, None)
+    raw = load_doc('ad_insertion', None)
     if not isinstance(raw, dict):
         return {k: [dict(r) for r in v] for k, v in DEFAULT_CARD_INSERTION_PATTERNS.items()}
     merged = {}
@@ -3150,7 +3289,7 @@ def save_ad_insertion_patterns(patterns):
     clean = {}
     for t in AD_INSERTION_ALLOWED_TYPES:
         clean[t] = _sanitize_ad_insertion_rules((patterns or {}).get(t, []))
-    save_json(AD_INSERTION_FILE, clean)
+    save_doc('ad_insertion', clean)
     return clean
 
 
@@ -4195,7 +4334,7 @@ def resolve_wp_category_ids(wp_url, wp_user, wp_password, category_value):
 
 
 def save_settings(settings):
-    save_json(SETTINGS_FILE, settings)
+    save_doc('settings', settings)
 
 def login_required(f):
     @wraps(f)

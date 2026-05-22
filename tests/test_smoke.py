@@ -220,6 +220,36 @@ def test_load_json_returns_default_when_missing(tmp_path):
 
 
 # ─────────────────────────────────────────────
+# SQLite ドキュメントストア（ロードマップ #2）
+# ─────────────────────────────────────────────
+def test_save_load_doc_roundtrip():
+    app.save_doc('test_doc_roundtrip', {'a': 1, 'list': [1, 2], 'jp': '日本語'})
+    assert app.load_doc('test_doc_roundtrip', None) == {'a': 1, 'list': [1, 2], 'jp': '日本語'}
+
+
+def test_load_doc_returns_default_when_missing():
+    assert app.load_doc('definitely-no-such-key-xyz', []) == []
+    assert app.load_doc('definitely-no-such-key-xyz', {'d': 1}) == {'d': 1}
+
+
+def test_save_doc_upserts():
+    app.save_doc('test_doc_upsert', {'v': 1})
+    app.save_doc('test_doc_upsert', {'v': 2})  # 上書き
+    assert app.load_doc('test_doc_upsert', None) == {'v': 2}
+
+
+def test_articles_persist_through_db():
+    # save_articles / load_articles が DB 経由で往復すること
+    sample = [{'id': 'test-a1', 'title': 'テスト記事', 'status': 'pending'}]
+    original = app.load_articles()
+    try:
+        app.save_articles(sample)
+        assert app.load_articles() == sample
+    finally:
+        app.save_articles(original)  # 後始末
+
+
+# ─────────────────────────────────────────────
 # Flask ルート疎通
 # ─────────────────────────────────────────────
 def test_unauthenticated_api_is_blocked():
