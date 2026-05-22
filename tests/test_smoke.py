@@ -146,9 +146,39 @@ def test_find_h2_range_includes_gutenberg_wrapper():
 
 
 def test_find_matome_range_keywords_broadened():
-    for kw in ['まとめ', 'おわりに', '最後に', '結論']:
+    for kw in ['まとめ', 'おわりに', '最後に', '結論', '総括', 'ベストバイ']:
         assert app._find_matome_h2_range(f'<h2>{kw}</h2><p>x</p>') is not None, kw
-    assert app._find_matome_h2_range('<h2>選び方のコツ</h2>') is None
+    # H2 が1つも無ければ None
+    assert app._find_matome_h2_range('<p>本文だけ</p>') is None
+
+
+def test_matome_range_falls_back_to_last_h2():
+    # まとめがSEO別名でキーワードに一致しなくても「最後のH2」で確実に解決する
+    html = '<p>x</p><h2>選び方</h2><p>y</p><h2>用途別ベストの考え方</h2><p>z</p>'
+    rng = app._find_matome_h2_range(html)
+    assert rng is not None
+    assert '用途別ベスト' in html[rng[0]:rng[1]]
+
+
+def test_strip_summary_keeps_comparison_table():
+    # 比較表セクションは削除しない。早見表セクションだけ削除する。
+    html = ('<h2>主要モデル比較</h2><table><tr><td>A</td></tr></table>'
+            '<h2>おすすめ早見表</h2><table><tr><td>B</td></tr></table>'
+            '<h2>本編</h2><p>x</p>')
+    out = app.strip_summary_table_sections(html)
+    assert '主要モデル比較' in out      # 比較表セクションは残る（コンテンツ保護）
+    assert '<table' in out             # テーブル自体も残る
+    assert 'おすすめ早見表' not in out  # 早見表セクションは消える
+
+
+def test_after_matome_marker_placed_with_seo_heading():
+    # まとめ見出しがSEO別名でも after_matome_h2 マーカーが必ず配置される
+    # （広告挿入定義が「効かない」を防ぐ）
+    html = '<p>導入</p><h2>選び方</h2><p>x</p><h2>用途別ベストバイ総括</h2><p>結び</p>'
+    out, _ = app.insert_card_markers(
+        html, 'column',
+        patterns={'column': [{'position': 'after_matome_h2', 'design': 'ranking', 'count': 3}]})
+    assert 'ai-product' in out
 
 
 def test_insert_card_markers_outside_heading_blocks():

@@ -3221,20 +3221,22 @@ def strip_leading_introduction_h2(html, title=None):
 
 
 def strip_summary_table_sections(html):
-    """サマリー/比較系のH2セクション（H2 + そのセクション内容）を削除する。
+    """「早見表」セクションだけを削除する。
 
-    プラグインの compare デザインが同じ役割を担うため、本文中の比較表/早見表は不要。
-    検出条件:
-      (a) H2 が比較・要約系キーワード（早見表 / 比較表 / 一覧表 / スペック比較 等）を含む
-      (b) H2 の直後に <table> が来ている（タイトルにキーワードが無くてもテーブルがあれば削除）
-    削除範囲: H2 から「次のH2 / ランキング個別H3 / 末尾」まで。
+    ⚠️ 方針変更（広告挿入位置の安定化）:
+      旧実装は「H2直後に<table>があれば問答無用で削除」していたため、
+      コラム記事などの**正規の比較表セクションを丸ごと消し**、内容が欠落＋
+      後続の広告マーカー位置がずれる原因になっていた。
+      比較表はユーザーの正当なコンテンツなので削除しない。
+      生成プロンプトで「作るな」と明示している「早見表」だけを掃除する。
+    削除範囲: 早見表H2 から「次のH2 / ランキング個別H3 / 末尾」まで。
     """
     if not html:
         return html
     text = str(html)
 
-    # (a) キーワードを含むH2のセクション削除
-    summary_keywords = '早見表|比較表|比較一覧|一覧表|スペック比較|スペック表|主要スペック|ラインナップ|商品比較|一目で|早分かり|早わかり'
+    # 「早見表」系キーワードを含むH2セクションのみ削除（比較表は残す）
+    summary_keywords = '早見表|早分かり|早わかり|一目でわかる|一目で分かる'
     pattern_keyword = re.compile(
         r'(?:<!--\s*wp:heading[^>]*-->\s*)?'
         r'<h2[^>]*>(?:(?!</h2>)[\s\S])*?(?:' + summary_keywords + r')(?:(?!</h2>)[\s\S])*?</h2>'
@@ -3245,21 +3247,6 @@ def strip_summary_table_sections(html):
     )
     cleaned = pattern_keyword.sub('', text)
     cleaned = pattern_keyword.sub('', cleaned)  # 複数の早見表対策
-
-    # (b) H2 の直後に table が来ているセクションも削除（タイトル違いでもテーブルなら除去）
-    pattern_table_after_h2 = re.compile(
-        r'(?:<!--\s*wp:heading[^>]*-->\s*)?'
-        r'<h2[^>]*>(?:(?!</h2>)[\s\S])*?</h2>'
-        r'(?:\s*<!--\s*/wp:heading\s*-->)?'
-        r'\s*(?:<!--\s*wp:[^>]*-->\s*)?\s*<table\b[\s\S]*?</table>'
-        r'(?:\s*<!--\s*/wp:[^>]*-->)?'
-        r'[\s\S]*?'
-        r'(?=<h2|<!--\s*wp:heading|<h3[^>]*>\s*(?:<!--\s*wp:[^>]*-->\s*)?(?:第\s*)?[\d０-９]+\s*位|$)',
-        re.IGNORECASE
-    )
-    cleaned = pattern_table_after_h2.sub('', cleaned)
-    cleaned = pattern_table_after_h2.sub('', cleaned)
-
     return cleaned
 
 
@@ -3365,23 +3352,41 @@ def _build_marker(design='vertical', count=None):
     return f'<!--ai-product:{design}-->'
 
 
-def _find_matome_h2_range(html):
-    """「まとめ」系H2のブロック範囲 (start, end) を返す。無ければ None。
+# H2ブロック1個分（Gutenberg wp:heading ラッパー込み）の正規表現
+_H2_BLOCK_RE = (
+    r'(?:<!--\s*wp:heading[^>]*-->\s*)?'
+    r'<h2[^>]*>(?:(?!</h2>)[\s\S])*?</h2>'
+    r'(?:\s*<!--\s*/wp:heading\s*-->)?'
+)
 
-    ⚠️ Gutenberg の <!--wp:heading--> / <!--/wp:heading--> ラッパーを範囲に含める。
-    これを含めないと、マーカーが heading ブロックの内側に挿入されてブロックが
-    壊れ、カードが意図しない位置に描画される（広告位置がめちゃくちゃになる主因）。
+
+def _find_matome_h2_range(html):
+    """「まとめ」H2のブロック範囲 (start, end)。無ければ「最後のH2」を返す。
+
+    ⚠️ NON-NEGOTIABLE（広告挿入定義の信頼性）:
+      after_matome_h2 / before_matome_h2 のマーカーは「まとめH2」を基準に置く。
+      旧実装はキーワード一致のみで、まとめが「総括」「ベストバイ」等のSEO見出し
+      （生成プロンプト自体が推奨）になるとマッチせず、マーカーが0個＝定義が
+      まるごと無効化されていた（「定義が効かない」の主因）。
+      キーワードで見つからない場合は、記事構造上まとめにあたる "最後のH2" へ
+      確実にフォールバックする。
     """
-    pattern = re.compile(
+    kw = re.compile(
         r'(?:<!--\s*wp:heading[^>]*-->\s*)?'
-        r'<h2[^>]*>(?:(?!</h2>)[\s\S])*?(?:まとめ|総まとめ|結論|要点|おわりに|最後に)(?:(?!</h2>)[\s\S])*?</h2>'
+        r'<h2[^>]*>(?:(?!</h2>)[\s\S])*?'
+        r'(?:まとめ|総まとめ|結論|要点|おわりに|最後に|総括|ベストバイ)'
+        r'(?:(?!</h2>)[\s\S])*?</h2>'
         r'(?:\s*<!--\s*/wp:heading\s*-->)?',
         re.IGNORECASE
     )
-    m = pattern.search(html)
-    if not m:
-        return None
-    return m.start(), m.end()
+    m = kw.search(html)
+    if m:
+        return m.start(), m.end()
+    # キーワード不一致 → 最後のH2をまとめとみなす（確実に解決させる）
+    h2s = list(re.finditer(_H2_BLOCK_RE, html, re.IGNORECASE))
+    if h2s:
+        return h2s[-1].start(), h2s[-1].end()
+    return None
 
 
 def _find_first_h2_range(html):
