@@ -146,6 +146,14 @@ try:
     BATCH_GENERATION_MAX_RETRIES = int(os.environ.get('BATCH_GENERATION_MAX_RETRIES', '2'))
 except ValueError:
     BATCH_GENERATION_MAX_RETRIES = 2
+# Claude API 過負荷（HTTP 529 / overloaded_error）専用のリトライ回数。
+# 529 は Anthropic サーバ側の一時的な混雑で、数十秒〜数分で回復する。
+# 通常エラー用の2回・数秒バックオフでは足りずバッチが全滅するため、
+# 過負荷は長め指数バックオフ＋多めリトライで待ち抜く（通常予算とは別枠）。
+try:
+    CLAUDE_OVERLOAD_MAX_RETRIES = int(os.environ.get('CLAUDE_OVERLOAD_MAX_RETRIES', '8'))
+except ValueError:
+    CLAUDE_OVERLOAD_MAX_RETRIES = 8
 try:
     CLAUDE_SEGMENT_CONTINUATION_MAX_ROUNDS = int(os.environ.get('CLAUDE_SEGMENT_CONTINUATION_MAX_ROUNDS', '2'))
 except ValueError:
@@ -2142,6 +2150,16 @@ def compact_ai_error(error, limit=260):
 def non_retryable_ai_error(error):
     text = str(error or '').lower()
     return bool(re.search(r'401|403|authentication|unauthorized|permission|api key|invalid key|credit|quota|billing|balance', text))
+
+
+def is_overload_error(error):
+    """Claude API の一時的な過負荷（HTTP 529 / overloaded_error）かどうか。
+
+    529 は Anthropic サーバ側の混雑で、こちらの設定やコードの不具合ではない。
+    数十秒〜数分で回復するので、長めに待ってリトライすれば成功する。
+    """
+    text = str(error or '').lower()
+    return 'overloaded' in text or 'error code: 529' in text
 
 
 def title_idea_max_tokens(keyword_count, count_per_keyword):
@@ -4397,9 +4415,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.2.1',
     },
     'rewrite': {
-        'file': 'affiros-rewrite-0.4.0.zip',
+        'file': 'affiros-rewrite-0.4.3.zip',
         'name': 'Affiros リライター',
-        'version': '0.4.0',
+        'version': '0.4.3',
     },
 }
 
@@ -4802,6 +4820,7 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
 
         client = anthropic.Anthropic(api_key=api_key) if api_key else None
         attempt_counts = {}
+        overload_counts = {}  # 記事ごとの「Claude API過負荷(529)」リトライ回数（通常予算とは別枠）
         queue_articles = list(pending_articles)
         while queue_articles:
             if is_cancel_requested():
@@ -5120,6 +5139,40 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                 trace = traceback.format_exc()
                 error_text = str(e) or e.__class__.__name__
                 error_detail = f'{stage}: {error_text}'
+                # ── Claude API 過負荷 (HTTP 529 / overloaded_error) の特別扱い ──
+                # 529 は Anthropic サーバ側の一時的な混雑。通常エラーの2回・数秒
+                # バックオフでは回復前にリトライを使い切りバッチが全滅する。
+                # 過負荷専用に「長め指数バックオフ・多めリトライ」で待ち抜き、
+                # かつ通常リトライ予算（BATCH_GENERATION_MAX_RETRIES）を消費しない。
+                if is_overload_error(e):
+                    ov = overload_counts.get(article_id, 0) + 1
+                    overload_counts[article_id] = ov
+                    if ov <= CLAUDE_OVERLOAD_MAX_RETRIES:
+                        wait = min(180, 20 * (2 ** (ov - 1)))  # 20,40,80,160,180,180...
+                        # 過負荷分は通常リトライ予算に数えない（次回 pickup の +1 を相殺）
+                        attempt_counts[article_id] = attempt_no - 1
+                        retried += 1
+                        with _DATA_LOCK:
+                            current_articles = load_articles()
+                            for a in current_articles:
+                                if a['id'] == article['id']:
+                                    a['status'] = 'generating'
+                                    a['error'] = f'Claude APIが混雑中（529 Overloaded）。{wait}秒待って自動再試行します'
+                                    a['updated_at'] = now_iso()
+                                    break
+                            save_articles(current_articles)
+                        queue_articles.append(article)
+                        update_job(
+                            completed=completed,
+                            failed=failed,
+                            retried=retried,
+                            current_title=article.get('title', ''),
+                            last_error=error_detail,
+                            message=f"Claude APIが混雑中（529 Overloaded）。{wait}秒待って再試行します（過負荷リトライ {ov}/{CLAUDE_OVERLOAD_MAX_RETRIES}）"
+                        )
+                        time.sleep(wait)
+                        continue
+                    # 過負荷リトライも尽きた → 通常のエラー処理へ流す
                 if attempt_no <= BATCH_GENERATION_MAX_RETRIES:
                     retried += 1
                     with _DATA_LOCK:

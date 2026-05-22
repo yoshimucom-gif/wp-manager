@@ -285,6 +285,21 @@ def test_quality_gate_config_is_sane():
     assert app.QUALITY_GATE_MAX_POLISH >= 1
 
 
+def test_is_overload_error():
+    # Claude API 過負荷（529 / overloaded_error）を検出
+    assert app.is_overload_error(
+        "Error code: 529 - {'type': 'error', 'error': "
+        "{'type': 'overloaded_error', 'message': 'Overloaded'}}")
+    assert app.is_overload_error("Overloaded")
+    # 過負荷以外のエラーは False
+    assert not app.is_overload_error("Error code: 401 - authentication_error")
+    assert not app.is_overload_error("Error code: 400 - invalid_request")
+    assert not app.is_overload_error("req_011CbH3Emxbr4VssfbpHB9yt")
+    assert not app.is_overload_error("")
+    assert not app.is_overload_error(None)
+    assert app.CLAUDE_OVERLOAD_MAX_RETRIES >= 1
+
+
 # ─────────────────────────────────────────────
 # Flask ルート疎通
 # ─────────────────────────────────────────────
