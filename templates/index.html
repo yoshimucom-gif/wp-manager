@@ -1215,10 +1215,6 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
                 </select>
               </div>
               <div class="form-group">
-                <label class="form-label">カテゴリー</label>
-                <input type="text" id="title-category" class="form-control" placeholder="例: 防寒グッズ">
-              </div>
-              <div class="form-group">
                 <label class="form-label">記事種別</label>
                 <select id="title-type-filter" class="form-control">
                   <option value="">自動振り分け（ランキング／コラム）</option>
@@ -1728,24 +1724,25 @@ table { width: 100%; border-collapse: collapse; }"></textarea>
                 <div style="font-weight:700;font-size:14px">❹ Affiros カテゴライザー</div>
                 <div style="font-size:11px;color:var(--muted)">カテゴリー / 投稿時の自動分類</div>
               </div>
-              <div style="font-size:11px;background:rgba(255,200,100,0.18);color:#ffc864;padding:2px 8px;border-radius:10px">準備中</div>
+              <div style="font-size:11px;background:rgba(102,210,255,0.18);color:#66d2ff;padding:2px 8px;border-radius:10px">v0.1.0</div>
             </div>
             <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:10px">
-              wp_manager から投稿される記事のタイトル・本文を解析し、
-              事前定義したカテゴリーマップに従って自動でカテゴリーを
-              紐付ける WordPress 側プラグイン。現在仕様策定中。
+              記事の公開時に Claude API で本文を解析し、適切なカテゴリーを
+              自動で紐付ける WordPress 側プラグイン。分類表は持たず、
+              インストール先サイトの<strong>実カテゴリーを動的に読み取る</strong>ため、
+              どのサイトでもそのまま動作します。
             </div>
             <div style="font-size:11px;color:var(--muted);background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:6px;margin-bottom:8px">
-              <div>📂 配布物: <em>未配布</em></div>
-              <div>🔧 設定: 未実装</div>
-              <div>🚧 ステータス: 設計フェーズ</div>
+              <div>📂 配布物: <code>affiros-categorizer-0.1.0.zip</code></div>
+              <div>🔧 設定: WP管理画面 →「Affiros カテゴライザー」</div>
+              <div>📝 必要キー: Claude API キー</div>
             </div>
             <div style="font-size:11px;color:var(--muted);margin-bottom:12px">
-              想定機能: キーワードマッチング / 親子カテゴリー判定 / フォールバック「未分類」回避
+              主要機能: 公開時の自動分類 / 一括分類（未分類の解消）/ 実カテゴリー動的取得 / 親子カテゴリー判定
             </div>
-            <button class="btn btn-secondary" style="font-size:12px;opacity:0.5;cursor:not-allowed" disabled>
-              ⬇ ダウンロード（準備中）
-            </button>
+            <a href="/download/plugin/categorizer" class="btn btn-primary" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;text-decoration:none">
+              ⬇ ダウンロード（v0.1.0）
+            </a>
           </div>
 
         </div>
@@ -3342,9 +3339,6 @@ function fillTitleIdeaSample() {
     '防寒手袋 比較',
     '着る毛布 洗える'
   ].join('\n');
-  if (!document.getElementById('title-category').value) {
-    document.getElementById('title-category').value = '防寒グッズ';
-  }
 }
 
 function titleIdeaScoreClass(score) {
@@ -3420,7 +3414,7 @@ function selectedTitleIdeas() {
     .filter(Boolean)
     .map(idea => ({
       ...idea,
-      category: document.getElementById('title-category').value || idea.category || '',
+      category: idea.category || '',
       site_id: document.getElementById('title-site').value || idea.site_id || null,
     }));
 }
@@ -3635,7 +3629,7 @@ async function generateFromStock() {
   const progressEl = document.getElementById('kw-stock-progress');
 
   const site_id = document.getElementById('title-site').value || null;
-  const category = document.getElementById('title-category').value;
+  const category = '';
   const count_per_keyword = document.getElementById('title-count').value;
   const article_type_filter = document.getElementById('title-type-filter')?.value || '';
 
@@ -3691,7 +3685,7 @@ async function generateTitleIdeas() {
   const keywordsRaw = document.getElementById('title-keywords').value;
   const count_per_keyword = document.getElementById('title-count').value;
   const site_id = document.getElementById('title-site').value || null;
-  const category = document.getElementById('title-category').value;
+  const category = '';
   const article_type_filter = document.getElementById('title-type-filter')?.value || '';
 
   if (!keywordsRaw.trim()) {
@@ -3753,7 +3747,7 @@ async function saveSelectedTitleIdeas() {
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
         ideas,
-        category: document.getElementById('title-category').value,
+        category: '',
         site_id: document.getElementById('title-site').value || null,
       })
     });
