@@ -16,7 +16,8 @@ class Affiros_Rewrite_Engine {
      * @param int $post_id
      * @param array $opts
      *   - rewrite_mode, emphasis_level, tone, target_chars, tolerance_percent
-     *   - article_type ('ranking'|'brand'|'column'|'', 任意)
+     *   - article_type ('auto'|'ranking'|'brand'|'column'|'', 任意)
+     *       'auto' は本体 infer_title_article_type 準拠でタイトルから判定する
      *   - insert_markers (bool, 任意)  trueなら記事タイプ別マーカー挿入
      * @return array|WP_Error
      */
@@ -39,6 +40,20 @@ class Affiros_Rewrite_Engine {
         $merged = array_merge($settings, array_filter($opts, function ($v) {
             return $v !== '' && $v !== null;
         }));
+
+        // 記事タイプを確定する。
+        // 'auto'      … 本体 infer_title_article_type 準拠で元記事タイトルから判定
+        // ranking 等  … その値を採用
+        // ''（指定なし）… タイプ無し（マーカーも挿入しない）
+        $requested_type = $merged['article_type'] ?? '';
+        if ($requested_type === 'auto') {
+            $article_type = Affiros_Rewrite_Article_Type::infer('', $post['title']);
+        } elseif ($requested_type !== '') {
+            $article_type = Affiros_Rewrite_Article_Type::normalize($requested_type, 'ranking');
+        } else {
+            $article_type = '';
+        }
+        $merged['article_type'] = $article_type;
 
         $prompt = self::build_prompt($post, $merged);
 
@@ -70,22 +85,23 @@ class Affiros_Rewrite_Engine {
             );
         }
         $content = $parsed['content'];
+        $new_title = $parsed['title'] ?: $post['title'];
 
-        // マーカー挿入（記事タイプが指定されかつ insert_markers が true）
-        $article_type = $merged['article_type'] ?? '';
+        // マーカー挿入（記事タイプが確定しかつ insert_markers が true）
         if (!empty($opts['insert_markers']) && $article_type) {
-            $content = Affiros_Rewrite_Marker_Inserter::insert($content, $article_type);
+            $content = Affiros_Rewrite_Marker_Inserter::insert($content, $article_type, $new_title);
         }
 
         return [
             'post_id' => $post_id,
             'original_title' => $post['title'],
             'original_content' => $post['content'],
-            'rewritten_title' => $parsed['title'] ?: $post['title'],
+            'rewritten_title' => $new_title,
             'rewritten_content' => $content,
             'usage' => $result['usage'] ?? [],
             'model' => $result['model'] ?? '',
             'article_type' => $article_type,
+            'article_type_auto' => ($requested_type === 'auto'),
             'markers_inserted' => !empty($opts['insert_markers']) && $article_type,
         ];
     }
@@ -101,6 +117,32 @@ class Affiros_Rewrite_Engine {
         }
         $est = (int)ceil($target * 2.5) + 1000;
         return max(2000, min(32000, $est));
+    }
+
+    /**
+     * 記事タイプ別の指示。本体 build_article_type_prompt の移植。
+     */
+    private static function article_type_prompt($article_type) {
+        $prompts = [
+            'ranking' => "記事種類: ランキング記事\n"
+                . "- おすすめ記事・比較記事を統合した構成にする\n"
+                . "- 読者が商品やサービスを選びやすいよう、選定基準、比較軸、ランキング理由を明確にする\n"
+                . "- 比較表、ランキング理由、選び方、向いている人、注意点を入れる\n"
+                . "- 根拠のない順位付けを避け、比較軸ごとに理由を書く\n"
+                . "- ランキング表は商品名、特徴、価格帯、向いている人程度に絞り、セルを長文にしない\n"
+                . "- 各商品の個別解説は順位付きのh3にし、比較表だけで終わらせない",
+            'brand' => "記事種類: 商標記事（レビュー記事）\n"
+                . "- 特定の商品・サービス名で検索する読者に向けたレビュー記事にする\n"
+                . "- 特徴、口コミ・評判、メリット・デメリット、向いている人、購入・申込前の注意点を整理する\n"
+                . "- メリットとデメリット・注意点はH2の下にH3小見出しを置き、項目ごとに本文を分ける\n"
+                . "- FAQ/よくある質問セクションは原則作らず、疑問点は本文内で自然に解消する\n"
+                . "- 押し売りではなく、判断材料を丁寧に提示する",
+            'column' => "記事種類: コラム記事\n"
+                . "- 読者の悩みや疑問に対して、自然な読み物として理解を深める構成にする\n"
+                . "- 導入、背景、具体例、解決策、まとめを自然につなげる\n"
+                . "- アフィリエイト導線は必要な場所にだけ控えめに入れる",
+        ];
+        return $prompts[$article_type] ?? '';
     }
 
     /**
@@ -133,20 +175,19 @@ class Affiros_Rewrite_Engine {
         if ($target > 0) {
             $lower = max(1, (int)($target * (100 - $tolerance) / 100));
             $upper = (int)($target * (100 + $tolerance) / 100);
-            $char_section = "\n文字数条件:\n- 目標 {$target} 文字（許容範囲 ±{$tolerance}%）\n- {$lower}〜{$upper} 文字を目安にする\n- 文字数を優先しすぎて不自然にしない";
+            $char_section = "\n文字数条件（重要・必ず守ること）:\n"
+                . "- 本文の目標文字数は {$target} 文字（HTMLタグを除いた、読者が実際に読む文字数）。これを基準として必ず目指す。\n"
+                . "- 許容範囲は {$lower}〜{$upper} 文字。{$lower} 文字を下回ってはならない。\n"
+                . "- リライトは短縮作業ではない。元記事が目標より短い場合でも、"
+                . "具体例・手順・根拠・データ・注意点・FAQ など読者価値のある情報を加えて {$target} 文字前後まで充実させる。\n"
+                . "- ただし、文字数合わせのための水増し・同じ内容の言い換え・冗長な前置きは禁止。情報の実質で目標に届かせる。";
         } else {
             $char_section = "\n文字数条件:\n- 元記事と同等の長さを目安にする（極端な短縮・引き伸ばしは避ける）";
         }
 
-        $article_type = $opts['article_type'] ?? '';
-        $type_section = '';
-        if ($article_type === 'ranking') {
-            $type_section = "\n記事タイプ: ランキング記事\n- 比較・おすすめ視点で構成する\n- 商品紹介セクションは h3 単位で区切る（後段で商品カードを挿入するため）";
-        } elseif ($article_type === 'brand') {
-            $type_section = "\n記事タイプ: 商標（レビュー）記事\n- 1商品に絞り、メリット・デメリット・実体験ベースの記述を意識";
-        } elseif ($article_type === 'column') {
-            $type_section = "\n記事タイプ: コラム記事\n- 読み物として自然に流れる構成。最後にまとめセクションを置く";
-        }
+        // 記事タイプ別の指示（本体 build_article_type_prompt 準拠）
+        $type_prompt = self::article_type_prompt($opts['article_type'] ?? '');
+        $type_section = $type_prompt !== '' ? "\n" . $type_prompt : '';
 
         $original_title = $post['title'];
         $original_content = mb_substr((string)$post['content'], 0, self::MAX_SOURCE_CHARS);

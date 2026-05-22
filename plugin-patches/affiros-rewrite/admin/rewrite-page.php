@@ -66,6 +66,7 @@ function affiros_rewrite_render_rewrite_page() {
                     記事タイプ:
                     <select id="affiros-article-type">
                         <option value="">— 指定なし</option>
+                        <option value="auto">自動判定（記事ごとにAIが分類）</option>
                         <option value="ranking">ランキング</option>
                         <option value="brand">商標</option>
                         <option value="column">コラム</option>
@@ -75,6 +76,7 @@ function affiros_rewrite_render_rewrite_page() {
                     <input type="checkbox" id="affiros-insert-markers">
                     商品カードマーカーを挿入する（記事タイプ別の規則）
                 </label>
+                <span id="affiros-marker-hint" class="description" style="display:none;color:#a06000;">← 記事タイプを選ぶと有効になります</span>
             </div>
         </div>
 
@@ -144,6 +146,7 @@ function affiros_rewrite_render_rewrite_page() {
                     <span id="affiros-bulk-status">準備中...</span>
                     <span style="float:right;color:#666;"><span id="affiros-bulk-done">0</span> / <span id="affiros-bulk-total">0</span></span>
                 </div>
+                <div style="margin-bottom:8px;font-size:11px;color:#a06000;">※ 処理はブラウザ上で動きます。完了までこのタブを閉じないでください（閉じると残りは処理されません）。</div>
                 <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;margin-bottom:14px;">
                     <div id="affiros-bulk-progress" style="height:100%;background:#2271b1;width:0%;transition:width .2s;"></div>
                 </div>
@@ -241,6 +244,16 @@ function affiros_rewrite_render_rewrite_page() {
             };
         }
 
+        // 商品カードマーカーは記事タイプ別の規則で挿入されるため、記事タイプ未指定では使えない
+        function syncMarkerCheckbox() {
+            const hasType = !!$('#affiros-article-type').val();
+            $('#affiros-insert-markers').prop('disabled', !hasType);
+            if (!hasType) $('#affiros-insert-markers').prop('checked', false);
+            $('#affiros-marker-hint').toggle(!hasType);
+        }
+        $('#affiros-article-type').on('change', syncMarkerCheckbox);
+        syncMarkerCheckbox();
+
         // --- 単記事リライト ---
         function runSingleRewrite(postId) {
             const $row = $('tr[data-post-id="' + postId + '"]');
@@ -274,7 +287,7 @@ function affiros_rewrite_render_rewrite_page() {
             const usage = data.usage || {};
             const tokens = (usage.input_tokens || 0) + '/' + (usage.output_tokens || 0) + ' tokens (in/out)';
             const tags = [];
-            if (data.article_type) tags.push('タイプ: ' + data.article_type);
+            if (data.article_type) tags.push('タイプ: ' + data.article_type + (data.article_type_auto ? '（自動判定）' : ''));
             if (data.markers_inserted) tags.push('マーカー挿入: ✓');
             const tagsLine = tags.length ? ' / ' + tags.join(' / ') : '';
             $('#affiros-modal-usage').text('モデル: ' + (data.model || '?') + ' / ' + tokens + tagsLine);
@@ -324,6 +337,10 @@ function affiros_rewrite_render_rewrite_page() {
             if (!confirm(ids.length + '件の記事をリライトし、即座にWordPress投稿へ上書き保存します。\n（リビジョン機能で1件ずつ元に戻せます）\n\n実行しますか?')) return;
 
             bulkAbort = false;
+            // 実行中にタブを閉じる/離脱すると残りが処理されないため、ブラウザの離脱警告を出す
+            window.onbeforeunload = function() {
+                return '一括リライトを実行中です。このページを離れると残りの記事は処理されません。';
+            };
             $('#affiros-bulk-modal').css('display', 'flex');
             $('#affiros-bulk-total').text(ids.length);
             $('#affiros-bulk-done').text(0);
@@ -358,7 +375,9 @@ function affiros_rewrite_render_rewrite_page() {
                         content: result.data.rewritten_content,
                     }));
                     if (!saved.success) throw new Error(saved.data?.message || 'save failed');
-                    appendBulkLog('  ✓ #' + id + ' 保存完了', 'success');
+                    const t = result.data.article_type ? ' [' + result.data.article_type + (result.data.article_type_auto ? '/自動判定' : '') + ']' : '';
+                    const mk = result.data.markers_inserted ? ' +マーカー' : '';
+                    appendBulkLog('  ✓ #' + id + ' 保存完了' + t + mk, 'success');
                     succeeded++;
                 } catch (e) {
                     appendBulkLog('  ✗ #' + id + ' 失敗: ' + e.message, 'error');
@@ -369,6 +388,7 @@ function affiros_rewrite_render_rewrite_page() {
                 $('#affiros-bulk-progress').css('width', (done / ids.length * 100) + '%');
             }
 
+            window.onbeforeunload = null;
             $('#affiros-bulk-status').text('完了: 成功 ' + succeeded + ' / 失敗 ' + failed + ' / 全 ' + ids.length);
             $('#affiros-bulk-close').show();
             $('#affiros-bulk-cancel').hide();

@@ -18,10 +18,11 @@ affiros-rewrite/
 │   ├── settings-page.php  … 設定画面（APIキー・モデル・リライト既定値）
 │   └── ajax-handler.php   … AJAXエンドポイント（fetch_posts / run_single / save）
 ├── includes/
-│   ├── claude-api.php     … Claude API ラッパー
+│   ├── claude-api.php     … Claude API ラッパー（自動リトライ付き）
 │   ├── rewrite-engine.php … プロンプト生成・実行・出力パース・安全弁
 │   ├── post-fetcher.php   … WP_Query での投稿取得・更新
-│   └── marker-inserter.php… 商品カードマーカー挿入
+│   ├── marker-inserter.php… 商品カードマーカー挿入（本体 insert_card_markers 準拠）
+│   └── article-type.php   … 記事タイプ判定（本体 infer_title_article_type 準拠）
 └── assets/
     └── admin.css         … 管理画面CSS
 ```
@@ -34,6 +35,36 @@ affiros-rewrite/
 - リライト結果は `wp_update_post` 経由で保存 → WordPress のリビジョンで復元可能（リビジョン無効サイトでは画面に警告を出す）。
 
 ## バージョン履歴
+
+### v0.4.3 (2026-05-22)
+> 0.4.1 / 0.4.2 は欠番。本体リポジトリ外で作られた切り離しビルドが先にその番号を
+> 使ってしまったため、正式な本体準拠ビルドを 0.4.3 とした（バージョン表記の一意化）。
+
+**本体（wp_manager app.py）準拠の見直し**
+- `marker-inserter.php` を本体 `insert_card_markers` / `DEFAULT_CARD_INSERTION_PATTERNS`
+  の忠実移植に修正:
+  - ranking のh3挿入を `after_each_h3_rank`（「第N位 / No.N / ①」等のランキング見出しのみ。
+    0件時は最初のH2〜まとめH2間の全H3へフォールバック）に。従来は全h3に無差別挿入していた。
+  - brand のマーカーを1個に（本体準拠。従来は余分な `before_matome_h2` があった）。
+  - まとめH2の判定キーワードを本体と統一（まとめ / 総まとめ / 結論 / 要点）。
+  - `top` / `bottom` 位置に対応、`repeat` を全位置で対応。
+  - 挿入前に導入H2・早見表セクションを除去（本体の前処理を移植）。
+- 記事タイプに「自動判定」を追加。本体 `infer_title_article_type` / `normalize_article_type`
+  を PHP移植し、元記事タイトルから ranking / brand / column を判定する。
+  種類の異なる記事を一括リライトしても各記事に正しいマーカー規則が当たる。
+- リライトのタイプ別指示を本体 `build_article_type_prompt` 準拠に拡充。
+
+**堅牢化**
+- Claude API が一時的エラー（529 Overloaded / 429 / 5xx / 通信エラー）を返したとき、
+  時間を置いて最大3回まで自動リトライ。一括リライト中の単発「Overloaded」失敗を低減。
+- 一括リライト実行中にタブを閉じようとするとブラウザ警告を表示。
+- 商品カードマーカーのチェックボックスは、記事タイプ未選択時は操作不能に。
+- 一括リライトのログに、判定された記事タイプとマーカー挿入有無を表示。
+- 目標文字数の指示を強化。設定した目標文字数を必ず目指し、許容下限を下回らないよう明示
+  （「リライト＝短縮ではない」「不足分は実質的な情報で補う」を明記）。
+  設定値より大幅に短く出力される問題に対応。
+
+新規ファイル: `includes/article-type.php`
 
 ### v0.4.0 (2026-05-22)
 **削除**
@@ -74,6 +105,7 @@ affiros-rewrite/
 
 ## 既知の制約・今後の検討事項
 
+- **広告挿入定義のカスタム非対応**: 本体の「広告挿入定義」UIでマーカー規則を変更しても、プラグインは本体のJSONを読めないため反映されない。プラグインは `DEFAULT_CARD_INSERTION_PATTERNS` 相当のみ対応。
 - **長文記事のタイムアウト**: Claude の応答がホスティング（ConoHa 等）の PHP / プロキシ制限を超えると「通信エラー」で失敗しうる。一括実行では Haiku・少数バッチが安全。
 - **元記事の上限**: 30000 字。超える記事はリライトを中断する。
 - **画面JS**: `rewrite-page.php` にインライン（約260行）。必要なら `admin.js` へ分離可能。

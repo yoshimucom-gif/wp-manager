@@ -7,6 +7,12 @@ if (!defined('ABSPATH')) exit;
 
 class Affiros_Rewrite_Claude_API {
 
+    /** 一時的なエラー（時間を置いて再試行する）の HTTP ステータス */
+    const RETRYABLE_CODES = [429, 500, 502, 503, 529];
+
+    /** API 呼び出しの最大試行回数（初回 + リトライ） */
+    const MAX_ATTEMPTS = 3;
+
     private $api_key;
     private $model;
     private $endpoint = 'https://api.anthropic.com/v1/messages';
@@ -25,6 +31,9 @@ class Affiros_Rewrite_Claude_API {
     /**
      * メッセージ送信
      *
+     * 過負荷(529)・レート制限(429)・サーバエラー(5xx)・通信エラーは、
+     * 時間を置いて自動的に再試行する（最大 MAX_ATTEMPTS 回）。
+     *
      * @param string $prompt
      * @param int $max_tokens
      * @return array|WP_Error
@@ -41,8 +50,7 @@ class Affiros_Rewrite_Claude_API {
                 ['role' => 'user', 'content' => $prompt],
             ],
         ];
-
-        $response = wp_remote_post($this->endpoint, [
+        $request_args = [
             'timeout' => 180,
             'headers' => [
                 'x-api-key' => $this->api_key,
@@ -50,36 +58,54 @@ class Affiros_Rewrite_Claude_API {
                 'content-type' => 'application/json',
             ],
             'body' => wp_json_encode($body),
-        ]);
-
-        if (is_wp_error($response)) {
-            return $response;
-        }
-
-        $code = wp_remote_retrieve_response_code($response);
-        $body_str = wp_remote_retrieve_body($response);
-        $data = json_decode($body_str, true);
-
-        if ($code !== 200) {
-            $msg = $data['error']['message'] ?? "Claude APIエラー (HTTP {$code})";
-            return new WP_Error('claude_api_error', $msg);
-        }
-
-        // テキスト抽出
-        $text = '';
-        if (!empty($data['content']) && is_array($data['content'])) {
-            foreach ($data['content'] as $block) {
-                if (($block['type'] ?? '') === 'text') {
-                    $text .= $block['text'] ?? '';
-                }
-            }
-        }
-
-        return [
-            'text' => $text,
-            'usage' => $data['usage'] ?? [],
-            'model' => $data['model'] ?? $this->model,
-            'stop_reason' => $data['stop_reason'] ?? '',
         ];
+
+        $last_error = null;
+        for ($attempt = 1; $attempt <= self::MAX_ATTEMPTS; $attempt++) {
+            $response = wp_remote_post($this->endpoint, $request_args);
+
+            // 通信エラー（タイムアウト・DNS等）も一時的なものとして再試行
+            if (is_wp_error($response)) {
+                $last_error = $response;
+                if ($attempt < self::MAX_ATTEMPTS) {
+                    sleep($attempt * 3);
+                    continue;
+                }
+                return $response;
+            }
+
+            $code = wp_remote_retrieve_response_code($response);
+            $body_str = wp_remote_retrieve_body($response);
+            $data = json_decode($body_str, true);
+
+            if ($code === 200) {
+                $text = '';
+                if (!empty($data['content']) && is_array($data['content'])) {
+                    foreach ($data['content'] as $block) {
+                        if (($block['type'] ?? '') === 'text') {
+                            $text .= $block['text'] ?? '';
+                        }
+                    }
+                }
+                return [
+                    'text' => $text,
+                    'usage' => $data['usage'] ?? [],
+                    'model' => $data['model'] ?? $this->model,
+                    'stop_reason' => $data['stop_reason'] ?? '',
+                ];
+            }
+
+            // 過負荷・レート制限・サーバエラーは時間を置いて再試行
+            $msg = $data['error']['message'] ?? "Claude APIエラー (HTTP {$code})";
+            $last_error = new WP_Error('claude_api_error', $msg);
+            if (in_array($code, self::RETRYABLE_CODES, true) && $attempt < self::MAX_ATTEMPTS) {
+                $retry_after = (int) wp_remote_retrieve_header($response, 'retry-after');
+                sleep($retry_after > 0 ? min($retry_after, 10) : $attempt * 3);
+                continue;
+            }
+            return $last_error;
+        }
+
+        return $last_error ?: new WP_Error('claude_api_error', 'Claude APIエラー');
     }
 }

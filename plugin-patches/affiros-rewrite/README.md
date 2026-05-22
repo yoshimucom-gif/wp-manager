@@ -27,7 +27,7 @@ Affiros（外部 SaaS）から WP REST API 経由でリライトしようとす�
 ### Phase 3 (実装済 / v0.3.0)
 - マーカー挿入（Affiros の DEFAULT_CARD_INSERTION_PATTERNS を PHP 移植）
 - 記事タイプ別の規則: ranking / brand / column
-- 位置: each_h3 / after_first_h2 / before_first_h2 / after_matome_h2 / before_matome_h2
+- 位置: after_each_h3_rank / before_first_h2 / after_first_h2 / before_matome_h2 / after_matome_h2 / top / bottom
 - デザイン: vertical / ranking(count)
 - Affiros プロダクトインサーター（affiros-product-inserter）プラグインが
   `<!--ai-product:...-->` マーカーを実際の商品カードに置換

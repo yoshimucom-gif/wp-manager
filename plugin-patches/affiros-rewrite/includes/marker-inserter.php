@@ -2,9 +2,17 @@
 /**
  * 商品カードマーカー挿入エンジン
  *
- * Affiros の DEFAULT_CARD_INSERTION_PATTERNS を PHP 移植。
- * リライト後の HTML に <!--ai-product:vertical--> や <!--ai-product:ranking:3--> を
- * 記事タイプ別の規則で挿入する。実際の商品カード描画は ai-product-inserter プラグインが担当。
+ * 本体 app.py の insert_card_markers / DEFAULT_CARD_INSERTION_PATTERNS /
+ * _build_marker / _find_matome_h2_range / _find_first_h2_range /
+ * strip_leading_introduction_h2 / strip_summary_table_sections を
+ * 忠実に PHP 移植したもの。
+ *
+ * リライト後の HTML に <!--ai-product:vertical--> / <!--ai-product:ranking:3--> を
+ * 記事タイプ別の規則で挿入する。実際の商品カード描画は affiros-product-inserter
+ * プラグインが担当。
+ *
+ * 注: 本体は load_ad_insertion_patterns() でユーザー編集パターンを使えるが、
+ *     プラグインは本体の JSON を読めないため DEFAULT 相当のみ対応。
  */
 
 if (!defined('ABSPATH')) exit;
@@ -12,18 +20,18 @@ if (!defined('ABSPATH')) exit;
 class Affiros_Rewrite_Marker_Inserter {
 
     /**
-     * 記事タイプ別 挿入パターン
-     * 各エントリは { position, design, count?, repeat? }
+     * 記事タイプ別 既定の挿入パターン。
+     * 本体 DEFAULT_CARD_INSERTION_PATTERNS と一致させること。
      */
     public static function default_patterns() {
         return [
             'ranking' => [
-                ['position' => 'each_h3',         'design' => 'vertical'],
-                ['position' => 'after_matome_h2', 'design' => 'ranking', 'count' => 3],
+                ['position' => 'after_each_h3_rank', 'design' => 'vertical'],
+                ['position' => 'after_matome_h2',    'design' => 'ranking', 'count' => 3],
             ],
             'brand' => [
-                ['position' => 'after_first_h2',  'design' => 'vertical'],
-                ['position' => 'before_matome_h2','design' => 'vertical'],
+                // 商標記事は1商品を深掘りする構造なので、マーカーは1つだけ。
+                ['position' => 'after_first_h2', 'design' => 'vertical'],
             ],
             'column' => [
                 ['position' => 'before_first_h2', 'design' => 'vertical', 'repeat' => 3],
@@ -33,110 +41,258 @@ class Affiros_Rewrite_Marker_Inserter {
     }
 
     /**
-     * 記事タイプに応じてマーカーを挿入
+     * 記事タイプに応じてマーカーを挿入する。本体 insert_card_markers の移植。
      *
-     * @param string $html  リライト後のHTML
-     * @param string $article_type  'ranking' | 'brand' | 'column'
+     * @param string $html         リライト後のHTML
+     * @param string $article_type 'ranking' | 'brand' | 'column'
+     * @param string $title        記事タイトル（先頭introH2判定に使用）
      * @return string  マーカー挿入後のHTML
      */
-    public static function insert($html, $article_type) {
-        $patterns = self::default_patterns();
-        if (!isset($patterns[$article_type])) {
+    public static function insert($html, $article_type, $title = '') {
+        if ($html === '' || $html === null) {
             return $html;
         }
-        $rules = $patterns[$article_type];
+        $patterns = self::default_patterns();
+        $rules = $patterns[$article_type] ?? [];
+        if (!$rules) {
+            return $html;
+        }
 
-        // 既存の <!--ai-product:...--> マーカーを残したまま追加（重複は避ける = 既に同じ位置にあれば追加しない、はせず素直に追加）
-        // 各ルールを順に適用
+        $text = (string)$html;
+
+        // 本体 insert_card_markers と同じ前処理:
+        // 先頭の導入H2を削除し、早見表/比較表セクションを削除する。
+        $text = self::strip_leading_introduction_h2($text, $title);
+        $text = self::strip_summary_table_sections($text);
+
+        $matome_range = self::find_matome_h2_range($text);
+        $first_h2_range = self::find_first_h2_range($text);
+
+        // [挿入バイト位置, 挿入文字列] のリスト
+        $insertions = [];
+
         foreach ($rules as $rule) {
-            $html = self::apply_rule($html, $rule);
+            $pos = $rule['position'] ?? '';
+            $design = $rule['design'] ?? 'vertical';
+            $count = $rule['count'] ?? null;
+            $repeat = max(1, intval($rule['repeat'] ?? 1));
+            $marker = self::build_marker($design, $count);
+            $marker_block = str_repeat("\n" . $marker, $repeat);
+
+            if ($pos === 'top') {
+                $insertions[] = [0, $marker_block . "\n"];
+            } elseif ($pos === 'bottom') {
+                $insertions[] = [strlen($text), "\n" . $marker_block];
+            } elseif ($pos === 'before_first_h2' && $first_h2_range) {
+                $insertions[] = [$first_h2_range[0], $marker_block . "\n"];
+            } elseif ($pos === 'after_first_h2' && $first_h2_range) {
+                $insertions[] = [$first_h2_range[1], "\n" . $marker_block];
+            } elseif ($pos === 'before_matome_h2' && $matome_range) {
+                $insertions[] = [$matome_range[0], $marker_block . "\n"];
+            } elseif ($pos === 'after_matome_h2' && $matome_range) {
+                $insertions[] = [$matome_range[1], "\n" . $marker_block];
+            } elseif ($pos === 'after_each_h3_rank') {
+                foreach (self::collect_h3_rank_insertions($text, $marker, $matome_range, $first_h2_range) as $ins) {
+                    $insertions[] = $ins;
+                }
+            }
         }
-        return $html;
-    }
 
-    private static function apply_rule($html, $rule) {
-        $position = $rule['position'] ?? '';
-        $marker = self::build_marker($rule);
-
-        switch ($position) {
-            case 'each_h3':
-                // すべての </h3> 直後にマーカー挿入
-                return preg_replace_callback(
-                    '#</h3\s*>#i',
-                    function ($m) use ($marker) { return $m[0] . "\n" . $marker; },
-                    $html
-                );
-
-            case 'after_first_h2':
-                // 最初の </h2> 直後にマーカー挿入
-                return preg_replace('#</h2\s*>#i', '$0' . "\n" . $marker, $html, 1);
-
-            case 'before_first_h2':
-                // 最初の <h2 ...> 直前にマーカー挿入（repeat 指定があれば繰り返す）
-                $repeat = max(1, intval($rule['repeat'] ?? 1));
-                $block = str_repeat($marker . "\n", $repeat);
-                return preg_replace('#<h2[\s>]#i', $block . '$0', $html, 1);
-
-            case 'after_matome_h2':
-                // 「まとめ」を含む h2 の直後（その h2 配下のセクションを区切らずに次の h2 / 末尾の直前）
-                // 簡易版: 「まとめ」を含む最初の <h2>...</h2> の直後に挿入
-                return self::insert_after_matome($html, $marker);
-
-            case 'before_matome_h2':
-                return self::insert_before_matome($html, $marker);
+        // 後ろから挿入してバイト位置のズレを防ぐ
+        usort($insertions, function ($a, $b) { return $b[0] - $a[0]; });
+        foreach ($insertions as $ins) {
+            $text = substr($text, 0, $ins[0]) . $ins[1] . substr($text, $ins[0]);
         }
-        return $html;
-    }
-
-    private static function build_marker($rule) {
-        $design = $rule['design'] ?? 'vertical';
-        if ($design === 'ranking') {
-            $count = max(1, intval($rule['count'] ?? 3));
-            return '<!--ai-product:ranking:' . $count . '-->';
-        }
-        if ($design && $design !== 'default') {
-            return '<!--ai-product:' . preg_replace('/[^a-z0-9_-]/', '', strtolower($design)) . '-->';
-        }
-        return '<!--ai-product-->';
+        return $text;
     }
 
     /**
-     * 「まとめ」「最後に」「終わりに」など総括見出しを含む h2 の直後にマーカー挿入
+     * プラグイン用マーカー文字列を組み立てる。本体 _build_marker の移植。
      */
-    private static function insert_after_matome($html, $marker) {
-        $matome_keywords = ['まとめ', '最後に', '終わりに', 'おわりに', '結論'];
-        $pattern = '#<h2\b[^>]*>(.*?)</h2\s*>#is';
-        $inserted = false;
-        return preg_replace_callback($pattern, function ($m) use ($matome_keywords, $marker, &$inserted) {
-            if ($inserted) return $m[0];
-            $text = wp_strip_all_tags($m[1]);
-            foreach ($matome_keywords as $kw) {
-                if (mb_strpos($text, $kw) !== false) {
-                    $inserted = true;
-                    return $m[0] . "\n" . $marker;
-                }
-            }
-            return $m[0];
-        }, $html);
+    private static function build_marker($design = 'vertical', $count = null) {
+        if (!$design || $design === 'default') {
+            return '<!--ai-product-->';
+        }
+        if ($design === 'ranking' && $count) {
+            return '<!--ai-product:ranking:' . intval($count) . '-->';
+        }
+        return '<!--ai-product:' . $design . '-->';
     }
 
     /**
-     * 「まとめ」等の h2 の直前にマーカー挿入
+     * 「まとめ」を含むH2の [開始, 終了] バイト位置を返す。無ければ null。
+     * 本体 _find_matome_h2_range の移植。
      */
-    private static function insert_before_matome($html, $marker) {
-        $matome_keywords = ['まとめ', '最後に', '終わりに', 'おわりに', '結論'];
-        $pattern = '#<h2\b[^>]*>(.*?)</h2\s*>#is';
-        $inserted = false;
-        return preg_replace_callback($pattern, function ($m) use ($matome_keywords, $marker, &$inserted) {
-            if ($inserted) return $m[0];
-            $text = wp_strip_all_tags($m[1]);
-            foreach ($matome_keywords as $kw) {
-                if (mb_strpos($text, $kw) !== false) {
-                    $inserted = true;
-                    return $marker . "\n" . $m[0];
+    private static function find_matome_h2_range($html) {
+        $re = '/<h2[^>]*>(?:(?!<\/h2>)[\s\S])*?(?:まとめ|総まとめ|結論|要点)(?:(?!<\/h2>)[\s\S])*?<\/h2>/iu';
+        if (preg_match($re, $html, $m, PREG_OFFSET_CAPTURE)) {
+            $start = $m[0][1];
+            return [$start, $start + strlen($m[0][0])];
+        }
+        return null;
+    }
+
+    /**
+     * 記事の最初のH2の [開始, 終了] バイト位置を返す。無ければ null。
+     * 本体 _find_first_h2_range の移植。
+     */
+    private static function find_first_h2_range($html) {
+        $re = '/<h2[^>]*>(?:(?!<\/h2>)[\s\S])*?<\/h2>/iu';
+        if (preg_match($re, $html, $m, PREG_OFFSET_CAPTURE)) {
+            $start = $m[0][1];
+            return [$start, $start + strlen($m[0][0])];
+        }
+        return null;
+    }
+
+    /**
+     * after_each_h3_rank: ランキング見出しのH3直後にマーカーを集める。
+     * 本体 insert_card_markers 内の after_each_h3_rank 分岐の移植。
+     */
+    private static function collect_h3_rank_insertions($text, $marker, $matome_range, $first_h2_range) {
+        // 「第N位」「No.N」「①②③」など各種フォーマットのランキングH3
+        $h3_patterns = [
+            '/<h3[^>]*>\s*(?:第\s*)?(?:\d+|[０-９]+)\s*位[\s:：、・　]*[^<]*?<\/h3>/iu',
+            '/<h3[^>]*>\s*No\.?\s*(?:\d+|[０-９]+)[\s:：、・　]*[^<]*?<\/h3>/iu',
+            '/<h3[^>]*>\s*[①②③④⑤⑥⑦⑧⑨⑩][\s:：、・　]*[^<]*?<\/h3>/iu',
+        ];
+        $insertions = [];
+        $seen = [];
+        foreach ($h3_patterns as $re) {
+            if (preg_match_all($re, $text, $matches, PREG_OFFSET_CAPTURE | PREG_SET_ORDER)) {
+                foreach ($matches as $m) {
+                    $start = $m[0][1];
+                    if (isset($seen[$start])) {
+                        continue;
+                    }
+                    $seen[$start] = true;
+                    $insertions[] = [$start + strlen($m[0][0]), "\n" . $marker];
                 }
             }
-            return $m[0];
-        }, $html);
+        }
+        // ゼロ件なら、最初のH2より後・まとめH2より前の全H3をランキングH3とみなしフォールバック
+        if (!$seen) {
+            $end_limit = $matome_range ? $matome_range[0] : strlen($text);
+            $start_limit = $first_h2_range ? $first_h2_range[1] : 0;
+            if (preg_match_all('/<h3[^>]*>[^<]*?<\/h3>/iu', $text, $matches, PREG_OFFSET_CAPTURE | PREG_SET_ORDER)) {
+                foreach ($matches as $m) {
+                    $start = $m[0][1];
+                    if ($start < $start_limit || $start >= $end_limit) {
+                        continue;
+                    }
+                    $insertions[] = [$start + strlen($m[0][0]), "\n" . $marker];
+                }
+            }
+        }
+        return $insertions;
+    }
+
+    /**
+     * 記事冒頭の導入H2を物理削除する。本体 strip_leading_introduction_h2 の移植。
+     */
+    private static function strip_leading_introduction_h2($html, $title = '') {
+        if ($html === '' || $html === null) {
+            return $html;
+        }
+        $text = (string)$html;
+        $re = '/\A\s*(?:<!--\s*wp:heading[^>]*-->\s*)?<h2([^>]*)>((?:(?!<\/h2>)[\s\S])*?)<\/h2>(?:\s*<!--\s*\/wp:heading\s*-->)?/iu';
+        if (!preg_match($re, $text, $m, PREG_OFFSET_CAPTURE)) {
+            return $text;
+        }
+        $match_end = $m[0][1] + strlen($m[0][0]);
+        $h2_inner = trim(preg_replace('/<[^>]+>/', '', $m[2][0]));
+
+        $intro_keywords = [
+            'とは', '結論', '選ぶポイント', '選定ポイント', '本記事の', '解説',
+            'について', 'を知る', '記事のポイント',
+            '完全ガイド', '完全攻略', '徹底ガイド', '徹底解説', '徹底比較',
+            'おすすめ', '比較', 'ランキング', '選び方', '選定基準',
+        ];
+        $is_intro = false;
+        foreach ($intro_keywords as $kw) {
+            if (mb_strpos($h2_inner, $kw) !== false) {
+                $is_intro = true;
+                break;
+            }
+        }
+
+        // タイトルとの類似度（タイトル繰り返しH2の対策）
+        if (!$is_intro && $title !== '') {
+            $norm = function ($s) {
+                return mb_strtolower(preg_replace('/[\s\|｜・:：－—\-　]+/u', '', (string)$s), 'UTF-8');
+            };
+            $nt = $norm($title);
+            $nh = $norm($h2_inner);
+            if ($nt !== '' && $nh !== '') {
+                if (mb_strpos($nt, $nh) !== false || mb_strpos($nh, $nt) !== false) {
+                    $is_intro = true;
+                } else {
+                    $t_chars = self::unique_chars($nt);
+                    $h_chars = self::unique_chars($nh);
+                    $common = 0;
+                    foreach ($t_chars as $c) {
+                        if (in_array($c, $h_chars, true)) {
+                            $common++;
+                        }
+                    }
+                    $ratio = $common / max(1, count($t_chars));
+                    if ($ratio >= 0.7) {
+                        $is_intro = true;
+                    }
+                }
+            }
+        }
+
+        if (!$is_intro) {
+            return $text;
+        }
+        return ltrim(substr($text, $match_end));
+    }
+
+    /**
+     * サマリー/比較系のH2セクションを削除する。
+     * 本体 strip_summary_table_sections の移植。
+     */
+    private static function strip_summary_table_sections($html) {
+        if ($html === '' || $html === null) {
+            return $html;
+        }
+        $text = (string)$html;
+
+        // (a) 比較・要約系キーワードを含むH2のセクション削除
+        $kw = '早見表|比較表|比較一覧|一覧表|スペック比較|スペック表|主要スペック|ラインナップ|商品比較|一目で|早分かり|早わかり';
+        $pat_keyword = '/(?:<!--\s*wp:heading[^>]*-->\s*)?'
+            . '<h2[^>]*>(?:(?!<\/h2>)[\s\S])*?(?:' . $kw . ')(?:(?!<\/h2>)[\s\S])*?<\/h2>'
+            . '(?:\s*<!--\s*\/wp:heading\s*-->)?'
+            . '[\s\S]*?'
+            . '(?=<h2|<!--\s*wp:heading|<h3[^>]*>\s*(?:<!--\s*wp:[^>]*-->\s*)?(?:第\s*)?[\d０-９]+\s*位|$)/iu';
+        // (b) H2直後に table が来ているセクションも削除
+        $pat_table = '/(?:<!--\s*wp:heading[^>]*-->\s*)?'
+            . '<h2[^>]*>(?:(?!<\/h2>)[\s\S])*?<\/h2>'
+            . '(?:\s*<!--\s*\/wp:heading\s*-->)?'
+            . '\s*(?:<!--\s*wp:[^>]*-->\s*)?\s*<table\b[\s\S]*?<\/table>'
+            . '(?:\s*<!--\s*\/wp:[^>]*-->)?'
+            . '[\s\S]*?'
+            . '(?=<h2|<!--\s*wp:heading|<h3[^>]*>\s*(?:<!--\s*wp:[^>]*-->\s*)?(?:第\s*)?[\d０-９]+\s*位|$)/iu';
+
+        // 各パターンを2回適用（複数セクション対策）。
+        // preg_replace は失敗時（バックトラック上限等）に null を返すので、
+        // その場合は前処理を諦めて元のHTMLを保つ。
+        foreach ([$pat_keyword, $pat_table] as $pat) {
+            for ($i = 0; $i < 2; $i++) {
+                $replaced = preg_replace($pat, '', $text);
+                if ($replaced === null) {
+                    return (string)$html;
+                }
+                $text = $replaced;
+            }
+        }
+        return $text;
+    }
+
+    /** 文字列のユニーク文字（UTF-8）配列を返す。 */
+    private static function unique_chars($s) {
+        $chars = preg_split('//u', (string)$s, -1, PREG_SPLIT_NO_EMPTY);
+        return is_array($chars) ? array_values(array_unique($chars)) : [];
     }
 }
