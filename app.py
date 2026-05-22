@@ -275,6 +275,7 @@ BATCH_JOBS_FILE = DATA_DIR / 'batch_jobs.json'
 TITLE_DEFINITION_FILE = DATA_DIR / 'title_definition.json'
 TITLE_IDEA_JOBS_FILE = DATA_DIR / 'title_idea_jobs.json'
 AD_INSERTION_FILE = DATA_DIR / 'ad_insertion.json'
+PUBLISH_JOBS_FILE  = DATA_DIR / 'publish_jobs.json'
 
 # 日本時間 (JST = UTC+9) のタイムゾーン定数。
 # 全てのタイムスタンプはJST固定でISO文字列化する（+09:00 サフィックス付き）。
@@ -472,6 +473,7 @@ _DOC_FILE_MAP = {
     'title_definition': TITLE_DEFINITION_FILE,
     'title_idea_jobs': TITLE_IDEA_JOBS_FILE,
     'ad_insertion': AD_INSERTION_FILE,
+    'publish_jobs': PUBLISH_JOBS_FILE,
 }
 
 
@@ -523,6 +525,13 @@ def load_batch_jobs():
 
 def save_batch_jobs(jobs):
     save_doc('batch_jobs', jobs[:50])
+
+
+def load_publish_jobs():
+    return load_doc('publish_jobs', [])
+
+def save_publish_jobs(jobs):
+    save_doc('publish_jobs', jobs[:30])
 
 
 def load_title_idea_jobs():
@@ -6687,21 +6696,22 @@ def bulk_repair_article_posts():
 def batch_publish():
     """
     WP一括投稿をバックグラウンドジョブとして起動。
-    ・同期ループを廃止し Render の30秒タイムアウトを回避
-    ・ThreadPoolExecutor(3) で並列投稿（ネットワーク待ち時間を短縮）
-    ・カテゴリーIDをジョブ内でキャッシュし重複WP呼び出しを削減
-    ・_DATA_LOCK は JSON 読み書き時のみ保持（WP通信中は解放）
+    300記事対応:
+      - ThreadPoolExecutor(max_workers=5) で並列投稿
+      - 10件ごとにまとめてarticles.jsonを書き込む（I/O削減）
+      - ジョブをpublish_jobs.jsonに永続化（ページ更新後も進捗復元可能）
+      - _DATA_LOCK はJSON読み書き時のみ取得（WP通信中は解放）
     """
     data = request.get_json(silent=True) or {}
     article_ids = data.get('article_ids', [])
-    post_status = data.get('post_status', 'draft')
+    post_status = data.get('post_status', 'publish')  # デフォルト公開
 
     with _DATA_LOCK:
-        settings = load_settings()
-        articles_snapshot = load_articles()
-        quality_list = load_quality()
+        settings       = load_settings()
+        articles_snap  = load_articles()
+        quality_list   = load_quality()
 
-    article_lookup = {a['id']: a for a in articles_snapshot}
+    article_lookup = {a['id']: a for a in articles_snap}
     targets = [article_lookup[i] for i in article_ids
                if i in article_lookup and article_lookup[i].get('content')]
 
@@ -6709,121 +6719,157 @@ def batch_publish():
         return jsonify({'error': '投稿可能な記事（本文あり）が見つかりません'}), 400
 
     job_id = str(uuid.uuid4())
-    now = now_iso()
+    now    = now_iso()
     job = {
-        'id': job_id,
-        'status': 'running',
-        'total': len(targets),
-        'completed': 0,
-        'failed': 0,
-        'errors': [],
+        'id':           job_id,
+        'status':       'running',
+        'total':        len(targets),
+        'completed':    0,
+        'failed':       0,
+        'errors':       [],
         'current_title': '',
-        'started_at': now,
-        'updated_at': now,
+        'post_status':  post_status,
+        'started_at':   now,
+        'updated_at':   now,
     }
     with _PUBLISH_JOBS_LOCK:
         _PUBLISH_JOBS[job_id] = job
-        # 古いジョブを削除（最新20件保持）
-        if len(_PUBLISH_JOBS) > 20:
-            oldest = sorted(_PUBLISH_JOBS.keys(),
-                            key=lambda k: _PUBLISH_JOBS[k].get('started_at', ''))[:-20]
-            for k in oldest:
-                del _PUBLISH_JOBS[k]
+    # ディスクにも保存（ページ更新後に復元できるよう）
+    with _DATA_LOCK:
+        pjobs = load_publish_jobs()
+        pjobs.insert(0, job)
+        save_publish_jobs(pjobs)
 
-    def _publish_one(article):
-        """1記事のWP投稿。戻り値: (success: bool, error_msg: str|None)"""
-        quality = select_quality_definition(
-            quality_list,
-            article.get('quality_id'),
-            article.get('article_type', 'ranking')
-        )
-        validation_error = validate_generated_article(
-            article,
-            article.get('article_type', 'ranking'),
-            article.get('content', ''),
-            quality
-        )
-        if validation_error:
-            return False, f'品質チェック未通過: {validation_error}'
+    def worker():
+        # カテゴリーIDキャッシュ: (wp_url, category) → [id]
+        # 同一サイト×同一カテゴリーのWP呼び出しを1回に抑える
+        cat_cache = {}
 
-        wp_url, wp_user, wp_password = get_site_credentials(article, settings)
-        if not all([wp_url, wp_user, wp_password]):
-            return False, 'サイト未設定'
+        # 結果バッファ: {article_id: (wp_post_id, wp_link, published_at)} or None=失敗
+        result_buf = {}
+        result_lock = threading.Lock()
 
-        content = prepare_article_content_for_publish(article['content'], settings)
-        post_payload = {'title': article['title'], 'content': content, 'status': post_status}
-        slug = normalize_slug(article.get('slug'))
-        if slug:
-            post_payload['slug'] = slug
-
-        # カテゴリーIDをキャッシュキーで解決（同一カテゴリーの重複WP呼び出しを防ぐ）
-        cache_key = (wp_url, article.get('category', ''))
-        if cache_key not in _cat_cache:
-            _cat_cache[cache_key] = resolve_wp_category_ids(
-                wp_url, wp_user, wp_password, article.get('category', '')
+        def _publish_one(article):
+            """1記事のWP投稿 → (success, wp_id, wp_link, err_msg)"""
+            quality = select_quality_definition(
+                quality_list,
+                article.get('quality_id'),
+                article.get('article_type', 'ranking')
             )
-        category_ids = _cat_cache[cache_key]
-        if category_ids:
-            post_payload['categories'] = category_ids
-
-        try:
-            response = requests.post(
-                f"{wp_url}/wp-json/wp/v2/posts",
-                auth=(wp_user, wp_password),
-                json=post_payload,
-                headers=WP_REQUEST_HEADERS,
-                timeout=30,
+            verr = validate_generated_article(
+                article,
+                article.get('article_type', 'ranking'),
+                article.get('content', ''),
+                quality
             )
-            response.raise_for_status()
-            post_data = response.json()
-            # JSON更新: ロックを短時間だけ取得
+            if verr:
+                return False, None, None, f'品質チェック未通過: {verr}'
+
+            wp_url, wp_user, wp_pass = get_site_credentials(article, settings)
+            if not all([wp_url, wp_user, wp_pass]):
+                return False, None, None, 'サイト未設定'
+
+            content = prepare_article_content_for_publish(article['content'], settings)
+            payload = {'title': article['title'], 'content': content, 'status': post_status}
+            slug = normalize_slug(article.get('slug'))
+            if slug:
+                payload['slug'] = slug
+
+            cache_key = (wp_url, article.get('category', ''))
+            if cache_key not in cat_cache:
+                cat_cache[cache_key] = resolve_wp_category_ids(
+                    wp_url, wp_user, wp_pass, article.get('category', '')
+                )
+            cat_ids = cat_cache[cache_key]
+            if cat_ids:
+                payload['categories'] = cat_ids
+
+            try:
+                resp = requests.post(
+                    f"{wp_url}/wp-json/wp/v2/posts",
+                    auth=(wp_user, wp_pass),
+                    json=payload,
+                    headers=WP_REQUEST_HEADERS,
+                    timeout=30,
+                )
+                resp.raise_for_status()
+                pd = resp.json()
+                return True, pd['id'], pd.get('link', ''), None
+            except requests.exceptions.RequestException as e:
+                return False, None, None, describe_wp_request_error(e)
+            except Exception as e:
+                return False, None, None, str(e)
+
+        def _flush_buf(force=False):
+            """result_buf を articles.json に一括書き込み（10件ごと or 強制）"""
+            with result_lock:
+                if not result_buf:
+                    return
+                # force=True か 10件以上溜まった時のみ書き込む
+                if not force and len(result_buf) < 10:
+                    return
+                to_write = dict(result_buf)
+                result_buf.clear()
             with _DATA_LOCK:
                 arts = load_articles()
                 for a in arts:
-                    if a['id'] == article['id']:
-                        a['status'] = 'published'
-                        a['wp_post_id'] = post_data['id']
-                        a['wp_url'] = post_data.get('link', '')
-                        a['published_at'] = now_iso()
-                        break
+                    entry = to_write.get(a['id'])
+                    if entry:
+                        a['status']       = 'published'
+                        a['wp_post_id']   = entry[0]
+                        a['wp_url']       = entry[1]
+                        a['published_at'] = entry[2]
                 save_articles(arts)
-            return True, None
-        except requests.exceptions.RequestException as e:
-            return False, describe_wp_request_error(e)
-        except Exception as e:
-            return False, str(e)
 
-    # カテゴリーキャッシュ: (wp_url, category) → [id, ...]
-    # GILにより dict への単純代入はスレッドセーフ
-    _cat_cache = {}
-
-    def worker():
-        with ThreadPoolExecutor(max_workers=3) as executor:
+        done = 0
+        with ThreadPoolExecutor(max_workers=5) as executor:
             future_map = {executor.submit(_publish_one, a): a for a in targets}
             for future in as_completed(future_map):
                 article = future_map[future]
                 with _PUBLISH_JOBS_LOCK:
                     _PUBLISH_JOBS[job_id]['current_title'] = article['title'][:50]
                 try:
-                    success, err = future.result()
+                    ok, wp_id, wp_link, err = future.result()
                 except Exception as e:
-                    success, err = False, str(e)
-                with _PUBLISH_JOBS_LOCK:
-                    j = _PUBLISH_JOBS[job_id]
-                    if success:
-                        j['completed'] += 1
-                    else:
+                    ok, wp_id, wp_link, err = False, None, None, str(e)
+
+                if ok:
+                    with result_lock:
+                        result_buf[article['id']] = (wp_id, wp_link, now_iso())
+                    with _PUBLISH_JOBS_LOCK:
+                        _PUBLISH_JOBS[job_id]['completed'] += 1
+                else:
+                    with _PUBLISH_JOBS_LOCK:
+                        j = _PUBLISH_JOBS[job_id]
                         j['failed'] += 1
                         j['errors'].append({'title': article['title'], 'error': err})
-                    j['updated_at'] = now_iso()
+
+                done += 1
+                with _PUBLISH_JOBS_LOCK:
+                    _PUBLISH_JOBS[job_id]['updated_at'] = now_iso()
+
+                _flush_buf(force=False)  # 10件溜まったら書き込む
+
+        _flush_buf(force=True)  # 残りを全部書き込む
+
+        # ジョブ完了をメモリ＋ディスクに記録
         with _PUBLISH_JOBS_LOCK:
-            _PUBLISH_JOBS[job_id]['status'] = 'completed'
-            _PUBLISH_JOBS[job_id]['updated_at'] = now_iso()
+            j = _PUBLISH_JOBS[job_id]
+            j['status']     = 'completed'
+            j['updated_at'] = now_iso()
+            job_snapshot    = dict(j)
+        with _DATA_LOCK:
+            pjobs = load_publish_jobs()
+            for pj in pjobs:
+                if pj.get('id') == job_id:
+                    pj.update(job_snapshot)
+                    break
+            save_publish_jobs(pjobs)
 
     threading.Thread(target=worker, daemon=True).start()
     return jsonify({
-        'job_id': job_id,
-        'total': len(targets),
+        'job_id':  job_id,
+        'total':   len(targets),
         'message': f'{len(targets)}件のWP投稿をバックグラウンドで開始しました。',
     })
 
@@ -6834,8 +6880,31 @@ def get_publish_job(job_id):
     with _PUBLISH_JOBS_LOCK:
         job = _PUBLISH_JOBS.get(job_id)
     if not job:
+        # メモリにない場合はディスクから復元
+        with _DATA_LOCK:
+            pjobs = load_publish_jobs()
+        job = next((j for j in pjobs if j.get('id') == job_id), None)
+    if not job:
         return jsonify({'error': 'ジョブが見つかりません'}), 404
     return jsonify(job)
+
+
+@app.route('/api/batch-publish/jobs/latest', methods=['GET'])
+@login_required
+def get_latest_publish_job():
+    """ページ初期化時に直近の実行中ジョブを復元するためのエンドポイント"""
+    # まずメモリの running ジョブを探す
+    with _PUBLISH_JOBS_LOCK:
+        running = [j for j in _PUBLISH_JOBS.values() if j.get('status') == 'running']
+    if running:
+        latest = max(running, key=lambda j: j.get('started_at', ''))
+        return jsonify(latest)
+    # なければディスクから直近1件
+    with _DATA_LOCK:
+        pjobs = load_publish_jobs()
+    if pjobs:
+        return jsonify(pjobs[0])
+    return jsonify({'status': 'none'})
 
 
 # Scheduled (future) publish

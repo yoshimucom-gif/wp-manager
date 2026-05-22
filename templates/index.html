@@ -1052,11 +1052,12 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <button class="btn btn-primary" onclick="generateSelected()">⚡ 選択を再生成</button>
           <div class="split-btn">
             <select id="articles-post-status" title="WP投稿時のステータス">
-              <option value="draft">下書き投稿</option>
               <option value="publish">公開投稿</option>
+              <option value="draft">下書き投稿</option>
             </select>
             <button class="btn btn-success" onclick="publishSelected()">🚀 WP投稿</button>
           </div>
+          <span id="publish-progress-label" style="font-size:12px;color:var(--accent);display:inline-block;min-width:80px"></span>
           <button class="btn btn-secondary" onclick="openSchedulePublishModal()" title="選択記事をWordPressの予約投稿として割り当て">📅 予約投稿割り当て</button>
           <button class="btn btn-danger" onclick="deleteSelected()">🗑 選択を削除</button>
           <button class="btn btn-secondary" onclick="rescoreArticles()" title="記事スコアを再計算">↯ スコア再計算</button>
@@ -2059,7 +2060,7 @@ function showPage(name, opts = {}) {
     updateArticleTypeUI();
   }
   if (!opts.skipLoad) {
-    if (pageName === 'articles') loadArticles();
+    if (pageName === 'articles') { loadArticles(); resumePublishJobIfRunning(); }
     if (pageName === 'generate') { loadQualitySelects(); updateSiteSelects(); populateGenSelect(); }
     if (pageName === 'title-ideas') { updateSiteSelects(); renderTitleIdeas(); updateTitleKeywordCount(); loadKwStock(); updateKwStockDisplay(); }
     if (pageName === 'batch') { batchSelectedIds = null; loadQualitySelects(); loadArticles(); loadLatestBatchJob(); }
@@ -2875,7 +2876,7 @@ async function publishSelected() {
     return a && a.content;
   });
   if (!eligible.length) { toast('本文が生成済みの記事を選択してください', 'error'); return; }
-  const postStatus = document.getElementById('articles-post-status')?.value || 'draft';
+  const postStatus = document.getElementById('articles-post-status')?.value || 'publish';
   const label = postStatus === 'publish' ? '公開' : '下書き';
   if (!confirm(`${eligible.length}件をWordPressに${label}投稿しますか?`)) return;
 
@@ -2902,15 +2903,43 @@ async function publishSelected() {
   }
 }
 
+let _publishJobId = null; // 実行中ジョブID（ページ更新後の復元用）
+
+function _setPublishProgress(done, total) {
+  const el = document.getElementById('publish-progress-label');
+  if (el) el.textContent = `WP投稿中 ${done}/${total}件...`;
+  const btn = document.querySelector('button[onclick="publishSelected()"]');
+  if (btn && btn.disabled) btn.textContent = `投稿中 ${done}/${total}`;
+}
+
+function _clearPublishProgress() {
+  const el = document.getElementById('publish-progress-label');
+  if (el) el.textContent = '';
+  const btn = document.querySelector('button[onclick="publishSelected()"]');
+  if (btn) { btn.disabled = false; btn.textContent = '🚀 WP投稿'; }
+  _publishJobId = null;
+}
+
 function pollPublishJob(jobId, btn) {
+  _publishJobId = jobId;
+  if (btn) { btn.disabled = true; }
+  let errStreak = 0;
   const tick = async () => {
+    if (_publishJobId !== jobId) return; // 別ジョブに切り替わった
     try {
       const res = await fetch(`/api/batch-publish/jobs/${jobId}`);
-      if (!res.ok) { setTimeout(tick, 4000); return; }
+      if (!res.ok) {
+        errStreak++;
+        if (errStreak < 10) setTimeout(tick, 5000);
+        return;
+      }
+      errStreak = 0;
       const job = await res.json();
-      if (btn) btn.textContent = `投稿中 ${job.completed + job.failed}/${job.total}`;
+      const done = (job.completed || 0) + (job.failed || 0);
+      _setPublishProgress(done, job.total || 0);
       if (job.status === 'running') {
-        setTimeout(tick, 3000);
+        // 300件対応: 5秒ポーリング（長時間でもサーバー負荷を抑える）
+        setTimeout(tick, 5000);
         return;
       }
       // 完了
@@ -2920,15 +2949,33 @@ function pollPublishJob(jobId, btn) {
         errCount ? 'warning' : 'success'
       );
       if (errCount && job.errors?.length) {
-        job.errors.slice(0, 3).forEach(e => toast(`✗ ${e.title}: ${e.error}`, 'error'));
+        job.errors.slice(0, 5).forEach(e => toast(`✗ ${e.title}: ${e.error}`, 'error'));
       }
-      if (btn) { btn.disabled = false; btn.textContent = '🚀 WP投稿'; }
+      _clearPublishProgress();
       await loadArticles();
     } catch (e) {
-      setTimeout(tick, 4000);
+      errStreak++;
+      if (errStreak < 15) setTimeout(tick, 5000);
     }
   };
   setTimeout(tick, 2000);
+}
+
+// ページ初期化時に実行中の投稿ジョブを復元する
+async function resumePublishJobIfRunning() {
+  try {
+    const res = await fetch('/api/batch-publish/jobs/latest');
+    if (!res.ok) return;
+    const job = await res.json();
+    if (job.status !== 'running') return;
+    // 実行中ジョブが見つかったら自動でポーリング再開
+    const done = (job.completed || 0) + (job.failed || 0);
+    _setPublishProgress(done, job.total || 0);
+    const btn = document.querySelector('button[onclick="publishSelected()"]');
+    if (btn) btn.disabled = true;
+    toast(`WP投稿を継続中 (${done}/${job.total}件)`, 'info');
+    pollPublishJob(job.id, btn);
+  } catch (e) { /* 無視 */ }
 }
 
 async function repairSelected() {
