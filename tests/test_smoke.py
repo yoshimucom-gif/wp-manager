@@ -358,3 +358,12 @@ def test_settings_get_masks_secrets():
     # reveal は実値を返す
     revealed = client.get('/api/settings/reveal-secret/claude_api_key').get_json()
     assert revealed['value'] == 'sk-ant-SECRETVALUE1234567890'
+
+
+def test_reveal_site_password_endpoint():
+    client = app.app.test_client()
+    # 未認証はブロック
+    assert client.get('/api/sites/x/reveal-password').status_code in (401, 302)
+    client.post('/login', json={'password': 'testpass'})
+    # 存在しないサイトは 404
+    assert client.get('/api/sites/nonexistent-site/reveal-password').status_code == 404

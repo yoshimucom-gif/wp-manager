@@ -2216,6 +2216,17 @@ function updateSiteSelects() {
   }
 }
 
+// サイト編集モーダルのWPパスワード欄を「隠す」初期状態に戻し、
+// 既存サイト編集時は実値取得URL(data-reveal-url)を設定する。
+function resetSitePasswordToggle(passwordEl, revealUrl) {
+  passwordEl.type = 'password';
+  delete passwordEl.dataset.masked;
+  if (revealUrl) passwordEl.dataset.revealUrl = revealUrl;
+  else delete passwordEl.dataset.revealUrl;
+  const btn = passwordEl.parentElement.querySelector('button');
+  if (btn) btn.textContent = '表示';
+}
+
 function openSiteModal() {
   document.getElementById('site-edit-id').value = '';
   document.getElementById('site-name').value = '';
@@ -2224,6 +2235,7 @@ function openSiteModal() {
   const passwordEl = document.getElementById('site-wp-password');
   passwordEl.value = '';
   passwordEl.placeholder = 'xxxx xxxx xxxx xxxx xxxx xxxx';
+  resetSitePasswordToggle(passwordEl, null);  // 新規サイト: 復元URL無し
   document.getElementById('site-password-help').textContent = 'WordPressのユーザー設定で発行したアプリケーションパスワードを入力してください。';
   document.getElementById('site-modal-title').textContent = '// サイトを追加';
   document.getElementById('site-modal').classList.add('open');
@@ -2238,6 +2250,7 @@ function editSite(id) {
   document.getElementById('site-wp-user').value = s.wp_user;
   const passwordEl = document.getElementById('site-wp-password');
   passwordEl.value = s.wp_password || '';
+  resetSitePasswordToggle(passwordEl, '/api/sites/' + id + '/reveal-password');
   passwordEl.placeholder = '変更する場合のみ新しいパスワードを入力';
   document.getElementById('site-password-help').textContent = '保存済みのパスワードは安全のため短く表示しています。変更しない場合はこのまま保存して大丈夫です。';
   document.getElementById('site-modal-title').textContent = '// サイトを編集';
@@ -4739,15 +4752,18 @@ async function restoreSettingsFromBrowserBackup(settings) {
 async function toggleKeyVisibility(btn) {
   const input = btn.parentElement.querySelector('input');
   if (!input) return;
-  const secretField = input.dataset.secretField;
+  // 実値の取得先URL。APIキー欄は data-secret-field、サイトのWPパスワードは
+  // data-reveal-url を持つ。どちらも無ければ単純に type を切り替えるだけ。
+  const revealUrl = input.dataset.revealUrl
+    || (input.dataset.secretField ? '/api/settings/reveal-secret/' + input.dataset.secretField : '');
   if (input.type === 'password') {
     // ── 表示する ──
-    if (secretField) {
+    if (revealUrl) {
       // 表示直前のマスク値を退避（「隠す」で元に戻すため）
       if (input.dataset.masked === undefined) input.dataset.masked = input.value;
       btn.disabled = true;
       try {
-        const res = await fetch('/api/settings/reveal-secret/' + secretField);
+        const res = await fetch(revealUrl);
         if (res.ok) {
           const d = await res.json();
           if (typeof d.value === 'string') input.value = d.value;
@@ -4762,7 +4778,7 @@ async function toggleKeyVisibility(btn) {
     btn.textContent = '隠す';
   } else {
     // ── 隠す ──
-    if (secretField && input.dataset.masked !== undefined) {
+    if (revealUrl && input.dataset.masked !== undefined) {
       input.value = input.dataset.masked;
     }
     input.type = 'password';

@@ -132,10 +132,11 @@ except ValueError:
     CLAUDE_ARTICLE_MAX_TOKENS = 20000
 
 # WordPress REST API リクエスト共通ヘッダ
-# 'python-requests/x.x' UA は WAF / Wordfence / Cloudflare で 403 になりやすいため
-# ブラウザ風 User-Agent を必ず付与
+# 'python-requests/x.x' UA や bot 風 UA（'compatible; Name/ver; +url' 形式）は
+# WAF / Wordfence / SiteGuard / Cloudflare で 403 になりやすい。
+# そのため「実在ブラウザそのまま」の Chrome UA を付与する。
 WP_REQUEST_HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (compatible; Affiros9/1.0; +https://github.com/yoshimucom-gif/wp-manager)',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     'Accept': 'application/json',
 }
 try:
@@ -5104,6 +5105,11 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                             current_articles = load_articles()
                             for a in current_articles:
                                 if a['id'] == article['id']:
+                                    # 競合ガード: ベース生成後に別経路（対応履歴からの
+                                    # 再生成など）で本文が書き換わっていたら、品質改善
+                                    # (polish) 結果で上書きしない（ユーザーの再生成を保護）。
+                                    if a.get('content_hash') != content_hash(content):
+                                        break
                                     a['content'] = post_content
                                     a['generation_phase'] = 'postprocessed'
                                     a['updated_at'] = post_generated_at
@@ -7234,6 +7240,18 @@ def reveal_secret(field):
         return jsonify({'error': 'unknown field'}), 404
     settings = load_settings()
     return jsonify({'field': field, 'value': settings.get(field, '') or ''})
+
+
+@app.route('/api/sites/<site_id>/reveal-password', methods=['GET'])
+@login_required
+def reveal_site_password(site_id):
+    """サイト編集モーダルの「表示」ボタン用。ログイン中のみ、
+    指定サイトの WordPress アプリケーションパスワード実値を返す。"""
+    settings = load_settings()
+    for s in settings.get('sites', []):
+        if s.get('id') == site_id:
+            return jsonify({'value': s.get('wp_password', '') or ''})
+    return jsonify({'error': 'site not found'}), 404
 
 @app.route('/api/settings', methods=['POST'])
 @login_required
