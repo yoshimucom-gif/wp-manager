@@ -1978,9 +1978,11 @@ def title_generation_prompt(keywords, count_per_keyword, category='', article_ty
 - {d.get('symbol_rules', '')}
 
 【ranking のときの追加ルール】
-- ranking タイトルには **必ず「○選」を入れる**。デフォルトは **{d['ranking_default_count']}選**。
+- ranking タイトルには **必ず「おすすめ」を入れる**。
+- さらに **必ず「○選」を入れる**。デフォルトは **{d['ranking_default_count']}選**。
   特別な理由がない限り {d['ranking_default_count']}選。候補が明らかに豊富なら最大 {d['ranking_max_count']}選まで。
   それ以上は実商品データが揃いにくく品質が落ちるため避ける。
+- 「おすすめ」と「○選」が両方入ったタイトルを必ず生成すること（例: 「防水バッグ おすすめ5選」）。
 
 【slug】
 - slug は英語のみ・小文字・ハイフン区切り（kebab-case）。3〜4単語、最大30文字以内。
