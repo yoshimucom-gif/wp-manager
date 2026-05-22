@@ -4355,6 +4355,8 @@ function loadBatchArticles() {
   let targets = allArticles.filter(a => ['pending', 'queued', 'generating', 'error'].includes(a.status));
   if (typeFilter) targets = targets.filter(a => (a.article_type || 'ranking') === typeFilter);
   if (category) targets = targets.filter(a => (a.category || '') === category);
+  // 新着が上に来るよう作成日時降順で並べる（商標化した記事がすぐ上に現れる）
+  targets.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
 
   document.getElementById('batch-count').textContent = targets.length;
   // 選択状態はタブ非依存の永続Set batchSelectedIds で管理する。
