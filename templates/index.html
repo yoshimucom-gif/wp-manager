@@ -339,6 +339,22 @@ body {
 .btn-success:hover { background: rgba(26,127,55,0.15); }
 .btn-sm { font-size: 11px; padding: 4px 10px; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+/* スプリットボタン: セレクト＋ボタンを1つの操作として見せる */
+.split-btn { display: inline-flex; align-items: stretch; }
+.split-btn select {
+  border-right: none;
+  border-radius: 4px 0 0 4px;
+  font-size: 12px;
+  padding: 0 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+}
+.split-btn .btn {
+  border-radius: 0 4px 4px 0;
+  white-space: nowrap;
+}
 
 input, select, textarea {
   font-family: var(--font);
@@ -1034,11 +1050,13 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
 
         <div class="toolbar">
           <button class="btn btn-primary" onclick="generateSelected()">⚡ 選択を再生成</button>
-          <button class="btn btn-success" onclick="publishSelected()">🚀 WP投稿</button>
-          <select id="articles-post-status" style="font-size:12px" title="WP投稿時のステータス（WP投稿ボタンに適用）">
-            <option value="draft">下書き投稿</option>
-            <option value="publish">公開投稿</option>
-          </select>
+          <div class="split-btn">
+            <select id="articles-post-status" title="WP投稿時のステータス">
+              <option value="draft">下書き投稿</option>
+              <option value="publish">公開投稿</option>
+            </select>
+            <button class="btn btn-success" onclick="publishSelected()">🚀 WP投稿</button>
+          </div>
           <button class="btn btn-secondary" onclick="openSchedulePublishModal()" title="選択記事をWordPressの予約投稿として割り当て">📅 予約投稿割り当て</button>
           <button class="btn btn-danger" onclick="deleteSelected()">🗑 選択を削除</button>
           <button class="btn btn-secondary" onclick="rescoreArticles()" title="記事スコアを再計算">↯ スコア再計算</button>
