@@ -2878,18 +2878,57 @@ async function publishSelected() {
   const postStatus = document.getElementById('articles-post-status')?.value || 'draft';
   const label = postStatus === 'publish' ? '公開' : '下書き';
   if (!confirm(`${eligible.length}件をWordPressに${label}投稿しますか?`)) return;
-  const res = await fetch('/api/batch-publish', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({article_ids: eligible, post_status: postStatus})
-  });
-  const data = await res.json();
-  if (data.error && data.success === undefined) {
-    toast(data.error, 'error');
-    return;
+
+  // ボタンを一時無効化
+  const btn = document.querySelector('button[onclick="publishSelected()"]');
+  if (btn) { btn.disabled = true; btn.textContent = '投稿中...'; }
+
+  try {
+    const res = await fetch('/api/batch-publish', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({article_ids: eligible, post_status: postStatus})
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      toast(data.error || 'WP投稿開始に失敗しました', 'error');
+      return;
+    }
+    toast(`WP投稿開始 (${data.total}件) — バックグラウンドで処理中`, 'info');
+    pollPublishJob(data.job_id, btn);
+  } catch (e) {
+    toast('WP投稿開始に失敗しました: ' + e.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '🚀 WP投稿'; }
   }
-  toast(`成功: ${data.success}件 / エラー: ${data.error}件`, data.error ? 'error' : 'success');
-  await loadArticles();
+}
+
+function pollPublishJob(jobId, btn) {
+  const tick = async () => {
+    try {
+      const res = await fetch(`/api/batch-publish/jobs/${jobId}`);
+      if (!res.ok) { setTimeout(tick, 4000); return; }
+      const job = await res.json();
+      if (btn) btn.textContent = `投稿中 ${job.completed + job.failed}/${job.total}`;
+      if (job.status === 'running') {
+        setTimeout(tick, 3000);
+        return;
+      }
+      // 完了
+      const errCount = job.failed || 0;
+      toast(
+        `WP投稿完了: 成功 ${job.completed}件 / 失敗 ${errCount}件`,
+        errCount ? 'warning' : 'success'
+      );
+      if (errCount && job.errors?.length) {
+        job.errors.slice(0, 3).forEach(e => toast(`✗ ${e.title}: ${e.error}`, 'error'));
+      }
+      if (btn) { btn.disabled = false; btn.textContent = '🚀 WP投稿'; }
+      await loadArticles();
+    } catch (e) {
+      setTimeout(tick, 4000);
+    }
+  };
+  setTimeout(tick, 2000);
 }
 
 async function repairSelected() {
