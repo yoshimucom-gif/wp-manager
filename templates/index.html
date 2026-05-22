@@ -1256,6 +1256,9 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
               <button class="btn btn-secondary btn-sm" onclick="toggleTitleIdeaChecks(true)">全選択</button>
               <button class="btn btn-secondary btn-sm" onclick="toggleTitleIdeaChecks(false)">全解除</button>
               <button class="btn btn-secondary btn-sm" onclick="removeDuplicateTitleIdeas()">重複案を外す</button>
+              <div style="width:1px;background:var(--border);height:20px;margin:0 4px"></div>
+              <button class="btn btn-success btn-sm" id="title-save-btn2" onclick="saveSelectedTitleIdeas()" disabled>✚ 選択を一括処理へ</button>
+              <button class="btn btn-danger btn-sm" id="title-delete-btn" onclick="deleteSelectedTitleIdeas()" disabled>🗑 選択を削除</button>
               <div style="flex:1"></div>
               <span id="title-ideas-count" style="font-size:12px;color:var(--muted)">0件</span>
             </div>
@@ -3433,10 +3436,15 @@ function renderTitleIdeas() {
   const body = document.getElementById('title-ideas-body');
   const empty = document.getElementById('title-ideas-empty');
   const count = document.getElementById('title-ideas-count');
-  const saveBtn = document.getElementById('title-save-btn');
+  const saveBtn  = document.getElementById('title-save-btn');
+  const saveBtn2 = document.getElementById('title-save-btn2');
+  const delBtn   = document.getElementById('title-delete-btn');
   if (!body) return;
   if (count) count.textContent = `${titleIdeaList.length}件`;
-  if (saveBtn) saveBtn.disabled = !titleIdeaList.length;
+  const hasItems = !!titleIdeaList.length;
+  if (saveBtn)  saveBtn.disabled  = !hasItems;
+  if (saveBtn2) saveBtn2.disabled = !hasItems;
+  if (delBtn)   delBtn.disabled   = !hasItems;
   if (!titleIdeaList.length) {
     body.innerHTML = '';
     if (empty) empty.style.display = 'block';
@@ -3482,6 +3490,16 @@ function removeDuplicateTitleIdeas() {
     const idea = titleIdeaList[Number(c.dataset.index)];
     if (idea?.duplicate) c.checked = false;
   });
+}
+
+function deleteSelectedTitleIdeas() {
+  const checkedIndices = new Set(
+    [...document.querySelectorAll('.title-idea-check:checked')].map(c => Number(c.dataset.index))
+  );
+  if (!checkedIndices.size) { toast('削除する案を選択してください', 'error'); return; }
+  titleIdeaList = titleIdeaList.filter((_, i) => !checkedIndices.has(i));
+  renderTitleIdeas();
+  toast(`${checkedIndices.size}件を削除しました`, 'info');
 }
 
 function selectedTitleIdeas() {
