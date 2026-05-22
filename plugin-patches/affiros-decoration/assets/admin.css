@@ -1,0 +1,245 @@
+/* === AIデコレーションプラグイン 管理画面CSS === */
+
+.ai-deco-wrap {
+    max-width: 1200px;
+}
+
+/* === メタボックス（投稿編集画面） === */
+.ai-deco-metabox .ai-deco-status {
+    padding: 10px 12px;
+    border-radius: 4px;
+    margin-bottom: 12px;
+    font-size: 13px;
+}
+
+.ai-deco-status--ok {
+    background: #e8f5e9;
+    border-left: 3px solid #27ae60;
+}
+
+.ai-deco-status--warning {
+    background: #fef9e7;
+    border-left: 3px solid #f39c12;
+}
+
+.ai-deco-status--error {
+    background: #fdf2f0;
+    border-left: 3px solid #e74c3c;
+}
+
+.ai-deco-status--none {
+    background: #f5f5f5;
+    color: #888;
+    padding: 10px 12px;
+    border-radius: 4px;
+}
+
+.ai-deco-meta {
+    font-size: 11px;
+    color: #666;
+    margin-top: 2px;
+}
+
+.ai-deco-warnings {
+    margin: 6px 0 0 0;
+    padding-left: 18px;
+    font-size: 11px;
+    color: #d68910;
+}
+
+.ai-deco-metrics {
+    font-size: 11px;
+    color: #666;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed #ddd;
+}
+
+.ai-deco-result {
+    margin-top: 12px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+.ai-deco-result h4 {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+}
+
+.ai-deco-result-body {
+    font-size: 11px;
+    max-height: 300px;
+    overflow-y: auto;
+    background: #fff;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    font-family: Consolas, Monaco, monospace;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.ai-deco-spinner {
+    margin-top: 12px;
+    padding: 10px;
+    background: #f0f9ff;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #2563a6;
+}
+
+/* === 一括処理画面 === */
+.ai-deco-checkbox-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    padding: 10px;
+    background: #fafafa;
+    border-radius: 4px;
+}
+
+.ai-deco-checkbox-list label {
+    display: inline-block;
+    margin: 4px 10px 4px 0;
+    font-size: 13px;
+}
+
+.ai-deco-count {
+    color: #888;
+    font-size: 11px;
+}
+
+.ai-deco-targets-result {
+    margin-top: 20px;
+    padding: 16px;
+    background: #f0f9ff;
+    border-left: 4px solid #3498db;
+    border-radius: 4px;
+}
+
+.ai-deco-targets-summary {
+    font-size: 14px;
+    margin-bottom: 10px;
+}
+
+.ai-deco-targets-summary strong {
+    color: #2563a6;
+    font-size: 18px;
+}
+
+.ai-deco-targets-list {
+    max-height: 300px;
+    overflow-y: auto;
+    background: #fff;
+    padding: 10px;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+.ai-deco-targets-list ul {
+    margin: 0;
+    padding-left: 18px;
+}
+
+/* === プログレスバー === */
+.ai-deco-progress {
+    margin-top: 20px;
+    padding: 16px;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+.ai-deco-progress-bar {
+    height: 28px;
+    background: #e0e0e0;
+    border-radius: 14px;
+    overflow: hidden;
+    margin-bottom: 10px;
+    position: relative;
+}
+
+.ai-deco-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #27ae60, #2ecc71);
+    color: #fff;
+    text-align: center;
+    line-height: 28px;
+    font-size: 12px;
+    font-weight: 700;
+    transition: width 0.3s;
+}
+
+.ai-deco-progress-log {
+    max-height: 400px;
+    overflow-y: auto;
+    background: #fff;
+    padding: 10px;
+    border-radius: 3px;
+    font-family: Consolas, monospace;
+    font-size: 11px;
+    border: 1px solid #ddd;
+}
+
+.ai-deco-progress-log .log-item {
+    padding: 4px 0;
+    border-bottom: 1px dashed #eee;
+}
+
+.ai-deco-progress-log .log-success {
+    color: #27ae60;
+}
+
+.ai-deco-progress-log .log-failure {
+    color: #e74c3c;
+}
+
+.ai-deco-progress-log .log-warning {
+    color: #f39c12;
+}
+
+/* === 処理ログページ === */
+.ai-deco-log-summary {
+    display: flex;
+    gap: 12px;
+    margin: 20px 0;
+}
+
+.ai-deco-stat {
+    flex: 1;
+    background: #fff;
+    padding: 16px;
+    border-radius: 4px;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.ai-deco-stat-num {
+    font-size: 24px;
+    font-weight: 700;
+    color: #2c3e50;
+    margin-bottom: 4px;
+}
+
+.ai-deco-stat-num--success {
+    color: #27ae60;
+}
+
+.ai-deco-stat-num--failure {
+    color: #e74c3c;
+}
+
+.ai-deco-stat-label {
+    font-size: 11px;
+    color: #888;
+    letter-spacing: 0.05em;
+}
+
+@media (max-width: 768px) {
+    .ai-deco-log-summary {
+        flex-wrap: wrap;
+    }
+    .ai-deco-stat {
+        min-width: 45%;
+    }
+}

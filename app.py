@@ -4197,6 +4197,42 @@ def index():
 def favicon():
     return send_from_directory(app.static_folder, 'favicon.svg', mimetype='image/svg+xml')
 
+# 配布プラグイン（WordPress 連携プラグインの zip）
+PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugin-downloads')
+PLUGIN_DOWNLOADS = {
+    'product-inserter': {
+        'file': 'affiros-product-inserter-1.7.3.zip',
+        'name': 'Affiros プロダクトインサーター',
+        'version': '1.7.3',
+    },
+    'decoration': {
+        'file': 'affiros-decoration-1.2.0.zip',
+        'name': 'Affiros デコレーター',
+        'version': '1.2.0',
+    },
+    'rewrite': {
+        'file': 'affiros-rewrite-0.3.1.zip',
+        'name': 'Affiros リライター',
+        'version': '0.3.1',
+    },
+}
+
+@app.route('/download/plugin/<plugin_key>')
+@login_required
+def download_plugin(plugin_key):
+    """WordPress 連携プラグインの zip をダウンロードさせる。"""
+    info = PLUGIN_DOWNLOADS.get(plugin_key)
+    if not info:
+        return jsonify({'error': 'unknown plugin'}), 404
+    target = os.path.join(PLUGIN_DIR, info['file'])
+    if not os.path.exists(target):
+        return jsonify({'error': 'plugin file not found', 'file': info['file']}), 404
+    return send_from_directory(
+        PLUGIN_DIR, info['file'],
+        as_attachment=True, download_name=info['file'],
+        mimetype='application/zip',
+    )
+
 @app.route('/login', methods=['GET'])
 def login_page():
     if session.get('authenticated'):
