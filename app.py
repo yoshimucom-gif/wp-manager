@@ -4828,7 +4828,11 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                 with _DATA_LOCK:
                     current_articles = load_articles()
                     for a in current_articles:
-                        if a['id'] in remaining_ids and a.get('status') == 'queued':
+                        # キュー残の記事は 'queued' だけでなく、リトライ待ちで
+                        # 'generating' になっているものも pending に戻す。
+                        # （これを 'queued' だけにすると、リトライ待ち記事が
+                        #   generating のまま残り、UIで開始ボタンが無効化され続ける）
+                        if a['id'] in remaining_ids and a.get('status') in ('queued', 'generating'):
                             a['status'] = 'pending'
                             a.pop('batch_job_id', None)
                             a['updated_at'] = now_iso()
@@ -5156,7 +5160,10 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                             current_articles = load_articles()
                             for a in current_articles:
                                 if a['id'] == article['id']:
-                                    a['status'] = 'generating'
+                                    # リトライ待ちは 'queued'（待機中）にする。'generating' に
+                                    # すると UI で複数件「処理中」に見え、キャンセル戻し対象から
+                                    # も漏れる。実処理に入る時に worker が generating へ戻す。
+                                    a['status'] = 'queued'
                                     a['error'] = f'Claude APIが混雑中（529 Overloaded）。{wait}秒待って自動再試行します'
                                     a['updated_at'] = now_iso()
                                     break
@@ -5179,7 +5186,8 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                         current_articles = load_articles()
                         for a in current_articles:
                             if a['id'] == article['id']:
-                                a['status'] = 'generating'
+                                # リトライ待ちは 'queued'（待機中）。実処理時に generating へ戻す
+                                a['status'] = 'queued'
                                 a['error'] = f'一時エラーのため自動リトライ待ち: {error_detail}'
                                 a['error_stage'] = stage
                                 a['error_trace'] = trace[-4000:]
