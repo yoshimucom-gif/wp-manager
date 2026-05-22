@@ -1317,7 +1317,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             <div style="position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0">
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 <label class="form-label" style="margin:0;flex:1">対象記事 (<span id="batch-count">0</span>件)</label>
-                <button class="btn btn-primary btn-sm" onclick="startBatchGenerate()">⚡ 一括生成開始</button>
+                <button class="btn btn-primary btn-sm" onclick="startBatchGenerate()">⚡ 一括生成開始 (<span id="batch-selected-count">0</span>件選択中)</button>
                 <button class="btn btn-secondary btn-sm" onclick="loadBatchArticles()">↻ 状態更新</button>
                 <button class="btn btn-danger btn-sm" onclick="deleteBatchSelected()">🗑 選択を削除</button>
               </div>
@@ -4614,6 +4614,9 @@ function loadBatchArticles() {
   if (batchSelectedIds === null) {
     batchSelectedIds = new Set(allArticles.filter(a => batchRowSelectable(a)).map(a => a.id));
   }
+  // 選択件数バッジを更新（現在のタブの選択数を表示）
+  const selCount = document.getElementById('batch-selected-count');
+  if (selCount) selCount.textContent = getBatchSelectedIds().length;
   document.getElementById('batch-body').innerHTML = targets.map(a => {
     const selectable = batchRowSelectable(a);
     const shouldCheck = selectable && batchSelectedIds.has(a.id);
@@ -4672,6 +4675,8 @@ function toggleBatchRow(id, checked) {
   if (batchSelectedIds === null) batchSelectedIds = new Set();
   if (checked) batchSelectedIds.add(id);
   else batchSelectedIds.delete(id);
+  const selCount = document.getElementById('batch-selected-count');
+  if (selCount) selCount.textContent = getBatchSelectedIds().length;
 }
 
 function toggleBatchAll(cb) {
@@ -4686,8 +4691,15 @@ function toggleBatchAll(cb) {
 
 function getBatchSelectedIds() {
   if (!batchSelectedIds) return [];
-  // 「いま選択可能な対象記事」に存在するIDだけに絞る（古いID・選択不可を除外）
-  const valid = new Set(allArticles.filter(a => batchRowSelectable(a)).map(a => a.id));
+  // 現在のタブ + 選択可能な記事に絞る。
+  // 「すべて」タブ(currentBatchTypeTab='')以外は表示中タブの記事だけを対象にする。
+  // これにより「商標タブで1件選択 → 一括生成」が他タブの記事を巻き込まない。
+  const typeFilter = currentBatchTypeTab;
+  const valid = new Set(allArticles.filter(a => {
+    if (!batchRowSelectable(a)) return false;
+    if (typeFilter) return (a.article_type || 'ranking') === typeFilter;
+    return true;
+  }).map(a => a.id));
   return [...batchSelectedIds].filter(id => valid.has(id));
 }
 
