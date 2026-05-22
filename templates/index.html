@@ -2774,17 +2774,17 @@ function renderArticles(articles) {
       : '';
     // 行アクションは固定2×2グリッド。出ないボタンは空スロットにして
     // 他ボタンの位置が動かないようにする（並びのがちゃがちゃ防止）。
-    const _bs = 'style="font-size:11px;padding:3px 7px"';
+    const _bs = 'style="font-size:11px;padding:3px 7px;width:100%"';
     const editBtn = `<button class="btn btn-secondary btn-sm" ${_bs} ${disabled} title="記事の内容・設定の確認／手直し保存／再生成" onclick="openArticleModal('${a.id}')">編集</button>`;
     const brandBtn = ((a.article_type || 'ranking') === 'ranking' && a.content)
-      ? `<button class="btn btn-secondary btn-sm" ${_bs} ${disabled} title="ランキング記事から商標記事の下書きを作成" onclick="openBrandExpansionModal('${a.id}')">商標化</button>`
-      : '<span></span>';
+      ? `<button class="btn btn-secondary btn-sm" ${_bs} ${disabled} title="ランキング記事から商標記事の下書きを作成" onclick="openBrandExpansionModal('${a.id}')" style="font-size:11px;padding:3px 7px;width:100%;opacity:0.75">商標化</button>`
+      : '';
     const wpDraftBtn = (a.content && !a.wp_post_id)
       ? `<button class="btn btn-success btn-sm" ${_bs} ${disabled} title="WordPressに下書き投稿" onclick="quickPublish('${a.id}')">${publishLabel}</button>`
-      : '<span></span>';
+      : '';
     const openBtn = a.wp_url
-      ? `<a href="${esc(a.wp_url)}" target="_blank" class="btn btn-secondary btn-sm" ${_bs} title="投稿済み記事を開く">開く</a>`
-      : '<span></span>';
+      ? `<a href="${esc(a.wp_url)}" target="_blank" class="btn btn-sm" style="font-size:11px;padding:3px 7px;width:100%;background:#3b82f6;color:#fff;border:none;text-align:center;display:block;border-radius:4px" title="投稿済み記事を開く">開く ↗</a>`
+      : '';
     const rowClass = ['published', 'scheduled', 'updated'].includes(a.status) ? 'row-completed' : '';
     const checkedAttr = previouslyChecked.has(a.id) ? 'checked' : '';
     return `
@@ -2798,8 +2798,8 @@ function renderArticles(articles) {
       <td>${statusBadge(a.status)}${statusDetail}</td>
       <td style="color:var(--muted);font-size:11px;white-space:nowrap">${a.generated_at ? fmtDate(a.generated_at) : '—'}</td>
       <td>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;width:170px">
-          ${editBtn}${brandBtn}${wpDraftBtn}${openBtn}
+        <div style="display:flex;flex-direction:column;gap:3px;width:88px">
+          ${editBtn}${wpDraftBtn}${openBtn}${brandBtn}
         </div>
       </td>
     </tr>
