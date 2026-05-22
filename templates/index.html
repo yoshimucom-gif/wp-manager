@@ -1081,9 +1081,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
                 <th>種類</th>
                 <th>タイトル</th>
                 <th>キーワード</th>
-                <th>カテゴリー</th>
                 <th>スコア</th>
-                <th>サイト</th>
                 <th>ステータス</th>
                 <th>生成日時</th>
                 <th>操作</th>
@@ -2668,7 +2666,7 @@ function renderArticles(articles) {
   tbody.innerHTML = articles.map((a, i) => {
     const busy = isArticleBusy(a.status);
     const disabled = busy ? 'disabled' : '';
-    const publishLabel = a.status === 'publishing' ? '投稿中...' : 'WP下書き投稿';
+    const publishLabel = a.status === 'publishing' ? '投稿中...' : 'WP投稿';
     // 警告表示は「致命的なもの」だけ。成功している記事に非致命的な装飾スキップ警告
     // （HTML整形をスキップ、本文後処理をスキップ等）を出すとノイズになるので隠す。
     const isSuccessful = ['generated', 'published', 'scheduled', 'updated'].includes(a.status);
@@ -2684,15 +2682,16 @@ function renderArticles(articles) {
       : '';
     // 行アクションは固定2×2グリッド。出ないボタンは空スロットにして
     // 他ボタンの位置が動かないようにする（並びのがちゃがちゃ防止）。
-    const editBtn = `<button class="btn btn-secondary btn-sm" ${disabled} title="記事の内容・設定の確認／手直し保存／再生成" onclick="openArticleModal('${a.id}')">編集</button>`;
+    const _bs = 'style="font-size:11px;padding:3px 7px"';
+    const editBtn = `<button class="btn btn-secondary btn-sm" ${_bs} ${disabled} title="記事の内容・設定の確認／手直し保存／再生成" onclick="openArticleModal('${a.id}')">編集</button>`;
     const brandBtn = ((a.article_type || 'ranking') === 'ranking' && a.content)
-      ? `<button class="btn btn-secondary btn-sm" ${disabled} title="ランキング記事で紹介した商品から商標記事の未生成下書きを作成" onclick="openBrandExpansionModal('${a.id}')">商標記事化</button>`
+      ? `<button class="btn btn-secondary btn-sm" ${_bs} ${disabled} title="ランキング記事から商標記事の下書きを作成" onclick="openBrandExpansionModal('${a.id}')">商標化</button>`
       : '<span></span>';
     const wpDraftBtn = (a.content && !a.wp_post_id)
-      ? `<button class="btn btn-success btn-sm" ${disabled} title="WordPressに下書き投稿" onclick="quickPublish('${a.id}')">${publishLabel}</button>`
+      ? `<button class="btn btn-success btn-sm" ${_bs} ${disabled} title="WordPressに下書き投稿" onclick="quickPublish('${a.id}')">${publishLabel}</button>`
       : '<span></span>';
     const openBtn = a.wp_url
-      ? `<a href="${esc(a.wp_url)}" target="_blank" class="btn btn-secondary btn-sm" title="投稿済み記事を開く">記事を開く</a>`
+      ? `<a href="${esc(a.wp_url)}" target="_blank" class="btn btn-secondary btn-sm" ${_bs} title="投稿済み記事を開く">開く</a>`
       : '<span></span>';
     const rowClass = ['published', 'scheduled', 'updated'].includes(a.status) ? 'row-completed' : '';
     const checkedAttr = previouslyChecked.has(a.id) ? 'checked' : '';
@@ -2703,13 +2702,11 @@ function renderArticles(articles) {
       <td style="font-size:11px;color:var(--accent);white-space:nowrap">${articleTypeLabel(a.article_type || 'ranking')}</td>
       <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.title)}">${esc(a.title)}</td>
       <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)" title="${esc(a.keywords)}">${esc(a.keywords)}</td>
-      <td style="font-size:11px;color:var(--muted);white-space:nowrap">${esc(a.category || '—')}</td>
       <td>${scoreBadge(a)}</td>
-      <td>${getSiteName(a.site_id)}</td>
       <td>${statusBadge(a.status)}${statusDetail}</td>
       <td style="color:var(--muted);font-size:11px;white-space:nowrap">${a.generated_at ? fmtDate(a.generated_at) : '—'}</td>
       <td>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;width:210px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;width:170px">
           ${editBtn}${brandBtn}${wpDraftBtn}${openBtn}
         </div>
       </td>
