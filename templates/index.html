@@ -1497,7 +1497,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             <div class="form-group">
               <label class="form-label">APIキー</label>
               <div style="position:relative">
-                <input type="password" id="s-claude-key" class="form-control" placeholder="sk-ant-..." style="padding-right:62px">
+                <input type="password" id="s-claude-key" class="form-control" placeholder="sk-ant-..." style="padding-right:62px" data-secret-field="claude_api_key">
                 <button type="button" onclick="toggleKeyVisibility(this)" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.12);border:none;color:var(--muted);font-size:11px;padding:4px 9px;border-radius:4px;cursor:pointer">表示</button>
               </div>
             </div>
@@ -1532,14 +1532,14 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             <div class="form-group">
               <label class="form-label">Access Key ID</label>
               <div style="position:relative">
-                <input type="password" id="s-amazon-access-key" class="form-control" autocomplete="off" style="padding-right:62px">
+                <input type="password" id="s-amazon-access-key" class="form-control" autocomplete="off" style="padding-right:62px" data-secret-field="amazon_access_key">
                 <button type="button" onclick="toggleKeyVisibility(this)" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.12);border:none;color:var(--muted);font-size:11px;padding:4px 9px;border-radius:4px;cursor:pointer">表示</button>
               </div>
             </div>
             <div class="form-group">
               <label class="form-label">Secret Access Key</label>
               <div style="position:relative">
-                <input type="password" id="s-amazon-secret-key" class="form-control" autocomplete="off" style="padding-right:62px">
+                <input type="password" id="s-amazon-secret-key" class="form-control" autocomplete="off" style="padding-right:62px" data-secret-field="amazon_secret_key">
                 <button type="button" onclick="toggleKeyVisibility(this)" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.12);border:none;color:var(--muted);font-size:11px;padding:4px 9px;border-radius:4px;cursor:pointer">表示</button>
               </div>
             </div>
@@ -1554,7 +1554,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             <div class="form-group">
               <label class="form-label">アプリケーションID</label>
               <div style="position:relative">
-                <input type="password" id="s-rakuten-app-id" class="form-control" autocomplete="off" style="padding-right:62px">
+                <input type="password" id="s-rakuten-app-id" class="form-control" autocomplete="off" style="padding-right:62px" data-secret-field="rakuten_app_id">
                 <button type="button" onclick="toggleKeyVisibility(this)" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.12);border:none;color:var(--muted);font-size:11px;padding:4px 9px;border-radius:4px;cursor:pointer">表示</button>
               </div>
             </div>
@@ -4716,14 +4716,38 @@ async function restoreSettingsFromBrowserBackup(settings) {
   return await fresh.json();
 }
 
-// APIキー等のパスワード入力欄の表示/非表示を個別に切り替える
-function toggleKeyVisibility(btn) {
+// APIキー等のパスワード入力欄の表示/非表示を個別に切り替える。
+// data-secret-field を持つ欄（APIキー類）は、表示時にサーバから実キー全体を
+// 取得して見せる（GET /api/settings はマスク値しか返さないため）。
+async function toggleKeyVisibility(btn) {
   const input = btn.parentElement.querySelector('input');
   if (!input) return;
+  const secretField = input.dataset.secretField;
   if (input.type === 'password') {
+    // ── 表示する ──
+    if (secretField) {
+      // 表示直前のマスク値を退避（「隠す」で元に戻すため）
+      if (input.dataset.masked === undefined) input.dataset.masked = input.value;
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/settings/reveal-secret/' + secretField);
+        if (res.ok) {
+          const d = await res.json();
+          if (typeof d.value === 'string') input.value = d.value;
+        }
+      } catch (e) {
+        // 取得失敗時はマスクのまま（表示だけ切替）
+      } finally {
+        btn.disabled = false;
+      }
+    }
     input.type = 'text';
     btn.textContent = '隠す';
   } else {
+    // ── 隠す ──
+    if (secretField && input.dataset.masked !== undefined) {
+      input.value = input.dataset.masked;
+    }
     input.type = 'password';
     btn.textContent = '表示';
   }
@@ -4741,6 +4765,13 @@ async function loadSettings() {
   document.getElementById('s-amazon-partner-tag').value = s.amazon_partner_tag || '';
   document.getElementById('s-rakuten-app-id').value = s.rakuten_app_id || '';
   document.getElementById('s-rakuten-affiliate-id').value = s.rakuten_affiliate_id || '';
+  // 秘匿フィールドは再読み込み時に「隠す」状態へ戻す（表示中だった欄の取り残しを防ぐ）
+  document.querySelectorAll('input[data-secret-field]').forEach(inp => {
+    inp.type = 'password';
+    delete inp.dataset.masked;
+    const tgl = inp.parentElement.querySelector('button');
+    if (tgl) tgl.textContent = '表示';
+  });
   await loadQuality();
   if (s.default_quality_id) document.getElementById('s-default-quality').value = s.default_quality_id;
   scheduleDataSnapshotBackup();

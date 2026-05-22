@@ -7145,18 +7145,34 @@ def restore_data_snapshot_api():
 @login_required
 def get_settings():
     settings = load_settings()
+    # 先頭10文字までを見せ、残りをマスク（識別しやすく・全露出は避ける）。
+    # 全体を見たい場合は /api/settings/reveal-secret/<field> を使う。
     safe = {
-        'claude_api_key': mask_secret(settings.get('claude_api_key', '')),
+        'claude_api_key': mask_secret(settings.get('claude_api_key', ''), 10),
         'claude_article_model': settings.get('claude_article_model', 'claude-sonnet-4-6'),
         'default_quality_id': settings.get('default_quality_id', 'default'),
         'article_css': settings.get('article_css', ''),
-        'amazon_access_key': mask_secret(settings.get('amazon_access_key', '')),
-        'amazon_secret_key': mask_secret(settings.get('amazon_secret_key', '')),
+        'amazon_access_key': mask_secret(settings.get('amazon_access_key', ''), 10),
+        'amazon_secret_key': mask_secret(settings.get('amazon_secret_key', ''), 10),
         'amazon_partner_tag': settings.get('amazon_partner_tag', ''),
-        'rakuten_app_id': mask_secret(settings.get('rakuten_app_id', '')),
+        'rakuten_app_id': mask_secret(settings.get('rakuten_app_id', ''), 10),
         'rakuten_affiliate_id': settings.get('rakuten_affiliate_id', ''),
     }
     return jsonify(safe)
+
+
+# 「表示」ボタンで全体を取得できる秘匿フィールドのホワイトリスト
+REVEALABLE_SECRETS = ('claude_api_key', 'amazon_access_key', 'amazon_secret_key', 'rakuten_app_id')
+
+
+@app.route('/api/settings/reveal-secret/<field>', methods=['GET'])
+@login_required
+def reveal_secret(field):
+    """APIキー等の「表示」ボタン用。ログイン中のみ、指定フィールドの実値を返す。"""
+    if field not in REVEALABLE_SECRETS:
+        return jsonify({'error': 'unknown field'}), 404
+    settings = load_settings()
+    return jsonify({'field': field, 'value': settings.get(field, '') or ''})
 
 @app.route('/api/settings', methods=['POST'])
 @login_required

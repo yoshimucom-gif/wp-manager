@@ -317,3 +317,29 @@ def test_plugins_page_route_serves():
     client.post('/login', json={'password': 'testpass'})
     r = client.get('/plugins')
     assert r.status_code == 200
+
+
+def test_reveal_secret_endpoint():
+    client = app.app.test_client()
+    # 未認証はブロック
+    assert client.get('/api/settings/reveal-secret/claude_api_key').status_code in (401, 302)
+    client.post('/login', json={'password': 'testpass'})
+    # 既知フィールドは 200 + value キー
+    r = client.get('/api/settings/reveal-secret/claude_api_key')
+    assert r.status_code == 200
+    assert 'value' in r.get_json()
+    # ホワイトリスト外フィールドは 404
+    assert client.get('/api/settings/reveal-secret/bogus_field').status_code == 404
+
+
+def test_settings_get_masks_secrets():
+    client = app.app.test_client()
+    client.post('/login', json={'password': 'testpass'})
+    # 既知のキーを保存 → GET はマスクされて返ること
+    app.save_settings({**app.load_settings(), 'claude_api_key': 'sk-ant-SECRETVALUE1234567890'})
+    body = client.get('/api/settings').get_json()
+    assert '•' in body['claude_api_key']                # マスクされている
+    assert 'SECRETVALUE' not in body['claude_api_key']   # 後半は露出しない
+    # reveal は実値を返す
+    revealed = client.get('/api/settings/reveal-secret/claude_api_key').get_json()
+    assert revealed['value'] == 'sk-ant-SECRETVALUE1234567890'
