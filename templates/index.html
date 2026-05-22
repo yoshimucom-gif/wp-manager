@@ -1529,7 +1529,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             </div>
             <div class="form-group">
               <label class="form-label">記事生成モデル</label>
-              <select id="s-article-model" class="form-control">
+              <select id="s-article-model" class="form-control" onchange="syncUsageEstimateConfigModel()">
                 <option value="claude-sonnet-4-6">Sonnet 4.6（推奨・コスパ良）</option>
                 <option value="claude-opus-4-7">Opus 4.7（最高品質・コスト高）</option>
               </select>
@@ -1957,6 +1957,10 @@ let qualityList = [];
 let siteList = [];
 let seoNewsList = [];
 let titleIdeaList = [];
+const MODEL_PRICING = {
+  'claude-sonnet-4-6': { inputUsdPerMTok: 3.0,  outputUsdPerMTok: 15.0 },
+  'claude-opus-4-7':   { inputUsdPerMTok: 15.0, outputUsdPerMTok: 75.0 },
+};
 const usageEstimateConfig = {
   model: 'claude-sonnet-4-6',
   inputUsdPerMTok: 3,
@@ -1965,6 +1969,15 @@ const usageEstimateConfig = {
   fallbackInputTokensPerArticle: 3500,
   outputCharsPerToken: 2,
 };
+/** 設定ページで選択されたモデルに合わせて usageEstimateConfig を更新する */
+function syncUsageEstimateConfigModel() {
+  const sel = document.getElementById('s-article-model');
+  const modelId = sel ? sel.value : 'claude-sonnet-4-6';
+  const p = MODEL_PRICING[modelId] || MODEL_PRICING['claude-sonnet-4-6'];
+  usageEstimateConfig.model = modelId;
+  usageEstimateConfig.inputUsdPerMTok  = p.inputUsdPerMTok;
+  usageEstimateConfig.outputUsdPerMTok = p.outputUsdPerMTok;
+}
 let batchPollTimer = null;
 let currentBatchTypeTab = ''; // 一括処理ページの記事種類タブ ('' | 'ranking' | 'brand' | 'column')
 // 一括処理の選択状態（記事ID）。DOMではなくここで一元管理するため、
@@ -2611,7 +2624,7 @@ function renderMonthlyUsageEstimate() {
         </div>
       </div>
       <div class="usage-note">
-        ${usageEstimateConfig.model} を ${usageEstimateConfig.inputUsdPerMTok} USD/100万入力token・${usageEstimateConfig.outputUsdPerMTok} USD/100万出力token、1 USD=${usageEstimateConfig.usdJpy}円で換算した目安です。<br>
+        ${usageEstimateConfig.model}（入力$${usageEstimateConfig.inputUsdPerMTok}/100万token・出力$${usageEstimateConfig.outputUsdPerMTok}/100万token）、1 USD=${usageEstimateConfig.usdJpy}円で換算した目安です。<br>
         対象記事 ${articleCount.toLocaleString()}件。再生成も1回ごとに履歴へ積み、今月分の生成コストとして加算します。
       </div>
     </div>`;
@@ -5181,6 +5194,7 @@ async function loadSettings() {
   s = await restoreSettingsFromBrowserBackup(s);
   document.getElementById('s-claude-key').value = s.claude_api_key || '';
   document.getElementById('s-article-model').value = s.claude_article_model || 'claude-sonnet-4-6';
+  syncUsageEstimateConfigModel();   // 選択モデルに合わせてコスト単価を同期
   document.getElementById('s-article-css').value = s.article_css || '';
   document.getElementById('s-amazon-access-key').value = s.amazon_access_key || '';
   document.getElementById('s-amazon-secret-key').value = s.amazon_secret_key || '';
