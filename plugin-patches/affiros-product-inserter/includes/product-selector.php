@@ -1,0 +1,403 @@
+<?php
+/**
+ * 商品選定ロジック（API連携の中核）
+ */
+
+if (!defined('ABSPATH')) exit;
+
+class AI_PI_Product_Selector {
+
+    /**
+     * キーワードでAmazon・楽天両方を検索して候補を収集
+     *
+     * エラーは静かに握りつぶさず、PHPエラーログとプラグイン内ログにも残す。
+     * デバッグのために最後に発生したAPIエラーをトランジェントに保持する。
+     */
+    public static function fetch_candidates($keyword, $per_source = 10) {
+        $settings = get_option('ai_pi_settings', []);
+        $preferred = $settings['preferred_site'] ?? 'both';
+
+        $candidates = [];
+        $api_errors = [];
+
+        if (in_array($preferred, ['amazon', 'both'])) {
+            $amazon = new AI_PI_Amazon_API();
+            if ($amazon->is_configured()) {
+                $amazon_results = $amazon->search($keyword, $per_source);
+                if (is_wp_error($amazon_results)) {
+                    $msg = '[Amazon] ' . $amazon_results->get_error_message() . ' (keyword=' . $keyword . ')';
+                    $api_errors[] = $msg;
+                    error_log('[AI_PI] ' . $msg);
+                } else {
+                    $candidates = array_merge($candidates, $amazon_results);
+                }
+            } else {
+                $msg = '[Amazon] APIキー未設定（Access Key / Secret Key / Partner Tag のいずれかが空）';
+                $api_errors[] = $msg;
+                error_log('[AI_PI] ' . $msg);
+            }
+        }
+
+        if (in_array($preferred, ['rakuten', 'both'])) {
+            $rakuten = new AI_PI_Rakuten_API();
+            if ($rakuten->is_configured()) {
+                $rakuten_results = $rakuten->search($keyword, $per_source);
+                if (is_wp_error($rakuten_results)) {
+                    $msg = '[楽天] ' . $rakuten_results->get_error_message() . ' (keyword=' . $keyword . ')';
+                    $api_errors[] = $msg;
+                    error_log('[AI_PI] ' . $msg);
+                } else {
+                    // 楽天のタイトルは販促ノイズが多いので、クリーン版を別フィールドに保持
+                    foreach ($rakuten_results as &$r) {
+                        $r['title_raw'] = $r['title'];
+                        $r['title'] = self::clean_rakuten_title($r['title']);
+                    }
+                    unset($r);
+                    $candidates = array_merge($candidates, $rakuten_results);
+                }
+            } elseif ($preferred === 'rakuten') {
+                $msg = '[楽天] APIキー未設定（アプリID が空）';
+                $api_errors[] = $msg;
+                error_log('[AI_PI] ' . $msg);
+            }
+        }
+
+        // デバッグ用: 最後のAPIエラーを5分保持
+        if (!empty($api_errors)) {
+            set_transient('ai_pi_last_api_errors', $api_errors, 5 * MINUTE_IN_SECONDS);
+        }
+
+        return $candidates;
+    }
+
+    /**
+     * 直近のAPIエラーを取得（デバッグ表示用）
+     */
+    public static function get_last_api_errors() {
+        $errors = get_transient('ai_pi_last_api_errors');
+        return is_array($errors) ? $errors : [];
+    }
+
+    /**
+     * 候補リストにペア情報を付与（ハイブリッドモード + D案: 個別再検索）
+     *
+     * 1. merge_duplicates で初期ペア化
+     * 2. ペア未成立の Amazon 商品を商品タイトルで楽天個別再検索（最大10件）
+     * 3. 上位3件のうち類似度0.5以上があれば rakuten_pair として紐付け
+     *
+     * 楽天 API は無料・実質無制限なので個別再検索のコストは時間のみ。
+     * Amazon → 楽天の片方向のみ（PA-APIレート保護）。
+     *
+     * @param array $candidates fetch_candidates の戻り値
+     * @return array merge_duplicates + enrich_with_rakuten_pair 適用後
+     */
+    public static function pair_candidates($candidates) {
+        if (empty($candidates)) return [];
+
+        $merged = self::merge_duplicates($candidates);
+
+        // D案: ペア未成立のAmazon商品を楽天で個別再検索してペア化を試みる
+        $merged = self::enrich_with_rakuten_pair($merged, 10);
+
+        // 統計ログ
+        $paired_count = 0;
+        $unpaired_count = 0;
+        foreach ($merged as $item) {
+            if (!empty($item['rakuten_pair']['url']) || !empty($item['amazon_pair']['asin'])) {
+                $paired_count++;
+            } else {
+                $unpaired_count++;
+            }
+        }
+        error_log("[AI_PI] pair_candidates: paired={$paired_count}, unpaired={$unpaired_count} (after enrichment)");
+
+        return $merged;
+    }
+
+    /**
+     * D案: ペア未成立の Amazon 商品ごとに、商品タイトルで楽天を個別再検索しペア化
+     *
+     * @param array $merged_candidates merge_duplicates の出力
+     * @param int $max_searches 楽天再検索の上限（API call 保護）
+     * @return array 再検索でペア追加された候補リスト
+     */
+    public static function enrich_with_rakuten_pair($merged_candidates, $max_searches = 10) {
+        if (empty($merged_candidates)) return $merged_candidates;
+
+        $rakuten = new AI_PI_Rakuten_API();
+        if (!$rakuten->is_configured()) {
+            return $merged_candidates;
+        }
+
+        $enriched_count = 0;
+        $searches_done = 0;
+        $count = count($merged_candidates);
+
+        for ($i = 0; $i < $count; $i++) {
+            if (!empty($merged_candidates[$i]['rakuten_pair']['url'])) continue;
+            if (($merged_candidates[$i]['source'] ?? '') !== 'amazon') continue;
+            if ($searches_done >= $max_searches) break;
+
+            $title = $merged_candidates[$i]['title'] ?? '';
+            if (empty($title)) continue;
+
+            $search_term = self::clean_title_for_search($title);
+            if (empty($search_term)) continue;
+
+            $searches_done++;
+            $results = $rakuten->search($search_term, 3);
+            if (is_wp_error($results) || empty($results)) continue;
+
+            foreach ($results as $r) {
+                $r_title_clean = self::clean_rakuten_title($r['title'] ?? '');
+                // クリーン済 Amazon タイトル(search_term) vs クリーン済 Rakuten タイトル
+                // 短い方の何割が一致してるか + 最低3トークン共通 で判定
+                if (self::title_match_for_enrichment($search_term, $r_title_clean)) {
+                    $merged_candidates[$i]['rakuten_pair'] = [
+                        'url' => $r['url'] ?? '',
+                        'price_display' => $r['price_display'] ?? '',
+                    ];
+                    // merge_duplicates と同様、楽天ペアのレビューを代理値として引き継ぐ
+                    if (empty($merged_candidates[$i]['rating']) && !empty($r['rating'])) {
+                        $merged_candidates[$i]['rating'] = $r['rating'];
+                        $merged_candidates[$i]['review_count'] = $r['review_count'] ?? 0;
+                        $merged_candidates[$i]['rating_source'] = 'rakuten';
+                    }
+                    $enriched_count++;
+                    break;
+                }
+            }
+        }
+
+        error_log("[AI_PI] enrich_with_rakuten_pair: searched={$searches_done}, paired={$enriched_count}");
+        return $merged_candidates;
+    }
+
+    /**
+     * ペア再検索専用のタイトル一致判定
+     *
+     * title_similarity は max(...) で割るため、長いAmazonタイトルvs短い楽天タイトルで
+     * 同一商品でも 0.5 を下回りやすい。enrichment 用には短い方基準で評価する。
+     *
+     * - 共通トークン数 >= 3
+     * - 共通トークン数 / 短い方のトークン数 >= 0.5
+     */
+    private static function title_match_for_enrichment($a, $b) {
+        $tokens_a = self::tokenize($a);
+        $tokens_b = self::tokenize($b);
+        if (empty($tokens_a) || empty($tokens_b)) return false;
+
+        $common = array_intersect($tokens_a, $tokens_b);
+        $common_count = count($common);
+        if ($common_count < 3) return false;
+
+        $shorter = min(count($tokens_a), count($tokens_b));
+        if ($shorter < 1) return false;
+        $ratio = $common_count / $shorter;
+
+        return ($ratio >= 0.5);
+    }
+
+    /**
+     * 商品タイトルを楽天検索向けにクリーニング
+     * - [ブランド名] (補足) などのカッコ内を削除
+     * - 連続空白を1つに
+     * - 40文字に丸め（楽天検索は長すぎるとヒット率低下）
+     */
+    private static function clean_title_for_search($title) {
+        $cleaned = preg_replace('/[\[\(（【「『][^\]\)）】」』]{1,40}[\]\)）】」』]/u', ' ', $title);
+        $cleaned = preg_replace('/\s+/u', ' ', $cleaned);
+        $cleaned = trim($cleaned);
+        if (mb_strlen($cleaned) > 40) {
+            $cleaned = mb_substr($cleaned, 0, 40);
+        }
+        return $cleaned;
+    }
+
+    /**
+     * IDから候補商品を検索
+     */
+    public static function find_by_id($candidates, $id) {
+        foreach ($candidates as $c) {
+            if ($c['id'] === $id) return $c;
+        }
+        return null;
+    }
+
+    /**
+     * 同一商品の重複統合（Amazonベース固定方針 / NON-NEGOTIABLE）
+     *
+     * ⚠️ この関数の挙動を変更する前に docs/decisions/0001-amazon-base-product-cards.md
+     *    を必ず読むこと。「楽天単独商品をフォールバックで出す」改修は v1.6.0 で実施した
+     *    結果ユーザーから差し戻された案件で、繰り返し再発させない。
+     *
+     * 方針:
+     * - カードの source は必ず 'amazon'
+     * - 楽天で同じ商品が見つかればペア化（楽天ボタン=直リン）
+     * - 楽天で見つからなければカード自体は出す（楽天ボタンは検索URLフォールバック）
+     * - 楽天単独商品（Amazon未マッチ）はカードに出さない
+     *
+     * 「楽天しか取れなかった時もとりあえず表示」みたいなフォールバックは禁止。
+     * Amazonが取れていない＝CV機会が薄い前提なので、Rakuten-only カードを並べるより
+     * Amazon商品だけに絞る方が運用上望ましい、というのが過去議論の結論。
+     */
+    public static function merge_duplicates($candidates) {
+        $merged = [];
+        $used_amazon = [];
+
+        // 楽天商品ごとに、類似Amazon商品を探してペア化
+        // ペアが見つかった Amazon 商品にだけ rakuten_pair を付与
+        foreach ($candidates as $c) {
+            if ($c['source'] !== 'rakuten') continue;
+            foreach ($candidates as $a) {
+                if ($a['source'] !== 'amazon') continue;
+                if (in_array($a['id'], $used_amazon)) continue;
+                if (self::title_similarity($c['title'], $a['title']) > 0.6) {
+                    $merged_item = $a;
+                    $merged_item['rakuten_pair'] = [
+                        'url' => $c['url'],
+                        'price_display' => $c['price_display'] ?? '',
+                    ];
+                    // Amazon PA-API は CustomerReviews を返さない（rating/review_count は常に0）。
+                    // ペア成立した楽天商品＝同一商品なので、そのレビューを代理値として引き継ぐ。
+                    // → AI選定プロンプトとカード表示の両方でレビュー情報が使えるようになる。
+                    if (empty($merged_item['rating']) && !empty($c['rating'])) {
+                        $merged_item['rating'] = $c['rating'];
+                        $merged_item['review_count'] = $c['review_count'] ?? 0;
+                        $merged_item['rating_source'] = 'rakuten';
+                    }
+                    $merged[] = $merged_item;
+                    $used_amazon[] = $a['id'];
+                    break;
+                }
+            }
+        }
+
+        // ペア未成立の Amazon 商品も追加（楽天ボタンは検索URLフォールバックされる）
+        foreach ($candidates as $c) {
+            if ($c['source'] !== 'amazon') continue;
+            if (in_array($c['id'], $used_amazon)) continue;
+            $merged[] = $c;
+        }
+
+        // 楽天単独はここでドロップ（Amazonに見つからない商品は基本表示しない）
+        $rakuten_total = 0;
+        $amazon_total = 0;
+        foreach ($candidates as $c) {
+            if ($c['source'] === 'rakuten') $rakuten_total++;
+            elseif ($c['source'] === 'amazon') $amazon_total++;
+        }
+        $paired = count($used_amazon);
+        $rakuten_dropped = $rakuten_total - $paired;
+        error_log("[AI_PI] merge_duplicates (amazon-base): merged=" . count($merged) . " amazon_in={$amazon_total} rakuten_in={$rakuten_total} paired={$paired} rakuten_dropped={$rakuten_dropped}");
+
+        return $merged;
+    }
+
+    /**
+     * ★ v1.2.0新規: タイトル類似度判定（外部から呼べるpublic）
+     * 共通単語の割合（Jaccard係数の簡易版）
+     */
+    public static function title_similarity($a, $b) {
+        $tokens_a = self::tokenize($a);
+        $tokens_b = self::tokenize($b);
+
+        if (empty($tokens_a) || empty($tokens_b)) return 0;
+
+        $common = array_intersect($tokens_a, $tokens_b);
+        $total = max(count($tokens_a), count($tokens_b));
+        if ($total === 0) return 0;
+
+        return count($common) / $total;
+    }
+
+    /**
+     * タイトルをトークン化（簡易）
+     * - 半角/全角スペース・記号で分割
+     * - 1文字トークンは除外
+     */
+    private static function tokenize($text) {
+        $text = mb_strtolower($text);
+        $tokens = preg_split('/[\s　、,\.\(\)（）\[\]【】\/\-_:：;；・]+/u', $text);
+        return array_filter($tokens, function($t) {
+            return mb_strlen($t) >= 2;
+        });
+    }
+
+    /**
+     * ★ v1.2.0新規: 商品リストから類似商品を除去
+     * @param array $products 商品配列
+     * @param float $threshold 類似度閾値（0.0-1.0）。これ以上なら重複とみなす
+     * @return array 重複除去後の商品配列
+     */
+    public static function dedupe_by_similarity($products, $threshold = 0.5) {
+        $kept = [];
+        foreach ($products as $p) {
+            $is_dup = false;
+            foreach ($kept as $k) {
+                if (self::title_similarity($p['title'], $k['title']) >= $threshold) {
+                    $is_dup = true;
+                    break;
+                }
+            }
+            if (!$is_dup) {
+                $kept[] = $p;
+            }
+        }
+        return $kept;
+    }
+
+    /**
+     * ★ v1.2.0新規: 楽天タイトルから販促ノイズを除去
+     *
+     * 例:
+     *   「複数買い最大15％OFF 20:00〜16日迄 ☆シルク100％で新発売☆ 【ピコタン専用バッグインバッグ】 …」
+     *   → 「ピコタン専用バッグインバッグ …」
+     */
+    public static function clean_rakuten_title($title) {
+        if (empty($title)) return $title;
+
+        $text = $title;
+        $max_iter = 10;
+
+        while ($max_iter-- > 0) {
+            $prev = $text;
+
+            // 先頭の空白
+            $text = preg_replace('/^[\s　]+/u', '', $text);
+
+            // 先頭の【販促文言】を剥がす
+            //   例: 【楽天1位】【新発売】【SALE】【ポイント10倍】【期間限定】
+            $promo_in_brackets = '楽天[\d０-９]*位|ランキング[\d０-９]*位|楽天ランキング[\d０-９]*位?|新発売|新商品|新登場|再入荷|SALE|セール|タイムセール|スーパーSALE|スーパーセール|お買い物マラソン|送料無料|あす楽|即納|翌日配送|ポイント[\d０-９]+倍|[\d０-９]+ポイント|本日限定|期間限定|限定特価|特価|大特価|お買得|お得|目玉|レビュー特典|プレゼント付|楽天市場|限定';
+            $text = preg_replace('/^【\s*(' . $promo_in_brackets . ')(\s*[\/\|・]\s*(' . $promo_in_brackets . '))*\s*】\s*/u', '', $text);
+
+            // 「複数買い最大XX％OFF」「まとめ買いXX％OFF」「最大XX％OFF」
+            $text = preg_replace('/^(複数買い|まとめ買い|最大|今だけ)?[最大]*[\d０-９]+[％%]\s*(OFF|オフ|お値引き|引き)\s*/u', '', $text);
+
+            // 期間表記
+            $text = preg_replace('/^[\d０-９]{1,2}\/[\d０-９]{1,2}[\s　]*[\d０-９]{1,2}:[\d０-９]{2}[〜~から][\s　]*/u', '', $text);
+            $text = preg_replace('/^[\d０-９]{1,2}:[\d０-９]{2}[〜~から][\d０-９]{1,2}日(\s*[\d０-９]{1,2}:[\d０-９]{2})?(迄|まで)?\s*/u', '', $text);
+            $text = preg_replace('/^[\d０-９]{1,2}日[\s　]*[\d０-９]{1,2}:[\d０-９]{2}\s*(迄|まで)?\s*/u', '', $text);
+            $text = preg_replace('/^(本日|今日|月末)\s*限り\s*/u', '', $text);
+
+            // 「☆〜☆」「★〜★」「♪〜♪」で囲まれた販促文（50文字以内）
+            $text = preg_replace('/^[★☆][^★☆]{1,50}[★☆]\s*/u', '', $text);
+            $text = preg_replace('/^[♪♫][^♪♫]{1,50}[♪♫]\s*/u', '', $text);
+
+            // セール系のキーワード単体
+            $text = preg_replace('/^(タイムセール|スーパーセール|スーパーSALE|楽天スーパーセール|お買い物マラソン|セール|期間限定|限定特価|特価|大特価|本日限定|新発売|新登場|新商品|再入荷|楽天1位|楽天ランキング1位|送料無料|即納|あす楽|翌日配送|ポイント[\d０-９]+倍|[\d０-９]+ポイント|レビュー特典|プレゼント付|あす楽対応)\s*/u', '', $text);
+
+            // 残った装飾記号
+            $text = preg_replace('/^[★☆◆◇●○▼▽■□▲△※♪♫♥♡]+\s*/u', '', $text);
+
+            if ($prev === $text) break;
+        }
+
+        $text = trim($text);
+
+        // クリーニング後に空になった場合は元のタイトルを返す
+        if (empty($text)) return $title;
+
+        return $text;
+    }
+}

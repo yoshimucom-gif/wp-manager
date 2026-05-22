@@ -31,7 +31,7 @@ class AI_Deco_Decorator {
 
         $settings = get_option('ai_deco_settings', []);
         $level = $options['level'] ?? $settings['decoration_level'] ?? 'standard';
-        $enable_faq = $options['enable_faq'] ?? ($settings['enable_faq'] === 'yes');
+        $enable_faq = $options['enable_faq'] ?? (($settings['enable_faq'] ?? 'no') === 'yes');
         $dry_run = $options['dry_run'] ?? false;
 
         // モデル指定：optionsが優先、なければ設定のデフォルト
@@ -60,11 +60,12 @@ class AI_Deco_Decorator {
             }
         }
 
-        // エラー時は再試行（最大2回）
+        // エラー時は再試行（最大2回）。検証エラーをモデルにフィードバックして修正させる
         $retry_count = 0;
         while ($validation['status'] === 'error' && $retry_count < 2) {
             $retry_count++;
-            $result = $api->decorate($source_for_decoration, $level, $enable_faq);
+            $feedback = implode("\n", array_map(fn($e) => '・' . $e, $validation['errors']));
+            $result = $api->decorate($source_for_decoration, $level, $enable_faq, $feedback);
             if (is_wp_error($result)) break;
             $decorated = $result['content'];
             $validation = AI_Deco_Validator::validate($source_for_decoration, $decorated);

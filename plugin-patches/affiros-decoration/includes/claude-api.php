@@ -24,13 +24,23 @@ class AI_Deco_Claude_API {
         return $this->model;
     }
 
-    public function decorate($content, $level = 'standard', $enable_faq = false) {
+    /**
+     * @param string $retry_feedback 再試行時に直前の検証エラーを渡すと、修正指示としてプロンプトに加える
+     */
+    public function decorate($content, $level = 'standard', $enable_faq = false, $retry_feedback = '') {
         if (empty($this->api_key)) {
             return new WP_Error('no_api_key', 'Claude APIキーが設定されていません');
         }
 
         $system_prompt = $this->build_system_prompt($level, $enable_faq);
-        $user_message = "以下の記事をDBPテーマのGutenbergブロックで装飾してください。装飾済みの本文のみを返してください。前置きや説明、コードブロックの囲い（```）は不要です。\n\n---\n\n" . $content;
+
+        $instruction = "以下の記事をDBPテーマのGutenbergブロックで装飾してください。装飾済みの本文のみを返してください。前置きや説明、コードブロックの囲い（```）は不要です。";
+        if (!empty($retry_feedback)) {
+            $instruction .= "\n\n⚠️【再生成】前回の装飾結果は以下の理由で不正と判定されました。今回は必ず修正してください：\n"
+                . $retry_feedback
+                . "\nGutenbergブロックの開始 <!-- wp:xxx --> と終了 <!-- /wp:xxx --> を必ず1対1で対応させ、<div> の開閉とブロック属性JSONの構文を厳密に守ってください。";
+        }
+        $user_message = $instruction . "\n\n---\n\n" . $content;
 
         $body = [
             'model' => $this->model,

@@ -79,6 +79,7 @@ class Affiros_Rewrite_Claude_API {
             'text' => $text,
             'usage' => $data['usage'] ?? [],
             'model' => $data['model'] ?? $this->model,
+            'stop_reason' => $data['stop_reason'] ?? '',
         ];
     }
 }

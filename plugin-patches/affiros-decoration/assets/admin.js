@@ -58,10 +58,10 @@
                         }
 
                         if (v.errors && v.errors.length) {
-                            html += '<div style="color:#e74c3c;margin-top:6px;">エラー:<br>' + v.errors.join('<br>') + '</div>';
+                            html += '<div style="color:#e74c3c;margin-top:6px;">エラー:<br>' + v.errors.map(escapeHtml).join('<br>') + '</div>';
                         }
                         if (v.warnings && v.warnings.length) {
-                            html += '<div style="color:#f39c12;margin-top:6px;">警告:<br>' + v.warnings.join('<br>') + '</div>';
+                            html += '<div style="color:#f39c12;margin-top:6px;">警告:<br>' + v.warnings.map(escapeHtml).join('<br>') + '</div>';
                         }
                         if (v.metrics) {
                             html += '<div style="margin-top:6px;font-size:11px;color:#666;">';

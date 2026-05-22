@@ -1,0 +1,204 @@
+/* AIプロダクトインサーター 管理画面CSS */
+
+.aipi-wrap { max-width: 1200px; }
+
+/* メタボックス */
+.aipi-metabox .aipi-status {
+    padding: 10px 12px;
+    border-radius: 4px;
+    margin-bottom: 12px;
+    font-size: 13px;
+}
+.aipi-status--inserted {
+    background: #e8f5e9;
+    border-left: 3px solid #27ae60;
+}
+.aipi-status--none {
+    background: #f5f5f5;
+    color: #888;
+}
+.aipi-meta {
+    font-size: 11px;
+    color: #666;
+    margin-top: 2px;
+}
+.aipi-expired-tag {
+    display: inline-block;
+    background: #fef5e7;
+    color: #d68910;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-left: 6px;
+}
+.aipi-marker-info {
+    background: #f8f9fa;
+    padding: 8px 10px;
+    border-radius: 3px;
+    font-size: 12px;
+}
+.aipi-marker-info code {
+    background: #fff;
+    padding: 1px 4px;
+    border: 1px solid #ddd;
+    border-radius: 2px;
+    font-size: 11px;
+}
+.aipi-spinner {
+    margin-top: 12px;
+    padding: 10px;
+    background: #f0f9ff;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #2563a6;
+}
+.aipi-result {
+    margin-top: 12px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+.aipi-result h4 {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+}
+.aipi-result-body {
+    font-size: 11px;
+    max-height: 300px;
+    overflow-y: auto;
+    background: #fff;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+}
+
+.aipi-product-list {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 12px;
+}
+.aipi-product-list li {
+    margin-bottom: 4px;
+}
+
+.aipi-source-tag {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 2px;
+    font-size: 9px;
+    font-weight: 700;
+    margin-left: 4px;
+    color: #fff;
+}
+.aipi-source-tag--amazon { background: #FF9900; }
+.aipi-source-tag--rakuten { background: #BF0000; }
+
+/* 一括処理 */
+.aipi-checkbox-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    padding: 10px;
+    background: #fafafa;
+    border-radius: 4px;
+}
+.aipi-checkbox-list label {
+    display: inline-block;
+    margin: 4px 10px 4px 0;
+    font-size: 13px;
+}
+.aipi-count { color: #888; font-size: 11px; }
+
+.aipi-targets-result {
+    margin-top: 20px;
+    padding: 16px;
+    background: #f0f9ff;
+    border-left: 4px solid #3498db;
+    border-radius: 4px;
+}
+.aipi-targets-summary { font-size: 14px; margin-bottom: 10px; }
+.aipi-targets-summary strong { color: #2563a6; font-size: 18px; }
+.aipi-targets-list {
+    max-height: 300px;
+    overflow-y: auto;
+    background: #fff;
+    padding: 10px;
+    border-radius: 3px;
+    font-size: 12px;
+}
+.aipi-targets-list ul { margin: 0; padding-left: 18px; }
+
+/* プログレスバー */
+.aipi-progress {
+    margin-top: 20px;
+    padding: 16px;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+.aipi-progress-bar {
+    height: 28px;
+    background: #e0e0e0;
+    border-radius: 14px;
+    overflow: hidden;
+    margin-bottom: 10px;
+}
+.aipi-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #27ae60, #2ecc71);
+    color: #fff;
+    text-align: center;
+    line-height: 28px;
+    font-size: 12px;
+    font-weight: 700;
+    transition: width 0.3s;
+}
+.aipi-progress-log {
+    max-height: 400px;
+    overflow-y: auto;
+    background: #fff;
+    padding: 10px;
+    border-radius: 3px;
+    font-family: Consolas, monospace;
+    font-size: 11px;
+    border: 1px solid #ddd;
+}
+.aipi-progress-log .log-item {
+    padding: 4px 0;
+    border-bottom: 1px dashed #eee;
+}
+.aipi-progress-log .log-success { color: #27ae60; }
+.aipi-progress-log .log-failure { color: #e74c3c; }
+.aipi-progress-log .log-warning { color: #f39c12; }
+
+/* ログ */
+.aipi-log-summary {
+    display: flex;
+    gap: 12px;
+    margin: 20px 0;
+}
+.aipi-stat {
+    flex: 1;
+    background: #fff;
+    padding: 16px;
+    border-radius: 4px;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.aipi-stat-num {
+    font-size: 24px;
+    font-weight: 700;
+    color: #2c3e50;
+    margin-bottom: 4px;
+}
+.aipi-stat-num--success { color: #27ae60; }
+.aipi-stat-num--failure { color: #e74c3c; }
+.aipi-stat-label {
+    font-size: 11px;
+    color: #888;
+    letter-spacing: 0.05em;
+}
+
+@media (max-width: 768px) {
+    .aipi-log-summary { flex-wrap: wrap; }
+    .aipi-stat { min-width: 45%; }
+}

@@ -8,6 +8,13 @@ if (!defined('ABSPATH')) exit;
 function ai_deco_logs_render() {
     if (!current_user_can('manage_options')) return;
 
+    // ログ削除処理（nonce検証付き）
+    $cleared = false;
+    if (isset($_POST['ai_deco_clear_logs']) && check_admin_referer('ai_deco_clear_logs')) {
+        delete_option('ai_deco_logs');
+        $cleared = true;
+    }
+
     $logs = get_option('ai_deco_logs', []);
     $logs = array_reverse($logs); // 新しい順
 
@@ -31,6 +38,20 @@ function ai_deco_logs_render() {
     ?>
     <div class="wrap ai-deco-wrap">
         <h1>処理ログ</h1>
+
+        <?php if ($cleared): ?>
+            <div class="notice notice-success is-dismissible"><p>処理ログを削除しました。</p></div>
+        <?php endif; ?>
+
+        <?php if (!empty($logs)): ?>
+            <form method="post" style="margin:12px 0;">
+                <?php wp_nonce_field('ai_deco_clear_logs'); ?>
+                <button type="submit" name="ai_deco_clear_logs" value="1" class="button button-secondary"
+                        onclick="return confirm('処理ログをすべて削除します。よろしいですか？\n（投稿の装飾状態・バックアップには影響しません）');">
+                    🗑 ログをすべて削除
+                </button>
+            </form>
+        <?php endif; ?>
 
         <div class="ai-deco-log-summary">
             <div class="ai-deco-stat">

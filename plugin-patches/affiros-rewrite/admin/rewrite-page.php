@@ -11,7 +11,6 @@ function affiros_rewrite_render_rewrite_page() {
     $settings = affiros_rewrite_get_settings();
     $has_api_key = !empty($settings['claude_api_key']);
     $categories = Affiros_Rewrite_Post_Fetcher::get_categories();
-    $presets = Affiros_Rewrite_Quality_Presets::all();
     ?>
     <div class="wrap affiros-wrap">
         <h1>Affiros リライト</h1>
@@ -25,6 +24,15 @@ function affiros_rewrite_render_rewrite_page() {
                     Claude APIキーが未設定です。
                     <a href="<?php echo esc_url(admin_url('admin.php?page=affiros-rewrite-settings')); ?>">設定画面</a>
                     で入力してください。
+                </p>
+            </div>
+        <?php endif; ?>
+
+        <?php if (defined('WP_POST_REVISIONS') && WP_POST_REVISIONS === false): ?>
+            <div class="notice notice-warning">
+                <p>
+                    このサイトはリビジョンが無効（<code>WP_POST_REVISIONS</code> が <code>false</code>）です。
+                    リライトで上書きした記事は<strong>元に戻せません</strong>。実行前に必ずバックアップしてください。
                 </p>
             </div>
         <?php endif; ?>
@@ -55,17 +63,6 @@ function affiros_rewrite_render_rewrite_page() {
             <strong style="display:block;margin-bottom:8px;">リライト オプション</strong>
             <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
                 <label>
-                    プリセット:
-                    <select id="affiros-preset">
-                        <option value="">— なし（設定画面のデフォルト）</option>
-                        <?php foreach ($presets as $p): ?>
-                            <option value="<?php echo esc_attr($p['id']); ?>" data-article-type="<?php echo esc_attr($p['article_type'] ?? ''); ?>">
-                                <?php echo esc_html($p['name'] ?? ''); ?><?php if (!empty($p['article_type'])): ?> [<?php echo esc_html($p['article_type']); ?>]<?php endif; ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </label>
-                <label>
                     記事タイプ:
                     <select id="affiros-article-type">
                         <option value="">— 指定なし</option>
@@ -78,11 +75,6 @@ function affiros_rewrite_render_rewrite_page() {
                     <input type="checkbox" id="affiros-insert-markers">
                     商品カードマーカーを挿入する（記事タイプ別の規則）
                 </label>
-                <?php if (!$presets): ?>
-                    <span class="description">
-                        <a href="<?php echo esc_url(admin_url('admin.php?page=affiros-rewrite-presets')); ?>">プリセットを作成・インポート →</a>
-                    </span>
-                <?php endif; ?>
             </div>
         </div>
 
@@ -92,7 +84,14 @@ function affiros_rewrite_render_rewrite_page() {
             <button type="button" class="button button-primary" id="affiros-bulk-rewrite-btn" style="margin-left:12px;" <?php echo $has_api_key ? '' : 'disabled'; ?>>
                 ✍ 選択した記事を一括リライト
             </button>
-            <span class="description" style="margin-left:10px;">上のオプションが適用されます。確認画面を経由せず順次実行</span>
+            <?php if ($has_api_key): ?>
+                <span class="description" style="margin-left:10px;">上のオプションが適用されます。確認画面を経由せず順次実行</span>
+            <?php else: ?>
+                <span class="description" style="margin-left:10px;color:#b32d2e;">
+                    ⚠ Claude APIキーが未設定のため実行できません。
+                    <a href="<?php echo esc_url(admin_url('admin.php?page=affiros-rewrite-settings')); ?>">設定画面で入力 →</a>
+                </span>
+            <?php endif; ?>
         </div>
 
         <div id="affiros-result" style="background:#fff;border:1px solid #ccd0d4;padding:0;min-height:200px;">
@@ -237,19 +236,10 @@ function affiros_rewrite_render_rewrite_page() {
         // --- 共通オプション取得 ---
         function rewriteOpts() {
             return {
-                preset_id: $('#affiros-preset').val() || '',
                 article_type: $('#affiros-article-type').val() || '',
                 insert_markers: $('#affiros-insert-markers').is(':checked') ? '1' : '0',
             };
         }
-
-        // プリセット選択 → 記事タイプを自動セット（未指定なら）
-        $(document).on('change', '#affiros-preset', function() {
-            const presetType = $(this).find(':selected').data('article-type') || '';
-            if (presetType && !$('#affiros-article-type').val()) {
-                $('#affiros-article-type').val(presetType);
-            }
-        });
 
         // --- 単記事リライト ---
         function runSingleRewrite(postId) {
@@ -284,7 +274,6 @@ function affiros_rewrite_render_rewrite_page() {
             const usage = data.usage || {};
             const tokens = (usage.input_tokens || 0) + '/' + (usage.output_tokens || 0) + ' tokens (in/out)';
             const tags = [];
-            if (data.preset_used) tags.push('プリセット: ' + data.preset_used);
             if (data.article_type) tags.push('タイプ: ' + data.article_type);
             if (data.markers_inserted) tags.push('マーカー挿入: ✓');
             const tagsLine = tags.length ? ' / ' + tags.join(' / ') : '';

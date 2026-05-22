@@ -96,5 +96,9 @@ ai-decoration/
 - プロンプトを `prompts/` ディレクトリ内で調整
 - モデルを Opus に変更（高精度・高コスト）
 
+## 変更履歴
+
+改修履歴は [CHANGELOG.md](CHANGELOG.md) を参照してください。
+
 ## ライセンス
 GPL v2 or later

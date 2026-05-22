@@ -17,8 +17,18 @@ add_action('admin_post_affiros_rewrite_save_settings', function () {
     $input = $_POST['affiros_rewrite'] ?? [];
     $current = affiros_rewrite_get_settings();
 
+    // パスワード欄は空のときも '' を送信するため ?? では既存キーを拾えない。
+    // 空欄で保存されたら既存キーを維持する。
+    $submitted_key = trim((string)($input['claude_api_key'] ?? ''));
+    if (defined('AFFIROS_REWRITE_API_KEY') && AFFIROS_REWRITE_API_KEY) {
+        // wp-config.php 定数で管理しているときは DB にキーを保存しない
+        $new_api_key = '';
+    } else {
+        $new_api_key = $submitted_key !== '' ? $submitted_key : $current['claude_api_key'];
+    }
+
     $new = [
-        'claude_api_key' => trim((string)($input['claude_api_key'] ?? $current['claude_api_key'])),
+        'claude_api_key' => $new_api_key,
         'claude_model' => sanitize_text_field($input['claude_model'] ?? $current['claude_model']),
         'rewrite_mode' => sanitize_text_field($input['rewrite_mode'] ?? 'seo'),
         'emphasis_level' => sanitize_text_field($input['emphasis_level'] ?? 'standard'),
@@ -50,6 +60,7 @@ add_action('admin_post_affiros_rewrite_save_settings', function () {
 function affiros_rewrite_render_settings_page() {
     if (!current_user_can('manage_options')) return;
     $settings = affiros_rewrite_get_settings();
+    $key_from_constant = defined('AFFIROS_REWRITE_API_KEY') && AFFIROS_REWRITE_API_KEY;
     $masked_key = '';
     if ($settings['claude_api_key']) {
         $key = $settings['claude_api_key'];
@@ -72,18 +83,35 @@ function affiros_rewrite_render_settings_page() {
                 <tr>
                     <th><label for="claude_api_key">Claude APIキー</label></th>
                     <td>
-                        <input
-                            type="password"
-                            id="claude_api_key"
-                            name="affiros_rewrite[claude_api_key]"
-                            class="regular-text"
-                            placeholder="<?php echo esc_attr($masked_key ?: 'sk-ant-...'); ?>"
-                            autocomplete="off"
-                        >
-                        <p class="description">
-                            空欄のまま保存すると既存のキーが維持されます。<br>
-                            <a href="https://console.anthropic.com/" target="_blank" rel="noopener">Anthropic Console</a> で発行してください。
-                        </p>
+                        <?php if ($key_from_constant): ?>
+                            <p style="margin:0 0 6px;">
+                                <strong style="color:#0a7a2f;">✓ wp-config.php で設定済み</strong>
+                                <code><?php echo esc_html($masked_key); ?></code>
+                            </p>
+                            <p class="description">
+                                <code>wp-config.php</code> の <code>AFFIROS_REWRITE_API_KEY</code> 定数が使われています。<br>
+                                この方式ならプラグインの更新・再インストール・削除でもキーは消えません。<br>
+                                変更する場合は <code>wp-config.php</code> を直接編集してください（この画面からは変更できません）。
+                            </p>
+                        <?php else: ?>
+                            <input
+                                type="password"
+                                id="claude_api_key"
+                                name="affiros_rewrite[claude_api_key]"
+                                class="regular-text"
+                                placeholder="<?php echo esc_attr($masked_key ?: 'sk-ant-...'); ?>"
+                                autocomplete="off"
+                            >
+                            <p class="description">
+                                空欄のまま保存すると既存のキーが維持されます。<br>
+                                <a href="https://console.anthropic.com/" target="_blank" rel="noopener">Anthropic Console</a> で発行してください。
+                            </p>
+                            <p class="description" style="margin-top:8px;padding:8px 10px;background:#f0f6fc;border-left:3px solid #2271b1;">
+                                💡 <strong>キーを絶対に消したくない場合</strong>は、<code>wp-config.php</code> に次の行を追加してください。
+                                プラグインを更新・再インストールしてもキーが残り、毎回入力し直す必要がなくなります。<br>
+                                <code>define('AFFIROS_REWRITE_API_KEY', 'sk-ant-xxxxx');</code>
+                            </p>
+                        <?php endif; ?>
                     </td>
                 </tr>
                 <tr>
@@ -92,7 +120,7 @@ function affiros_rewrite_render_settings_page() {
                         <select id="claude_model" name="affiros_rewrite[claude_model]">
                             <option value="claude-sonnet-4-6" <?php selected($settings['claude_model'], 'claude-sonnet-4-6'); ?>>Claude Sonnet 4.6（推奨・コスパ良）</option>
                             <option value="claude-opus-4-7" <?php selected($settings['claude_model'], 'claude-opus-4-7'); ?>>Claude Opus 4.7（最高品質・高コスト）</option>
-                            <option value="claude-haiku-4-5" <?php selected($settings['claude_model'], 'claude-haiku-4-5'); ?>>Claude Haiku 4.5（低コスト・速度優先）</option>
+                            <option value="claude-haiku-4-5-20251001" <?php selected($settings['claude_model'], 'claude-haiku-4-5-20251001'); ?>>Claude Haiku 4.5（低コスト・速度優先）</option>
                         </select>
                         <p class="description">wp_manager 本体の記事生成モデルと揃えています。</p>
                     </td>
@@ -100,7 +128,7 @@ function affiros_rewrite_render_settings_page() {
             </table>
 
             <h2>// リライト デフォルト設定</h2>
-            <p class="description">リライト実行画面で個別に上書きできます。ここはデフォルト値の指定。</p>
+            <p class="description">下記はリライト実行時に常に適用される設定です。</p>
             <table class="form-table">
                 <tr>
                     <th>リライトモード</th>

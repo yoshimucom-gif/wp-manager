@@ -14,7 +14,11 @@ function ai_deco_register_settings() {
 
 function ai_deco_sanitize_settings($input) {
     $output = [];
-    $output['api_key'] = sanitize_text_field($input['api_key'] ?? '');
+
+    // APIキー：設定画面ではマスク表示し、空欄のまま保存されたら既存キーを維持する
+    $existing = get_option('ai_deco_settings', []);
+    $submitted_key = sanitize_text_field($input['api_key'] ?? '');
+    $output['api_key'] = $submitted_key !== '' ? $submitted_key : ($existing['api_key'] ?? '');
 
     $allowed_models = array_keys(ai_deco_get_models());
     $output['model'] = in_array($input['model'] ?? '', $allowed_models, true)
@@ -49,10 +53,20 @@ function ai_deco_render_settings_page() {
                 <tr>
                     <th scope="row"><label for="api_key">Claude APIキー</label></th>
                     <td>
+                        <?php
+                        $saved_key = $settings['api_key'] ?? '';
+                        $has_key = $saved_key !== '';
+                        $key_hint = $has_key
+                            ? '保存済み ••••' . substr($saved_key, -4) . '（変更する場合のみ入力）'
+                            : 'sk-ant-... を入力';
+                        ?>
                         <input type="password" id="api_key" name="ai_deco_settings[api_key]"
-                               value="<?php echo esc_attr($settings['api_key'] ?? ''); ?>"
-                               class="regular-text" autocomplete="off">
-                        <p class="description">Anthropic Consoleで発行したAPIキーを入力</p>
+                               value="" class="regular-text" autocomplete="off"
+                               placeholder="<?php echo esc_attr($key_hint); ?>">
+                        <p class="description">
+                            Anthropic Consoleで発行したAPIキーを入力。
+                            <?php if ($has_key): ?><strong>空欄のまま保存すると現在のキーが維持されます。</strong><?php endif; ?>
+                        </p>
                     </td>
                 </tr>
                 <tr>

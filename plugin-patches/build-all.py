@@ -5,9 +5,11 @@
 各プラグインの zip はトップレベルにプラグインディレクトリを1つ持つ
 WordPress 標準構造で、パス区切りは forward slash（WP 互換）。
 
+各プラグインのソースは plugin-patches/<plugin>/ に置く（git 追跡下）。
+
 更新手順:
-  1. plugin-patches/<plugin>/ または build/<plugin>/ のソースを編集
-  2. バージョンを上げたら下の SPECS と app.py の PLUGIN_DOWNLOADS を更新
+  1. plugin-patches/affiros-*/ のソースを編集（Version ヘッダーも上げる）
+  2. 下の SPECS と app.py の PLUGIN_DOWNLOADS の zip 名・version を更新
   3. python plugin-patches/build-all.py を実行
   4. 生成された zip を git commit
 """
@@ -19,12 +21,12 @@ OUT_DIR = os.path.join(ROOT, os.pardir, 'plugin-downloads')
 
 # (ソースディレクトリ, zip 内トップディレクトリ名, 出力 zip 名)
 SPECS = [
-    (os.path.join(ROOT, 'build', 'affiros-product-inserter'),
-     'affiros-product-inserter', 'affiros-product-inserter-1.7.3.zip'),
+    (os.path.join(ROOT, 'affiros-product-inserter'),
+     'affiros-product-inserter', 'affiros-product-inserter-1.8.0.zip'),
     (os.path.join(ROOT, 'affiros-decoration'),
-     'affiros-decoration', 'affiros-decoration-1.2.0.zip'),
+     'affiros-decoration', 'affiros-decoration-1.2.1.zip'),
     (os.path.join(ROOT, 'affiros-rewrite'),
-     'affiros-rewrite', 'affiros-rewrite-0.3.1.zip'),
+     'affiros-rewrite', 'affiros-rewrite-0.4.0.zip'),
 ]
 
 

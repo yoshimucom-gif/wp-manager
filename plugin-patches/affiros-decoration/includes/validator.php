@@ -16,7 +16,8 @@ class AI_Deco_Validator {
         $warnings = [];
 
         // 1. Gutenbergブロックのペアチェック
-        preg_match_all('/<!-- wp:(\S+)[^>]*-->/', $decorated, $opens);
+        //    自己終了ブロック（<!-- wp:xxx /-->）は終了タグを持たないので開始数から除外する
+        preg_match_all('/<!-- wp:(\S+)[^>]*?(?<!\/)-->/', $decorated, $opens);
         preg_match_all('/<!-- \/wp:(\S+) -->/', $decorated, $closes);
 
         $open_count = count($opens[1]);

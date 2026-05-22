@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros リライター
  * Description: WordPress記事をClaude APIでリライトする。WP_Queryで内部処理するためホスティングWAFの影響を受けない（403回避）。
- * Version: 0.3.1
+ * Version: 0.4.0
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-rewrite
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('AFFIROS_REWRITE_VERSION', '0.3.1');
+define('AFFIROS_REWRITE_VERSION', '0.4.0');
 define('AFFIROS_REWRITE_PATH', plugin_dir_path(__FILE__));
 define('AFFIROS_REWRITE_URL', plugin_dir_url(__FILE__));
 
@@ -22,11 +22,9 @@ define('AFFIROS_REWRITE_OPTION_KEY', 'affiros_rewrite_settings');
 // モジュール読み込み
 require_once AFFIROS_REWRITE_PATH . 'includes/claude-api.php';
 require_once AFFIROS_REWRITE_PATH . 'includes/post-fetcher.php';
-require_once AFFIROS_REWRITE_PATH . 'includes/quality-presets.php';
 require_once AFFIROS_REWRITE_PATH . 'includes/marker-inserter.php';
 require_once AFFIROS_REWRITE_PATH . 'includes/rewrite-engine.php';
 require_once AFFIROS_REWRITE_PATH . 'admin/settings-page.php';
-require_once AFFIROS_REWRITE_PATH . 'admin/presets-page.php';
 require_once AFFIROS_REWRITE_PATH . 'admin/rewrite-page.php';
 require_once AFFIROS_REWRITE_PATH . 'admin/ajax-handler.php';
 
@@ -58,8 +56,9 @@ function affiros_rewrite_migrate_model_id($model) {
         'claude-sonnet-4-5'          => 'claude-sonnet-4-6',
         'claude-opus-4-1-20250805'   => 'claude-opus-4-7',
         'claude-opus-4-1'            => 'claude-opus-4-7',
-        'claude-3-5-haiku-20241022'  => 'claude-haiku-4-5',
-        'claude-3-5-haiku'           => 'claude-haiku-4-5',
+        'claude-3-5-haiku-20241022'  => 'claude-haiku-4-5-20251001',
+        'claude-3-5-haiku'           => 'claude-haiku-4-5-20251001',
+        'claude-haiku-4-5'           => 'claude-haiku-4-5-20251001',
     ];
     return $map[$model] ?? $model;
 }
@@ -71,6 +70,13 @@ function affiros_rewrite_get_settings() {
     $saved = get_option(AFFIROS_REWRITE_OPTION_KEY, []);
     $settings = array_merge(affiros_rewrite_default_settings(), is_array($saved) ? $saved : []);
     $settings['claude_model'] = affiros_rewrite_migrate_model_id($settings['claude_model'] ?? '');
+
+    // wp-config.php に AFFIROS_REWRITE_API_KEY を定義していれば最優先で使う。
+    // wp-config.php はプラグインの更新・再インストール・削除で変更されないため、
+    // この方式ならAPIキーが消えることはない。
+    if (defined('AFFIROS_REWRITE_API_KEY') && AFFIROS_REWRITE_API_KEY) {
+        $settings['claude_api_key'] = AFFIROS_REWRITE_API_KEY;
+    }
     return $settings;
 }
 
@@ -97,14 +103,6 @@ add_action('admin_menu', function () {
     );
     add_submenu_page(
         'affiros-rewrite',
-        '品質プリセット',
-        '品質プリセット',
-        'manage_options',
-        'affiros-rewrite-presets',
-        'affiros_rewrite_render_presets_page'
-    );
-    add_submenu_page(
-        'affiros-rewrite',
         '設定',
         '設定',
         'manage_options',
@@ -126,14 +124,8 @@ add_action('admin_enqueue_scripts', function ($hook) {
         [],
         AFFIROS_REWRITE_VERSION
     );
-    wp_enqueue_script(
-        'affiros-rewrite-admin',
-        AFFIROS_REWRITE_URL . 'assets/admin.js',
-        ['jquery'],
-        AFFIROS_REWRITE_VERSION,
-        true
-    );
-    wp_localize_script('affiros-rewrite-admin', 'AffirosRewrite', [
+    // 画面のJSは各ページにインラインで持たせている。ajax 用の値だけ jQuery 経由で渡す。
+    wp_localize_script('jquery', 'AffirosRewrite', [
         'ajaxUrl' => admin_url('admin-ajax.php'),
         'nonce' => wp_create_nonce('affiros_rewrite_nonce'),
     ]);

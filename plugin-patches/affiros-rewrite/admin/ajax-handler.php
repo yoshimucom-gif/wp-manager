@@ -27,25 +27,6 @@ add_action('wp_ajax_affiros_rewrite_fetch_posts', function () {
 });
 
 /**
- * 単一記事の本文取得
- */
-add_action('wp_ajax_affiros_rewrite_get_post', function () {
-    check_ajax_referer('affiros_rewrite_nonce', 'nonce');
-    if (!current_user_can('manage_options')) {
-        wp_send_json_error(['message' => '権限がありません']);
-    }
-    $post_id = intval($_POST['post_id'] ?? 0);
-    if (!$post_id) {
-        wp_send_json_error(['message' => '記事IDが不正です']);
-    }
-    $post = Affiros_Rewrite_Post_Fetcher::get_post_content($post_id);
-    if (!$post) {
-        wp_send_json_error(['message' => '記事が見つかりません']);
-    }
-    wp_send_json_success($post);
-});
-
-/**
  * リライト実行（1記事）
  * - opts でモード等を上書き可能（指定なければ設定画面のデフォルト値）
  * - 保存はしない（returnのみ）→ クライアント側で確認後に save 呼び出し
@@ -61,7 +42,7 @@ add_action('wp_ajax_affiros_rewrite_run_single', function () {
     }
 
     $opts = [];
-    foreach (['rewrite_mode', 'emphasis_level', 'tone', 'target_chars', 'tolerance_percent', 'preset_id', 'article_type'] as $k) {
+    foreach (['rewrite_mode', 'emphasis_level', 'tone', 'target_chars', 'tolerance_percent', 'article_type'] as $k) {
         if (isset($_POST[$k]) && $_POST[$k] !== '') {
             $opts[$k] = sanitize_text_field($_POST[$k]);
         }
