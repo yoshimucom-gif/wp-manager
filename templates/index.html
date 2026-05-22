@@ -1823,7 +1823,7 @@ table { width: 100%; border-collapse: collapse; }"></textarea>
 <!-- Article Detail Modal -->
 <div class="modal-overlay" id="article-modal">
   <div class="modal" style="width:800px">
-    <div class="modal-title">// 本文/設定編集</div>
+    <div class="modal-title">// 記事の編集 / 再生成</div>
     <input type="hidden" id="modal-article-id">
     <div class="form-group">
       <label class="form-label">タイトル</label>
@@ -1862,7 +1862,8 @@ table { width: 100%; border-collapse: collapse; }"></textarea>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeArticleModal()">閉じる</button>
-      <button class="btn btn-primary" onclick="saveArticleModal()">保存</button>
+      <button class="btn btn-secondary" onclick="saveArticleModal()">手直しを保存</button>
+      <button class="btn btn-primary" onclick="regenerateFromArticleModal()">⚡ 再生成</button>
     </div>
   </div>
 </div>
@@ -2667,7 +2668,6 @@ function renderArticles(articles) {
   tbody.innerHTML = articles.map((a, i) => {
     const busy = isArticleBusy(a.status);
     const disabled = busy ? 'disabled' : '';
-    const generateLabel = a.status === 'generating' ? '再生成中...' : (a.content ? '再生成' : '生成');
     const publishLabel = a.status === 'publishing' ? '投稿中...' : 'WP下書き投稿';
     // 警告表示は「致命的なもの」だけ。成功している記事に非致命的な装飾スキップ警告
     // （HTML整形をスキップ、本文後処理をスキップ等）を出すとノイズになるので隠す。
@@ -2682,9 +2682,18 @@ function renderArticles(articles) {
     const statusDetail = statusDetailText
       ? `<div style="font-size:10px;color:${statusDetailColor};margin-top:4px">${esc(statusDetailText)}</div>`
       : '';
-    const brandExpansionButton = (a.article_type || 'ranking') === 'ranking' && a.content
+    // 行アクションは固定2×2グリッド。出ないボタンは空スロットにして
+    // 他ボタンの位置が動かないようにする（並びのがちゃがちゃ防止）。
+    const editBtn = `<button class="btn btn-secondary btn-sm" ${disabled} title="記事の内容・設定の確認／手直し保存／再生成" onclick="openArticleModal('${a.id}')">編集</button>`;
+    const brandBtn = ((a.article_type || 'ranking') === 'ranking' && a.content)
       ? `<button class="btn btn-secondary btn-sm" ${disabled} title="ランキング記事で紹介した商品から商標記事の未生成下書きを作成" onclick="openBrandExpansionModal('${a.id}')">商標記事化</button>`
-      : '';
+      : '<span></span>';
+    const wpDraftBtn = (a.content && !a.wp_post_id)
+      ? `<button class="btn btn-success btn-sm" ${disabled} title="WordPressに下書き投稿" onclick="quickPublish('${a.id}')">${publishLabel}</button>`
+      : '<span></span>';
+    const openBtn = a.wp_url
+      ? `<a href="${esc(a.wp_url)}" target="_blank" class="btn btn-secondary btn-sm" title="投稿済み記事を開く">記事を開く</a>`
+      : '<span></span>';
     const rowClass = ['published', 'scheduled', 'updated'].includes(a.status) ? 'row-completed' : '';
     const checkedAttr = previouslyChecked.has(a.id) ? 'checked' : '';
     return `
@@ -2700,12 +2709,8 @@ function renderArticles(articles) {
       <td>${statusBadge(a.status)}${statusDetail}</td>
       <td style="color:var(--muted);font-size:11px;white-space:nowrap">${a.generated_at ? fmtDate(a.generated_at) : '—'}</td>
       <td>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn btn-secondary btn-sm" ${disabled} title="Affiros9内の記事情報と保存本文を手動編集。Claude生成やWordPress送信は行いません。" onclick="openArticleModal('${a.id}')">本文/設定編集</button>
-          <button class="btn btn-primary btn-sm" ${disabled} title="生成画面で広告設定などを確認してから開始" onclick="quickGenerate('${a.id}')">${generateLabel}</button>
-          ${brandExpansionButton}
-          ${a.content && !a.wp_post_id ? `<button class="btn btn-success btn-sm" ${disabled} title="WordPressに下書き投稿" onclick="quickPublish('${a.id}')">${publishLabel}</button>` : ''}
-          ${a.wp_url ? `<a href="${esc(a.wp_url)}" target="_blank" class="btn btn-secondary btn-sm" title="投稿済み記事を開く">記事を開く</a>` : ''}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;width:210px">
+          ${editBtn}${brandBtn}${wpDraftBtn}${openBtn}
         </div>
       </td>
     </tr>
@@ -2985,6 +2990,15 @@ async function quickRepair(id) {
 }
 
 // ---- Article Modal ----
+// 記事モーダルから「再生成」: モーダルを閉じて生成画面へ遷移する。
+// （行の「本文/設定編集」と「再生成」を1つに統合したための導線）
+function regenerateFromArticleModal() {
+  const id = document.getElementById('modal-article-id').value;
+  if (!id) return;
+  closeArticleModal();
+  quickGenerate(id);
+}
+
 async function openArticleModal(id) {
   const res = await fetch(`/api/articles/${id}`);
   const article = await res.json();
@@ -4402,6 +4416,7 @@ const AD_POSITION_LABELS = {
   'after_each_h3_rank': '各「N位」H3の直後',
   'before_matome_h2':   'まとめH2の直前',
   'after_matome_h2':    'まとめH2の直後',
+  'after_last_h2':      '最後のH2の直後（確定）',
   'bottom':             '記事末尾',
 };
 const AD_DESIGN_LABELS = { 'vertical': '縦置きカード', 'ranking': 'ランキングカード' };

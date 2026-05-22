@@ -3253,7 +3253,7 @@ def strip_summary_table_sections(html):
 # 記事種別ごとの広告マーカー挿入ルール（既定値）。
 # 各ルール: {position, design, count?, repeat?}
 # position: 'before_first_h2', 'after_first_h2', 'after_each_h3_rank',
-#           'before_matome_h2', 'after_matome_h2', 'top', 'bottom'
+#           'before_matome_h2', 'after_matome_h2', 'after_last_h2', 'top', 'bottom'
 # design: 'vertical', 'horizontal', 'ranking'
 # count: ランキングデザインの場合の件数 (TOP3 等)
 # repeat: 同じ位置に何個マーカーを並べるか (既定1)
@@ -3269,7 +3269,10 @@ DEFAULT_CARD_INSERTION_PATTERNS = {
     ],
     'column': [
         {'position': 'before_first_h2', 'design': 'vertical', 'repeat': 3},
-        {'position': 'after_matome_h2', 'design': 'ranking', 'count': 3},
+        # after_last_h2: キーワードに依存しない確定位置。
+        # after_matome_h2 はFAQ等のH2が記事末尾にある場合まとめと誤解離するため、
+        # 無条件に「記事内の最後のH2直後」を使う方が安定。
+        {'position': 'after_last_h2', 'design': 'ranking', 'count': 3},
     ],
 }
 
@@ -3281,6 +3284,7 @@ AD_INSERTION_ALLOWED_POSITIONS = (
     'after_each_h3_rank',
     'before_matome_h2',
     'after_matome_h2',
+    'after_last_h2',
     'bottom',
 )
 AD_INSERTION_ALLOWED_DESIGNS = ('vertical', 'ranking')
@@ -3479,6 +3483,17 @@ def insert_card_markers(html, article_type='ranking', patterns=None, title=None)
             stats['rules_applied'] += 1
             stats['marker_count'] += repeat
             stats['positions'].append(pos)
+        elif pos == 'after_last_h2':
+            # キーワードに依存せず記事内の最後のH2直後に挿入。
+            # after_matome_h2 はFAQ等のH2が末尾にある場合まとめから離れるため、
+            # 安定性重視の場合はこちらを推奨。
+            h2s_all = list(re.finditer(_H2_BLOCK_RE, text, re.IGNORECASE))
+            if h2s_all:
+                last_h2 = h2s_all[-1]
+                insertions.append((last_h2.end(), '\n' + marker_block))
+                stats['rules_applied'] += 1
+                stats['marker_count'] += repeat
+                stats['positions'].append(pos)
         elif pos == 'after_each_h3_rank':
             # h3ランキング見出し直下に1個ずつ
             # 「第1位」「1位」「No.1」「①」など各種フォーマットに対応
@@ -4812,7 +4827,11 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                     save_articles(current_articles)
                 article_type = normalize_article_type(article.get('article_type') or batch_article_type, batch_article_type)
                 quality, quality_prompt = resolve_quality_for(article_type)
-                use_generation_extras = False
+                # 品質定義の「書き方参考URL」を一括生成でも使う。
+                # （以前は False ハードコードで、参考URLが一括生成では完全に無視されていた。
+                #   単体生成(SSE)では使われるのに不整合だった）。
+                # fetch は記事タイプ単位でキャッシュ＋try/exceptされるので低コスト・安全。
+                use_generation_extras = True
                 pipeline_warnings = []
                 if not api_key and article_type != 'ranking':
                     raise ValueError('Claude APIキーが設定されていません')
