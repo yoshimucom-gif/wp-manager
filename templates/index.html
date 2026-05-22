@@ -923,7 +923,6 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
     <span id="current-site-indicator" style="display:none;color:#fff;font-size:13px;margin-right:14px;padding:4px 10px;background:rgba(255,255,255,0.12);border-radius:4px;">
       <span id="current-site-name"></span>
     </span>
-    <button class="logout-btn" onclick="window.location.href='/logout'">LOGOUT</button>
   </div>
 </div>
 
@@ -2153,26 +2152,6 @@ function toast(msg, type = 'info') {
   }
 }
 
-// ---- Global 401 handler ----
-// セッション切れ時にサーバーが JSON 401 を返す。
-// フロントの fetch が HTML をパースしようとして "Unexpected token '<'" になるのを防ぐ。
-(function() {
-  const _origFetch = window.fetch.bind(window);
-  window.fetch = async function(...args) {
-    const res = await _origFetch(...args);
-    if (res.status === 401) {
-      try {
-        const clone = res.clone();
-        const data = await clone.json();
-        if (data && data.login_required) {
-          toast('セッションが切れました。ログインページへ移動します…', 'error');
-          setTimeout(() => { window.location.href = '/login'; }, 1800);
-        }
-      } catch (_) {}
-    }
-    return res;
-  };
-})();
 
 // ---- Data durability ----
 const DATA_SNAPSHOT_KEY = 'affiros9.dataSnapshot.v1';

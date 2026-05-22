@@ -4432,14 +4432,9 @@ def save_settings(settings):
     save_doc('settings', settings)
 
 def login_required(f):
+    """認証不要（シングルユーザー運用）。デコレータは互換のため残す。"""
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not session.get('authenticated'):
-            if (request.is_json
-                    or request.headers.get('Accept') == 'text/event-stream'
-                    or request.path.startswith('/api/')):
-                return jsonify({'error': '認証が必要です', 'login_required': True}), 401
-            return redirect(url_for('login_page'))
         return f(*args, **kwargs)
     return decorated
 
@@ -4461,8 +4456,6 @@ def login_required(f):
 @app.route('/settings')
 @app.route('/plugins')
 def index():
-    if not session.get('authenticated'):
-        return redirect(url_for('login_page'))
     return render_template('index.html')
 
 @app.route('/favicon.ico')
@@ -4510,25 +4503,13 @@ def download_plugin(plugin_key):
         mimetype='application/zip',
     )
 
-@app.route('/login', methods=['GET'])
+@app.route('/login', methods=['GET', 'POST'])
 def login_page():
-    if session.get('authenticated'):
-        return redirect(url_for('index'))
-    return render_template('login.html')
-
-@app.route('/login', methods=['POST'])
-def login():
-    password = (request.get_json(silent=True) or {}).get('password', '')
-    app_password = os.environ.get('APP_PASSWORD', 'admin')
-    if password == app_password:
-        session['authenticated'] = True
-        return jsonify({'success': True})
-    return jsonify({'success': False, 'error': 'パスワードが違います'}), 401
+    return redirect(url_for('index'))
 
 @app.route('/logout')
 def logout():
-    session.clear()
-    return redirect(url_for('login_page'))
+    return redirect(url_for('index'))
 
 
 # Title ideas
