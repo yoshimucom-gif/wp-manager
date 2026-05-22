@@ -38,6 +38,41 @@ except ImportError:
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
+# ───────────────────────────────────────────────────────────────────────────
+# データ整合性ロック（NON-NEGOTIABLE / ロスト・アップデート対策）
+#
+# JSON ファイル永続化は save_json() が tmp+os.replace でアトミックだが、
+# 「load → 変更 → save」の一連の流れ（read-modify-write）は守られていない。
+# gunicorn は --threads 8 で複数 HTTP リクエストを並行処理し、さらにバッチ
+# 生成・タイトル生成はバックグラウンドスレッドで動く。これらが同じ JSON を
+# 同時に read-modify-write すると後勝ちで片方の更新が丸ごと消える。
+#
+# 対策: 再入可能なグローバルロック _DATA_LOCK を1本用意し、
+#   - データ変更系の HTTP ルートは @with_data_lock デコレータで囲む
+#   - バックグラウンドスレッドの load→save スパンは `with _DATA_LOCK:` で囲む
+# RLock なので、ロック保持中にさらにロックを取る入れ子呼び出しも安全。
+#
+# ⚠️ このロックは threading.RLock = 同一プロセス内でしか効かない。
+#    gunicorn の --workers は必ず 1 にすること。2 以上にすると別プロセスとなり
+#    ロックがすり抜けてロスト・アップデートが再発する（render.yaml 参照）。
+# ───────────────────────────────────────────────────────────────────────────
+_DATA_LOCK = threading.RLock()
+
+
+def with_data_lock(f):
+    """データ変更系ルート用デコレータ。ハンドラ全体を _DATA_LOCK で直列化する。
+
+    ⚠️ SSE ストリーミングルート（/api/generate など、長時間レスポンスを
+       握り続けるもの）には付けないこと。ロックを長時間占有してしまう。
+       それらはハンドラ内部の load→save スパンを個別に `with _DATA_LOCK:`
+       で囲むこと。
+    """
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        with _DATA_LOCK:
+            return f(*args, **kwargs)
+    return wrapper
+
 
 @app.errorhandler(Exception)
 def handle_unexpected_error(error):
@@ -305,13 +340,14 @@ def save_title_idea_jobs(jobs):
 
 
 def update_title_idea_job(job_id, **changes):
-    jobs = load_title_idea_jobs()
-    for item in jobs:
-        if item.get('id') == job_id:
-            item.update(changes)
-            item['updated_at'] = now_iso()
-            break
-    save_title_idea_jobs(jobs)
+    with _DATA_LOCK:
+        jobs = load_title_idea_jobs()
+        for item in jobs:
+            if item.get('id') == job_id:
+                item.update(changes)
+                item['updated_at'] = now_iso()
+                break
+        save_title_idea_jobs(jobs)
 
 def parse_saved_datetime(value):
     if not value:
@@ -4311,9 +4347,10 @@ def generate_title_ideas():
         'started_at': now,
         'updated_at': now,
     }
-    jobs = load_title_idea_jobs()
-    jobs.insert(0, job)
-    save_title_idea_jobs(jobs)
+    with _DATA_LOCK:
+        jobs = load_title_idea_jobs()
+        jobs.insert(0, job)
+        save_title_idea_jobs(jobs)
 
     def worker():
         try:
@@ -4453,6 +4490,7 @@ def get_latest_title_idea_job():
 
 @app.route('/api/title-ideas/save', methods=['POST'])
 @login_required
+@with_data_lock
 def save_title_ideas():
     data = request.get_json(silent=True) or {}
     ideas = data.get('ideas') or []
@@ -4525,12 +4563,13 @@ def save_title_ideas():
 @app.route('/api/articles', methods=['GET'])
 @login_required
 def get_articles():
-    articles = load_articles()
-    changed = recover_stale_article_statuses(articles, load_batch_jobs())
-    if ensure_article_scores_current(articles):
-        changed = True
-    if changed:
-        save_articles(articles)
+    with _DATA_LOCK:
+        articles = load_articles()
+        changed = recover_stale_article_statuses(articles, load_batch_jobs())
+        if ensure_article_scores_current(articles):
+            changed = True
+        if changed:
+            save_articles(articles)
     # 現在サイトでフィルタ（?site_id=xxx）。指定なしまたは 'all' で全件返す（後方互換）
     site_id = request.args.get('site_id', '').strip()
     if site_id and site_id != 'all':
@@ -4587,13 +4626,14 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
     style_reference_cache = {}
 
     def update_job(**changes):
-        jobs = load_batch_jobs()
-        for item in jobs:
-            if item.get('id') == job_id:
-                item.update(changes)
-                item['updated_at'] = now_iso()
-                break
-        save_batch_jobs(jobs)
+        with _DATA_LOCK:
+            jobs = load_batch_jobs()
+            for item in jobs:
+                if item.get('id') == job_id:
+                    item.update(changes)
+                    item['updated_at'] = now_iso()
+                    break
+            save_batch_jobs(jobs)
 
     def is_cancel_requested():
         for j in load_batch_jobs():
@@ -4616,13 +4656,14 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
         while queue_articles:
             if is_cancel_requested():
                 remaining_ids = {a['id'] for a in queue_articles}
-                current_articles = load_articles()
-                for a in current_articles:
-                    if a['id'] in remaining_ids and a.get('status') == 'queued':
-                        a['status'] = 'pending'
-                        a.pop('batch_job_id', None)
-                        a['updated_at'] = now_iso()
-                save_articles(current_articles)
+                with _DATA_LOCK:
+                    current_articles = load_articles()
+                    for a in current_articles:
+                        if a['id'] in remaining_ids and a.get('status') == 'queued':
+                            a['status'] = 'pending'
+                            a.pop('batch_job_id', None)
+                            a['updated_at'] = now_iso()
+                    save_articles(current_articles)
                 update_job(
                     status='cancelled',
                     current_title='',
@@ -4642,13 +4683,14 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                 stage = 'prepare article'
                 retry_suffix = f"（リトライ{attempt_no - 1}/{BATCH_GENERATION_MAX_RETRIES}）" if attempt_no > 1 else ''
                 update_job(current_title=article.get('title', ''), message=f"生成中{retry_suffix}: {article.get('title', '')}")
-                current_articles = load_articles()
-                for a in current_articles:
-                    if a['id'] == article['id']:
-                        a['status'] = 'generating'
-                        a['updated_at'] = now_iso()
-                        break
-                save_articles(current_articles)
+                with _DATA_LOCK:
+                    current_articles = load_articles()
+                    for a in current_articles:
+                        if a['id'] == article['id']:
+                            a['status'] = 'generating'
+                            a['updated_at'] = now_iso()
+                            break
+                    save_articles(current_articles)
                 article_type = normalize_article_type(article.get('article_type') or batch_article_type, batch_article_type)
                 quality, quality_prompt = resolve_quality_for(article_type)
                 use_generation_extras = False
@@ -4783,32 +4825,33 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                 run_id = str(uuid.uuid4())
 
                 stage = 'save generated article'
-                current_articles = load_articles()
-                for a in current_articles:
-                    if a['id'] == article['id']:
-                        a['content'] = content
-                        a['status'] = 'generated'
-                        a.pop('batch_job_id', None)
-                        a.pop('error', None)
-                        a.pop('error_stage', None)
-                        a.pop('error_trace', None)
-                        if pipeline_warnings:
-                            a['generation_warning'] = ' / '.join(dict.fromkeys(pipeline_warnings))
-                        else:
-                            a.pop('generation_warning', None)
-                        a.pop('last_generation_interrupted', None)
-                        a['quality_id'] = quality.get('id') if quality else quality_id
-                        a['article_type'] = article_type
-                        a['ad_keywords'] = article.get('ad_keywords', a.get('ad_keywords', ''))
-                        a['generation_phase'] = 'base_saved'
-                        a['generated_at'] = generated_at
-                        a['updated_at'] = generated_at
-                        a['content_hash'] = content_hash(content)
-                        usage = combine_article_usages(usage_parts)
-                        append_generation_usage(a, usage, run_id, generated_at, content)
-                        apply_score_fields(a)
-                        break
-                save_articles(current_articles)
+                with _DATA_LOCK:
+                    current_articles = load_articles()
+                    for a in current_articles:
+                        if a['id'] == article['id']:
+                            a['content'] = content
+                            a['status'] = 'generated'
+                            a.pop('batch_job_id', None)
+                            a.pop('error', None)
+                            a.pop('error_stage', None)
+                            a.pop('error_trace', None)
+                            if pipeline_warnings:
+                                a['generation_warning'] = ' / '.join(dict.fromkeys(pipeline_warnings))
+                            else:
+                                a.pop('generation_warning', None)
+                            a.pop('last_generation_interrupted', None)
+                            a['quality_id'] = quality.get('id') if quality else quality_id
+                            a['article_type'] = article_type
+                            a['ad_keywords'] = article.get('ad_keywords', a.get('ad_keywords', ''))
+                            a['generation_phase'] = 'base_saved'
+                            a['generated_at'] = generated_at
+                            a['updated_at'] = generated_at
+                            a['content_hash'] = content_hash(content)
+                            usage = combine_article_usages(usage_parts)
+                            append_generation_usage(a, usage, run_id, generated_at, content)
+                            apply_score_fields(a)
+                            break
+                    save_articles(current_articles)
                 stage = 'postprocess article'
                 postprocess_warnings = []
                 try:
@@ -4847,41 +4890,43 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                             title=article.get('title') if isinstance(article, dict) else None,
                         )
                         post_generated_at = now_iso()
+                        with _DATA_LOCK:
+                            current_articles = load_articles()
+                            for a in current_articles:
+                                if a['id'] == article['id']:
+                                    a['content'] = post_content
+                                    a['generation_phase'] = 'postprocessed'
+                                    a['updated_at'] = post_generated_at
+                                    a['content_hash'] = content_hash(post_content)
+                                    a['last_generation_chars'] = len(html_to_text(post_content))
+                                    usage = combine_article_usages(usage_parts)
+                                    a['usage'] = usage
+                                    a['card_injection_stats'] = {
+                                        'h3_count': 0, 'matched_count': 0, 'products_available': 0,
+                                        'fallback_count': 0,
+                                        'marker_count': post_marker_stats.get('marker_count', 0),
+                                        'mode': 'marker_only',
+                                    }
+                                    warnings = pipeline_warnings + postprocess_warnings
+                                    if warnings:
+                                        a['generation_warning'] = ' / '.join(dict.fromkeys(warnings))
+                                    else:
+                                        a.pop('generation_warning', None)
+                                    apply_score_fields(a)
+                                    break
+                            save_articles(current_articles)
+                except Exception as post_error:
+                    postprocess_warnings.append(f'本文後処理をスキップしました: {post_error}')
+                    with _DATA_LOCK:
                         current_articles = load_articles()
                         for a in current_articles:
                             if a['id'] == article['id']:
-                                a['content'] = post_content
-                                a['generation_phase'] = 'postprocessed'
-                                a['updated_at'] = post_generated_at
-                                a['content_hash'] = content_hash(post_content)
-                                a['last_generation_chars'] = len(html_to_text(post_content))
-                                usage = combine_article_usages(usage_parts)
-                                a['usage'] = usage
-                                a['card_injection_stats'] = {
-                                    'h3_count': 0, 'matched_count': 0, 'products_available': 0,
-                                    'fallback_count': 0,
-                                    'marker_count': post_marker_stats.get('marker_count', 0),
-                                    'mode': 'marker_only',
-                                }
                                 warnings = pipeline_warnings + postprocess_warnings
-                                if warnings:
-                                    a['generation_warning'] = ' / '.join(dict.fromkeys(warnings))
-                                else:
-                                    a.pop('generation_warning', None)
-                                apply_score_fields(a)
+                                a['generation_warning'] = ' / '.join(dict.fromkeys(warnings))
+                                a['generation_phase'] = 'base_saved_with_postprocess_warning'
+                                a['updated_at'] = now_iso()
                                 break
                         save_articles(current_articles)
-                except Exception as post_error:
-                    postprocess_warnings.append(f'本文後処理をスキップしました: {post_error}')
-                    current_articles = load_articles()
-                    for a in current_articles:
-                        if a['id'] == article['id']:
-                            warnings = pipeline_warnings + postprocess_warnings
-                            a['generation_warning'] = ' / '.join(dict.fromkeys(warnings))
-                            a['generation_phase'] = 'base_saved_with_postprocess_warning'
-                            a['updated_at'] = now_iso()
-                            break
-                    save_articles(current_articles)
                 completed += 1
                 update_job(completed=completed, failed=failed, retried=retried, message=f"{completed}/{total_for_msg}件生成済み")
             except Exception as e:
@@ -4890,17 +4935,18 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                 error_detail = f'{stage}: {error_text}'
                 if attempt_no <= BATCH_GENERATION_MAX_RETRIES:
                     retried += 1
-                    current_articles = load_articles()
-                    for a in current_articles:
-                        if a['id'] == article['id']:
-                            a['status'] = 'generating'
-                            a['error'] = f'一時エラーのため自動リトライ待ち: {error_detail}'
-                            a['error_stage'] = stage
-                            a['error_trace'] = trace[-4000:]
-                            a['generation_retry_count'] = attempt_no
-                            a['updated_at'] = now_iso()
-                            break
-                    save_articles(current_articles)
+                    with _DATA_LOCK:
+                        current_articles = load_articles()
+                        for a in current_articles:
+                            if a['id'] == article['id']:
+                                a['status'] = 'generating'
+                                a['error'] = f'一時エラーのため自動リトライ待ち: {error_detail}'
+                                a['error_stage'] = stage
+                                a['error_trace'] = trace[-4000:]
+                                a['generation_retry_count'] = attempt_no
+                                a['updated_at'] = now_iso()
+                                break
+                        save_articles(current_articles)
                     queue_articles.append(article)
                     update_job(
                         completed=completed,
@@ -4914,19 +4960,20 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                     )
                     time.sleep(min(10, 2 * attempt_no))
                     continue
-                current_articles = load_articles()
-                for a in current_articles:
-                    if a['id'] == article['id']:
-                        a['status'] = 'error'
-                        a['error'] = error_detail
-                        a['error_stage'] = stage
-                        a['error_trace'] = trace[-4000:]
-                        a.pop('batch_job_id', None)
-                        a['generation_retry_count'] = attempt_no - 1
-                        a['updated_at'] = now_iso()
-                        a['generation_finished_at'] = a['updated_at']
-                        break
-                save_articles(current_articles)
+                with _DATA_LOCK:
+                    current_articles = load_articles()
+                    for a in current_articles:
+                        if a['id'] == article['id']:
+                            a['status'] = 'error'
+                            a['error'] = error_detail
+                            a['error_stage'] = stage
+                            a['error_trace'] = trace[-4000:]
+                            a.pop('batch_job_id', None)
+                            a['generation_retry_count'] = attempt_no - 1
+                            a['updated_at'] = now_iso()
+                            a['generation_finished_at'] = a['updated_at']
+                            break
+                    save_articles(current_articles)
                 failed += 1
                 update_job(
                     completed=completed,
@@ -4955,18 +5002,19 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
             outer_trace = traceback.format_exc()
             app.logger.error('Batch worker outer exception: %s\n%s', outer_e, outer_trace)
             try:
-                current_articles = load_articles()
-                for a in current_articles:
-                    if a.get('batch_job_id') == job_id and a.get('status') in ('queued', 'generating'):
-                        new_status = fallback_article_status(a)
-                        a['status'] = new_status
-                        a.pop('batch_job_id', None)
-                        a['updated_at'] = now_iso()
-                        if new_status == 'generated':
-                            a['generation_warning'] = f'バッチが予期せず終了しましたが、本文は保存済みです: {compact_ai_error(outer_e, 120)}'
-                        else:
-                            a['generation_warning'] = f'バッチが予期せず終了: {compact_ai_error(outer_e, 120)}'
-                save_articles(current_articles)
+                with _DATA_LOCK:
+                    current_articles = load_articles()
+                    for a in current_articles:
+                        if a.get('batch_job_id') == job_id and a.get('status') in ('queued', 'generating'):
+                            new_status = fallback_article_status(a)
+                            a['status'] = new_status
+                            a.pop('batch_job_id', None)
+                            a['updated_at'] = now_iso()
+                            if new_status == 'generated':
+                                a['generation_warning'] = f'バッチが予期せず終了しましたが、本文は保存済みです: {compact_ai_error(outer_e, 120)}'
+                            else:
+                                a['generation_warning'] = f'バッチが予期せず終了: {compact_ai_error(outer_e, 120)}'
+                    save_articles(current_articles)
             except Exception:
                 pass
             try:
@@ -5156,6 +5204,7 @@ def recover_stale_batch_jobs(jobs, articles):
 
 @app.route('/api/dashboard/sites', methods=['GET'])
 @login_required
+@with_data_lock
 def get_sites_dashboard():
     """各サイトの統計情報をダッシュボード用に集計して返す。"""
     settings = load_settings()
@@ -5210,6 +5259,7 @@ def get_sites_dashboard():
 
 @app.route('/api/articles', methods=['POST'])
 @login_required
+@with_data_lock
 def create_article():
     data = request.get_json(silent=True) or {}
     title = str(data.get('title') or '').strip()
@@ -5265,6 +5315,7 @@ def get_article(article_id):
 
 @app.route('/api/articles/<article_id>', methods=['PUT'])
 @login_required
+@with_data_lock
 def update_article(article_id):
     data = request.get_json(silent=True) or {}
     articles = load_articles()
@@ -5296,6 +5347,7 @@ def update_article(article_id):
 
 @app.route('/api/articles/<article_id>/recover-generated-content', methods=['POST'])
 @login_required
+@with_data_lock
 def recover_generated_content(article_id):
     data = request.get_json(silent=True) or {}
     clean_content = sanitize_generated_html(data.get('content', ''))
@@ -5373,6 +5425,7 @@ def recover_generated_content(article_id):
 
 @app.route('/api/articles/<article_id>', methods=['DELETE'])
 @login_required
+@with_data_lock
 def delete_article(article_id):
     articles = [a for a in load_articles() if a['id'] != article_id]
     save_articles(articles)
@@ -5380,6 +5433,7 @@ def delete_article(article_id):
 
 @app.route('/api/articles/bulk-delete', methods=['POST'])
 @login_required
+@with_data_lock
 def bulk_delete():
     ids = set((request.get_json(silent=True) or {}).get('ids', []))
     articles = [a for a in load_articles() if a['id'] not in ids]
@@ -5389,6 +5443,7 @@ def bulk_delete():
 
 @app.route('/api/articles/score', methods=['POST'])
 @login_required
+@with_data_lock
 def score_articles():
     articles = load_articles()
     for article in articles:
@@ -5416,6 +5471,7 @@ def get_batch_job(job_id):
 
 @app.route('/api/batch-jobs/<job_id>/cancel', methods=['POST'])
 @login_required
+@with_data_lock
 def cancel_batch_job(job_id):
     """一括処理にキャンセルフラグを立てる。
     ワーカーは次の記事を取り出す前にこのフラグを確認し、true なら停止する。
@@ -5440,6 +5496,7 @@ def cancel_batch_job(job_id):
 
 @app.route('/api/batch-jobs/<job_id>/force-terminate', methods=['POST'])
 @login_required
+@with_data_lock
 def force_terminate_batch_job(job_id):
     """ジョブを強制終了マークする。
     ワーカースレッドは Python から強制停止できないため:
@@ -5485,6 +5542,7 @@ def force_terminate_batch_job(job_id):
 # Import
 @app.route('/api/import', methods=['POST'])
 @login_required
+@with_data_lock
 def import_excel():
     if 'file' not in request.files:
         return jsonify({'error': 'ファイルがありません'}), 400
@@ -5637,22 +5695,24 @@ def generate_article(article_id):
     previous_content_text = html_to_text(previous_content)
     is_regeneration = bool(previous_content_text.strip())
     regeneration_instruction = build_regeneration_instruction(previous_content)
-    for a in articles:
-        if a['id'] == article_id:
-            for key in ('title', 'keywords', 'category', 'ad_keywords', 'site_id', 'slug'):
-                a[key] = article_work.get(key, '')
-            a['article_type'] = article_type
-            if quality_id:
-                a['quality_id'] = quality_id
-            a['status'] = 'generating'
-            a['generation_run_id'] = generation_run_id
-            a['generation_started_at'] = now
-            a['updated_at'] = now
-            a.pop('error', None)
-            a.pop('generation_warning', None)
-            a.pop('last_generation_interrupted', None)
-            break
-    save_articles(articles)
+    with _DATA_LOCK:
+        articles = load_articles()
+        for a in articles:
+            if a['id'] == article_id:
+                for key in ('title', 'keywords', 'category', 'ad_keywords', 'site_id', 'slug'):
+                    a[key] = article_work.get(key, '')
+                a['article_type'] = article_type
+                if quality_id:
+                    a['quality_id'] = quality_id
+                a['status'] = 'generating'
+                a['generation_run_id'] = generation_run_id
+                a['generation_started_at'] = now
+                a['updated_at'] = now
+                a.pop('error', None)
+                a.pop('generation_warning', None)
+                a.pop('last_generation_interrupted', None)
+                break
+        save_articles(articles)
     quality_list = load_quality()
     quality = select_quality_definition(quality_list, quality_id, article_type)
     quality_prompt = build_quality_prompt(quality)
@@ -5778,68 +5838,77 @@ def generate_article(article_id):
                 validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
                 content_chars = len(html_to_text(clean_content))
 
-            current_articles = load_articles()
-            for a in current_articles:
-                if a['id'] == article_id:
-                    similarity = content_similarity(previous_content, clean_content) if is_regeneration else 0
-                    generation_warning = enhance_warning or ''
-                    if not validation_error and content_chars < 500:
-                        validation_error = f'生成結果が短すぎます（{content_chars}文字）。Claude生成が途中で止まった可能性があります。もう一度生成してください。'
-                    if not validation_error and is_regeneration and similarity >= 0.985:
-                        generation_warning = f'再生成結果は既存本文とほぼ同じです（類似度 {round(similarity * 100, 1)}%）。本文は生成済みとして保持しました。'
-                    if validation_error:
-                        a['status'] = 'error'
-                        a['error'] = validation_error
-                        a['updated_at'] = now_iso()
-                        a['generation_finished_at'] = a['updated_at']
-                        save_articles(current_articles)
-                        yield f"data: {json.dumps({'error': validation_error})}\n\n"
-                        return
-                    generated_at = now_iso()
-                    new_content_hash = content_hash(clean_content)
-                    changed = new_content_hash != previous_content_hash
-                    a['content'] = clean_content
-                    a['status'] = 'generated'
-                    if generation_warning:
-                        a['generation_warning'] = generation_warning
-                    else:
-                        a.pop('generation_warning', None)
-                    a.pop('error', None)
-                    a.pop('last_generation_interrupted', None)
-                    a['title'] = article_work.get('title', a.get('title', ''))
-                    a['keywords'] = article_work.get('keywords', a.get('keywords', ''))
-                    a['category'] = article_work.get('category', a.get('category', ''))
-                    a['slug'] = normalize_slug(article_work.get('slug', a.get('slug', '')))
-                    a['ad_keywords'] = article_work.get('ad_keywords', a.get('ad_keywords', ''))
-                    a['site_id'] = article_work.get('site_id') or a.get('site_id')
-                    a['quality_id'] = quality.get('id') if quality else quality_id
-                    a['article_type'] = article_type
-                    a['generated_at'] = generated_at
-                    a['updated_at'] = generated_at
-                    a['content_hash'] = new_content_hash
-                    a['generation_finished_at'] = generated_at
-                    a['last_generation_changed'] = changed
-                    a['last_generation_chars'] = content_chars
-                    a['last_generation_similarity'] = round(similarity, 4)
-                    a['last_generation_title'] = article_work.get('title', a.get('title', ''))
-                    a['last_generation_keywords'] = article_work.get('keywords', a.get('keywords', ''))
-                    a['card_injection_stats'] = card_stats
-                    usage = combine_article_usages(usage_parts)
-                    append_generation_usage(a, usage, generation_run_id, generated_at, clean_content)
-                    apply_score_fields(a)
-                    break
-            save_articles(current_articles)
+            # ロック内では load→変更→save のみ。yield はロック解放後に行う
+            # （ジェネレータが yield 中に放棄されてもロックを掴んだままにしないため）
+            similarity = 0
+            changed = False
+            usage = {}
+            generation_warning = enhance_warning or ''
+            with _DATA_LOCK:
+                current_articles = load_articles()
+                for a in current_articles:
+                    if a['id'] == article_id:
+                        similarity = content_similarity(previous_content, clean_content) if is_regeneration else 0
+                        generation_warning = enhance_warning or ''
+                        if not validation_error and content_chars < 500:
+                            validation_error = f'生成結果が短すぎます（{content_chars}文字）。Claude生成が途中で止まった可能性があります。もう一度生成してください。'
+                        if not validation_error and is_regeneration and similarity >= 0.985:
+                            generation_warning = f'再生成結果は既存本文とほぼ同じです（類似度 {round(similarity * 100, 1)}%）。本文は生成済みとして保持しました。'
+                        if validation_error:
+                            a['status'] = 'error'
+                            a['error'] = validation_error
+                            a['updated_at'] = now_iso()
+                            a['generation_finished_at'] = a['updated_at']
+                        else:
+                            generated_at = now_iso()
+                            new_content_hash = content_hash(clean_content)
+                            changed = new_content_hash != previous_content_hash
+                            a['content'] = clean_content
+                            a['status'] = 'generated'
+                            if generation_warning:
+                                a['generation_warning'] = generation_warning
+                            else:
+                                a.pop('generation_warning', None)
+                            a.pop('error', None)
+                            a.pop('last_generation_interrupted', None)
+                            a['title'] = article_work.get('title', a.get('title', ''))
+                            a['keywords'] = article_work.get('keywords', a.get('keywords', ''))
+                            a['category'] = article_work.get('category', a.get('category', ''))
+                            a['slug'] = normalize_slug(article_work.get('slug', a.get('slug', '')))
+                            a['ad_keywords'] = article_work.get('ad_keywords', a.get('ad_keywords', ''))
+                            a['site_id'] = article_work.get('site_id') or a.get('site_id')
+                            a['quality_id'] = quality.get('id') if quality else quality_id
+                            a['article_type'] = article_type
+                            a['generated_at'] = generated_at
+                            a['updated_at'] = generated_at
+                            a['content_hash'] = new_content_hash
+                            a['generation_finished_at'] = generated_at
+                            a['last_generation_changed'] = changed
+                            a['last_generation_chars'] = content_chars
+                            a['last_generation_similarity'] = round(similarity, 4)
+                            a['last_generation_title'] = article_work.get('title', a.get('title', ''))
+                            a['last_generation_keywords'] = article_work.get('keywords', a.get('keywords', ''))
+                            a['card_injection_stats'] = card_stats
+                            usage = combine_article_usages(usage_parts)
+                            append_generation_usage(a, usage, generation_run_id, generated_at, clean_content)
+                            apply_score_fields(a)
+                        break
+                save_articles(current_articles)
+            if validation_error:
+                yield f"data: {json.dumps({'error': validation_error})}\n\n"
+                return
             yield f"data: {json.dumps({'done': True, 'run_id': generation_run_id, 'content_chars': content_chars, 'changed': changed, 'similarity': round(similarity, 4), 'warning': generation_warning, 'usage': usage, 'card_stats': card_stats})}\n\n"
         except Exception as e:
-            current_articles = load_articles()
-            for a in current_articles:
-                if a['id'] == article_id:
-                    a['status'] = 'error'
-                    a['error'] = str(e)
-                    a['updated_at'] = now_iso()
-                    a['generation_finished_at'] = a['updated_at']
-                    break
-            save_articles(current_articles)
+            with _DATA_LOCK:
+                current_articles = load_articles()
+                for a in current_articles:
+                    if a['id'] == article_id:
+                        a['status'] = 'error'
+                        a['error'] = str(e)
+                        a['updated_at'] = now_iso()
+                        a['generation_finished_at'] = a['updated_at']
+                        break
+                save_articles(current_articles)
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
     return Response(
@@ -5879,19 +5948,21 @@ def generate_article_direct(article_id):
     quality_id = data.get('quality_id') or article.get('quality_id')
     quality = select_quality_definition(load_quality(), quality_id, article_type)
     now = now_iso()
-    for a in articles:
-        if a['id'] == article_id:
-            for key in ('title', 'keywords', 'category', 'ad_keywords', 'site_id', 'slug'):
-                a[key] = article_work.get(key, '')
-            a['article_type'] = article_type
-            if quality_id:
-                a['quality_id'] = quality_id
-            a['status'] = 'generating'
-            a['generation_started_at'] = now
-            a['updated_at'] = now
-            a.pop('error', None)
-            break
-    save_articles(articles)
+    with _DATA_LOCK:
+        articles = load_articles()
+        for a in articles:
+            if a['id'] == article_id:
+                for key in ('title', 'keywords', 'category', 'ad_keywords', 'site_id', 'slug'):
+                    a[key] = article_work.get(key, '')
+                a['article_type'] = article_type
+                if quality_id:
+                    a['quality_id'] = quality_id
+                a['status'] = 'generating'
+                a['generation_started_at'] = now
+                a['updated_at'] = now
+                a.pop('error', None)
+                break
+        save_articles(articles)
 
     try:
         previous_content = article.get('content', '')
@@ -5942,44 +6013,45 @@ def generate_article_direct(article_id):
         if validation_error:
             raise RuntimeError(validation_error)
 
-        current_articles = load_articles()
         saved_article = None
         generated_at = now_iso()
         similarity = content_similarity(previous_content, clean_content) if is_regeneration else 0
         changed = content_hash(clean_content) != previous_content_hash
         usage = combine_article_usages(usage_parts)
-        for a in current_articles:
-            if a['id'] == article_id:
-                a['content'] = clean_content
-                a['status'] = 'generated'
-                a['title'] = article_work.get('title', a.get('title', ''))
-                a['keywords'] = article_work.get('keywords', a.get('keywords', ''))
-                a['category'] = article_work.get('category', a.get('category', ''))
-                a['slug'] = normalize_slug(article_work.get('slug', a.get('slug', '')))
-                a['ad_keywords'] = article_work.get('ad_keywords', a.get('ad_keywords', ''))
-                a['site_id'] = article_work.get('site_id') or a.get('site_id')
-                a['quality_id'] = quality.get('id') if quality else quality_id
-                a['article_type'] = article_type
-                a['generated_at'] = generated_at
-                a['updated_at'] = generated_at
-                a['content_hash'] = content_hash(clean_content)
-                a['generation_finished_at'] = generated_at
-                a['last_generation_changed'] = changed
-                a['last_generation_chars'] = content_chars
-                a['last_generation_similarity'] = round(similarity, 4)
-                a['last_generation_title'] = article_work.get('title', a.get('title', ''))
-                a['last_generation_keywords'] = article_work.get('keywords', a.get('keywords', ''))
-                a.pop('error', None)
-                if enhance_warning:
-                    a['generation_warning'] = enhance_warning
-                else:
-                    a.pop('generation_warning', None)
-                a.pop('last_generation_interrupted', None)
-                append_generation_usage(a, usage, str(uuid.uuid4()), generated_at, clean_content)
-                apply_score_fields(a)
-                saved_article = a
-                break
-        save_articles(current_articles)
+        with _DATA_LOCK:
+            current_articles = load_articles()
+            for a in current_articles:
+                if a['id'] == article_id:
+                    a['content'] = clean_content
+                    a['status'] = 'generated'
+                    a['title'] = article_work.get('title', a.get('title', ''))
+                    a['keywords'] = article_work.get('keywords', a.get('keywords', ''))
+                    a['category'] = article_work.get('category', a.get('category', ''))
+                    a['slug'] = normalize_slug(article_work.get('slug', a.get('slug', '')))
+                    a['ad_keywords'] = article_work.get('ad_keywords', a.get('ad_keywords', ''))
+                    a['site_id'] = article_work.get('site_id') or a.get('site_id')
+                    a['quality_id'] = quality.get('id') if quality else quality_id
+                    a['article_type'] = article_type
+                    a['generated_at'] = generated_at
+                    a['updated_at'] = generated_at
+                    a['content_hash'] = content_hash(clean_content)
+                    a['generation_finished_at'] = generated_at
+                    a['last_generation_changed'] = changed
+                    a['last_generation_chars'] = content_chars
+                    a['last_generation_similarity'] = round(similarity, 4)
+                    a['last_generation_title'] = article_work.get('title', a.get('title', ''))
+                    a['last_generation_keywords'] = article_work.get('keywords', a.get('keywords', ''))
+                    a.pop('error', None)
+                    if enhance_warning:
+                        a['generation_warning'] = enhance_warning
+                    else:
+                        a.pop('generation_warning', None)
+                    a.pop('last_generation_interrupted', None)
+                    append_generation_usage(a, usage, str(uuid.uuid4()), generated_at, clean_content)
+                    apply_score_fields(a)
+                    saved_article = a
+                    break
+            save_articles(current_articles)
         return jsonify({
             'success': True,
             'article': saved_article,
@@ -5990,21 +6062,23 @@ def generate_article_direct(article_id):
             'direct_fallback': True,
         })
     except Exception as e:
-        current_articles = load_articles()
-        for a in current_articles:
-            if a['id'] == article_id:
-                a['status'] = 'error'
-                a['error'] = str(e)
-                a['updated_at'] = now_iso()
-                a['generation_finished_at'] = a['updated_at']
-                break
-        save_articles(current_articles)
+        with _DATA_LOCK:
+            current_articles = load_articles()
+            for a in current_articles:
+                if a['id'] == article_id:
+                    a['status'] = 'error'
+                    a['error'] = str(e)
+                    a['updated_at'] = now_iso()
+                    a['generation_finished_at'] = a['updated_at']
+                    break
+            save_articles(current_articles)
         return jsonify({'error': str(e)}), 500
 
 
 # Batch generate
 @app.route('/api/batch-generate', methods=['POST'])
 @login_required
+@with_data_lock
 def batch_generate():
     data = request.get_json(silent=True) or {}
     requested_ids = list(dict.fromkeys(data.get('article_ids', [])))
@@ -6170,6 +6244,7 @@ def update_wordpress_post_from_article(article, settings):
 
 @app.route('/api/publish/<article_id>', methods=['POST'])
 @login_required
+@with_data_lock
 def publish_article(article_id):
     articles = load_articles()
     article = next((a for a in articles if a['id'] == article_id), None)
@@ -6235,6 +6310,7 @@ def publish_article(article_id):
 
 @app.route('/api/articles/<article_id>/unlink-wp', methods=['POST'])
 @login_required
+@with_data_lock
 def unlink_wp_post(article_id):
     """記事から wp_post_id / wp_url の紐付けを外す（再投稿で新規作成したい時に使う）。"""
     articles = load_articles()
@@ -6258,6 +6334,7 @@ def unlink_wp_post(article_id):
 
 @app.route('/api/articles/<article_id>/apply-cards', methods=['POST'])
 @login_required
+@with_data_lock
 def apply_cards_to_existing_article(article_id):
     """既存記事の本文に対して inject_affiliate_cards を後付け適用する。
     本文を Claude で再生成せず、保存済みコンテンツに対してカード挿入だけ行う。
@@ -6317,6 +6394,7 @@ def apply_cards_to_existing_article(article_id):
 
 @app.route('/api/articles/bulk-apply-cards', methods=['POST'])
 @login_required
+@with_data_lock
 def bulk_apply_cards():
     """選択された記事に対して inject_affiliate_cards を一括適用する。
     既にカードが入っている記事はスキップ。Claude API は使わず Amazon/楽天検索のみ。
@@ -6443,6 +6521,7 @@ def diagnose_card_injection(article_id):
 
 @app.route('/api/articles/<article_id>/repair-post', methods=['POST'])
 @login_required
+@with_data_lock
 def repair_article_post(article_id):
     articles = load_articles()
     article = next((a for a in articles if a['id'] == article_id), None)
@@ -6489,6 +6568,7 @@ def repair_article_post(article_id):
 
 @app.route('/api/articles/bulk-repair-posts', methods=['POST'])
 @login_required
+@with_data_lock
 def bulk_repair_article_posts():
     ids = set((request.get_json(silent=True) or {}).get('ids', []))
     articles = load_articles()
@@ -6524,6 +6604,7 @@ def bulk_repair_article_posts():
 # Batch publish
 @app.route('/api/batch-publish', methods=['POST'])
 @login_required
+@with_data_lock
 def batch_publish():
     data = request.get_json(silent=True) or {}
     article_ids = data.get('article_ids', [])
@@ -6630,6 +6711,7 @@ def get_title_definition():
 
 @app.route('/api/title-definition', methods=['PUT'])
 @login_required
+@with_data_lock
 def update_title_definition():
     data = request.get_json(silent=True) or {}
     saved = save_title_definition(data)
@@ -6638,6 +6720,7 @@ def update_title_definition():
 
 @app.route('/api/title-definition/reset', methods=['POST'])
 @login_required
+@with_data_lock
 def reset_title_definition():
     saved = save_title_definition(dict(DEFAULT_TITLE_DEFINITION))
     return jsonify({'success': True, 'definition': saved})
@@ -6657,6 +6740,7 @@ def get_ad_insertion():
 
 @app.route('/api/ad-insertion', methods=['PUT'])
 @login_required
+@with_data_lock
 def update_ad_insertion():
     data = request.get_json(silent=True) or {}
     saved = save_ad_insertion_patterns(data.get('definition') or data)
@@ -6665,6 +6749,7 @@ def update_ad_insertion():
 
 @app.route('/api/ad-insertion/reset', methods=['POST'])
 @login_required
+@with_data_lock
 def reset_ad_insertion():
     saved = save_ad_insertion_patterns(
         {k: [dict(r) for r in v] for k, v in DEFAULT_CARD_INSERTION_PATTERNS.items()}
@@ -6680,6 +6765,7 @@ def get_quality():
 
 @app.route('/api/quality', methods=['POST'])
 @login_required
+@with_data_lock
 def create_quality():
     data = request.get_json(silent=True) or {}
     quality_list = load_quality()
@@ -6706,6 +6792,7 @@ def create_quality():
 
 @app.route('/api/quality/<quality_id>', methods=['PUT'])
 @login_required
+@with_data_lock
 def update_quality(quality_id):
     data = request.get_json(silent=True) or {}
     quality_list = load_quality()
@@ -6734,6 +6821,7 @@ def update_quality(quality_id):
 
 @app.route('/api/quality/<quality_id>', methods=['DELETE'])
 @login_required
+@with_data_lock
 def delete_quality(quality_id):
     quality_list = [q for q in load_quality() if q['id'] != quality_id]
     save_quality(quality_list)
@@ -6754,6 +6842,7 @@ def get_quality_style_references():
 
 @app.route('/api/quality/style-references', methods=['POST'])
 @login_required
+@with_data_lock
 def update_quality_style_references():
     data = request.get_json(silent=True) or {}
     settings = load_settings()
@@ -6781,6 +6870,7 @@ def get_sites():
 
 @app.route('/api/sites', methods=['POST'])
 @login_required
+@with_data_lock
 def create_site():
     data = request.get_json(silent=True) or {}
     settings = load_settings()
@@ -6802,6 +6892,7 @@ def create_site():
 
 @app.route('/api/sites/<site_id>', methods=['PUT'])
 @login_required
+@with_data_lock
 def update_site(site_id):
     data = request.get_json(silent=True) or {}
     settings = load_settings()
@@ -6818,6 +6909,7 @@ def update_site(site_id):
 
 @app.route('/api/sites/<site_id>', methods=['DELETE'])
 @login_required
+@with_data_lock
 def delete_site(site_id):
     settings = load_settings()
     settings['sites'] = [s for s in settings.get('sites', []) if s['id'] != site_id]
@@ -6826,6 +6918,7 @@ def delete_site(site_id):
 
 @app.route('/api/articles/<article_id>/site', methods=['PUT'])
 @login_required
+@with_data_lock
 def update_article_site(article_id):
     data = request.get_json(silent=True) or {}
     articles = load_articles()
@@ -6851,6 +6944,7 @@ def get_data_snapshot():
 
 @app.route('/api/data-snapshot', methods=['POST'])
 @login_required
+@with_data_lock
 def restore_data_snapshot_api():
     snapshot = request.get_json(silent=True) or {}
     if not isinstance(snapshot, dict):
@@ -6879,6 +6973,7 @@ def get_settings():
 
 @app.route('/api/settings', methods=['POST'])
 @login_required
+@with_data_lock
 def update_settings():
     data = request.get_json(silent=True) or {}
     settings = load_settings()

@@ -3,9 +3,15 @@ services:
     name: wp-manager
     env: python
     region: singapore
-    plan: starter
+    plan: standard
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --workers 1 --timeout 120 --bind 0.0.0.0:$PORT
+    # ⚠️ --workers は必ず 1 のままにすること（NON-NEGOTIABLE）。
+    #    app.py のデータ整合性ロック _DATA_LOCK は threading.RLock（プロセス内ロック）。
+    #    workers を 2 以上にすると別プロセスになりロックが効かず、JSON への
+    #    ロスト・アップデート（並行書き込みで片方の更新が消える）が再発する。
+    #    並行性は --threads で稼ぐ。スループットを上げたい場合は JSON を
+    #    SQLite 等のプロセス間で安全なストアへ移行してから workers を増やすこと。
+    startCommand: gunicorn app:app --workers 1 --threads 8 --timeout 300 --bind 0.0.0.0:$PORT
     envVars:
       - key: APP_PASSWORD
         sync: false
