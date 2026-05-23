@@ -35,11 +35,26 @@ class AI_PI_Inserter {
         // 再挿入時: バックアップ（=オリジナルのマーカー入り content）が残っていれば
         // そちらを source として使う。現在の content はカード描画後のためマーカーが消えており
         // そのままだと「マーカーが見つかりません」になる。
+        //
+        // ⚠️ 例外: Affiros9 が再投稿した場合、post_content が新しいマーカー入りコンテンツに
+        // 上書きされる。この時バックアップ（マーカーなし旧版）を優先すると誤ってエラーになる。
+        // post_content にマーカーが存在する場合は「新規投稿扱い」として post_content を使う。
+        $marker_pattern_quick = '/<!--\s*ai-product/i';
         $backup_content = get_post_meta($post_id, '_ai_pi_backup', true);
         $already_inserted = !empty(get_post_meta($post_id, '_ai_pi_inserted', true));
-        if ($already_inserted && !empty($backup_content)) {
+        $current_has_markers = (bool) preg_match($marker_pattern_quick, $post->post_content);
+        if ($already_inserted && !empty($backup_content) && !$current_has_markers) {
+            // 前回挿入済み（カード描画後）かつ現在のpost_contentにマーカーなし → バックアップ使用
             $original_content = $backup_content;
         } else {
+            // ① 未挿入の通常ケース
+            // ② Affiros9再投稿でpost_contentにマーカーが戻っている場合 → post_content優先
+            //    既存の挿入済みフラグ・バックアップは古くなっているのでリセット
+            if ($already_inserted && $current_has_markers) {
+                delete_post_meta($post_id, '_ai_pi_inserted');
+                delete_post_meta($post_id, '_ai_pi_backup');
+                delete_post_meta($post_id, '_ai_pi_backup_at');
+            }
             $original_content = $post->post_content;
         }
 
