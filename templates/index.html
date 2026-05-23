@@ -3119,13 +3119,11 @@ function updateSchedPreview() {
   const days = Math.ceil(count / cap);
   const startDate = document.getElementById('sched-start-date').value;
   const startTime = document.getElementById('sched-start-time').value || '10:00';
-  const spacingMin = Math.max(5, Math.floor(720 / cap));
 
   let preview = `${count} 件を ${days} 日分に割り当て（1日最大 ${cap} 件）\n`;
-  preview += `初回公開: ${startDate} ${startTime} ／ 公開間隔: 約 ${spacingMin} 分\n`;
+  preview += `初回公開: ${startDate} ${startTime}\n`;
   preview += `※ 今すぐ全件WPに送信。以降はWPが自動公開します。\n`;
 
-  // 最終公開日を計算
   if (startDate) {
     const endD = new Date(startDate);
     endD.setDate(endD.getDate() + days - 1);
