@@ -390,21 +390,6 @@ DEFAULT_TITLE_DEFINITION = {
         '神', 'No.1', '絶対', '必見', '驚愕', '衝撃',
         'プロが選ぶ', 'プロおすすめ', 'プロ厳選',
     ],
-    'concreteness_examples': (
-        '数字（5選、3つの違い、3,000円以下、2026年）／'
-        '条件（賃貸でも、初心者でも、在宅ワーク向け、子ども部屋に）／'
-        '検証視点（本当に効果ある？、実際どう？、失敗例から学ぶ）／'
-        '悩み訴求（もう迷わない、失敗しない、〜で困ったら）／'
-        'ベネフィット（快適に〜できる、夏でも涼しい、水洗いOK）'
-    ),
-    'angle_categories': [
-        '比較・選び方系',
-        '悩み解決系',
-        '検証・疑問系',
-        '条件絞り込み系',
-        'ベネフィット明示系',
-    ],
-    'symbol_rules': 'タイトル内の縦棒（｜・|）は最大1個まで。2個以上は絶対に使わない。「タイトル本題｜サブタイトル」のような形は OK だが、「本題｜カウント｜説明」のような3分割は禁止。【】は1タイトル最大1箇所、本当に強調したいときだけ。',
     'ranking_default_count': 5,
     'ranking_max_count': 7,
     'additional_instructions': '',
@@ -430,16 +415,9 @@ def load_title_definition():
     merged = dict(DEFAULT_TITLE_DEFINITION)
     merged.update({k: v for k, v in raw.items() if k in DEFAULT_TITLE_DEFINITION})
     # 配列フィールドは型確認
-    for key in ('forbidden_phrases', 'angle_categories', 'example_titles'):
+    for key in ('forbidden_phrases', 'example_titles'):
         if not isinstance(merged.get(key), list):
             merged[key] = list(DEFAULT_TITLE_DEFINITION[key])
-    # 旧 symbol_rules を保存していた場合、現行デフォルトに自動移行。
-    # 検知対象:
-    #   - 「区切りは｜」: 最初期の許可ルール
-    #   - 「区切り記号」「使用禁止」: 一時的に縦棒禁止だったルール
-    current_rule = str(merged.get('symbol_rules') or '')
-    if '区切りは｜' in current_rule or ('区切り記号' in current_rule and '使用禁止' in current_rule):
-        merged['symbol_rules'] = DEFAULT_TITLE_DEFINITION['symbol_rules']
     return merged
 
 
@@ -448,7 +426,7 @@ def save_title_definition(definition):
     for k, v in (definition or {}).items():
         if k not in DEFAULT_TITLE_DEFINITION:
             continue
-        if k in ('forbidden_phrases', 'angle_categories'):
+        if k in ('forbidden_phrases', 'example_titles'):
             if isinstance(v, list):
                 clean[k] = [str(x).strip() for x in v if str(x).strip()]
         elif k in ('char_basic_min', 'char_basic_max', 'char_max', 'ranking_default_count', 'ranking_max_count'):

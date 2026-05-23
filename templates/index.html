@@ -1402,29 +1402,6 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
-            <div class="section-header">// 推奨される具体性要素（自由記述）</div>
-            <div class="form-group">
-              <textarea id="td-concreteness" class="form-control" rows="4"></textarea>
-              <div style="font-size:11px;color:var(--muted);margin-top:4px">「数字・条件・検証視点・悩み・ベネフィット」など。プロンプトの『使える要素の例:』にそのまま差し込まれる。</div>
-            </div>
-          </div>
-
-          <div class="settings-section">
-            <div class="section-header">// 切り口カテゴリ（カンマ区切り）</div>
-            <div class="form-group">
-              <textarea id="td-angle-categories" class="form-control" rows="2" placeholder="比較・選び方系, 悩み解決系, 検証・疑問系, 条件絞り込み系, ベネフィット明示系"></textarea>
-              <div style="font-size:11px;color:var(--muted);margin-top:4px">1KW内で違う切り口を割り当てるための候補集。</div>
-            </div>
-          </div>
-
-          <div class="settings-section">
-            <div class="section-header">// 記号ルール</div>
-            <div class="form-group">
-              <textarea id="td-symbol-rules" class="form-control" rows="2"></textarea>
-            </div>
-          </div>
-
-          <div class="settings-section">
             <div class="section-header">// Ranking（〇選）</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
               <div class="form-group">
@@ -4764,9 +4741,6 @@ async function loadTitleDefinition() {
     document.getElementById('td-char-basic-max').value = d.char_basic_max ?? '';
     document.getElementById('td-char-max').value = d.char_max ?? '';
     document.getElementById('td-forbidden-phrases').value = (d.forbidden_phrases || []).join(', ');
-    document.getElementById('td-concreteness').value = d.concreteness_examples || '';
-    document.getElementById('td-angle-categories').value = (d.angle_categories || []).join(', ');
-    document.getElementById('td-symbol-rules').value = d.symbol_rules || '';
     document.getElementById('td-ranking-default').value = d.ranking_default_count ?? 5;
     document.getElementById('td-ranking-max').value = d.ranking_max_count ?? 7;
     document.getElementById('td-example-titles').value = (d.example_titles || []).join('\n');
@@ -4791,9 +4765,6 @@ async function saveTitleDefinition() {
     char_basic_max: parseInt(document.getElementById('td-char-basic-max').value, 10) || 35,
     char_max: parseInt(document.getElementById('td-char-max').value, 10) || 45,
     forbidden_phrases: readListField(document.getElementById('td-forbidden-phrases').value),
-    concreteness_examples: document.getElementById('td-concreteness').value,
-    angle_categories: readListField(document.getElementById('td-angle-categories').value),
-    symbol_rules: document.getElementById('td-symbol-rules').value,
     ranking_default_count: parseInt(document.getElementById('td-ranking-default').value, 10) || 5,
     ranking_max_count: parseInt(document.getElementById('td-ranking-max').value, 10) || 7,
     example_titles: String(document.getElementById('td-example-titles').value || '')
