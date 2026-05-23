@@ -944,6 +944,10 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
       <a class="sidebar-link muted" onclick="showPage('sites')">
         <span>⊕</span><span>サイトを追加</span>
       </a>
+      <div class="sidebar-divider"></div>
+      <a class="sidebar-link muted" onclick="showPage('changelog')" style="font-size:11px">
+        <span>📋</span><span>改修履歴</span>
+      </a>
     </div>
   </aside>
 
@@ -1739,6 +1743,36 @@ table { width: 100%; border-collapse: collapse; }"></textarea>
             <a href="/download/plugin/categorizer" class="btn btn-primary" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;text-decoration:none">
               ⬇ ダウンロード（v0.1.0）
             </a>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Changelog Page -->
+      <div class="page" id="page-changelog">
+        <div class="page-header">
+          <div class="page-title">改修履歴</div>
+          <div class="page-subtitle">Affiros9 の更新ログ</div>
+        </div>
+        <div style="max-width:720px">
+
+          <div class="settings-section">
+            <div class="section-header">// 2026-05-23</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>ログイン認証を削除</strong> — シングルユーザー運用のため不要と判断。URLを知っていれば即アクセス可能に。</li>
+              <li><strong>広告マーカー挿入を完全保証（3層防御）</strong><br>
+                <span style="color:var(--muted);font-size:12px">
+                  ① 保存済み設定の <code>after_matome_h2</code> → <code>after_last_h2</code> 自動マイグレーション<br>
+                  ② brand DEFAULT に <code>after_last_h2</code> を追加（冒頭＋末尾の2点挿入）<br>
+                  ③ 全ルール失敗時の末尾強制挿入フォールバック<br>
+                  → WPプラグイン「マーカーが見つかりません」エラーを根絶
+                </span>
+              </li>
+              <li><strong>一括生成のタブ絞り込み</strong> — 商標タブで生成するとランキング記事を巻き込む問題を修正。</li>
+              <li><strong>対応履歴ボタンを縦並びに整理</strong> — 商標化を最下部に、開くボタンを青に変更。</li>
+              <li><strong>モデル別料金推計</strong> — Opus選択時も正しい単価で推計するように修正。</li>
+              <li><strong>セッション切れJSONエラー修正</strong> — API が HTML を返して "Unexpected token" になる問題を解消（→認証削除で不要に）。</li>
+            </ul>
           </div>
 
         </div>
