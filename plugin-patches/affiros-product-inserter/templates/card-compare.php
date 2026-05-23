@@ -7,19 +7,12 @@
 if (!defined('ABSPATH')) exit;
 ?>
 <div class="aipi-compare">
-    <div class="aipi-compare__header">
-        <span class="aipi-compare__badge">AI比較</span>
-        <span class="aipi-compare__title">おすすめ商品 比較表</span>
-    </div>
-
     <div class="aipi-compare__scroll">
         <table class="aipi-compare__table">
             <thead>
                 <tr>
                     <th>順位</th>
                     <th>商品</th>
-                    <th>価格</th>
-                    <th>評価</th>
                     <th>購入</th>
                 </tr>
             </thead>
@@ -31,7 +24,6 @@ if (!defined('ABSPATH')) exit;
 
                     $display_title = AI_PI_Card_Renderer::get_display_title($product, 60);
 
-                    // ハイブリッド: 直リン優先、無ければ検索URLフォールバック
                     $amazon_url = '';
                     $rakuten_url = '';
 
@@ -49,7 +41,6 @@ if (!defined('ABSPATH')) exit;
 
                     $primary_url = $amazon_url ?: $rakuten_url;
                     $rank_class = 'aipi-rank--' . ($rank <= 3 ? $rank : 'other');
-                    $rating = !empty($product['rating']) ? floatval($product['rating']) : 0;
                 ?>
                     <tr>
                         <td class="aipi-compare__rank-cell">
@@ -66,24 +57,6 @@ if (!defined('ABSPATH')) exit;
                             <a href="<?php echo esc_url($primary_url); ?>" target="_blank" rel="nofollow noopener sponsored" class="aipi-compare__product-name">
                                 <?php echo esc_html($display_title); ?>
                             </a>
-                        </td>
-                        <td class="aipi-compare__price-cell">
-                            <?php echo !empty($product['price_display']) ? esc_html($product['price_display']) : '—'; ?>
-                        </td>
-                        <td class="aipi-compare__rating-cell">
-                            <?php if ($rating > 0): ?>
-                                <div class="aipi-compare__rating-stars">
-                                    <?php
-                                    $full = floor($rating);
-                                    for ($s = 1; $s <= 5; $s++) {
-                                        echo $s <= $full ? '★' : '☆';
-                                    }
-                                    ?>
-                                </div>
-                                <div class="aipi-compare__rating-num"><?php echo esc_html(number_format($rating, 1)); ?></div>
-                            <?php else: ?>
-                                —
-                            <?php endif; ?>
                         </td>
                         <td class="aipi-compare__buy-cell">
                             <?php if (!empty($amazon_url)): ?>

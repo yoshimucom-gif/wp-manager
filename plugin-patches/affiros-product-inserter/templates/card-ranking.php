@@ -7,24 +7,13 @@
 if (!defined('ABSPATH')) exit;
 ?>
 <div class="aipi-ranking">
-    <div class="aipi-ranking__header">
-        <span class="aipi-ranking__badge">AI選定</span>
-        <span class="aipi-ranking__title">この記事でおすすめの商品TOP<?php echo count($products); ?></span>
-    </div>
-
-    <?php if (!empty($criteria)): ?>
-        <div class="aipi-ranking__criteria">判断軸: <?php echo esc_html($criteria); ?></div>
-    <?php endif; ?>
-
     <?php foreach ($products as $i => $product):
-        // rank はリナンバー済みだが、念のため fallback
         $rank = $product['rank'] ?? ($i + 1);
         $asin = $product['asin'] ?? '';
         $source = $product['source'] ?? '';
 
         $display_title = AI_PI_Card_Renderer::get_display_title($product, 80);
 
-        // ハイブリッド: 直リン優先、無ければ検索URLフォールバック
         $amazon_url = '';
         $rakuten_url = '';
 
@@ -59,9 +48,6 @@ if (!defined('ABSPATH')) exit;
                 </a>
                 <?php if (!empty($product['price_display'])): ?>
                     <div class="aipi-rank-row__price"><?php echo esc_html($product['price_display']); ?></div>
-                <?php endif; ?>
-                <?php if (!empty($product['reason'])): ?>
-                    <div class="aipi-rank-row__reason"><?php echo esc_html($product['reason']); ?></div>
                 <?php endif; ?>
                 <div class="aipi-rank-row__buttons">
                     <?php if (!empty($amazon_url)): ?>
