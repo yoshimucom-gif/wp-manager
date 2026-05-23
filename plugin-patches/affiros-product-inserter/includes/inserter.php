@@ -186,9 +186,12 @@ class AI_PI_Inserter {
         // 両方のボタンを出すため、片方しか無い商品はペア無しに分類される
         $all_candidates = AI_PI_Product_Selector::pair_candidates($all_candidates);
 
-        // Claudeには「単体マーカー数」分だけ選定を依頼（多商品マーカーは流用するため重複依頼を避ける）
+        // 単体マーカーの選定結果 → article_products（多商品マーカーの商品ソース）
         $selections_by_index = [];
+        $article_products    = [];
+
         if ($single_marker_count > 0) {
+            // 通常ケース: 単体マーカー分だけ選定を依頼し、article_products を構築する
             $sel_result = $claude->select_products_marker($content, $all_candidates, $single_marker_count);
             if (is_wp_error($sel_result)) return $sel_result;
             self::accumulate_usage($total_usage, $sel_result['usage']);
@@ -201,18 +204,40 @@ class AI_PI_Inserter {
                     $selections_by_index[$idx] = $sel;
                 }
             }
-        }
 
-        // 単体マーカーの選定結果を順番に並べた配列（多商品マーカーの一次ソース）
-        $article_products = [];
-        $seen_article_ids = [];
-        foreach ($selections_by_index as $sel) {
-            $p = AI_PI_Product_Selector::find_by_id($all_candidates, $sel['product_id']);
-            if (!$p) continue;
-            $pid = $p['id'] ?? '';
-            if (!$pid || isset($seen_article_ids[$pid])) continue;
-            $article_products[] = $p;
-            $seen_article_ids[$pid] = true;
+            $seen_article_ids = [];
+            foreach ($selections_by_index as $sel) {
+                $p = AI_PI_Product_Selector::find_by_id($all_candidates, $sel['product_id']);
+                if (!$p) continue;
+                $pid = $p['id'] ?? '';
+                if (!$pid || isset($seen_article_ids[$pid])) continue;
+                $article_products[]       = $p;
+                $seen_article_ids[$pid]   = true;
+            }
+        } elseif ($marker_count > 0) {
+            // ⚠️ compare/ranking のみで単体マーカーが0件の場合:
+            //    通常フローでは article_products が空のまま多商品マーカーが空振りするバグ。
+            //    ランキング選定で必要件数分の商品を直接取得して article_products を構築する。
+            $multi_need = 3;
+            foreach ($markers as $m) {
+                $md  = !empty($m[1]) ? strtolower($m[1]) : $design;
+                $cnt = !empty($m[2]) ? intval($m[2]) : 3;
+                if (($md === 'ranking' || $md === 'compare') && $cnt > $multi_need) {
+                    $multi_need = $cnt;
+                }
+            }
+            $rank_result = $claude->select_products_ranking($content, $all_candidates, $multi_need);
+            if (!is_wp_error($rank_result)) {
+                self::accumulate_usage($total_usage, $rank_result['usage']);
+                $seen_ids = [];
+                foreach ($rank_result['ranking'] as $r) {
+                    $p = AI_PI_Product_Selector::find_by_id($all_candidates, $r['product_id'] ?? '');
+                    if ($p && !in_array($p['id'] ?? '', $seen_ids, true)) {
+                        $article_products[] = $p;
+                        $seen_ids[]         = $p['id'] ?? '';
+                    }
+                }
+            }
         }
 
         $selected_products = [];
