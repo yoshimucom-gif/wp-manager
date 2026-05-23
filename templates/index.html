@@ -1375,22 +1375,12 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         </div>
         <div style="max-width:780px">
           <div class="settings-section">
-            <div class="section-header">// 文字数</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-              <div class="form-group">
-                <label class="form-label">基本最小</label>
-                <input type="number" id="td-char-basic-min" class="form-control" min="1">
-              </div>
-              <div class="form-group">
-                <label class="form-label">基本最大（推奨）</label>
-                <input type="number" id="td-char-basic-max" class="form-control" min="1">
-              </div>
-              <div class="form-group">
-                <label class="form-label">絶対最大</label>
-                <input type="number" id="td-char-max" class="form-control" min="1">
-              </div>
+            <div class="section-header">// 文字数（最大）</div>
+            <div class="form-group" style="max-width:160px">
+              <label class="form-label">最大文字数</label>
+              <input type="number" id="td-char-max" class="form-control" min="1">
             </div>
-            <div style="font-size:11px;color:var(--muted)">SERPでの表示切れを避けるため、基本最大は35前後を推奨。</div>
+            <div style="font-size:11px;color:var(--muted)">SERPでの表示切れを避けるため35以内を推奨。</div>
           </div>
 
           <div class="settings-section">
@@ -4737,9 +4727,7 @@ async function loadTitleDefinition() {
     if (!res.ok) throw new Error('読み込みに失敗しました');
     const data = await res.json();
     const d = data.definition || {};
-    document.getElementById('td-char-basic-min').value = d.char_basic_min ?? '';
-    document.getElementById('td-char-basic-max').value = d.char_basic_max ?? '';
-    document.getElementById('td-char-max').value = d.char_max ?? '';
+    document.getElementById('td-char-max').value = d.char_max ?? 35;
     document.getElementById('td-forbidden-phrases').value = (d.forbidden_phrases || []).join(', ');
     document.getElementById('td-ranking-default').value = d.ranking_default_count ?? 5;
     document.getElementById('td-ranking-max').value = d.ranking_max_count ?? 7;
@@ -4761,9 +4749,7 @@ function readListField(value) {
 async function saveTitleDefinition() {
   const msg = document.getElementById('td-msg');
   const payload = {
-    char_basic_min: parseInt(document.getElementById('td-char-basic-min').value, 10) || 28,
-    char_basic_max: parseInt(document.getElementById('td-char-basic-max').value, 10) || 35,
-    char_max: parseInt(document.getElementById('td-char-max').value, 10) || 45,
+    char_max: parseInt(document.getElementById('td-char-max').value, 10) || 35,
     forbidden_phrases: readListField(document.getElementById('td-forbidden-phrases').value),
     ranking_default_count: parseInt(document.getElementById('td-ranking-default').value, 10) || 5,
     ranking_max_count: parseInt(document.getElementById('td-ranking-max').value, 10) || 7,

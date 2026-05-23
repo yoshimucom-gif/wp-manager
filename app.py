@@ -382,8 +382,6 @@ def save_doc(key, data):
 
 DEFAULT_TITLE_DEFINITION = {
     'version': 1,
-    'char_basic_min': 28,
-    'char_basic_max': 35,
     'char_max': 35,
     'forbidden_phrases': [
         '完全ガイド', '決定版', '○○のすべて',
@@ -434,7 +432,7 @@ def save_title_definition(definition):
         if k in ('forbidden_phrases', 'example_titles'):
             if isinstance(v, list):
                 clean[k] = [str(x).strip() for x in v if str(x).strip()]
-        elif k in ('char_basic_min', 'char_basic_max', 'char_max', 'ranking_default_count', 'ranking_max_count'):
+        elif k in ('char_max', 'ranking_default_count', 'ranking_max_count'):
             try:
                 clean[k] = int(v)
             except (TypeError, ValueError):
