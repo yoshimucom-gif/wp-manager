@@ -408,6 +408,18 @@ DEFAULT_TITLE_DEFINITION = {
     'ranking_default_count': 5,
     'ranking_max_count': 7,
     'additional_instructions': '',
+    'example_titles': [
+        '防水バッグ おすすめ5選｜登山・海水浴・通勤に使えるモデルを防水等級で比較',
+        'ネックウォーマー おすすめ5選！暖かさ・洗いやすさ・価格で厳選',
+        '加湿器 おすすめ5選｜6〜10畳対応・電気代が安いモデルを徹底比較',
+        '在宅ワーク向けチェア おすすめ5選｜腰痛対策・長時間座れるモデルを比較',
+        '初心者向けプロテイン おすすめ5選！飲みやすく続けやすい商品を厳選',
+        '防水バッグの選び方｜IPX等級・素材・用途別に失敗しないポイントを解説',
+        'ネックウォーマーとマフラーはどっちが暖かい？素材・形状の違いを比較',
+        '加湿器でカビが生える原因と正しいお手入れ方法・置き場所のコツ',
+        'デスクワークで腰が痛い原因5つと今すぐできる改善策【椅子選びも解説】',
+        'プロテインはいつ飲むのが正解？タイミングで変わる効果を徹底解説',
+    ],
 }
 
 
@@ -418,7 +430,7 @@ def load_title_definition():
     merged = dict(DEFAULT_TITLE_DEFINITION)
     merged.update({k: v for k, v in raw.items() if k in DEFAULT_TITLE_DEFINITION})
     # 配列フィールドは型確認
-    for key in ('forbidden_phrases', 'angle_categories'):
+    for key in ('forbidden_phrases', 'angle_categories', 'example_titles'):
         if not isinstance(merged.get(key), list):
             merged[key] = list(DEFAULT_TITLE_DEFINITION[key])
     # 旧 symbol_rules を保存していた場合、現行デフォルトに自動移行。
@@ -1893,6 +1905,12 @@ def title_generation_prompt(keywords, count_per_keyword, category='', article_ty
     angles_text = '「' + '」「'.join(angles) + '」' if angles else ''
     additional = (d.get('additional_instructions') or '').strip()
     additional_block = f'\n【追加指示（運用ルール）】\n{additional}\n' if additional else ''
+    examples = [t for t in (d.get('example_titles') or []) if t and t.strip()]
+    examples_block = (
+        '\n【タイトル品質の参考例（この水準・スタイルを目標に）】\n'
+        + '\n'.join(f'- {t}' for t in examples)
+        + '\n'
+    ) if examples else ''
 
     if article_type_filter == 'ranking':
         type_intro = f'以下のキーワードごとに、**ランキング記事**のタイトル案を{count_per_keyword}個ずつ作ってください。'
@@ -1988,7 +2006,7 @@ def title_generation_prompt(keywords, count_per_keyword, category='', article_ty
 - slug は英語のみ・小文字・ハイフン区切り（kebab-case）。3〜4単語、最大30文字以内。
   記事内容を端的に表すSEOフレンドリーな英語に翻訳/要約する（直訳のローマ字化は禁止）。
   例: 「ネックウォーマーおすすめランキング」→「neck-warmer-ranking」。
-{additional_block}
+{examples_block}{additional_block}
 【出力】
 - JSON以外の説明文、Markdown、コードフェンスは禁止。
 

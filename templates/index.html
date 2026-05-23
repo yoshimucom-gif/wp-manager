@@ -1439,6 +1439,14 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// タイトル例（品質サンプル・few-shot）</div>
+            <div class="form-group">
+              <textarea id="td-example-titles" class="form-control" rows="10" placeholder="1行に1タイトル。ランキング・コラム両方の良いタイトル例を入れると精度が上がる。"></textarea>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">1行1タイトルで入力。「このくらいの質のタイトルを作れ」という品質基準例としてAIに渡す。ランキング5選前後・コラムを混ぜると効果的。</div>
+            </div>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// 追加指示（自由記述）</div>
             <div class="form-group">
               <textarea id="td-additional" class="form-control" rows="4" placeholder="（例）当サイトは女性向けなので柔らかい口調を意識する。価格訴求より使い勝手を優先。"></textarea>
@@ -4761,6 +4769,7 @@ async function loadTitleDefinition() {
     document.getElementById('td-symbol-rules').value = d.symbol_rules || '';
     document.getElementById('td-ranking-default').value = d.ranking_default_count ?? 5;
     document.getElementById('td-ranking-max').value = d.ranking_max_count ?? 7;
+    document.getElementById('td-example-titles').value = (d.example_titles || []).join('\n');
     document.getElementById('td-additional').value = d.additional_instructions || '';
     if (msg) { msg.style.color = 'var(--muted)'; msg.textContent = 'タイトル定義を読み込みました。'; }
   } catch (e) {
@@ -4787,6 +4796,8 @@ async function saveTitleDefinition() {
     symbol_rules: document.getElementById('td-symbol-rules').value,
     ranking_default_count: parseInt(document.getElementById('td-ranking-default').value, 10) || 5,
     ranking_max_count: parseInt(document.getElementById('td-ranking-max').value, 10) || 7,
+    example_titles: String(document.getElementById('td-example-titles').value || '')
+      .split('\n').map(s => s.trim()).filter(Boolean),
     additional_instructions: document.getElementById('td-additional').value,
   };
   try {
