@@ -1881,12 +1881,26 @@ def title_generation_prompt(keywords, count_per_keyword, category='', article_ty
     forbidden_list = '、'.join(d.get('forbidden_phrases') or [])
     additional = (d.get('additional_instructions') or '').strip()
     additional_block = f'\n【追加指示】\n{additional}\n' if additional else ''
-    examples = [t for t in (d.get('example_titles') or []) if t and t.strip()]
+
+    # サンプル例を記事種別でフィルタ（ランキング例 = \d+選 を含む）
+    all_examples = [t for t in (d.get('example_titles') or []) if t and t.strip()]
+    if article_type_filter == 'ranking':
+        examples = [t for t in all_examples if re.search(r'\d+選', t)]
+    elif article_type_filter == 'column':
+        examples = [t for t in all_examples if not re.search(r'\d+選', t)]
+    else:
+        examples = all_examples
     examples_block = (
         '\n【タイトル参考例（この水準・スタイルを目標に）】\n'
         + '\n'.join(f'- {t}' for t in examples)
         + '\n'
     ) if examples else ''
+
+    # ranking追加ルールはcolumn固定時は不要
+    ranking_rule_block = (
+        '\n【ranking のときの追加ルール】\n'
+        f'- **必ず「おすすめ」と「○選」を両方入れる**。デフォルトは{d["ranking_default_count"]}選、最大{d["ranking_max_count"]}選。\n'
+    ) if article_type_filter != 'column' else ''
 
     if article_type_filter == 'ranking':
         type_intro = f'以下のキーワードごとに、**ランキング記事**のタイトル案を{count_per_keyword}個ずつ作ってください。'
@@ -1956,9 +1970,7 @@ def title_generation_prompt(keywords, count_per_keyword, category='', article_ty
 - 同じKW内でタイトルが似た構文・似た語尾にならないよう切り口を変える
 - 以下の表現は使用禁止: {forbidden_list}
 
-【ranking のときの追加ルール】
-- **必ず「おすすめ」と「○選」を両方入れる**。デフォルトは{d['ranking_default_count']}選、最大{d['ranking_max_count']}選。
-
+{ranking_rule_block}
 【slug】
 - slug は英語のみ・小文字・ハイフン区切り（kebab-case）。3〜4単語、最大30文字以内。
   記事内容を端的に表すSEOフレンドリーな英語に翻訳/要約する（直訳のローマ字化は禁止）。
