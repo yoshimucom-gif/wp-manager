@@ -58,6 +58,7 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-producti
 #    ロックがすり抜けてロスト・アップデートが再発する（render.yaml 参照）。
 # ───────────────────────────────────────────────────────────────────────────
 _DATA_LOCK = threading.RLock()
+_SCHED_PUBLISH_JOBS = {}  # job_id -> {status, total, completed, success, error, errors}
 
 # WP一括投稿ジョブのインメモリストア（完了後に自動削除しない・最新20件保持）
 _PUBLISH_JOBS: dict = {}
@@ -6937,67 +6938,31 @@ def get_latest_publish_job():
 
 
 # Scheduled (future) publish
-@app.route('/api/schedule-publish', methods=['POST'])
-@login_required
-@with_data_lock
-def schedule_publish():
-    """生成済み記事を WordPress の予約投稿（status=future）として送信する。
-
-    リクエスト JSON:
-      article_ids: list[str]   — 対象記事 ID
-      start_date:  str         — 開始日 YYYY-MM-DD（当日以降）
-      start_hour:  int         — 開始時刻（0〜23、既定10）
-      daily_cap:   int         — 1日の最大投稿件数（1〜200、既定20）
-
-    日時計算:
-      i 番目の記事 → day = i // daily_cap, slot = i % daily_cap
-      間隔 = max(5, floor(720 / daily_cap)) 分（12時間内に均等分散）
-      時刻がオーバーフローしたら 23:59 にクランプ
-    """
-    from datetime import date as _date
-    data = request.get_json(silent=True) or {}
-    article_ids = data.get('article_ids') or []
-    start_date_str = str(data.get('start_date') or '').strip()
-    start_hour = 10  # 固定（UIから廃止）
-    daily_cap = clamp_int(data.get('daily_cap', 20), 20, 1, 200)
-
-    try:
-        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
-    except ValueError:
-        start_date = _date.today() + timedelta(days=1)
-
+def _run_sched_publish_worker(job_id, targets, daily_cap, start_date):
+    """予約投稿をバックグラウンドで処理するワーカー。"""
+    start_hour = 10
     spacing_minutes = max(5, (12 * 60) // daily_cap)
 
-    settings = load_settings()
-    articles = load_articles()
-    article_lookup = {a['id']: a for a in articles}
-    quality_list = load_quality()
-
-    targets = [article_lookup[i] for i in article_ids
-               if i in article_lookup and article_lookup[i].get('content')]
-    if not targets:
-        return jsonify({'error': '生成済み本文のある記事を選択してください'}), 400
-
-    results = {'success': 0, 'error': 0, 'errors': [], 'scheduled': []}
+    with _DATA_LOCK:
+        settings = load_settings()
 
     for idx, article in enumerate(targets):
         day_offset = idx // daily_cap
         slot = idx % daily_cap
-
         total_minutes = start_hour * 60 + slot * spacing_minutes
         total_minutes = min(total_minutes, 23 * 60 + 59)
-        sched_hour = total_minutes // 60
-        sched_min = total_minutes % 60
-        sched_date = start_date + timedelta(days=day_offset)
-        sched_dt = datetime(sched_date.year, sched_date.month, sched_date.day,
-                            sched_hour, sched_min, 0)
-        # WordPress date パラメータはサイトのローカルタイム（タイムゾーンなし）
+        sched_dt = datetime(
+            start_date.year, start_date.month, start_date.day,
+            total_minutes // 60, total_minutes % 60, 0,
+        ) + timedelta(days=day_offset)
         sched_dt_str = sched_dt.strftime('%Y-%m-%dT%H:%M:%S')
 
         wp_url, wp_user, wp_password = get_site_credentials(article, settings)
         if not all([wp_url, wp_user, wp_password]):
-            results['error'] += 1
-            results['errors'].append({'title': article.get('title', ''), 'error': 'サイト未設定'})
+            _SCHED_PUBLISH_JOBS[job_id]['error'] += 1
+            _SCHED_PUBLISH_JOBS[job_id]['errors'].append(
+                {'title': article.get('title', ''), 'error': 'サイト未設定'})
+            _SCHED_PUBLISH_JOBS[job_id]['completed'] += 1
             continue
 
         content = prepare_article_content_for_publish(article['content'], settings)
@@ -7024,25 +6989,80 @@ def schedule_publish():
             )
             resp.raise_for_status()
             post_data = resp.json()
-            for a in articles:
-                if a['id'] == article['id']:
-                    a['status'] = 'scheduled'
-                    a['wp_post_id'] = post_data['id']
-                    a['wp_url'] = post_data.get('link', '')
-                    a['scheduled_at'] = sched_dt_str
-                    a['published_at'] = now_iso()
-                    break
-            results['success'] += 1
-            results['scheduled'].append({'title': article['title'], 'date': sched_dt_str})
+            with _DATA_LOCK:
+                articles = load_articles()
+                for a in articles:
+                    if a['id'] == article['id']:
+                        a['status'] = 'scheduled'
+                        a['wp_post_id'] = post_data['id']
+                        a['wp_url'] = post_data.get('link', '')
+                        a['scheduled_at'] = sched_dt_str
+                        a['published_at'] = now_iso()
+                        break
+                save_articles(articles)
+            _SCHED_PUBLISH_JOBS[job_id]['success'] += 1
         except requests.exceptions.RequestException as e:
-            results['error'] += 1
-            results['errors'].append({'title': article.get('title', ''), 'error': describe_wp_request_error(e)})
+            _SCHED_PUBLISH_JOBS[job_id]['error'] += 1
+            _SCHED_PUBLISH_JOBS[job_id]['errors'].append(
+                {'title': article.get('title', ''), 'error': describe_wp_request_error(e)})
         except Exception as e:
-            results['error'] += 1
-            results['errors'].append({'title': article.get('title', ''), 'error': str(e)})
+            _SCHED_PUBLISH_JOBS[job_id]['error'] += 1
+            _SCHED_PUBLISH_JOBS[job_id]['errors'].append(
+                {'title': article.get('title', ''), 'error': str(e)})
 
-    save_articles(articles)
-    return jsonify(results)
+        _SCHED_PUBLISH_JOBS[job_id]['completed'] += 1
+
+    _SCHED_PUBLISH_JOBS[job_id]['status'] = 'done'
+
+
+@app.route('/api/schedule-publish', methods=['POST'])
+@login_required
+def schedule_publish():
+    """予約投稿をバックグラウンドジョブとして開始し、job_id を即返す。"""
+    from datetime import date as _date
+    data = request.get_json(silent=True) or {}
+    article_ids = data.get('article_ids') or []
+    start_date_str = str(data.get('start_date') or '').strip()
+    daily_cap = clamp_int(data.get('daily_cap', 20), 20, 1, 200)
+
+    try:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        start_date = _date.today() + timedelta(days=1)
+
+    with _DATA_LOCK:
+        articles = load_articles()
+    article_lookup = {a['id']: a for a in articles}
+    targets = [article_lookup[i] for i in article_ids
+               if i in article_lookup and article_lookup[i].get('content')]
+    if not targets:
+        return jsonify({'error': '生成済み本文のある記事を選択してください'}), 400
+
+    job_id = str(uuid.uuid4())
+    _SCHED_PUBLISH_JOBS[job_id] = {
+        'status': 'running',
+        'total': len(targets),
+        'completed': 0,
+        'success': 0,
+        'error': 0,
+        'errors': [],
+    }
+    threading.Thread(
+        target=_run_sched_publish_worker,
+        args=(job_id, targets, daily_cap, start_date),
+        daemon=True,
+    ).start()
+
+    return jsonify({'success': True, 'job_id': job_id, 'total': len(targets)})
+
+
+@app.route('/api/schedule-publish/jobs/<job_id>', methods=['GET'])
+@login_required
+def get_sched_publish_job(job_id):
+    job = _SCHED_PUBLISH_JOBS.get(job_id)
+    if not job:
+        return jsonify({'error': 'ジョブが見つかりません'}), 404
+    return jsonify(job)
 
 
 @app.route('/api/seo-news', methods=['GET'])
