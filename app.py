@@ -384,10 +384,10 @@ DEFAULT_TITLE_DEFINITION = {
     'version': 1,
     'char_basic_min': 28,
     'char_basic_max': 35,
-    'char_max': 45,
+    'char_max': 35,
     'forbidden_phrases': [
-        '徹底比較', '完全ガイド', '決定版', '○○のすべて',
-        '最強', '神', 'No.1', '絶対', '必見', '驚愕', '衝撃',
+        '完全ガイド', '決定版', '○○のすべて',
+        '神', 'No.1', '絶対', '必見', '驚愕', '衝撃',
         'プロが選ぶ', 'プロおすすめ', 'プロ厳選',
     ],
     'concreteness_examples': (
@@ -409,16 +409,16 @@ DEFAULT_TITLE_DEFINITION = {
     'ranking_max_count': 7,
     'additional_instructions': '',
     'example_titles': [
-        '防水バッグ おすすめ5選｜登山・海水浴・通勤に使えるモデルを防水等級で比較',
-        'ネックウォーマー おすすめ5選！暖かさ・洗いやすさ・価格で厳選',
-        '加湿器 おすすめ5選｜6〜10畳対応・電気代が安いモデルを徹底比較',
-        '在宅ワーク向けチェア おすすめ5選｜腰痛対策・長時間座れるモデルを比較',
-        '初心者向けプロテイン おすすめ5選！飲みやすく続けやすい商品を厳選',
-        '防水バッグの選び方｜IPX等級・素材・用途別に失敗しないポイントを解説',
-        'ネックウォーマーとマフラーはどっちが暖かい？素材・形状の違いを比較',
-        '加湿器でカビが生える原因と正しいお手入れ方法・置き場所のコツ',
-        'デスクワークで腰が痛い原因5つと今すぐできる改善策【椅子選びも解説】',
-        'プロテインはいつ飲むのが正解？タイミングで変わる効果を徹底解説',
+        '防水バッグおすすめ5選！通勤・登山で濡らさない最強モデルを徹底比較',
+        '洗えるネックウォーマーおすすめ5選！コスパと暖かさで選ぶ厳選モデル',
+        '【電気代を抑える】6〜10畳用加湿器おすすめ5選！コスパ最強比較',
+        '【腰痛対策】1日8時間座っても疲れない在宅ワーク向けチェア5選',
+        '「マズい」を卒業！初心者でも飲みやすく続けやすいプロテイン5選',
+        '防水バッグで後悔しない選び方！知っておくべきIPX等級の落とし穴',
+        '【防寒対決】ネックウォーマーvsマフラー本当に暖かいのはどっち？',
+        '【もう臭わない】加湿器のカビを防ぐ簡単お手入れと正しい置き場所',
+        '【脱・腰痛】デスクワークで腰が痛い5つの原因と今すぐできる改善策',
+        'プロテインを飲むゴールデンタイムは？目的別の効果的なタイミング',
     ],
 }
 
@@ -1901,13 +1901,11 @@ def score_title_idea(title, keyword, article_type, existing_title_keys):
 def title_generation_prompt(keywords, count_per_keyword, category='', article_type_filter=None):
     d = load_title_definition()
     forbidden_list = '、'.join(d.get('forbidden_phrases') or [])
-    angles = d.get('angle_categories') or []
-    angles_text = '「' + '」「'.join(angles) + '」' if angles else ''
     additional = (d.get('additional_instructions') or '').strip()
-    additional_block = f'\n【追加指示（運用ルール）】\n{additional}\n' if additional else ''
+    additional_block = f'\n【追加指示】\n{additional}\n' if additional else ''
     examples = [t for t in (d.get('example_titles') or []) if t and t.strip()]
     examples_block = (
-        '\n【タイトル品質の参考例（この水準・スタイルを目標に）】\n'
+        '\n【タイトル参考例（この水準・スタイルを目標に）】\n'
         + '\n'.join(f'- {t}' for t in examples)
         + '\n'
     ) if examples else ''
@@ -1940,7 +1938,7 @@ def title_generation_prompt(keywords, count_per_keyword, category='', article_ty
             '  （例: 「Andeor 防水バッグ 口コミ」のような商品名KWでも、ここでは無理に取り扱わず column 扱いで構いません）。'
         )
 
-    return f"""あなたはSEO記事の編集者です。検索順位とクリック率（CTR）の両方を最大化する記事タイトルを設計してください。
+    return f"""あなたはSEO記事の編集者です。クリックされる記事タイトルを設計してください。
 
 {type_intro}
 
@@ -1974,33 +1972,14 @@ def title_generation_prompt(keywords, count_per_keyword, category='', article_ty
 
 {type_rule_block}
 
-【SEO 観点 ─ 検索される & 評価される】
-- メインキーワードは **タイトルの先頭〜中盤** に置く。末尾に流さない。
-- メインKWの言い換えで関連サジェスト語を1つ盛り込む（口コミ・評判・効果・選び方・デメリット・違い・値段・賃貸OK・電気代・何歳から、など対象に合うもの）。
-- 文字数は日本語で **{d['char_basic_min']}〜{d['char_basic_max']}字を基本**（検索結果での表示切れを避ける）。最大でも {d['char_max']}字まで。
-- 同じKW内で全タイトルが似た構文・似た語尾になるのは禁止。検索意図ごとに違う切り口を割り当てる。
-
-【CTR 観点 ─ クリックされる】
-- 抽象的に締めず、必ず具体性を1つ以上入れる。
-  使える要素の例:
-    {d.get('concreteness_examples', '')}
-- 1キーワード内では切り口をしっかり分ける（同じパターンを2つ並べない）。
-  例: {angles_text} から複数を組み合わせる。
-
-【禁止表現】
+【ルール】
+- **文字数は{d['char_max']}字以内**（SERPでの表示切れを防ぐ絶対上限）
+- メインキーワードはタイトルの先頭〜中盤に置く
+- 同じKW内でタイトルが似た構文・似た語尾にならないよう切り口を変える
 - 以下の表現は使用禁止: {forbidden_list}
-- 根拠のない断定（「絶対に〜できる」など）も禁止
-- 釣りタイトル、誇大表現も禁止
-
-【記号】
-- {d.get('symbol_rules', '')}
 
 【ranking のときの追加ルール】
-- ranking タイトルには **必ず「おすすめ」を入れる**。
-- さらに **必ず「○選」を入れる**。デフォルトは **{d['ranking_default_count']}選**。
-  特別な理由がない限り {d['ranking_default_count']}選。候補が明らかに豊富なら最大 {d['ranking_max_count']}選まで。
-  それ以上は実商品データが揃いにくく品質が落ちるため避ける。
-- 「おすすめ」と「○選」が両方入ったタイトルを必ず生成すること（例: 「防水バッグ おすすめ5選」）。
+- **必ず「おすすめ」と「○選」を両方入れる**。デフォルトは{d['ranking_default_count']}選、最大{d['ranking_max_count']}選。
 
 【slug】
 - slug は英語のみ・小文字・ハイフン区切り（kebab-case）。3〜4単語、最大30文字以内。
@@ -2008,9 +1987,7 @@ def title_generation_prompt(keywords, count_per_keyword, category='', article_ty
   例: 「ネックウォーマーおすすめランキング」→「neck-warmer-ranking」。
 {examples_block}{additional_block}
 【出力】
-- JSON以外の説明文、Markdown、コードフェンスは禁止。
-
-タイトル案を出す前に「このKWで検索する人は何が知りたい / どんな不安があるか」を1〜2秒考えてから、SEO + CTR が両立する具体的なタイトルを設計してください。"""
+- JSON以外の説明文、Markdown、コードフェンスは禁止。"""
 
 
 def extract_title_ideas_payload(text):
