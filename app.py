@@ -418,6 +418,11 @@ def load_title_definition():
     for key in ('forbidden_phrases', 'example_titles'):
         if not isinstance(merged.get(key), list):
             merged[key] = list(DEFAULT_TITLE_DEFINITION[key])
+    # サンプル例に含まれる語が禁止リストに残っていたら自動除外（矛盾防止）
+    example_text = ' '.join(merged.get('example_titles') or [])
+    merged['forbidden_phrases'] = [
+        p for p in merged.get('forbidden_phrases', []) if p not in example_text
+    ]
     return merged
 
 
