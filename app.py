@@ -3329,7 +3329,7 @@ AD_INSERTION_ALLOWED_POSITIONS = (
     'after_last_h2',
     'bottom',
 )
-AD_INSERTION_ALLOWED_DESIGNS = ('vertical', 'ranking')
+AD_INSERTION_ALLOWED_DESIGNS = ('vertical', 'ranking', 'compare')
 AD_INSERTION_ALLOWED_TYPES = ('ranking', 'brand', 'column')
 
 
@@ -3437,8 +3437,8 @@ def _build_marker(design='vertical', count=None, brand=False):
     """
     if not design or design == 'default':
         return '<!--ai-product-->'
-    if design == 'ranking' and count:
-        return f'<!--ai-product:ranking:{int(count)}-->'
+    if design in ('ranking', 'compare') and count:
+        return f'<!--ai-product:{design}:{int(count)}-->'
     if brand:
         return f'<!--ai-product:{design}:brand-->'
     return f'<!--ai-product:{design}-->'
