@@ -6958,7 +6958,7 @@ def schedule_publish():
     data = request.get_json(silent=True) or {}
     article_ids = data.get('article_ids') or []
     start_date_str = str(data.get('start_date') or '').strip()
-    start_hour = clamp_int(data.get('start_hour', 10), 10, 0, 23)
+    start_hour = 10  # 固定（UIから廃止）
     daily_cap = clamp_int(data.get('daily_cap', 20), 20, 1, 200)
 
     try:

@@ -1913,15 +1913,9 @@ table { width: 100%; border-collapse: collapse; }"></textarea>
   <div class="modal" style="width:460px">
     <div class="modal-title">// 予約投稿 割り当て</div>
     <div id="schedule-publish-summary" style="font-size:13px;margin-bottom:16px;color:var(--muted)"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="form-group">
-        <label class="form-label">開始日</label>
-        <input type="date" id="sched-start-date" class="form-control" oninput="updateSchedPreview()">
-      </div>
-      <div class="form-group">
-        <label class="form-label">開始時刻</label>
-        <input type="time" id="sched-start-time" class="form-control" value="10:00" oninput="updateSchedPreview()">
-      </div>
+    <div class="form-group">
+      <label class="form-label">開始日</label>
+      <input type="date" id="sched-start-date" class="form-control" oninput="updateSchedPreview()">
     </div>
     <div class="form-group">
       <label class="form-label">1日の上限件数</label>
@@ -3118,10 +3112,9 @@ function updateSchedPreview() {
   const cap = Math.max(1, parseInt(document.getElementById('sched-daily-cap').value, 10) || 20);
   const days = Math.ceil(count / cap);
   const startDate = document.getElementById('sched-start-date').value;
-  const startTime = document.getElementById('sched-start-time').value || '10:00';
 
   let preview = `${count} 件を ${days} 日分に割り当て（1日最大 ${cap} 件）\n`;
-  preview += `初回公開: ${startDate} ${startTime}\n`;
+  preview += `初回公開: ${startDate} 10:00\n`;
   preview += `※ 今すぐ全件WPに送信。以降はWPが自動公開します。\n`;
 
   if (startDate) {
@@ -3142,8 +3135,6 @@ async function execSchedulePublish() {
   const startDate = document.getElementById('sched-start-date').value;
   if (!startDate) { toast('開始日を入力してください', 'error'); return; }
 
-  const timeVal = document.getElementById('sched-start-time').value || '10:00';
-  const startHour = parseInt(timeVal.split(':')[0], 10) || 10;
   const dailyCap = Math.max(1, parseInt(document.getElementById('sched-daily-cap').value, 10) || 20);
   const count = _scheduleTargetIds.length;
 
@@ -3160,7 +3151,6 @@ async function execSchedulePublish() {
       body: JSON.stringify({
         article_ids: _scheduleTargetIds,
         start_date: startDate,
-        start_hour: startHour,
         daily_cap: dailyCap,
       }),
     });
