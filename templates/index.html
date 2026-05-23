@@ -4825,12 +4825,10 @@ const AD_POSITION_LABELS = {
   'before_first_h2':    '最初のH2の直前',
   'after_first_h2':     '最初のH2の直後',
   'after_each_h3_rank': '各「N位」H3の直後',
-  'before_matome_h2':   'まとめH2の直前',
-  'after_matome_h2':    'まとめH2の直後',
   'after_last_h2':      '最後のH2の直後（確定）',
   'bottom':             '記事末尾',
 };
-const AD_DESIGN_LABELS = { 'vertical': '縦置きカード', 'ranking': 'ランキングカード' };
+const AD_DESIGN_LABELS = { 'vertical': '縦置きカード', 'ranking': 'ランキングカード', 'compare': '比較表カード' };
 
 function renderAdRules(articleType) {
   const container = document.getElementById('ad-rules-' + articleType);
@@ -4847,7 +4845,7 @@ function renderAdRules(articleType) {
     const designOpts = Object.entries(AD_DESIGN_LABELS).map(([v, l]) =>
       `<option value="${v}" ${r.design === v ? 'selected' : ''}>${esc(l)}</option>`
     ).join('');
-    const showCount = r.design === 'ranking';
+    const showCount = r.design === 'ranking' || r.design === 'compare';
     const showRepeat = r.design === 'vertical';
     return `
       <div class="ad-rule-row" style="display:grid;grid-template-columns:2fr 1.4fr 1fr 1fr auto;gap:8px;align-items:center;margin-bottom:6px;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:4px">
