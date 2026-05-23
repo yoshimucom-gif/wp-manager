@@ -3121,14 +3121,15 @@ function updateSchedPreview() {
   const startTime = document.getElementById('sched-start-time').value || '10:00';
   const spacingMin = Math.max(5, Math.floor(720 / cap));
 
-  let preview = `${count} 件を ${days} 日間で投稿（1日最大 ${cap} 件）\n`;
-  preview += `開始: ${startDate} ${startTime} ／ 投稿間隔: 約 ${spacingMin} 分\n`;
+  let preview = `${count} 件を ${days} 日分に割り当て（1日最大 ${cap} 件）\n`;
+  preview += `初回公開: ${startDate} ${startTime} ／ 公開間隔: 約 ${spacingMin} 分\n`;
+  preview += `※ 今すぐ全件WPに送信。以降はWPが自動公開します。\n`;
 
-  // 終了日を計算
+  // 最終公開日を計算
   if (startDate) {
     const endD = new Date(startDate);
     endD.setDate(endD.getDate() + days - 1);
-    preview += `終了予定: ${endD.toISOString().slice(0, 10)}`;
+    preview += `最終公開日: ${endD.toISOString().slice(0, 10)}`;
   }
 
   document.getElementById('sched-preview').textContent = preview;
@@ -3148,7 +3149,7 @@ async function execSchedulePublish() {
   const dailyCap = Math.max(1, parseInt(document.getElementById('sched-daily-cap').value, 10) || 20);
   const count = _scheduleTargetIds.length;
 
-  if (!confirm(`${count} 件を ${startDate} から予約投稿として割り当てます。よろしいですか？`)) return;
+  if (!confirm(`${count} 件をWPに送信し、${startDate} 以降に順次公開するよう予約します。よろしいですか？`)) return;
 
   const btn = document.getElementById('sched-exec-btn');
   btn.disabled = true;
