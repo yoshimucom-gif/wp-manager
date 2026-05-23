@@ -416,6 +416,9 @@ def load_title_definition():
     for key in ('forbidden_phrases', 'example_titles'):
         if not isinstance(merged.get(key), list):
             merged[key] = list(DEFAULT_TITLE_DEFINITION[key])
+    # 旧デフォルト値（45）が保存されていたら現行デフォルト（35）に移行
+    if merged.get('char_max') == 45:
+        merged['char_max'] = DEFAULT_TITLE_DEFINITION['char_max']
     # サンプル例に含まれる語が禁止リストに残っていたら自動除外（矛盾防止）
     example_text = ' '.join(merged.get('example_titles') or [])
     merged['forbidden_phrases'] = [
