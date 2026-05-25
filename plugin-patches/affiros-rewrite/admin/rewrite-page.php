@@ -65,18 +65,17 @@ function affiros_rewrite_render_rewrite_page() {
                 <label>
                     記事タイプ:
                     <select id="affiros-article-type">
-                        <option value="">— 指定なし</option>
-                        <option value="auto">自動判定（記事ごとにAIが分類）</option>
+                        <option value="">— 指定なし（マーカー挿入なし）</option>
+                        <option value="auto" selected>自動判定（タイトルから判定）</option>
                         <option value="ranking">ランキング</option>
                         <option value="brand">商標</option>
                         <option value="column">コラム</option>
                     </select>
                 </label>
                 <label>
-                    <input type="checkbox" id="affiros-insert-markers">
-                    商品カードマーカーを挿入する（記事タイプ別の規則）
+                    <input type="checkbox" id="affiros-insert-markers" checked>
+                    商品カードマーカーを挿入する
                 </label>
-                <span id="affiros-marker-hint" class="description" style="display:none;color:#a06000;">← 記事タイプを選ぶと有効になります</span>
             </div>
         </div>
 
@@ -244,12 +243,15 @@ function affiros_rewrite_render_rewrite_page() {
             };
         }
 
-        // 商品カードマーカーは記事タイプ別の規則で挿入されるため、記事タイプ未指定では使えない
+        // 記事タイプが選ばれたらマーカーチェックを自動ON、「指定なし」のみ無効化
         function syncMarkerCheckbox() {
             const hasType = !!$('#affiros-article-type').val();
             $('#affiros-insert-markers').prop('disabled', !hasType);
-            if (!hasType) $('#affiros-insert-markers').prop('checked', false);
-            $('#affiros-marker-hint').toggle(!hasType);
+            if (hasType) {
+                $('#affiros-insert-markers').prop('checked', true);
+            } else {
+                $('#affiros-insert-markers').prop('checked', false);
+            }
         }
         $('#affiros-article-type').on('change', syncMarkerCheckbox);
         syncMarkerCheckbox();
