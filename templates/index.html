@@ -2288,11 +2288,18 @@ function scheduleDataSnapshotBackup() {
 
 // ---- Sites ----
 async function loadSites() {
-  const res = await fetch('/api/sites');
-  siteList = await res.json();
-  renderSites();
-  updateSiteSelects();
-  scheduleDataSnapshotBackup();
+  try {
+    const res = await fetch('/api/sites');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    siteList = await res.json();
+    renderSites();
+    updateSiteSelects();
+    scheduleDataSnapshotBackup();
+  } catch (e) {
+    console.warn('loadSites failed:', e);
+    siteList = [];
+    renderSites();
+  }
 }
 
 function renderSites() {
@@ -2552,8 +2559,10 @@ function kwPlanRenderCatRows() {
 // ---- Articles ----
 async function loadArticles() {
   // 現在サイトでフィルタ（未選択 = 全件取得 = ダッシュボード表示用）
+  try {
   const siteParam = currentSiteId ? `?site_id=${encodeURIComponent(currentSiteId)}` : '';
   const res = await fetch('/api/articles' + siteParam);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
   allArticles = await res.json();
   updateStats();
   updateCategorySelects();
@@ -2563,6 +2572,10 @@ async function loadArticles() {
   renderDashboardCandidates();
   renderMonthlyUsageEstimate();
   scheduleDataSnapshotBackup();
+  } catch (e) {
+    console.warn('loadArticles failed:', e);
+    allArticles = [];
+  }
 }
 
 function isArticleBusy(status) {
@@ -5710,28 +5723,34 @@ async function goToDashboard() {
 (async function init() {
   const initialPage = pageFromUrl() || localStorage.getItem('currentPage') || 'home';
   showPage(initialPage, { replaceUrl: true, skipLoad: true });
-  await ensureDurableData();
-  await loadCurrentSite();
-  // 最後に使ったサイトがあって、サーバー側未設定なら復元
-  if (!currentSiteId) {
-    const last = localStorage.getItem('lastSiteId');
-    if (last) {
-      try {
-        await fetch('/api/current-site', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({site_id: last})
-        });
-        currentSiteId = last;
-      } catch {}
+  try {
+    await ensureDurableData();
+    await loadCurrentSite();
+    // 最後に使ったサイトがあって、サーバー側未設定なら復元
+    if (!currentSiteId) {
+      const last = localStorage.getItem('lastSiteId');
+      if (last) {
+        try {
+          await fetch('/api/current-site', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({site_id: last})
+          });
+          currentSiteId = last;
+        } catch {}
+      }
     }
+    await loadSites();
+    await loadSitesDashboard();
+    await loadQuality();
+    await loadArticles();
+    await showPage(initialPage, { replaceUrl: true });
+    renderMonthlyUsageEstimate();
+  } catch (e) {
+    // API 全滅（502等）でも showPage は動かす
+    console.error('init error:', e);
+    try { await showPage(initialPage, { replaceUrl: true }); } catch {}
   }
-  await loadSites();
-  await loadSitesDashboard();
-  await loadQuality();
-  await loadArticles();
-  await showPage(initialPage, { replaceUrl: true });
-  renderMonthlyUsageEstimate();
 })();
 
 </script>
