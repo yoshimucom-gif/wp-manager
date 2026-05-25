@@ -4453,6 +4453,7 @@ def login_required(f):
 @app.route('/brand')
 @app.route('/column')
 @app.route('/title-ideas')
+@app.route('/kw-plan')
 @app.route('/batch')
 @app.route('/history')
 @app.route('/articles')
