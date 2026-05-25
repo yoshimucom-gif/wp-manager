@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros リライター
  * Description: WordPress記事をClaude APIでリライトする。WP_Queryで内部処理するためホスティングWAFの影響を受けない（403回避）。
- * Version: 0.4.9
+ * Version: 0.5.0
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-rewrite
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('AFFIROS_REWRITE_VERSION', '0.4.9');
+define('AFFIROS_REWRITE_VERSION', '0.5.0');
 define('AFFIROS_REWRITE_PATH', plugin_dir_path(__FILE__));
 define('AFFIROS_REWRITE_URL', plugin_dir_url(__FILE__));
 
@@ -26,9 +26,15 @@ require_once AFFIROS_REWRITE_PATH . 'includes/marker-inserter.php';
 require_once AFFIROS_REWRITE_PATH . 'includes/article-type.php';
 require_once AFFIROS_REWRITE_PATH . 'includes/rewrite-engine.php';
 require_once AFFIROS_REWRITE_PATH . 'includes/plugin-updater.php';
+require_once AFFIROS_REWRITE_PATH . 'includes/job-queue.php';
+require_once AFFIROS_REWRITE_PATH . 'includes/job-worker.php';
 require_once AFFIROS_REWRITE_PATH . 'admin/settings-page.php';
 require_once AFFIROS_REWRITE_PATH . 'admin/rewrite-page.php';
+require_once AFFIROS_REWRITE_PATH . 'admin/history-page.php';
 require_once AFFIROS_REWRITE_PATH . 'admin/ajax-handler.php';
+
+// バックグラウンドジョブワーカーを初期化（cron スケジュール登録 + ハンドラ）
+Affiros_Rewrite_Worker::init();
 
 /**
  * Affiros9 サーバーをアップデートサーバーとして登録。
@@ -119,12 +125,29 @@ add_action('admin_menu', function () {
     );
     add_submenu_page(
         'affiros-rewrite',
+        '実行履歴',
+        '実行履歴',
+        'manage_options',
+        'affiros-rewrite-history',
+        'affiros_rewrite_render_history_page'
+    );
+    add_submenu_page(
+        'affiros-rewrite',
         '設定',
         '設定',
         'manage_options',
         'affiros-rewrite-settings',
         'affiros_rewrite_render_settings_page'
     );
+});
+
+/**
+ * プラグイン無効化時に cron をクリーンアップ
+ */
+register_deactivation_hook(__FILE__, function () {
+    if (class_exists('Affiros_Rewrite_Worker')) {
+        Affiros_Rewrite_Worker::clear_schedule();
+    }
 });
 
 /**

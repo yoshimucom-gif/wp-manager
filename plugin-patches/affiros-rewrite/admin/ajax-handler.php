@@ -94,3 +94,78 @@ add_action('wp_ajax_affiros_rewrite_save', function () {
         'view_link' => get_permalink($post_id),
     ]);
 });
+
+/* ─────────────────────────────────────────────
+ * バックグラウンドジョブ用エンドポイント
+ *   - enqueue_bulk : 一括リライトをキューに入れる
+ *   - jobs_list    : ジョブ一覧
+ *   - job_status   : ジョブ詳細（アイテム単位の状態含む）
+ *   - job_cancel   : ジョブ中断
+ *   - job_delete   : ジョブ削除
+ * ───────────────────────────────────────────── */
+
+add_action('wp_ajax_affiros_rewrite_enqueue_bulk', function () {
+    check_ajax_referer('affiros_rewrite_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error(['message' => '権限がありません']);
+
+    $ids = array_map('intval', (array)($_POST['post_ids'] ?? []));
+    $ids = array_values(array_filter($ids, function ($v) { return $v > 0; }));
+    if (empty($ids)) wp_send_json_error(['message' => '対象記事が選択されていません']);
+
+    $options = [];
+    foreach (['rewrite_mode','emphasis_level','tone','target_chars','tolerance_percent','article_type'] as $k) {
+        if (isset($_POST[$k]) && $_POST[$k] !== '') {
+            $options[$k] = sanitize_text_field((string)$_POST[$k]);
+        }
+    }
+    $options['insert_markers'] = !empty($_POST['insert_markers']) && $_POST['insert_markers'] !== '0';
+
+    $job_id = Affiros_Rewrite_Job_Queue::create_job($ids, $options);
+    if (!$job_id) wp_send_json_error(['message' => 'ジョブを作成できませんでした']);
+
+    // ワーカーを即発火（次のスケジュールを待たない）
+    wp_schedule_single_event(time() + 5, Affiros_Rewrite_Worker::TICK_HOOK);
+
+    wp_send_json_success([
+        'job_id'    => $job_id,
+        'count'     => count($ids),
+        'history_url' => admin_url('admin.php?page=affiros-rewrite-history'),
+    ]);
+});
+
+add_action('wp_ajax_affiros_rewrite_jobs_list', function () {
+    check_ajax_referer('affiros_rewrite_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error(['message' => '権限がありません']);
+    $jobs = Affiros_Rewrite_Job_Queue::list_sorted();
+    // 一覧では items 詳細は省く（軽量化）
+    $light = array_values(array_map(function ($j) {
+        unset($j['items']);
+        return $j;
+    }, $jobs));
+    wp_send_json_success(['jobs' => $light]);
+});
+
+add_action('wp_ajax_affiros_rewrite_job_status', function () {
+    check_ajax_referer('affiros_rewrite_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error(['message' => '権限がありません']);
+    $job_id = sanitize_text_field((string)($_POST['job_id'] ?? ''));
+    $job = Affiros_Rewrite_Job_Queue::get($job_id);
+    if (!$job) wp_send_json_error(['message' => 'ジョブが見つかりません']);
+    wp_send_json_success($job);
+});
+
+add_action('wp_ajax_affiros_rewrite_job_cancel', function () {
+    check_ajax_referer('affiros_rewrite_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error(['message' => '権限がありません']);
+    $job_id = sanitize_text_field((string)($_POST['job_id'] ?? ''));
+    $ok = Affiros_Rewrite_Job_Queue::cancel($job_id);
+    wp_send_json_success(['cancelled' => $ok]);
+});
+
+add_action('wp_ajax_affiros_rewrite_job_delete', function () {
+    check_ajax_referer('affiros_rewrite_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error(['message' => '権限がありません']);
+    $job_id = sanitize_text_field((string)($_POST['job_id'] ?? ''));
+    $ok = Affiros_Rewrite_Job_Queue::delete($job_id);
+    wp_send_json_success(['deleted' => $ok]);
+});

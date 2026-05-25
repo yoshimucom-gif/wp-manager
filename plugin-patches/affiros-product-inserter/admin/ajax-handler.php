@@ -237,3 +237,68 @@ function ai_pi_ajax_test_credentials() {
 
     wp_send_json_success(['results' => $results]);
 }
+
+/* ─────────────────────────────────────────────
+ * バックグラウンドジョブ用エンドポイント
+ * ───────────────────────────────────────────── */
+
+add_action('wp_ajax_ai_pi_enqueue_bulk', function () {
+    check_ajax_referer('ai_pi_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error(['message' => '権限がありません']);
+
+    $ids = array_map('intval', (array)($_POST['post_ids'] ?? []));
+    $ids = array_values(array_filter($ids, function ($v) { return $v > 0; }));
+    if (empty($ids)) wp_send_json_error(['message' => '対象記事が選択されていません']);
+
+    $options = [
+        'insert_mode' => sanitize_text_field($_POST['mode']   ?? 'marker'),
+        'card_design' => sanitize_text_field($_POST['design'] ?? 'vertical'),
+    ];
+
+    $job_id = AI_PI_Job_Queue::create_job($ids, $options);
+    if (!$job_id) wp_send_json_error(['message' => 'ジョブを作成できませんでした']);
+
+    wp_schedule_single_event(time() + 5, AI_PI_Worker::TICK_HOOK);
+
+    wp_send_json_success([
+        'job_id'      => $job_id,
+        'count'       => count($ids),
+        'history_url' => admin_url('admin.php?page=ai-product-inserter-history'),
+    ]);
+});
+
+add_action('wp_ajax_ai_pi_jobs_list', function () {
+    check_ajax_referer('ai_pi_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error(['message' => '権限がありません']);
+    $jobs = AI_PI_Job_Queue::list_sorted();
+    $light = array_values(array_map(function ($j) {
+        unset($j['items']);
+        return $j;
+    }, $jobs));
+    wp_send_json_success(['jobs' => $light]);
+});
+
+add_action('wp_ajax_ai_pi_job_status', function () {
+    check_ajax_referer('ai_pi_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error(['message' => '権限がありません']);
+    $job_id = sanitize_text_field((string)($_POST['job_id'] ?? ''));
+    $job = AI_PI_Job_Queue::get($job_id);
+    if (!$job) wp_send_json_error(['message' => 'ジョブが見つかりません']);
+    wp_send_json_success($job);
+});
+
+add_action('wp_ajax_ai_pi_job_cancel', function () {
+    check_ajax_referer('ai_pi_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error(['message' => '権限がありません']);
+    $job_id = sanitize_text_field((string)($_POST['job_id'] ?? ''));
+    $ok = AI_PI_Job_Queue::cancel($job_id);
+    wp_send_json_success(['cancelled' => $ok]);
+});
+
+add_action('wp_ajax_ai_pi_job_delete', function () {
+    check_ajax_referer('ai_pi_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error(['message' => '権限がありません']);
+    $job_id = sanitize_text_field((string)($_POST['job_id'] ?? ''));
+    $ok = AI_PI_Job_Queue::delete($job_id);
+    wp_send_json_success(['deleted' => $ok]);
+});

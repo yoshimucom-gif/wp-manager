@@ -4476,9 +4476,9 @@ def favicon():
 PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugin-downloads')
 PLUGIN_DOWNLOADS = {
     'product-inserter': {
-        'file': 'affiros-product-inserter-1.9.6.zip',
+        'file': 'affiros-product-inserter-2.0.0.zip',
         'name': 'Affiros プロダクトインサーター',
-        'version': '1.9.6',
+        'version': '2.0.0',
     },
     'decoration': {
         'file': 'affiros-decoration-1.2.1.zip',
@@ -4486,9 +4486,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.2.1',
     },
     'rewrite': {
-        'file': 'affiros-rewrite-0.4.9.zip',
+        'file': 'affiros-rewrite-0.5.0.zip',
         'name': 'Affiros リライター',
-        'version': '0.4.9',
+        'version': '0.5.0',
     },
     'categorizer': {
         'file': 'affiros-categorizer-0.1.0.zip',
