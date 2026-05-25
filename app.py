@@ -4476,9 +4476,9 @@ def favicon():
 PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugin-downloads')
 PLUGIN_DOWNLOADS = {
     'product-inserter': {
-        'file': 'affiros-product-inserter-1.9.4.zip',
+        'file': 'affiros-product-inserter-1.9.5.zip',
         'name': 'Affiros プロダクトインサーター',
-        'version': '1.9.4',
+        'version': '1.9.5',
     },
     'decoration': {
         'file': 'affiros-decoration-1.2.1.zip',
@@ -4486,9 +4486,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.2.1',
     },
     'rewrite': {
-        'file': 'affiros-rewrite-0.4.7.zip',
+        'file': 'affiros-rewrite-0.4.8.zip',
         'name': 'Affiros リライター',
-        'version': '0.4.7',
+        'version': '0.4.8',
     },
     'categorizer': {
         'file': 'affiros-categorizer-0.1.0.zip',
@@ -4512,6 +4512,57 @@ def download_plugin(plugin_key):
         as_attachment=True, download_name=info['file'],
         mimetype='application/zip',
     )
+
+
+# WordPress プラグイン自動更新用のメタ情報。
+# WP の plugins_api / pre_set_site_transient_update_plugins フィルタ経由で
+# 各プラグインがここを叩き、新バージョンを検知して自動更新する。
+PLUGIN_UPDATE_META = {
+    'rewrite': {
+        'plugin_basename': 'affiros-rewrite/affiros-rewrite.php',
+        'tested':   '6.6',
+        'requires': '5.8',
+        'requires_php': '7.4',
+        'author':   'Affiros',
+    },
+    'product-inserter': {
+        'plugin_basename': 'affiros-product-inserter/affiros-product-inserter.php',
+        'tested':   '6.6',
+        'requires': '5.8',
+        'requires_php': '7.4',
+        'author':   'Affiros',
+    },
+}
+
+
+@app.route('/api/plugin-update/<plugin_key>')
+def plugin_update_info(plugin_key):
+    """WordPress 自動更新用のメタ情報を JSON で返す。
+
+    各プラグインに同梱した Affiros_Plugin_Updater がこの URL を 6h ごとに
+    叩いて、Version ヘッダーと比較する。download_url から zip を取得して
+    WP 標準のプラグイン更新フローで自動インストールする。
+    """
+    info = PLUGIN_DOWNLOADS.get(plugin_key)
+    meta = PLUGIN_UPDATE_META.get(plugin_key)
+    if not info or not meta:
+        return jsonify({'error': 'unknown plugin'}), 404
+    base = request.host_url.rstrip('/')
+    return jsonify({
+        'name':         info['name'],
+        'slug':         meta['plugin_basename'].split('/')[0],
+        'plugin':       meta['plugin_basename'],
+        'version':      info['version'],
+        'tested':       meta['tested'],
+        'requires':     meta['requires'],
+        'requires_php': meta['requires_php'],
+        'author':       meta['author'],
+        'download_url': f"{base}/download/plugin/{plugin_key}",
+        'sections': {
+            'description': f"{info['name']} 本体。Affiros9 サーバーから自動更新します。",
+            'changelog':   f"最新バージョン {info['version']}",
+        },
+    })
 
 @app.route('/login', methods=['GET', 'POST'])
 def login_page():

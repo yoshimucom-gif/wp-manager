@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros リライター
  * Description: WordPress記事をClaude APIでリライトする。WP_Queryで内部処理するためホスティングWAFの影響を受けない（403回避）。
- * Version: 0.4.7
+ * Version: 0.4.8
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-rewrite
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('AFFIROS_REWRITE_VERSION', '0.4.7');
+define('AFFIROS_REWRITE_VERSION', '0.4.8');
 define('AFFIROS_REWRITE_PATH', plugin_dir_path(__FILE__));
 define('AFFIROS_REWRITE_URL', plugin_dir_url(__FILE__));
 
@@ -25,9 +25,23 @@ require_once AFFIROS_REWRITE_PATH . 'includes/post-fetcher.php';
 require_once AFFIROS_REWRITE_PATH . 'includes/marker-inserter.php';
 require_once AFFIROS_REWRITE_PATH . 'includes/article-type.php';
 require_once AFFIROS_REWRITE_PATH . 'includes/rewrite-engine.php';
+require_once AFFIROS_REWRITE_PATH . 'includes/plugin-updater.php';
 require_once AFFIROS_REWRITE_PATH . 'admin/settings-page.php';
 require_once AFFIROS_REWRITE_PATH . 'admin/rewrite-page.php';
 require_once AFFIROS_REWRITE_PATH . 'admin/ajax-handler.php';
+
+/**
+ * Affiros9 サーバーをアップデートサーバーとして登録。
+ * これ以降の更新は WP 管理画面の「プラグイン」から「今すぐ更新」で行える。
+ *
+ * 別ホストで運用する場合は wp-config.php に
+ *   define('AFFIROS_UPDATE_HOST', 'https://your-host.example.com');
+ * を入れると自動で切り替わる。
+ */
+add_action('init', function () {
+    $host = defined('AFFIROS_UPDATE_HOST') ? AFFIROS_UPDATE_HOST : 'https://wp-manager.onrender.com';
+    new Affiros_Plugin_Updater(__FILE__, rtrim($host, '/') . '/api/plugin-update/rewrite');
+});
 
 /**
  * デフォルト設定
