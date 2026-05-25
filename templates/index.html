@@ -1622,6 +1622,21 @@ table { width: 100%; border-collapse: collapse; }"></textarea>
             </div>
           </div>
           <button class="btn btn-primary" onclick="saveSettings()">💾 設定を保存</button>
+          <div class="settings-section" style="margin-top:28px">
+            <div class="section-header">// データバックアップ / 復元</div>
+            <div class="form-help" style="margin-bottom:10px">
+              サイト設定・記事・品質定義を JSON ファイルとして手元に保存できます。<br>
+              Render 側のデータが消えた場合は「ファイルから復元」で戻せます。
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <button class="btn btn-secondary" onclick="downloadDataBackup()">⬇️ JSONバックアップをダウンロード</button>
+              <label class="btn btn-secondary" style="cursor:pointer;margin:0">
+                ⬆️ ファイルから復元
+                <input type="file" accept=".json" style="display:none" onchange="restoreDataFromFile(this)">
+              </label>
+            </div>
+            <div id="backup-status" style="font-size:11px;color:var(--muted);margin-top:8px"></div>
+          </div>
           <div id="settings-msg" style="margin-top:10px;font-size:12px;color:var(--muted)"></div>
         </div>
       </div>
@@ -2256,16 +2271,18 @@ async function ensureDurableData() {
       writeDataSnapshotBackup(serverSnapshot);
       return;
     }
+    // サーバー側にデータがない → ローカルバックアップから復元を試みる
+    // ディスクがマウントされていても DB が消えていることがあるため、
+    // storageIsPersistent に関係なく復元する
     const backup = readDataSnapshotBackup();
-    const storageIsPersistent = !!serverSnapshot.storage?.persistent;
-    if (!storageIsPersistent && snapshotHasUserData(backup)) {
+    if (snapshotHasUserData(backup)) {
       const res = await fetch('/api/data-snapshot', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify(backup)
       });
       if (res.ok) {
-        toast('保存データを保護バックアップから戻しました', 'success');
+        toast('サーバー側データが消えていたため、ブラウザバックアップから自動復元しました', 'success');
       }
     }
   } catch (e) {
@@ -2284,6 +2301,56 @@ function scheduleDataSnapshotBackup() {
       console.warn('data snapshot backup failed', e);
     }
   }, 1200);
+}
+
+async function downloadDataBackup() {
+  const statusEl = document.getElementById('backup-status');
+  if (statusEl) statusEl.textContent = 'ダウンロード中...';
+  try {
+    const snapshot = await fetchDataSnapshot();
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const dt = new Date().toISOString().slice(0,10);
+    a.href = url;
+    a.download = `affiros9-backup-${dt}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    if (statusEl) statusEl.textContent = `バックアップ完了: affiros9-backup-${dt}.json`;
+  } catch (e) {
+    if (statusEl) statusEl.textContent = 'エラー: ' + e.message;
+    toast('バックアップのダウンロードに失敗しました', 'error');
+  }
+}
+
+async function restoreDataFromFile(input) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  const statusEl = document.getElementById('backup-status');
+  try {
+    const text = await file.text();
+    const snapshot = JSON.parse(text);
+    if (!snapshot || typeof snapshot !== 'object') throw new Error('不正なJSON形式');
+    if (!snapshotHasUserData(snapshot)) {
+      if (statusEl) statusEl.textContent = 'このファイルにはユーザーデータが含まれていません';
+      return;
+    }
+    if (!confirm(`${file.name} からデータを復元します。\n現在のサーバー側データは上書きされます。よろしいですか？`)) return;
+    if (statusEl) statusEl.textContent = '復元中...';
+    const res = await fetch('/api/data-snapshot', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(snapshot)
+    });
+    if (!res.ok) throw new Error('サーバーエラー: ' + res.status);
+    toast('データを復元しました。ページを再読み込みします...', 'success');
+    if (statusEl) statusEl.textContent = '復元完了。再読み込み中...';
+    setTimeout(() => location.reload(), 1500);
+  } catch (e) {
+    if (statusEl) statusEl.textContent = 'エラー: ' + e.message;
+    toast('復元に失敗しました: ' + e.message, 'error');
+  }
 }
 
 // ---- Sites ----
