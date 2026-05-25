@@ -1314,7 +1314,8 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <textarea id="kw-plan-textarea" class="form-control" rows="10"
             placeholder="ファッション小物&#10;ベビー・キッズ&#10;キッチン・食卓&#10;..."
             oninput="kwPlanOnTextareaInput(this.value)"
-            style="font-size:13px;resize:vertical;line-height:1.8;margin-bottom:16px"></textarea>
+            style="font-size:13px;resize:vertical;line-height:1.8;margin-bottom:8px"></textarea>
+          <div id="kw-plan-slug-status" style="font-size:11px;color:var(--muted);min-height:16px;margin-bottom:12px"></div>
           <div id="kw-plan-cat-rows"></div>
         </div>
       </div>
@@ -2451,12 +2452,13 @@ function kwPlanAutoSlug(name, idx) {
 }
 
 // テキストエリアが変わるたびに呼ばれる。1行 = 1カテゴリー。
+let _kwPlanSlugTimer = null;
+
 function kwPlanOnTextareaInput(val) {
-  const lines = val.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-  // 既存スラッグ（手動編集を保持するため名前でマップ）
+  const lines = val.split(/?
+/).map(s => s.trim()).filter(Boolean);
   const slugMap = {}, autoMap = {};
   kwPlanCategories.forEach(c => { slugMap[c.name] = c.slug; autoMap[c.name] = c.slugAuto; });
-  // 重複除去しながら再構築
   const seen = new Set();
   kwPlanCategories = lines.filter(n => { if (seen.has(n)) return false; seen.add(n); return true; })
     .map((name, idx) => ({
@@ -2466,6 +2468,38 @@ function kwPlanOnTextareaInput(val) {
     }));
   kwPlanSaveCats();
   kwPlanRenderCatRows();
+  // Claudeでスラッグ自動生成（新規カテゴリーのみ・800msデバウンス）
+  clearTimeout(_kwPlanSlugTimer);
+  const needsSlug = kwPlanCategories.filter(c => c.slugAuto && !(c.name in slugMap));
+  if (needsSlug.length > 0) {
+    kwPlanSetSlugStatus('生成中...');
+    _kwPlanSlugTimer = setTimeout(() => kwPlanFetchSlugs(needsSlug.map(c => c.name)), 800);
+  }
+}
+
+function kwPlanSetSlugStatus(msg) {
+  const el = document.getElementById('kw-plan-slug-status');
+  if (el) el.textContent = msg;
+}
+
+async function kwPlanFetchSlugs(names) {
+  try {
+    const res = await fetch('/api/kw-plan/slugs', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ names }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const { slugs } = await res.json();
+    slugs.forEach(({ name, slug }) => {
+      const cat = kwPlanCategories.find(c => c.name === name && c.slugAuto);
+      if (cat) { cat.slug = slug; cat.slugAuto = true; }
+    });
+    kwPlanSaveCats();
+    kwPlanRenderCatRows();
+    kwPlanSetSlugStatus('');
+  } catch (e) {
+    kwPlanSetSlugStatus('スラッグ生成失敗: ' + e.message);
+  }
 }
 
 function kwPlanOnSlugInput(i, val) {

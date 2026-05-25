@@ -7463,6 +7463,74 @@ def _kw_plan_call_claude(api_key, prompt, max_tokens=4000):
     return json.loads(m.group())
 
 
+@app.route('/api/kw-plan/slugs', methods=['POST'])
+@login_required
+def kw_plan_generate_slugs():
+    """カテゴリー名リストに対してSEO英語スラッグをClaudeで生成する。"""
+    data = request.get_json(silent=True) or {}
+    names = [str(n).strip() for n in (data.get('names') or []) if str(n).strip()]
+    if not names:
+        return jsonify({'error': 'カテゴリー名を入力してください'}), 400
+    if len(names) > 50:
+        return jsonify({'error': 'カテゴリーは50件以下にしてください'}), 400
+
+    settings = load_settings()
+    api_key = settings.get('claude_api_key')
+    if not api_key:
+        return jsonify({'error': 'Claude APIキーが必要です'}), 400
+
+    names_text = '\n'.join(f'- {n}' for n in names)
+    prompt = f"""以下のカテゴリー名それぞれに対して、SEOに適した英語スラッグを生成してください。
+
+ルール:
+- 英語のみ・小文字・ハイフン区切り（kebab-case）
+- 2〜4単語、最大30文字以内
+- 直訳のローマ字化は絶対禁止（例: ベビー・キッズ → baby-kids ○ / bebi-kizzu ✕）
+- 検索されやすいSEOフレンドリーな英語に意訳する
+
+カテゴリー名:
+{names_text}
+
+出力形式（JSONのみ・説明文・コードフェンス不要）:
+[
+  {{"name": "元のカテゴリー名", "slug": "english-slug"}},
+  ...
+]"""
+
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=600,
+            messages=[{'role': 'user', 'content': prompt}]
+        )
+        text = anthropic_message_text(message)
+        raw = re.sub(r'^\s*```(?:json)?\s*', '', str(text or '').strip(), flags=re.I)
+        raw = re.sub(r'\s*```\s*$', '', raw)
+        try:
+            items = json.loads(raw)
+        except Exception:
+            start = raw.find('[')
+            end = raw.rfind(']')
+            items = json.loads(raw[start:end + 1]) if start >= 0 and end > start else []
+
+        slug_map = {}
+        for item in (items if isinstance(items, list) else []):
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get('name') or '').strip()
+            slug = re.sub(r'[^a-z0-9-]', '', str(item.get('slug') or '').lower())
+            slug = re.sub(r'-+', '-', slug).strip('-')
+            if name and slug:
+                slug_map[name] = slug
+
+        result = [{'name': n, 'slug': slug_map.get(n) or f'cat-{i + 1}'} for i, n in enumerate(names)]
+        return jsonify({'slugs': result})
+    except Exception as e:
+        app.logger.error('kw_plan_generate_slugs error: %s', e)
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/kw-plan/categorize', methods=['POST'])
 @login_required
 def kw_plan_categorize():
