@@ -2463,8 +2463,7 @@ function kwPlanAutoSlug(name, idx) {
 let _kwPlanSlugTimer = null;
 
 function kwPlanOnTextareaInput(val) {
-  const lines = val.split(/?
-/).map(s => s.trim()).filter(Boolean);
+  const lines = val.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
   const slugMap = {}, autoMap = {};
   kwPlanCategories.forEach(c => { slugMap[c.name] = c.slug; autoMap[c.name] = c.slugAuto; });
   const seen = new Set();
