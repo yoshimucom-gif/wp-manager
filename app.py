@@ -313,8 +313,6 @@ def now_iso():
 #       解決しない）。--workers 1 制約も _DATA_LOCK がプロセス内ロックである限り継続。
 # ───────────────────────────────────────────────────────────────────────────
 DB_FILE = DATA_DIR / 'wpmanager.db'
-# DB が消えた/空になった場合のフォールバック用バックアップ
-SNAPSHOT_BACKUP_FILE = DATA_DIR / 'snapshot_backup.json'
 
 
 def _db_connect():
@@ -325,12 +323,7 @@ def _db_connect():
 
 
 def _db_init():
-    """documents テーブルを用意する（冪等）。
-
-    DB が空（settings が未保存）の場合、snapshot_backup.json が存在すれば
-    そこから自動復元する。Render のディスクが正常マウントされているのに
-    DB ファイルだけ消えているケースの対策。
-    """
+    """documents テーブルを用意する（冪等）。"""
     try:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
     except Exception:
@@ -343,55 +336,6 @@ def _db_init():
                 ' key TEXT PRIMARY KEY,'
                 ' value TEXT NOT NULL,'
                 ' updated_at TEXT)'
-            )
-        # settings が DB に存在するか確認
-        row = conn.execute(
-            "SELECT 1 FROM documents WHERE key='settings'"
-        ).fetchone()
-    finally:
-        conn.close()
-
-    if not row:
-        # DB が空 → snapshot_backup.json から復元を試みる
-        _try_restore_from_backup_file()
-
-
-def _try_restore_from_backup_file():
-    """snapshot_backup.json が存在すれば DB に復元する。起動時のみ呼ぶ。"""
-    if not SNAPSHOT_BACKUP_FILE.exists():
-        return
-    try:
-        with open(SNAPSHOT_BACKUP_FILE, 'r', encoding='utf-8') as f:
-            snapshot = json.load(f)
-    except Exception:
-        return
-    if not isinstance(snapshot, dict):
-        return
-    try:
-        if isinstance(snapshot.get('settings'), dict):
-            _save_doc_direct('settings', snapshot['settings'])
-        if isinstance(snapshot.get('articles'), list):
-            _save_doc_direct('articles', snapshot['articles'])
-        if isinstance(snapshot.get('quality'), list):
-            _save_doc_direct('quality', snapshot['quality'])
-        app.logger.info('snapshot_backup.json から DB を復元しました')
-    except Exception as e:
-        app.logger.warning('snapshot_backup.json からの復元に失敗: %s', e)
-
-
-def _save_doc_direct(key, data):
-    """_db_init 内から呼ぶ低レベル save_doc（app 依存なし）。"""
-    payload = json.dumps(data, ensure_ascii=False)
-    from datetime import datetime, timedelta, timezone as _tz
-    ts = datetime.now(_tz(timedelta(hours=9))).isoformat(timespec='seconds')
-    conn = _db_connect()
-    try:
-        with conn:
-            conn.execute(
-                'INSERT INTO documents(key, value, updated_at) VALUES(?,?,?) '
-                'ON CONFLICT(key) DO UPDATE SET '
-                'value=excluded.value, updated_at=excluded.updated_at',
-                (key, payload, ts)
             )
     finally:
         conn.close()
@@ -916,32 +860,6 @@ def has_user_data(snapshot):
         any(bool(v) for v in (settings.get('quality_style_references') or {}).values()),
     ])
 
-def write_snapshot_backup_file(snapshot=None):
-    """snapshot_backup.json を DATA_DIR に書く。
-
-    引数省略時は現在の DB から build_data_snapshot() を呼ぶ。
-    settings.sites がある（ユーザーデータが存在する）場合のみ書き込む。
-    DB が空の起動直後に呼ばれると空ファイルで上書きしてしまうので
-    has_user_data() チェックを必ず通す。
-    """
-    try:
-        if snapshot is None:
-            snapshot = build_data_snapshot()
-        if not has_user_data(snapshot):
-            return
-        tmp = SNAPSHOT_BACKUP_FILE.with_name(SNAPSHOT_BACKUP_FILE.name + '.tmp')
-        with open(tmp, 'w', encoding='utf-8') as f:
-            json.dump({
-                'version': snapshot.get('version', 1),
-                'exported_at': now_iso(),
-                'settings': snapshot.get('settings'),
-                'articles': snapshot.get('articles'),
-                'quality': snapshot.get('quality'),
-            }, f, ensure_ascii=False)
-        os.replace(tmp, SNAPSHOT_BACKUP_FILE)
-    except Exception as e:
-        app.logger.warning('snapshot_backup.json の書き込みに失敗: %s', e)
-
 def restore_data_snapshot(snapshot):
     if isinstance(snapshot.get('settings'), dict):
         save_settings(snapshot['settings'])
@@ -949,11 +867,6 @@ def restore_data_snapshot(snapshot):
         save_articles(snapshot['articles'])
     if isinstance(snapshot.get('quality'), list):
         save_quality(snapshot['quality'])
-    # 復元後は必ずバックアップファイルも更新しておく
-    try:
-        write_snapshot_backup_file(snapshot)
-    except Exception:
-        pass
 
 def load_settings():
     settings = load_doc('settings', {
@@ -4526,14 +4439,6 @@ def resolve_wp_category_ids(wp_url, wp_user, wp_password, category_value):
 
 def save_settings(settings):
     save_doc('settings', settings)
-    # settings が変わるたびに snapshot_backup.json を更新する
-    # （DB が消えた次回起動時のフォールバック用）
-    try:
-        sites = settings.get('sites') or []
-        if sites or settings.get('claude_api_key'):
-            write_snapshot_backup_file()
-    except Exception:
-        pass
 
 def login_required(f):
     """認証不要（シングルユーザー運用）。デコレータは互換のため残す。"""
@@ -4581,9 +4486,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.2.1',
     },
     'rewrite': {
-        'file': 'affiros-rewrite-0.4.7.zip',
+        'file': 'affiros-rewrite-0.4.6.zip',
         'name': 'Affiros リライター',
-        'version': '0.4.7',
+        'version': '0.4.6',
     },
     'categorizer': {
         'file': 'affiros-categorizer-0.1.0.zip',
