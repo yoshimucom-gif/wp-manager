@@ -1279,12 +1279,13 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
               <span id="title-ideas-count" style="font-size:12px;color:var(--muted)">0件</span>
             </div>
             <div class="table-wrap">
-              <table style="min-width:980px">
+              <table style="min-width:1080px">
                 <thead>
                   <tr>
                     <th><input type="checkbox" id="title-check-all" onchange="toggleTitleIdeaChecks(this.checked)"></th>
                     <th>キーワード</th>
                     <th>振り分け</th>
+                    <th>カテゴリー</th>
                     <th>タイトル案</th>
                     <th>優先度</th>
                     <th>スコア</th>
@@ -3621,6 +3622,14 @@ function renderTitleIdeas() {
         <td><input type="checkbox" class="title-idea-check" data-index="${i}" ${checked}></td>
         <td style="font-size:12px;max-width:220px" title="${esc(idea.keywords || idea.keyword)}">${esc(idea.keywords || idea.keyword || '—')}</td>
         <td style="white-space:nowrap;color:var(--accent);font-size:11px;font-weight:600">${articleTypeLabel(idea.article_type || 'ranking')}</td>
+        <td style="white-space:nowrap;min-width:80px">
+          ${(kwPlanCategories && kwPlanCategories.length > 0)
+            ? `<select class="form-control" onchange="updateTitleIdea(${i}, 'category', this.value)" style="font-size:11px;height:28px;min-width:80px;max-width:120px">
+                <option value="">—</option>
+                ${kwPlanCategories.map(c => `<option value="${esc(c.name)}" ${idea.category === c.name ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}
+               </select>`
+            : `<span style="color:var(--muted);font-size:11px">${esc(idea.category || '—')}</span>`}
+        </td>
         <td class="title-idea-title">
           <input type="text" class="form-control" value="${esc(idea.title)}" onchange="updateTitleIdea(${i}, 'title', this.value)" style="font-size:12px;height:32px">
           <div class="title-idea-meta">
@@ -3943,6 +3952,7 @@ async function generateTitleIdeas() {
   const site_id = document.getElementById('title-site').value || null;
   const category = '';
   const article_type_filter = document.getElementById('title-type-filter')?.value || '';
+  const categoriesForAPI = (kwPlanCategories || []).filter(c => (c.name || '').trim());
 
   if (!keywordsRaw.trim()) {
     toast('キーワードを1行以上入力してください', 'error');
@@ -3964,7 +3974,7 @@ async function generateTitleIdeas() {
     const res = await fetch('/api/title-ideas/generate', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ keywords: keywordsRaw, count_per_keyword, site_id, category, article_type_filter }),
+      body: JSON.stringify({ keywords: keywordsRaw, count_per_keyword, site_id, category, article_type_filter, categories: categoriesForAPI }),
     });
     if (!res.ok) {
       const text = await res.text().catch(()=>'');

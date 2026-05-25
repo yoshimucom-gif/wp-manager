@@ -1883,11 +1883,26 @@ def score_title_idea(title, keyword, article_type, existing_title_keys):
     return max(1, min(100, score))
 
 
-def title_generation_prompt(keywords, count_per_keyword, category='', article_type_filter=None):
+def title_generation_prompt(keywords, count_per_keyword, category='', article_type_filter=None, categories=None):
     d = load_title_definition()
     forbidden_list = '、'.join(d.get('forbidden_phrases') or [])
     additional = (d.get('additional_instructions') or '').strip()
     additional_block = f'\n【追加指示】\n{additional}\n' if additional else ''
+
+    # カテゴリー振り分けブロックとJSONフィールドを構築
+    valid_categories = [str(c.get('name') or '').strip() for c in (categories or []) if isinstance(c, dict) and str(c.get('name') or '').strip()]
+    if valid_categories:
+        cat_names = '\n'.join(f'- {n}' for n in valid_categories)
+        category_block = (
+            f'\n【カテゴリー振り分け（必須）】\n'
+            f'以下のカテゴリーから最も適切なものを1つ選び、"category" フィールドにカテゴリー名をそのまま入れてください。\n'
+            f'{cat_names}\n'
+            f'※ リスト以外のカテゴリー名は禁止。必ずリスト内の名前を使うこと。\n'
+        )
+        category_json_field = '      "category": "上記カテゴリーリストから選択（必須）",'
+    else:
+        category_block = f'\nカテゴリー: {category or "未指定"}\n' if category else ''
+        category_json_field = ''
 
     # サンプル例を記事種別でフィルタ（ランキング例 = \d+選 を含む）
     all_examples = [t for t in (d.get('example_titles') or []) if t and t.strip()]
@@ -1940,8 +1955,7 @@ def title_generation_prompt(keywords, count_per_keyword, category='', article_ty
     return f"""あなたはSEO記事の編集者です。クリックされる記事タイトルを設計してください。
 
 {type_intro}
-
-カテゴリー: {category or '未指定'}
+{category_block}
 キーワード:
 {chr(10).join(f'- {kw}' for kw in keywords)}
 
@@ -1954,6 +1968,7 @@ def title_generation_prompt(keywords, count_per_keyword, category='', article_ty
       "target_keywords": "メインKW, 関連KW1, 関連KW2, 関連KW3",
       "slug": "english-slug",
       "article_type": {article_type_field},
+{category_json_field}
       "search_intent": "読者の検索意図を短く",
       "reason": "このタイトルにした理由を短く",
       "priority": "高/中/低"
@@ -2059,6 +2074,7 @@ def coerce_title_ideas(payload, keywords, count_per_keyword, article_type_filter
             'reason': str(item.get('reason') or '').strip()[:220],
             'priority': str(item.get('priority') or '中').strip()[:10],
             'article_type': article_type_filter or coerce_title_article_type(item.get('article_type'), matched or keyword, title),
+            'category': str(item.get('category') or '').strip()[:80],
         }
         if matched:
             grouped[matched].append(idea)
@@ -2112,7 +2128,7 @@ def enrich_title_ideas(ideas, category='', site_id='', existing_title_keys=None)
             'score': score,
             'duplicate': key in existing_title_keys,
             'article_type': article_type,
-            'category': category,
+            'category': str(idea.get('category') or '').strip() or category,
             'site_id': site_id or None,
             'quality_id': None,
         })
@@ -2245,8 +2261,8 @@ def is_model_not_found_error(error):
     return 'not_found' in text or 'model' in text and '404' in text
 
 
-def generate_claude_title_ideas_once(api_key, keywords, count_per_keyword, category, article_type_filter=None):
-    prompt = title_generation_prompt(keywords, count_per_keyword, category, article_type_filter)
+def generate_claude_title_ideas_once(api_key, keywords, count_per_keyword, category, article_type_filter=None, categories=None):
+    prompt = title_generation_prompt(keywords, count_per_keyword, category, article_type_filter, categories)
     client = anthropic.Anthropic(api_key=api_key)
     last_error = None
     for model in claude_title_idea_models():
@@ -2282,10 +2298,10 @@ def generate_claude_title_ideas_once(api_key, keywords, count_per_keyword, categ
     raise last_error or RuntimeError('Claude title idea generation failed')
 
 
-def generate_claude_title_ideas_resilient(api_key, keywords, count_per_keyword, category):
+def generate_claude_title_ideas_resilient(api_key, keywords, count_per_keyword, category, categories=None):
     retry_notes = []
     try:
-        ideas, model_used = generate_claude_title_ideas_once(api_key, keywords, count_per_keyword, category)
+        ideas, model_used = generate_claude_title_ideas_once(api_key, keywords, count_per_keyword, category, categories=categories)
         return ideas, retry_notes, model_used
     except Exception as e:
         first_error = compact_ai_error(e)
@@ -2299,7 +2315,7 @@ def generate_claude_title_ideas_resilient(api_key, keywords, count_per_keyword, 
     failed_keywords = []
     for keyword in keywords:
         try:
-            chunk_ideas, chunk_model = generate_claude_title_ideas_once(api_key, [keyword], count_per_keyword, category)
+            chunk_ideas, chunk_model = generate_claude_title_ideas_once(api_key, [keyword], count_per_keyword, category, categories=categories)
             ideas.extend(chunk_ideas)
             model_used = chunk_model
         except Exception as e:
@@ -4521,6 +4537,7 @@ def generate_title_ideas():
     keywords = split_title_keywords(data.get('keywords', ''))
     count_per_keyword = clamp_int(data.get('count_per_keyword'), 3, 1, 5)
     category = str(data.get('category') or '').strip()
+    categories = [c for c in (data.get('categories') or []) if isinstance(c, dict) and str(c.get('name') or '').strip()]
     site_id = data.get('site_id') or ''
     _atf = str(data.get('article_type_filter') or '').strip().lower()
     article_type_filter = _atf if _atf in ('ranking', 'column') else None
@@ -4555,6 +4572,7 @@ def generate_title_ideas():
         'keywords': keywords,
         'count_per_keyword': count_per_keyword,
         'category': category,
+        'categories': categories,
         'site_id': site_id,
         'total_batches': len(batches),
         'completed_batches': 0,
@@ -4598,7 +4616,7 @@ def generate_title_ideas():
             max_workers = min(TITLE_IDEA_PARALLEL_BATCHES, len(batches))
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_idx = {
-                    executor.submit(generate_claude_title_ideas_once, claude_key, batch, count_per_keyword, category, article_type_filter): (idx, batch)
+                    executor.submit(generate_claude_title_ideas_once, claude_key, batch, count_per_keyword, category, article_type_filter, categories): (idx, batch)
                     for idx, batch in enumerate(batches, 1)
                 }
                 for future in as_completed(future_to_idx):
