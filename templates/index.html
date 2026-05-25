@@ -878,30 +878,33 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
   <nav class="nav">
     <!-- サイトスコープのメニュー（現在サイトが選択されている時のみ表示） -->
     <div class="nav-site-scoped" id="nav-site-scoped" style="display:none">
+      <div class="nav-item" onclick="showPage('kw-plan')" id="nav-kw-plan">
+        カテゴリー設定
+      </div>
+      <div class="nav-item" onclick="showPage('title-ideas')" id="nav-title-ideas">
+        タイトル案
+      </div>
+      <div class="nav-item" onclick="showPage('batch')" id="nav-batch">
+        一括処理
+      </div>
+      <div class="nav-item" onclick="showPage('articles')" id="nav-articles-scoped">
+        対応履歴
+      </div>
       <div class="nav-group">
-        <div class="nav-trigger active" id="nav-create">記事作成</div>
+        <div class="nav-trigger" id="nav-create">個別記事作成</div>
         <div class="nav-menu">
           <div class="nav-link" onclick="showPage('ranking')" id="nav-ranking">ランキング記事</div>
           <div class="nav-link" onclick="showPage('brand')" id="nav-brand">商標記事</div>
           <div class="nav-link" onclick="showPage('column')" id="nav-column">コラム記事</div>
         </div>
       </div>
-      <div class="nav-item" onclick="showPage('title-ideas')" id="nav-title-ideas">
-        タイトル案
-      </div>
-      <div class="nav-item" onclick="showPage('kw-plan')" id="nav-kw-plan">
-        カテゴリー設定
-      </div>
-      <div class="nav-item" onclick="showPage('batch')" id="nav-batch">
-        一括処理
-      </div>
     </div>
     <!-- サイト未選択時の案内 -->
     <div class="nav-no-site-hint" id="nav-no-site-hint" style="color:rgba(255,255,255,0.5);font-size:12px;padding:0 14px;align-self:center;display:none">
       ← サイドバーから対象サイトを選ぶ
     </div>
-    <!-- グローバルメニュー（常時表示） -->
-    <div class="nav-item" onclick="showPage('articles')" id="nav-articles">
+    <!-- グローバルメニュー（サイト未選択時の対応履歴アクセス用） -->
+    <div class="nav-item" onclick="showPage('articles')" id="nav-articles" style="display:none">
       対応履歴
     </div>
     <div class="nav-group">
@@ -5512,13 +5515,17 @@ function renderSidebarSites() {
   // サイトスコープメニューの表示制御
   const siteScoped = document.getElementById('nav-site-scoped');
   const noSiteHint = document.getElementById('nav-no-site-hint');
+  const globalArticles = document.getElementById('nav-articles');
   if (siteScoped && noSiteHint) {
     if (currentSiteId) {
       siteScoped.style.display = 'flex';
       noSiteHint.style.display = 'none';
+      if (globalArticles) globalArticles.style.display = 'none';
     } else {
       siteScoped.style.display = 'none';
       noSiteHint.style.display = 'block';
+      // サイト未選択時はグローバル「対応履歴」を見せる（サイト未選択でも履歴を見られるように）
+      if (globalArticles) globalArticles.style.display = '';
     }
   }
   if (!sitesDashboardData.length) {
