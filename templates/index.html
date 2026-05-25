@@ -2435,13 +2435,19 @@ function kwPlanSaveCats() {
   localStorage.setItem('kwPlanCategories', JSON.stringify(kwPlanCategories));
 }
 
-// 名前からスラッグを自動生成（ASCII変換 or cat-N）
+// 名前からスラッグを自動生成
+// ASCII成分がある → kebab-case。ない（日本語のみ）→ 日本語のまま使う（WP標準対応）
 function kwPlanAutoSlug(name, idx) {
-  const ascii = name.toLowerCase()
-    .replace(/[^\x00-\x7F]/g, ' ')   // 非ASCII → スペース
-    .replace(/[^a-z0-9\s]/g, '')      // 記号除去
-    .trim().replace(/\s+/g, '-');     // スペース → ハイフン
-  return ascii || ('cat-' + (idx + 1));
+  const ascii = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  if (ascii && ascii.length > 1) return ascii;
+  // 日本語のみ: 中黒(U+30FB)・全角スペース(U+3000)・半角スペースをハイフンに
+  return name.trim()
+    .replace(/・/g, '-')
+    .replace(/　/g, '-')
+    .replace(/\s+/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-|-$/g, '')
+    || ('cat-' + (idx + 1));
 }
 
 // テキストエリアが変わるたびに呼ばれる。1行 = 1カテゴリー。
