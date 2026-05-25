@@ -1310,14 +1310,12 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         </div>
         <div class="settings-section" style="max-width:640px">
           <div class="section-header">// カテゴリー設定</div>
-          <div class="form-help" style="margin-bottom:12px">WPに未作成のカテゴリーは投稿時に自動作成されます</div>
-          <div style="display:grid;grid-template-columns:1fr 160px 36px;gap:6px;margin-bottom:6px;padding:0 2px">
-            <span style="font-size:11px;color:var(--muted)">カテゴリー名</span>
-            <span style="font-size:11px;color:var(--muted)">スラッグ（自動生成）</span>
-            <span></span>
-          </div>
-          <div id="kw-plan-cat-rows" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>
-          <button class="btn btn-secondary btn-sm" onclick="kwPlanAddCatRow()">＋ カテゴリーを追加</button>
+          <div class="form-help" style="margin-bottom:10px">カテゴリー名を1行1つで貼り付けてください。スラッグは自動生成されます。</div>
+          <textarea id="kw-plan-textarea" class="form-control" rows="10"
+            placeholder="ファッション小物&#10;ベビー・キッズ&#10;キッチン・食卓&#10;..."
+            oninput="kwPlanOnTextareaInput(this.value)"
+            style="font-size:13px;resize:vertical;line-height:1.8;margin-bottom:16px"></textarea>
+          <div id="kw-plan-cat-rows"></div>
         </div>
       </div>
 
@@ -2119,7 +2117,7 @@ function showPage(name, opts = {}) {
     if (pageName === 'articles') { loadArticles(); resumePublishJobIfRunning(); }
     if (pageName === 'generate') { loadQualitySelects(); updateSiteSelects(); populateGenSelect(); }
     if (pageName === 'title-ideas') { updateSiteSelects(); renderTitleIdeas(); updateTitleKeywordCount(); loadKwStock(); updateKwStockDisplay(); }
-    if (pageName === 'kw-plan') { kwPlanRenderCatRows(); }
+    if (pageName === 'kw-plan') { kwPlanSyncTextarea(); kwPlanRenderCatRows(); }
     if (pageName === 'batch') { batchSelectedIds = null; loadQualitySelects(); loadArticles(); loadLatestBatchJob(); }
     if (pageName === 'quality') loadQuality();
     if (pageName === 'title-definition') loadTitleDefinition();
@@ -2429,8 +2427,8 @@ async function saveSheetUrl() {
   }
 }
 
-// ---- KW計画 ----
-// カテゴリー: [{name, slug, slugAuto}, ...]  slugAuto=true は自動生成済みで名前に連動して更新される
+// ---- カテゴリー設定 ----
+// カテゴリー: [{name, slug, slugAuto}, ...]
 let kwPlanCategories = JSON.parse(localStorage.getItem('kwPlanCategories') || '[]');
 
 function kwPlanSaveCats() {
@@ -2446,57 +2444,68 @@ function kwPlanAutoSlug(name, idx) {
   return ascii || ('cat-' + (idx + 1));
 }
 
-function kwPlanAddCatRow(name = '', slug = '') {
-  const idx = kwPlanCategories.length;
-  kwPlanCategories.push({name, slug: slug || kwPlanAutoSlug(name, idx), slugAuto: !slug});
+// テキストエリアが変わるたびに呼ばれる。1行 = 1カテゴリー。
+function kwPlanOnTextareaInput(val) {
+  const lines = val.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  // 既存スラッグ（手動編集を保持するため名前でマップ）
+  const slugMap = {}, autoMap = {};
+  kwPlanCategories.forEach(c => { slugMap[c.name] = c.slug; autoMap[c.name] = c.slugAuto; });
+  // 重複除去しながら再構築
+  const seen = new Set();
+  kwPlanCategories = lines.filter(n => { if (seen.has(n)) return false; seen.add(n); return true; })
+    .map((name, idx) => ({
+      name,
+      slug: (name in slugMap) ? slugMap[name] : kwPlanAutoSlug(name, idx),
+      slugAuto: (name in slugMap) ? !!autoMap[name] : true,
+    }));
   kwPlanSaveCats();
   kwPlanRenderCatRows();
+}
+
+function kwPlanOnSlugInput(i, val) {
+  kwPlanCategories[i].slug = val;
+  kwPlanCategories[i].slugAuto = false;
+  kwPlanSaveCats();
 }
 
 function kwPlanRemoveCatRow(i) {
   kwPlanCategories.splice(i, 1);
   kwPlanSaveCats();
+  kwPlanSyncTextarea();
   kwPlanRenderCatRows();
 }
 
-function kwPlanOnNameInput(i, val) {
-  kwPlanCategories[i].name = val;
-  if (kwPlanCategories[i].slugAuto) {
-    const autoSlug = kwPlanAutoSlug(val, i);
-    kwPlanCategories[i].slug = autoSlug;
-    // 対応するslug inputを直接更新（再レンダリングなしで）
-    const slugInput = document.querySelector(`#kw-plan-cat-rows [data-slug-idx="${i}"]`);
-    if (slugInput) slugInput.value = autoSlug;
-  }
-  kwPlanSaveCats();
-}
-
-function kwPlanOnSlugInput(i, val) {
-  kwPlanCategories[i].slug = val;
-  kwPlanCategories[i].slugAuto = false;  // 手動編集したので自動更新を止める
-  kwPlanSaveCats();
+// textarea をカテゴリー名一覧に同期（削除時など）
+function kwPlanSyncTextarea() {
+  const ta = document.getElementById('kw-plan-textarea');
+  if (ta) ta.value = kwPlanCategories.map(c => c.name).join('\n');
 }
 
 function kwPlanRenderCatRows() {
   const el = document.getElementById('kw-plan-cat-rows');
   if (!el) return;
   if (!kwPlanCategories.length) {
-    el.innerHTML = '<div style="font-size:12px;color:var(--muted)">カテゴリーがありません。「＋ カテゴリーを追加」で追加してください。</div>';
+    el.innerHTML = '';
     return;
   }
-  el.innerHTML = kwPlanCategories.map((cat, i) => `
-    <div style="display:grid;grid-template-columns:1fr 160px 36px;gap:6px;align-items:center">
-      <input type="text" class="form-control" style="font-size:12px" placeholder="例: 防音・吸音グッズ"
-        value="${esc(cat.name)}"
-        oninput="kwPlanOnNameInput(${i}, this.value)">
-      <input type="text" class="form-control" style="font-size:12px;color:${cat.slugAuto ? 'var(--muted)' : ''}"
-        placeholder="auto" data-slug-idx="${i}"
-        value="${esc(cat.slug)}"
-        oninput="kwPlanOnSlugInput(${i}, this.value)">
-      <button class="btn btn-danger btn-sm" style="padding:4px 8px"
-        onclick="kwPlanRemoveCatRow(${i})">×</button>
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 180px 36px;gap:6px;margin-bottom:6px;padding:0 2px">
+      <span style="font-size:11px;color:var(--muted)">カテゴリー名</span>
+      <span style="font-size:11px;color:var(--muted)">スラッグ（編集可）</span>
+      <span></span>
     </div>
-  `).join('');
+    ${kwPlanCategories.map((cat, i) => `
+      <div style="display:grid;grid-template-columns:1fr 180px 36px;gap:6px;align-items:center;margin-bottom:4px">
+        <div class="form-control" style="font-size:12px;background:var(--hover);cursor:default;color:var(--text)">${esc(cat.name)}</div>
+        <input type="text" class="form-control" style="font-size:12px;color:${cat.slugAuto ? 'var(--muted)' : 'var(--text)'}"
+          placeholder="auto" data-slug-idx="${i}"
+          value="${esc(cat.slug)}"
+          oninput="kwPlanOnSlugInput(${i}, this.value)">
+        <button class="btn btn-danger btn-sm" style="padding:4px 8px"
+          onclick="kwPlanRemoveCatRow(${i})">×</button>
+      </div>
+    `).join('')}
+  `;
 }
 
 // ---- Articles ----
