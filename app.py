@@ -7428,6 +7428,94 @@ def update_settings():
     return jsonify({'success': True})
 
 
+# ---- KW計画 ----
+
+def _kw_plan_call_claude(api_key, prompt, max_tokens=4000):
+    """Claude を同期呼び出しして JSON テキストを返す。失敗時は例外。"""
+    client = anthropic.Anthropic(api_key=api_key)
+    resp = client.messages.create(
+        model='claude-haiku-4-5-20251001',
+        max_tokens=max_tokens,
+        messages=[{'role': 'user', 'content': prompt}],
+    )
+    raw = resp.content[0].text.strip()
+    m = re.search(r'\{.*\}', raw, re.DOTALL)
+    if not m:
+        raise ValueError('AIの出力をJSONとしてパースできませんでした')
+    return json.loads(m.group())
+
+
+@app.route('/api/kw-plan/categorize', methods=['POST'])
+@login_required
+def kw_plan_categorize():
+    """キーワードリストを ≤10 カテゴリーに分類して返す。"""
+    data = request.get_json(silent=True) or {}
+    keywords = [str(k).strip() for k in (data.get('keywords') or []) if str(k).strip()]
+    max_cat = min(10, max(1, int(data.get('max_categories') or 10)))
+    if not keywords:
+        return jsonify({'error': 'キーワードが空です'}), 400
+    if len(keywords) > 400:
+        return jsonify({'error': 'キーワードは400件以下にしてください'}), 400
+    settings = load_settings()
+    api_key = settings.get('claude_api_key') or ''
+    if not api_key:
+        return jsonify({'error': 'Claude APIキーが未設定です'}), 400
+
+    prompt = (
+        f"以下のキーワードリストを、{max_cat}個以下の包括的なカテゴリーに分類してください。\n"
+        "カテゴリーは広すぎず狭すぎず、ECサイトの商品カテゴリーのような粒度が理想です（例:「防音・吸音グッズ」「ペット用安全グッズ」）。\n"
+        "各キーワードは必ずいずれかのカテゴリーに含めてください。\n\n"
+        "キーワード:\n" + '\n'.join(keywords) + "\n\n"
+        "以下のJSON形式のみで出力してください（前置き・説明不要）:\n"
+        '{"categories": [{"name": "カテゴリー名", "keywords": ["kw1", "kw2", ...]}]}'
+    )
+    try:
+        result = _kw_plan_call_claude(api_key, prompt, max_tokens=4000)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)[:300]}), 500
+
+
+@app.route('/api/kw-plan/titles', methods=['POST'])
+@login_required
+def kw_plan_titles():
+    """キーワード（≤30件）＋カテゴリーからタイトル案を生成して返す。"""
+    data = request.get_json(silent=True) or {}
+    keywords = [str(k).strip() for k in (data.get('keywords') or []) if str(k).strip()]
+    categories = [c for c in (data.get('categories') or []) if c.get('name')]
+    if not keywords:
+        return jsonify({'error': 'キーワードが空です'}), 400
+    if not categories:
+        return jsonify({'error': 'カテゴリーが空です'}), 400
+    if len(keywords) > 50:
+        return jsonify({'error': '1回のリクエストは50件以下にしてください'}), 400
+    settings = load_settings()
+    api_key = settings.get('claude_api_key') or ''
+    if not api_key:
+        return jsonify({'error': 'Claude APIキーが未設定です'}), 400
+
+    cat_lines = '\n'.join(f'- {c["name"]}' for c in categories)
+    kw_lines = '\n'.join(keywords)
+    prompt = (
+        "以下のキーワードそれぞれに対して、アフィリエイトSEO記事のタイトル案を作成してください。\n\n"
+        f"カテゴリー一覧:\n{cat_lines}\n\n"
+        "タイトルルール:\n"
+        "- 35文字以内（厳守）\n"
+        "- 禁止: 完全ガイド・決定版・神・No.1・絶対・必見\n"
+        "- ranking記事: タイトルに「おすすめ」+「○選」を含める（デフォルト5選）\n"
+        "- 各キーワードを上記カテゴリーの中から最も適切なものに1つ振り分ける\n"
+        "- article_type は ranking / brand / column のいずれか\n\n"
+        f"キーワード:\n{kw_lines}\n\n"
+        "以下のJSON形式のみで出力してください（前置き・説明不要）:\n"
+        '{"ideas": [{"keyword": "...", "title": "...", "category": "カテゴリー名", "article_type": "ranking"}]}'
+    )
+    try:
+        result = _kw_plan_call_claude(api_key, prompt, max_tokens=8000)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)[:300]}), 500
+
+
 @app.route('/api/products/search', methods=['POST'])
 @login_required
 def search_products():

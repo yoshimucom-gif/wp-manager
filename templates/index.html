@@ -889,6 +889,9 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
       <div class="nav-item" onclick="showPage('title-ideas')" id="nav-title-ideas">
         タイトル案
       </div>
+      <div class="nav-item" onclick="showPage('kw-plan')" id="nav-kw-plan">
+        KW計画
+      </div>
       <div class="nav-item" onclick="showPage('batch')" id="nav-batch">
         一括処理
       </div>
@@ -1293,6 +1296,80 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             <div id="title-ideas-empty" class="empty">
               <div class="empty-icon">T</div>
               <div>キーワードを入力してタイトル案を生成してください。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KW計画ページ -->
+      <div class="page" id="page-kw-plan">
+        <div class="page-header">
+          <div class="page-title">KW計画</div>
+          <div class="page-subtitle">キーワードからカテゴリーを生成 → タイトル案作成 → 対応履歴へインポート</div>
+        </div>
+
+        <!-- Step 1: KW入力 & カテゴリー生成 -->
+        <div class="settings-section">
+          <div class="section-header">// Step 1 — キーワードを入力してカテゴリーを生成</div>
+          <div class="form-group">
+            <label class="form-label">キーワード（1行1キーワード）</label>
+            <textarea id="kw-plan-input" class="form-control" rows="12"
+              placeholder="吸音パネル&#10;防音カーテン&#10;防振ゴム&#10;..."
+              oninput="kwPlanUpdateCount()"></textarea>
+            <div class="form-help"><span id="kw-plan-count">0</span> 件</div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-primary" id="kw-plan-categorize-btn" onclick="kwPlanCategorize()">
+              カテゴリーを生成
+            </button>
+            <span id="kw-plan-categorize-status" style="font-size:12px;color:var(--muted)"></span>
+          </div>
+        </div>
+
+        <!-- Step 2: カテゴリー確認 & タイトル案生成 -->
+        <div id="kw-plan-step2" style="display:none">
+          <div class="settings-section">
+            <div class="section-header">// Step 2 — カテゴリーを確認してタイトル案を生成</div>
+            <div id="kw-plan-categories-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px"></div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <button class="btn btn-primary" id="kw-plan-titles-btn" onclick="kwPlanGenerateTitles()">
+                タイトル案を生成
+              </button>
+              <span id="kw-plan-titles-status" style="font-size:12px;color:var(--muted)"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 3: タイトル案一覧 -->
+        <div id="kw-plan-step3" style="display:none">
+          <div class="settings-section">
+            <div class="section-header">// Step 3 — タイトル案を確認して記事をインポート</div>
+            <div class="toolbar" style="margin-bottom:10px">
+              <button class="btn btn-secondary btn-sm" onclick="kwPlanSelectAll(true)">全選択</button>
+              <button class="btn btn-secondary btn-sm" onclick="kwPlanSelectAll(false)">全解除</button>
+              <div style="flex:1"></div>
+              <span id="kw-plan-ideas-count" style="font-size:12px;color:var(--muted)"></span>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th style="width:36px"><input type="checkbox" id="kw-plan-check-all" onchange="kwPlanSelectAll(this.checked)"></th>
+                    <th>タイトル案（編集可）</th>
+                    <th style="width:150px">カテゴリー</th>
+                    <th style="width:90px">記事種類</th>
+                    <th style="width:130px">キーワード</th>
+                  </tr>
+                </thead>
+                <tbody id="kw-plan-ideas-body"></tbody>
+              </table>
+            </div>
+            <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <select id="kw-plan-site-id" class="form-control" style="font-size:12px;max-width:200px">
+                <option value="">— サイトを選択 —</option>
+              </select>
+              <button class="btn btn-primary" onclick="kwPlanImport()">選択記事をインポート → 対応履歴へ</button>
+              <span id="kw-plan-import-status" style="font-size:12px;color:var(--muted)"></span>
             </div>
           </div>
         </div>
@@ -2403,6 +2480,171 @@ async function saveSheetUrl() {
   } catch (e) {
     toast('保存に失敗しました: ' + e.message, 'error');
   }
+}
+
+// ---- KW計画 ----
+let kwPlanCategories = [];
+let kwPlanIdeas = [];
+
+function kwPlanUpdateCount() {
+  const kws = kwPlanGetKeywords();
+  document.getElementById('kw-plan-count').textContent = kws.length;
+}
+
+function kwPlanGetKeywords() {
+  const raw = document.getElementById('kw-plan-input').value || '';
+  return raw.split('\n').map(s => s.trim()).filter(Boolean);
+}
+
+async function kwPlanCategorize() {
+  const keywords = kwPlanGetKeywords();
+  if (!keywords.length) { toast('キーワードを入力してください', 'error'); return; }
+  const btn = document.getElementById('kw-plan-categorize-btn');
+  const status = document.getElementById('kw-plan-categorize-status');
+  btn.disabled = true;
+  status.textContent = 'AI がカテゴリーを生成中...';
+  document.getElementById('kw-plan-step2').style.display = 'none';
+  document.getElementById('kw-plan-step3').style.display = 'none';
+  try {
+    const res = await fetch('/api/kw-plan/categorize', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({keywords, max_categories: 10}),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.categories) throw new Error(data.error || '生成に失敗しました');
+    kwPlanCategories = data.categories;
+    kwPlanRenderCategories();
+    document.getElementById('kw-plan-step2').style.display = '';
+    status.textContent = `${kwPlanCategories.length} カテゴリーを生成しました ✓`;
+  } catch (e) {
+    toast('エラー: ' + e.message, 'error');
+    status.textContent = '';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function kwPlanRenderCategories() {
+  const el = document.getElementById('kw-plan-categories-list');
+  el.innerHTML = kwPlanCategories.map((cat, i) => `
+    <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:10px 14px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <input type="text" value="${esc(cat.name)}" class="form-control"
+          style="font-size:13px;font-weight:600;max-width:260px"
+          oninput="kwPlanCategories[${i}].name=this.value">
+        <span style="font-size:11px;color:var(--muted);white-space:nowrap">${cat.keywords.length} kw</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        ${cat.keywords.map(kw => `<span style="font-size:11px;background:rgba(100,200,255,0.12);color:var(--accent);padding:2px 8px;border-radius:10px">${esc(kw)}</span>`).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+async function kwPlanGenerateTitles() {
+  const keywords = kwPlanGetKeywords();
+  if (!keywords.length) { toast('キーワードが空です', 'error'); return; }
+  if (!kwPlanCategories.length) { toast('カテゴリーが空です', 'error'); return; }
+  const btn = document.getElementById('kw-plan-titles-btn');
+  const status = document.getElementById('kw-plan-titles-status');
+  btn.disabled = true;
+  kwPlanIdeas = [];
+  document.getElementById('kw-plan-step3').style.display = 'none';
+
+  const chunkSize = 30;
+  const chunks = [];
+  for (let i = 0; i < keywords.length; i += chunkSize) chunks.push(keywords.slice(i, i + chunkSize));
+
+  const catPayload = kwPlanCategories.map(c => ({name: c.name}));
+  for (let ci = 0; ci < chunks.length; ci++) {
+    status.textContent = `生成中... ${ci + 1} / ${chunks.length} バッチ（${kwPlanIdeas.length + chunks[ci].length} 件処理済）`;
+    try {
+      const res = await fetch('/api/kw-plan/titles', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({keywords: chunks[ci], categories: catPayload}),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ideas) throw new Error(data.error || '生成に失敗しました');
+      kwPlanIdeas.push(...data.ideas);
+    } catch (e) {
+      toast(`バッチ ${ci + 1} 失敗: ` + e.message, 'error');
+    }
+  }
+
+  btn.disabled = false;
+  if (!kwPlanIdeas.length) { status.textContent = '生成に失敗しました'; return; }
+  status.textContent = `${kwPlanIdeas.length} 件のタイトル案を生成しました ✓`;
+  kwPlanRenderIdeas();
+  // サイトセレクタにサイト一覧をセット
+  const sel = document.getElementById('kw-plan-site-id');
+  sel.innerHTML = '<option value="">— サイトを選択 —</option>'
+    + siteList.map(s => `<option value="${s.id}"${s.id === currentSiteId ? ' selected' : ''}>${esc(s.name)}</option>`).join('');
+  document.getElementById('kw-plan-step3').style.display = '';
+}
+
+function kwPlanRenderIdeas() {
+  const tbody = document.getElementById('kw-plan-ideas-body');
+  const cats = [...new Set(kwPlanCategories.map(c => c.name))];
+  tbody.innerHTML = kwPlanIdeas.map((idea, idx) => `
+    <tr>
+      <td><input type="checkbox" class="kw-plan-pick" value="${idx}" checked></td>
+      <td>
+        <input type="text" class="form-control" style="font-size:12px" value="${esc(idea.title)}"
+          oninput="kwPlanIdeas[${idx}].title=this.value">
+      </td>
+      <td>
+        <select class="form-control" style="font-size:12px" onchange="kwPlanIdeas[${idx}].category=this.value">
+          ${cats.map(c => `<option value="${esc(c)}"${idea.category === c ? ' selected' : ''}>${esc(c)}</option>`).join('')}
+        </select>
+      </td>
+      <td>
+        <select class="form-control" style="font-size:12px" onchange="kwPlanIdeas[${idx}].article_type=this.value">
+          <option value="ranking"${idea.article_type === 'ranking' ? ' selected' : ''}>ranking</option>
+          <option value="brand"${idea.article_type === 'brand' ? ' selected' : ''}>brand</option>
+          <option value="column"${idea.article_type === 'column' ? ' selected' : ''}>column</option>
+        </select>
+      </td>
+      <td style="font-size:11px;color:var(--muted)">${esc(idea.keyword)}</td>
+    </tr>
+  `).join('');
+  document.getElementById('kw-plan-ideas-count').textContent = kwPlanIdeas.length + ' 件';
+}
+
+function kwPlanSelectAll(checked) {
+  document.querySelectorAll('.kw-plan-pick').forEach(cb => cb.checked = checked);
+  const all = document.getElementById('kw-plan-check-all');
+  if (all) all.checked = checked;
+}
+
+async function kwPlanImport() {
+  const siteId = document.getElementById('kw-plan-site-id').value;
+  if (!siteId) { toast('サイトを選択してください', 'error'); return; }
+  const selected = [...document.querySelectorAll('.kw-plan-pick:checked')]
+    .map(cb => kwPlanIdeas[parseInt(cb.value, 10)]);
+  if (!selected.length) { toast('インポートする記事を選択してください', 'error'); return; }
+  const status = document.getElementById('kw-plan-import-status');
+  let done = 0, failed = 0;
+  for (const idea of selected) {
+    status.textContent = `インポート中... ${done + failed + 1} / ${selected.length}`;
+    try {
+      const res = await fetch('/api/articles', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          title: idea.title,
+          keywords: idea.keyword,
+          article_type: idea.article_type,
+          site_id: siteId,
+          category: idea.category,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      done++;
+    } catch { failed++; }
+  }
+  status.textContent = `完了: ${done} 件インポート${failed ? ' / ' + failed + ' 件失敗' : ''}`;
+  toast(`${done} 件をインポートしました`, 'success');
+  await loadArticles();
+  showPage('articles');
 }
 
 // ---- Articles ----
