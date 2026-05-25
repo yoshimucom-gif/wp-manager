@@ -32,7 +32,7 @@ class Affiros_Plugin_Updater {
     /** リモート情報キャッシュ TTL (秒) */
     private $cache_ttl;
 
-    public function __construct($plugin_file, $update_url, $cache_ttl = 21600) {
+    public function __construct($plugin_file, $update_url, $cache_ttl = 1800) {
         $this->plugin_file     = $plugin_file;
         $this->plugin_basename = plugin_basename($plugin_file);
         $this->plugin_slug     = dirname($this->plugin_basename);
