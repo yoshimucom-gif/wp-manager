@@ -1368,19 +1368,13 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <!-- 左パネル：設定 -->
           <div class="batch-side">
             <div class="form-group">
-              <label class="form-label">サイト</label>
-              <select id="rw-site" class="form-control" onchange="rwSiteChanged()">
-                <option value="">サイトを選択</option>
-              </select>
-            </div>
-            <div class="form-group">
               <label class="form-label">品質定義</label>
               <select id="rw-quality" class="form-control">
                 <option value="">自動（記事種類ごと）</option>
               </select>
             </div>
             <div class="form-group">
-              <label class="form-label">記事種類（インポート時に設定）</label>
+              <label class="form-label">記事種類</label>
               <select id="rw-article-type" class="form-control">
                 <option value="ranking">ランキング記事</option>
                 <option value="column">コラム記事</option>
@@ -1441,7 +1435,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
                   </tr>
                 </thead>
                 <tbody id="rw-post-body">
-                  <tr><td colspan="4" style="text-align:center;color:var(--muted);padding:24px">サイトを選択してWPから記事を取得してください</td></tr>
+                  <tr><td colspan="4" style="text-align:center;color:var(--muted);padding:24px">WPから記事を取得してください</td></tr>
                 </tbody>
               </table>
             </div>
@@ -2381,8 +2375,6 @@ function updateSiteSelects() {
   if (genEl) { const v = genEl.value; genEl.innerHTML = modalOpts; genEl.value = v; }
   const titleEl = document.getElementById('title-site');
   if (titleEl) { const v = titleEl.value; titleEl.innerHTML = modalOpts; titleEl.value = v; }
-  const rwSiteEl = document.getElementById('rw-site');
-  if (rwSiteEl) { const v = rwSiteEl.value; rwSiteEl.innerHTML = '<option value="">サイトを選択</option>' + siteList.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join(''); rwSiteEl.value = v; }
   // currentSiteId が設定済みなら option 投入後に自動選択 + 非表示
   if (typeof applySiteSelectorAutoFill === 'function') {
     applySiteSelectorAutoFill();
@@ -5636,26 +5628,13 @@ let rwRewriteJobId = null;
 let rwRewriteJobInterval = null;
 
 function rwInitPage() {
-  updateSiteSelects();
   loadQualitySelects();
   rwRenderPostList([]);
 }
 
-function rwSiteChanged() {
-  rwFetchedPosts = [];
-  rwSelectedIds.clear();
-  rwCurrentPage = 1;
-  rwRenderPostList([]);
-  document.getElementById('rw-fetch-status').textContent = '';
-  document.getElementById('rw-pagination').style.display = 'none';
-  document.getElementById('rw-post-count').textContent = '0';
-  document.getElementById('rw-selected-count').textContent = '0';
-  document.getElementById('rw-import-btn').disabled = true;
-}
-
 async function rwFetchPosts() {
-  const siteId = document.getElementById('rw-site').value;
-  if (!siteId) { toast('サイトを選択してください', 'error'); return; }
+  const siteId = currentSiteId;
+  if (!siteId) { toast('サイドバーからサイトを選択してください', 'error'); return; }
   const perPage = parseInt(document.getElementById('rw-per-page').value) || 20;
   document.getElementById('rw-fetch-status').textContent = '取得中...';
   try {
@@ -5742,8 +5721,8 @@ function rwUpdateSelectionUI() {
 }
 
 async function rwImportAndRewrite() {
-  const siteId = document.getElementById('rw-site').value;
-  if (!siteId) { toast('サイトを選択してください', 'error'); return; }
+  const siteId = currentSiteId;
+  if (!siteId) { toast('サイドバーからサイトを選択してください', 'error'); return; }
   const selectedPosts = rwFetchedPosts.filter(p => rwSelectedIds.has(p.wp_post_id));
   if (!selectedPosts.length) { toast('記事を選択してください', 'error'); return; }
 
