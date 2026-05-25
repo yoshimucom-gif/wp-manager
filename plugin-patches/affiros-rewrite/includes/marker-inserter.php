@@ -26,18 +26,35 @@ class Affiros_Rewrite_Marker_Inserter {
     public static function default_patterns() {
         return [
             'ranking' => [
-                ['position' => 'after_each_h3_rank', 'design' => 'vertical'],
-                ['position' => 'after_matome_h2',    'design' => 'ranking', 'count' => 3],
-            ],
-            'brand' => [
-                // 商標記事は1商品を深掘りする構造なので、マーカーは1つだけ。
-                ['position' => 'after_first_h2', 'design' => 'vertical'],
+                ['position' => 'after_each_h3_rank', 'design' => 'vertical',  'repeat' => 1],
+                ['position' => 'after_last_h2',      'design' => 'compare',   'count'  => 5],
             ],
             'column' => [
-                ['position' => 'before_first_h2', 'design' => 'vertical', 'repeat' => 3],
-                ['position' => 'after_matome_h2', 'design' => 'ranking', 'count' => 3],
+                ['position' => 'before_first_h2',    'design' => 'compare',   'count'  => 3],
+                ['position' => 'after_last_h2',      'design' => 'compare',   'count'  => 3],
+            ],
+            'brand' => [
+                ['position' => 'after_first_h2',     'design' => 'vertical',  'repeat' => 1],
+                ['position' => 'after_last_h2',      'design' => 'vertical',  'repeat' => 1],
             ],
         ];
+    }
+
+    /**
+     * WPオプションに保存されたパターンを返す。未設定・空の場合はデフォルトにフォールバック。
+     */
+    public static function get_patterns() {
+        $settings = function_exists('affiros_rewrite_get_settings') ? affiros_rewrite_get_settings() : [];
+        $patterns = $settings['ad_patterns'] ?? [];
+        if (!is_array($patterns)) {
+            return self::default_patterns();
+        }
+        // 全記事タイプが空配列なら「未設定」とみなしデフォルトを使う
+        $has_any = false;
+        foreach (['ranking', 'column', 'brand'] as $t) {
+            if (!empty($patterns[$t])) { $has_any = true; break; }
+        }
+        return $has_any ? $patterns : self::default_patterns();
     }
 
     /**
@@ -52,7 +69,7 @@ class Affiros_Rewrite_Marker_Inserter {
         if ($html === '' || $html === null) {
             return $html;
         }
-        $patterns = self::default_patterns();
+        $patterns = self::get_patterns();
         $rules = $patterns[$article_type] ?? [];
         if (!$rules) {
             return $html;
@@ -67,6 +84,7 @@ class Affiros_Rewrite_Marker_Inserter {
 
         $matome_range = self::find_matome_h2_range($text);
         $first_h2_range = self::find_first_h2_range($text);
+        $last_h2_range  = self::find_last_h2_range($text);
 
         // [挿入バイト位置, 挿入文字列] のリスト
         $insertions = [];
@@ -91,6 +109,8 @@ class Affiros_Rewrite_Marker_Inserter {
                 $insertions[] = [$matome_range[0], $marker_block . "\n"];
             } elseif ($pos === 'after_matome_h2' && $matome_range) {
                 $insertions[] = [$matome_range[1], "\n" . $marker_block];
+            } elseif ($pos === 'after_last_h2' && $last_h2_range) {
+                $insertions[] = [$last_h2_range[1], "\n" . $marker_block];
             } elseif ($pos === 'after_each_h3_rank') {
                 foreach (self::collect_h3_rank_insertions($text, $marker, $matome_range, $first_h2_range) as $ins) {
                     $insertions[] = $ins;
@@ -108,13 +128,15 @@ class Affiros_Rewrite_Marker_Inserter {
 
     /**
      * プラグイン用マーカー文字列を組み立てる。本体 _build_marker の移植。
+     * count が指定される設計: compare / ranking / proscons / mini
      */
     private static function build_marker($design = 'vertical', $count = null) {
         if (!$design || $design === 'default') {
             return '<!--ai-product-->';
         }
-        if ($design === 'ranking' && $count) {
-            return '<!--ai-product:ranking:' . intval($count) . '-->';
+        $count_designs = ['compare', 'ranking', 'proscons', 'mini'];
+        if (in_array($design, $count_designs, true) && $count) {
+            return '<!--ai-product:' . $design . ':' . intval($count) . '-->';
         }
         return '<!--ai-product:' . $design . '-->';
     }
@@ -141,6 +163,27 @@ class Affiros_Rewrite_Marker_Inserter {
         if (preg_match($re, $html, $m, PREG_OFFSET_CAPTURE)) {
             $start = $m[0][1];
             return [$start, $start + strlen($m[0][0])];
+        }
+        return null;
+    }
+
+    /**
+     * 記事の最後のH2の [開始, 終了] バイト位置を返す。無ければ null。
+     * まとめH2が存在する場合はそれを返す（= after_matome_h2 と同等）。
+     * まとめH2が無い場合は最後のH2を探す。
+     */
+    private static function find_last_h2_range($html) {
+        // まず まとめH2 を試みる（after_matome_h2 との一貫性）
+        $matome = self::find_matome_h2_range($html);
+        if ($matome) {
+            return $matome;
+        }
+        // 全H2を探して最後を返す
+        $re = '/<h2[^>]*>(?:(?!<\/h2>)[\s\S])*?<\/h2>/iu';
+        if (preg_match_all($re, $html, $matches, PREG_OFFSET_CAPTURE | PREG_SET_ORDER)) {
+            $last = end($matches);
+            $start = $last[0][1];
+            return [$start, $start + strlen($last[0][0])];
         }
         return null;
     }
