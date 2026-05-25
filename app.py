@@ -59,6 +59,7 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-producti
 # ───────────────────────────────────────────────────────────────────────────
 _DATA_LOCK = threading.RLock()
 _SCHED_PUBLISH_JOBS = {}  # job_id -> {status, total, completed, success, error, errors}
+_BATCH_REWRITE_JOBS = {}  # job_id -> {status, total, completed, success, error, errors, current_title}
 
 # WP一括投稿ジョブのインメモリストア（完了後に自動削除しない・最新20件保持）
 _PUBLISH_JOBS: dict = {}
@@ -4226,6 +4227,38 @@ def build_regeneration_instruction(previous_content):
 """
 
 
+def build_rewrite_prompt(title, keywords, quality_prompt, original_content, article_type='ranking'):
+    """WPから取得した既存記事のリライトプロンプトを構築する。"""
+    # HTMLタグを除去してテキストだけ渡す（トークン節約）
+    original_text = html_to_text(original_content or '')[:8000].strip()
+    kw_str = keywords if isinstance(keywords, str) else ', '.join(keywords or [])
+    type_label = {'ranking': 'ランキング記事', 'brand': '商標記事', 'column': 'コラム記事'}.get(article_type, '記事')
+    return f"""あなたは優秀なSEOライターです。
+以下の既存記事を完全にリライトしてください。
+
+【記事タイトル】
+{title}
+
+【ターゲットキーワード】
+{kw_str}
+
+【記事種類】
+{type_label}
+
+【品質要件】
+{quality_prompt}
+
+【リライト指示】
+- 既存記事の文章・見出し・言い回しをそのまま流用しないでください。
+- 検索意図を深く理解し、導入・見出し構成・比較軸・結論・CTAを全面的に書き直してください。
+- 上記の品質要件を必ず満たしてください。
+- 出力はHTMLの記事本文のみ。前置き・説明・作業メモは一切不要です。
+
+【既存記事（参考のみ。コピー禁止）】
+{original_text}
+"""
+
+
 def count_table_rows_from_html(content):
     html = str(content or '')
     if BeautifulSoup:
@@ -7063,6 +7096,329 @@ def get_sched_publish_job(job_id):
     if not job:
         return jsonify({'error': 'ジョブが見つかりません'}), 404
     return jsonify(job)
+
+
+# ─── Rewrite feature ─────────────────────────────────────────────────────────
+
+@app.route('/api/wp-fetch-posts', methods=['POST'])
+@login_required
+def wp_fetch_posts():
+    """WPサイトから公開済み記事一覧を取得する。"""
+    data = request.get_json(silent=True) or {}
+    site_id = data.get('site_id')
+    page = clamp_int(data.get('page'), 1, 1, 100)
+    per_page = clamp_int(data.get('per_page'), 20, 1, 100)
+    post_status = str(data.get('status') or 'publish').strip()
+
+    with _DATA_LOCK:
+        settings = load_settings()
+    site = get_site_by_id(site_id, settings)
+    if not site:
+        return jsonify({'error': 'サイトが見つかりません'}), 400
+
+    wp_url = site['wp_url'].rstrip('/')
+    wp_user = site['wp_user']
+    wp_password = site['wp_password']
+
+    try:
+        resp = requests.get(
+            f"{wp_url}/wp-json/wp/v2/posts",
+            auth=(wp_user, wp_password),
+            params={
+                'status': post_status,
+                'per_page': per_page,
+                'page': page,
+                'context': 'edit',
+                'orderby': 'modified',
+                'order': 'desc',
+            },
+            headers=WP_REQUEST_HEADERS,
+            timeout=30
+        )
+        resp.raise_for_status()
+        posts = resp.json()
+        total_pages = int(resp.headers.get('X-WP-TotalPages', 1))
+        total_posts = int(resp.headers.get('X-WP-Total', len(posts)))
+        result = []
+        for p in posts:
+            title_field = p.get('title', {})
+            title_str = title_field.get('rendered', '') if isinstance(title_field, dict) else str(title_field or '')
+            content_field = p.get('content', {})
+            if isinstance(content_field, dict):
+                content_raw = content_field.get('raw', '') or content_field.get('rendered', '')
+            else:
+                content_raw = str(content_field or '')
+            result.append({
+                'wp_post_id': p['id'],
+                'title': unescape(title_str),
+                'slug': p.get('slug', ''),
+                'modified': p.get('modified', ''),
+                'status': p.get('status', ''),
+                'content': content_raw,
+                'link': p.get('link', ''),
+            })
+        return jsonify({
+            'success': True,
+            'posts': result,
+            'total': total_posts,
+            'total_pages': total_pages,
+            'page': page,
+        })
+    except requests.exceptions.RequestException as e:
+        return jsonify({'error': describe_wp_request_error(e)}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/wp-import-articles', methods=['POST'])
+@login_required
+@with_data_lock
+def wp_import_articles():
+    """WPから取得した記事をAffiros9のarticles.jsonに取り込む。"""
+    data = request.get_json(silent=True) or {}
+    site_id = data.get('site_id')
+    posts = data.get('posts') or []
+
+    if not site_id:
+        return jsonify({'error': 'site_idが必要です'}), 400
+    if not posts:
+        return jsonify({'error': '取り込む記事がありません'}), 400
+
+    settings = load_settings()
+    site = get_site_by_id(site_id, settings)
+    if not site:
+        return jsonify({'error': 'サイトが見つかりません'}), 400
+
+    articles = load_articles()
+    existing = {(a.get('site_id'), str(a.get('wp_post_id', ''))) for a in articles if a.get('wp_post_id')}
+
+    now = now_iso()
+    created = 0
+    skipped = 0
+    imported_ids = []
+
+    for post in posts:
+        wp_post_id = post.get('wp_post_id')
+        if not wp_post_id:
+            continue
+        if (site_id, str(wp_post_id)) in existing:
+            skipped += 1
+            continue
+
+        article_id = str(uuid.uuid4())
+        new_article = {
+            'id': article_id,
+            'title': str(post.get('title') or ''),
+            'keywords': '',
+            'category': '',
+            'slug': str(post.get('slug') or ''),
+            'article_type': normalize_article_type(post.get('article_type'), 'ranking'),
+            'status': 'pending',
+            'content': '',
+            'original_content': str(post.get('content') or ''),
+            'created_at': now,
+            'updated_at': now,
+            'quality_id': None,
+            'site_id': site_id,
+            'wp_post_id': wp_post_id,
+            'wp_url': str(post.get('link') or ''),
+            'source': 'wp_import',
+        }
+        articles.append(new_article)
+        imported_ids.append(article_id)
+        created += 1
+
+    save_articles(articles)
+    return jsonify({'success': True, 'created': created, 'skipped': skipped, 'imported_ids': imported_ids})
+
+
+@app.route('/api/rewrite/<article_id>', methods=['GET'])
+@login_required
+def rewrite_article_sse(article_id):
+    """単一記事のリライト（SSEストリーミング）。"""
+    quality_id = request.args.get('quality_id')
+
+    with _DATA_LOCK:
+        articles = load_articles()
+        article = next((a for a in articles if a['id'] == article_id), None)
+        if not article:
+            return jsonify({'error': '記事が見つかりません'}), 404
+        settings = load_settings()
+        api_key = settings.get('claude_api_key') or os.environ.get('ANTHROPIC_API_KEY', '')
+        if not api_key:
+            return jsonify({'error': 'Claude APIキーが設定されていません'}), 400
+        quality_list = load_quality()
+        article_type = normalize_article_type(article.get('article_type'), 'ranking')
+        quality = select_quality_definition(quality_list, quality_id or article.get('quality_id'), article_type)
+        quality_prompt_str = build_quality_prompt(quality)
+        original_content = article.get('original_content') or article.get('content') or ''
+        title = article.get('title', '')
+        keywords = article.get('keywords', '')
+        article['status'] = 'generating'
+        article['updated_at'] = now_iso()
+        save_articles(articles)
+
+    client = anthropic.Anthropic(api_key=api_key)
+    prompt = build_rewrite_prompt(title, keywords, quality_prompt_str, original_content, article_type)
+
+    def generate():
+        nonlocal article_type, title
+        try:
+            full_content, _ = yield from stream_claude_sse(client, prompt, 'リライト中です。Claude応答待ちです。')
+            # 後処理
+            article_snap = {'id': article_id, 'title': title}
+            enhanced, _ = safe_enhance_generated_article_html(full_content, article_snap, article_type)
+            final_content, _ = insert_card_markers(enhanced, article_type, title=title)
+            with _DATA_LOCK:
+                arts = load_articles()
+                a = next((x for x in arts if x['id'] == article_id), None)
+                if a:
+                    a['content'] = final_content
+                    a['status'] = 'generated'
+                    a['updated_at'] = now_iso()
+                    save_articles(arts)
+            yield f"data: {json.dumps({'status': 'done'})}\n\n"
+        except Exception as e:
+            with _DATA_LOCK:
+                arts = load_articles()
+                a = next((x for x in arts if x['id'] == article_id), None)
+                if a:
+                    a['status'] = 'error'
+                    a['error'] = str(e)
+                    a['updated_at'] = now_iso()
+                    save_articles(arts)
+            yield f"data: {json.dumps({'status': 'error', 'error': str(e)})}\n\n"
+
+    return Response(stream_with_context(generate()), mimetype='text/event-stream')
+
+
+def _run_batch_rewrite_worker(job_id, article_ids, quality_id):
+    """バッチリライトをバックグラウンドで処理するワーカー。"""
+    with _DATA_LOCK:
+        settings = load_settings()
+        quality_list = load_quality()
+    api_key = settings.get('claude_api_key') or os.environ.get('ANTHROPIC_API_KEY', '')
+    if not api_key:
+        _BATCH_REWRITE_JOBS[job_id]['status'] = 'done'
+        _BATCH_REWRITE_JOBS[job_id]['errors'].append({'title': '', 'error': 'Claude APIキー未設定'})
+        return
+
+    client = anthropic.Anthropic(api_key=api_key)
+
+    for article_id in article_ids:
+        with _DATA_LOCK:
+            articles = load_articles()
+            article = next((a for a in articles if a['id'] == article_id), None)
+        if not article:
+            _BATCH_REWRITE_JOBS[job_id]['error'] += 1
+            _BATCH_REWRITE_JOBS[job_id]['errors'].append({'title': article_id, 'error': '記事が見つかりません'})
+            _BATCH_REWRITE_JOBS[job_id]['completed'] += 1
+            continue
+
+        title = article.get('title', '')
+        _BATCH_REWRITE_JOBS[job_id]['current_title'] = title
+
+        article_type = normalize_article_type(article.get('article_type'), 'ranking')
+        quality = select_quality_definition(quality_list, quality_id or article.get('quality_id'), article_type)
+        quality_prompt_str = build_quality_prompt(quality)
+        original_content = article.get('original_content') or article.get('content') or ''
+        keywords = article.get('keywords', '')
+
+        # status: generating
+        with _DATA_LOCK:
+            articles = load_articles()
+            a = next((x for x in articles if x['id'] == article_id), None)
+            if a:
+                a['status'] = 'generating'
+                a['updated_at'] = now_iso()
+                save_articles(articles)
+
+        try:
+            prompt = build_rewrite_prompt(title, keywords, quality_prompt_str, original_content, article_type)
+            response = create_claude_message(client, prompt)
+            full_content = anthropic_message_text(response)
+            article_snap = {'id': article_id, 'title': title}
+            enhanced, _ = safe_enhance_generated_article_html(full_content, article_snap, article_type)
+            final_content, _ = insert_card_markers(enhanced, article_type, title=title)
+            with _DATA_LOCK:
+                articles = load_articles()
+                a = next((x for x in articles if x['id'] == article_id), None)
+                if a:
+                    a['content'] = final_content
+                    a['status'] = 'generated'
+                    a['updated_at'] = now_iso()
+                    save_articles(articles)
+            _BATCH_REWRITE_JOBS[job_id]['success'] += 1
+        except Exception as e:
+            err_msg = compact_ai_error(e)
+            with _DATA_LOCK:
+                articles = load_articles()
+                a = next((x for x in articles if x['id'] == article_id), None)
+                if a:
+                    a['status'] = 'error'
+                    a['error'] = err_msg
+                    a['updated_at'] = now_iso()
+                    save_articles(articles)
+            _BATCH_REWRITE_JOBS[job_id]['error'] += 1
+            _BATCH_REWRITE_JOBS[job_id]['errors'].append({'title': title, 'error': err_msg})
+            # 認証エラーなら即終了
+            if non_retryable_ai_error(e):
+                _BATCH_REWRITE_JOBS[job_id]['status'] = 'done'
+                _BATCH_REWRITE_JOBS[job_id]['completed'] += 1
+                return
+
+        _BATCH_REWRITE_JOBS[job_id]['completed'] += 1
+
+    _BATCH_REWRITE_JOBS[job_id]['status'] = 'done'
+    _BATCH_REWRITE_JOBS[job_id]['current_title'] = ''
+
+
+@app.route('/api/batch-rewrite', methods=['POST'])
+@login_required
+def batch_rewrite():
+    """バッチリライトをバックグラウンドジョブとして開始し、job_id を即返す。"""
+    data = request.get_json(silent=True) or {}
+    article_ids = list(dict.fromkeys(data.get('article_ids') or []))
+    quality_id = data.get('quality_id')
+
+    if not article_ids:
+        return jsonify({'error': '対象記事を選択してください'}), 400
+
+    with _DATA_LOCK:
+        articles = load_articles()
+    article_lookup = {a['id']: a for a in articles}
+    targets = [i for i in article_ids if i in article_lookup]
+    if not targets:
+        return jsonify({'error': '有効な記事が見つかりません'}), 400
+
+    job_id = str(uuid.uuid4())
+    _BATCH_REWRITE_JOBS[job_id] = {
+        'status': 'running',
+        'total': len(targets),
+        'completed': 0,
+        'success': 0,
+        'error': 0,
+        'errors': [],
+        'current_title': '',
+    }
+    threading.Thread(
+        target=_run_batch_rewrite_worker,
+        args=(job_id, targets, quality_id),
+        daemon=True,
+    ).start()
+    return jsonify({'success': True, 'job_id': job_id, 'total': len(targets)})
+
+
+@app.route('/api/batch-rewrite/jobs/<job_id>', methods=['GET'])
+@login_required
+def get_batch_rewrite_job(job_id):
+    job = _BATCH_REWRITE_JOBS.get(job_id)
+    if not job:
+        return jsonify({'error': 'ジョブが見つかりません'}), 404
+    return jsonify(job)
+
+
+# ─── /Rewrite feature ─────────────────────────────────────────────────────────
 
 
 @app.route('/api/seo-news', methods=['GET'])

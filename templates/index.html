@@ -892,6 +892,9 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
       <div class="nav-item" onclick="showPage('batch')" id="nav-batch">
         一括処理
       </div>
+      <div class="nav-item" onclick="showPage('rewrite')" id="nav-rewrite">
+        リライト
+      </div>
     </div>
     <!-- サイト未選択時の案内 -->
     <div class="nav-no-site-hint" id="nav-no-site-hint" style="color:rgba(255,255,255,0.5);font-size:12px;padding:0 14px;align-self:center;display:none">
@@ -1349,6 +1352,97 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
                   </tr>
                 </thead>
                 <tbody id="batch-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rewrite Page -->
+      <div class="page" id="page-rewrite">
+        <div class="page-header">
+          <div class="page-title">リライト</div>
+          <div class="page-subtitle">WP公開済み記事を取得して最新定義でリライト</div>
+        </div>
+        <div class="batch-layout">
+          <!-- 左パネル：設定 -->
+          <div class="batch-side">
+            <div class="form-group">
+              <label class="form-label">サイト</label>
+              <select id="rw-site" class="form-control" onchange="rwSiteChanged()">
+                <option value="">サイトを選択</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">品質定義</label>
+              <select id="rw-quality" class="form-control">
+                <option value="">自動（記事種類ごと）</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">記事種類（インポート時に設定）</label>
+              <select id="rw-article-type" class="form-control">
+                <option value="ranking">ランキング記事</option>
+                <option value="column">コラム記事</option>
+                <option value="brand">商標記事</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">1回の取得件数（最大100）</label>
+              <input type="number" id="rw-per-page" class="form-control" value="20" min="1" max="100">
+            </div>
+            <button class="btn btn-secondary" style="width:100%;margin-bottom:8px" onclick="rwFetchPosts()">
+              ↓ WPから記事取得
+            </button>
+            <div id="rw-fetch-status" style="font-size:12px;color:var(--muted);margin-bottom:8px"></div>
+            <div id="rw-pagination" style="display:none;font-size:12px;margin-bottom:8px">
+              <span id="rw-page-info"></span>
+              <div style="display:flex;gap:6px;margin-top:4px">
+                <button class="btn btn-secondary btn-sm" onclick="rwFetchPage(-1)" id="rw-prev-btn">‹ 前</button>
+                <button class="btn btn-secondary btn-sm" onclick="rwFetchPage(1)" id="rw-next-btn">次 ›</button>
+              </div>
+            </div>
+            <div id="rw-progress" style="display:none;margin-top:12px">
+              <div class="batch-progress-meta">
+                <span id="rw-progress-label">リライト中</span>
+                <span id="rw-progress-percent">0%</span>
+              </div>
+              <div class="progress-bar"><div class="progress-fill" id="rw-progress-fill" style="width:0%"></div></div>
+              <div class="batch-progress-meta">
+                <span id="rw-progress-count">0/0件</span>
+                <span id="rw-progress-current" style="color:var(--muted);font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+              </div>
+              <div id="rw-progress-errors" style="margin-top:6px;font-size:11px;color:var(--danger)"></div>
+            </div>
+          </div>
+          <!-- 右パネル：記事リスト -->
+          <div class="batch-main">
+            <div style="position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <label class="form-label" style="margin:0;flex:1">取得記事 (<span id="rw-post-count">0</span>件)</label>
+                <button class="btn btn-secondary btn-sm" onclick="rwSelectAll()">全選択</button>
+                <button class="btn btn-secondary btn-sm" onclick="rwDeselectAll()">全解除</button>
+                <button class="btn btn-primary btn-sm" id="rw-import-btn" onclick="rwImportAndRewrite()" disabled>
+                  ⚡ 取込＆リライト (<span id="rw-selected-count">0</span>件)
+                </button>
+              </div>
+              <div style="font-size:11px;color:var(--muted);margin-top:6px">
+                WPから記事を取得 → 選択 → 「取込＆リライト」でAffiros9に保存後、現在の品質・広告定義でリライト。生成後はWPへ上書き投稿できます。
+              </div>
+            </div>
+            <div id="rw-post-table-wrap" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;overflow:auto;margin-top:8px">
+              <table style="width:100%;min-width:680px">
+                <thead>
+                  <tr>
+                    <th style="width:36px"><input type="checkbox" id="rw-check-all" onchange="rwToggleAll(this)"></th>
+                    <th>タイトル</th>
+                    <th style="width:140px">スラッグ</th>
+                    <th style="width:120px">最終更新</th>
+                  </tr>
+                </thead>
+                <tbody id="rw-post-body">
+                  <tr><td colspan="4" style="text-align:center;color:var(--muted);padding:24px">サイトを選択してWPから記事を取得してください</td></tr>
+                </tbody>
               </table>
             </div>
           </div>
@@ -2082,6 +2176,7 @@ function showPage(name, opts = {}) {
     if (pageName === 'generate') { loadQualitySelects(); updateSiteSelects(); populateGenSelect(); }
     if (pageName === 'title-ideas') { updateSiteSelects(); renderTitleIdeas(); updateTitleKeywordCount(); loadKwStock(); updateKwStockDisplay(); }
     if (pageName === 'batch') { batchSelectedIds = null; loadQualitySelects(); loadArticles(); loadLatestBatchJob(); }
+    if (pageName === 'rewrite') { rwInitPage(); }
     if (pageName === 'quality') loadQuality();
     if (pageName === 'title-definition') loadTitleDefinition();
     if (pageName === 'ad-insertion') loadAdInsertion();
@@ -2286,6 +2381,8 @@ function updateSiteSelects() {
   if (genEl) { const v = genEl.value; genEl.innerHTML = modalOpts; genEl.value = v; }
   const titleEl = document.getElementById('title-site');
   if (titleEl) { const v = titleEl.value; titleEl.innerHTML = modalOpts; titleEl.value = v; }
+  const rwSiteEl = document.getElementById('rw-site');
+  if (rwSiteEl) { const v = rwSiteEl.value; rwSiteEl.innerHTML = '<option value="">サイトを選択</option>' + siteList.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join(''); rwSiteEl.value = v; }
   // currentSiteId が設定済みなら option 投入後に自動選択 + 非表示
   if (typeof applySiteSelectorAutoFill === 'function') {
     applySiteSelectorAutoFill();
@@ -4950,12 +5047,12 @@ function loadQualitySelects() {
   const placeholderOpt = '<option value="">-- 品質定義を選択 --</option>';
   const autoOpt = '<option value="">自動（記事種類に合わせる）</option>';
   const qualityOpts = qualityList.map(q => `<option value="${q.id}">${esc(q.name)}</option>`).join('');
-  ['gen-quality', 'batch-quality', 's-default-quality'].forEach(id => {
+  ['gen-quality', 'batch-quality', 'rw-quality', 's-default-quality'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     const prev = el.value;
-    // gen-quality / batch-quality は「自動」、それ以外は単なるプレースホルダ
-    const firstOpt = (id === 'gen-quality' || id === 'batch-quality') ? autoOpt : placeholderOpt;
+    // gen-quality / batch-quality / rw-quality は「自動」、それ以外は単なるプレースホルダ
+    const firstOpt = (id === 'gen-quality' || id === 'batch-quality' || id === 'rw-quality') ? autoOpt : placeholderOpt;
     el.innerHTML = firstOpt + qualityOpts;
     // 既存の選択値を保持。無ければ空（=自動）。
     el.value = qualityList.some(q => q.id === prev) ? prev : '';
@@ -5529,6 +5626,214 @@ async function goToDashboard() {
   await showPage(initialPage, { replaceUrl: true });
   renderMonthlyUsageEstimate();
 })();
+
+// ─── Rewrite page ────────────────────────────────────────────────────────────
+let rwCurrentPage = 1;
+let rwTotalPages = 1;
+let rwFetchedPosts = [];       // [{wp_post_id, title, slug, modified, content, link}]
+let rwSelectedIds = new Set(); // wp_post_id（数値）のSet
+let rwRewriteJobId = null;
+let rwRewriteJobInterval = null;
+
+function rwInitPage() {
+  updateSiteSelects();
+  loadQualitySelects();
+  rwRenderPostList([]);
+}
+
+function rwSiteChanged() {
+  rwFetchedPosts = [];
+  rwSelectedIds.clear();
+  rwCurrentPage = 1;
+  rwRenderPostList([]);
+  document.getElementById('rw-fetch-status').textContent = '';
+  document.getElementById('rw-pagination').style.display = 'none';
+  document.getElementById('rw-post-count').textContent = '0';
+  document.getElementById('rw-selected-count').textContent = '0';
+  document.getElementById('rw-import-btn').disabled = true;
+}
+
+async function rwFetchPosts() {
+  const siteId = document.getElementById('rw-site').value;
+  if (!siteId) { toast('サイトを選択してください', 'error'); return; }
+  const perPage = parseInt(document.getElementById('rw-per-page').value) || 20;
+  document.getElementById('rw-fetch-status').textContent = '取得中...';
+  try {
+    const res = await fetch('/api/wp-fetch-posts', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ site_id: siteId, page: rwCurrentPage, per_page: perPage, status: 'publish' })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || '取得失敗');
+    rwFetchedPosts = data.posts || [];
+    rwTotalPages = data.total_pages || 1;
+    document.getElementById('rw-fetch-status').textContent =
+      `${data.total}件中 ${(rwCurrentPage - 1) * perPage + 1}〜${(rwCurrentPage - 1) * perPage + rwFetchedPosts.length}件を表示`;
+    document.getElementById('rw-pagination').style.display = rwTotalPages > 1 ? '' : 'none';
+    document.getElementById('rw-page-info').textContent = `${rwCurrentPage} / ${rwTotalPages} ページ`;
+    document.getElementById('rw-prev-btn').disabled = rwCurrentPage <= 1;
+    document.getElementById('rw-next-btn').disabled = rwCurrentPage >= rwTotalPages;
+    rwSelectedIds.clear();
+    rwRenderPostList(rwFetchedPosts);
+  } catch (e) {
+    toast(e.message || 'WP記事取得エラー', 'error');
+    document.getElementById('rw-fetch-status').textContent = 'エラー: ' + (e.message || '');
+  }
+}
+
+function rwFetchPage(delta) {
+  rwCurrentPage = Math.max(1, Math.min(rwTotalPages, rwCurrentPage + delta));
+  rwFetchPosts();
+}
+
+function rwRenderPostList(posts) {
+  const tbody = document.getElementById('rw-post-body');
+  if (!posts || !posts.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:24px">記事がありません</td></tr>';
+    document.getElementById('rw-post-count').textContent = '0';
+    document.getElementById('rw-selected-count').textContent = '0';
+    document.getElementById('rw-import-btn').disabled = true;
+    return;
+  }
+  document.getElementById('rw-post-count').textContent = posts.length;
+  tbody.innerHTML = posts.map(p => `
+    <tr>
+      <td><input type="checkbox" class="rw-post-check" value="${p.wp_post_id}"
+        ${rwSelectedIds.has(p.wp_post_id) ? 'checked' : ''}
+        onchange="rwTogglePost(${p.wp_post_id}, this.checked)"></td>
+      <td style="font-size:13px">${esc(p.title || '(無題)')}</td>
+      <td style="font-size:12px;color:var(--muted)">${esc(p.slug || '')}</td>
+      <td style="font-size:12px;color:var(--muted)">${(p.modified || '').substring(0, 10)}</td>
+    </tr>
+  `).join('');
+  rwUpdateSelectionUI();
+}
+
+function rwTogglePost(wpPostId, checked) {
+  if (checked) rwSelectedIds.add(wpPostId);
+  else rwSelectedIds.delete(wpPostId);
+  rwUpdateSelectionUI();
+}
+
+function rwToggleAll(cb) {
+  rwFetchedPosts.forEach(p => {
+    if (cb.checked) rwSelectedIds.add(p.wp_post_id);
+    else rwSelectedIds.delete(p.wp_post_id);
+  });
+  document.querySelectorAll('.rw-post-check').forEach(c => c.checked = cb.checked);
+  rwUpdateSelectionUI();
+}
+
+function rwSelectAll() {
+  document.getElementById('rw-check-all').checked = true;
+  rwToggleAll(document.getElementById('rw-check-all'));
+}
+
+function rwDeselectAll() {
+  document.getElementById('rw-check-all').checked = false;
+  rwToggleAll(document.getElementById('rw-check-all'));
+}
+
+function rwUpdateSelectionUI() {
+  const count = rwSelectedIds.size;
+  document.getElementById('rw-selected-count').textContent = count;
+  document.getElementById('rw-import-btn').disabled = count === 0;
+}
+
+async function rwImportAndRewrite() {
+  const siteId = document.getElementById('rw-site').value;
+  if (!siteId) { toast('サイトを選択してください', 'error'); return; }
+  const selectedPosts = rwFetchedPosts.filter(p => rwSelectedIds.has(p.wp_post_id));
+  if (!selectedPosts.length) { toast('記事を選択してください', 'error'); return; }
+
+  const qualityId = document.getElementById('rw-quality').value;
+  const articleType = document.getElementById('rw-article-type').value;
+
+  if (!confirm(`${selectedPosts.length}件の記事をAffiros9に取込みリライトを開始します。よろしいですか？`)) return;
+
+  // 記事種類を各postに付与
+  const postsWithType = selectedPosts.map(p => ({ ...p, article_type: articleType }));
+
+  // Step1: インポート
+  document.getElementById('rw-fetch-status').textContent = 'Affiros9に取込中...';
+  let importedIds = [];
+  try {
+    const res = await fetch('/api/wp-import-articles', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ site_id: siteId, posts: postsWithType })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || '取込失敗');
+    importedIds = data.imported_ids || [];
+    document.getElementById('rw-fetch-status').textContent =
+      `取込完了: 新規${data.created}件・重複スキップ${data.skipped}件`;
+    if (!importedIds.length) {
+      toast('新規取込記事なし（全件重複スキップ）', 'warning');
+      return;
+    }
+  } catch (e) {
+    toast(e.message || '取込エラー', 'error');
+    document.getElementById('rw-fetch-status').textContent = 'エラー: ' + (e.message || '');
+    return;
+  }
+
+  // Step2: バッチリライト開始
+  document.getElementById('rw-progress').style.display = '';
+  document.getElementById('rw-progress-fill').style.width = '0%';
+  document.getElementById('rw-progress-count').textContent = `0/${importedIds.length}件`;
+  document.getElementById('rw-progress-percent').textContent = '0%';
+  document.getElementById('rw-progress-current').textContent = '';
+  document.getElementById('rw-progress-errors').textContent = '';
+
+  try {
+    const res = await fetch('/api/batch-rewrite', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ article_ids: importedIds, quality_id: qualityId || null })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'リライト開始失敗');
+    rwRewriteJobId = data.job_id;
+    toast(`リライト開始: ${importedIds.length}件`, 'success');
+    rwPollRewriteJob();
+  } catch (e) {
+    toast(e.message || 'リライト開始エラー', 'error');
+    document.getElementById('rw-progress').style.display = 'none';
+  }
+}
+
+function rwPollRewriteJob() {
+  if (rwRewriteJobInterval) clearInterval(rwRewriteJobInterval);
+  rwRewriteJobInterval = setInterval(async () => {
+    if (!rwRewriteJobId) { clearInterval(rwRewriteJobInterval); return; }
+    try {
+      const res = await fetch(`/api/batch-rewrite/jobs/${rwRewriteJobId}`);
+      const job = await res.json();
+      const pct = job.total > 0 ? Math.round((job.completed / job.total) * 100) : 0;
+      document.getElementById('rw-progress-fill').style.width = pct + '%';
+      document.getElementById('rw-progress-percent').textContent = pct + '%';
+      document.getElementById('rw-progress-count').textContent = `${job.completed}/${job.total}件`;
+      document.getElementById('rw-progress-label').textContent =
+        job.status === 'done' ? 'リライト完了' : 'リライト中';
+      if (job.current_title) {
+        document.getElementById('rw-progress-current').textContent = job.current_title;
+      }
+      if (job.errors && job.errors.length) {
+        document.getElementById('rw-progress-errors').textContent =
+          `エラー${job.errors.length}件: ` + job.errors.slice(-3).map(e => e.title + ': ' + e.error).join(' / ');
+      }
+      if (job.status === 'done') {
+        clearInterval(rwRewriteJobInterval);
+        rwRewriteJobInterval = null;
+        toast(`リライト完了 成功${job.success}件 / エラー${job.error}件`, job.error > 0 ? 'warning' : 'success');
+        loadArticles();
+      }
+    } catch {}
+  }, 2000);
+}
+// ─── /Rewrite page ───────────────────────────────────────────────────────────
 </script>
 </body>
 </html>
