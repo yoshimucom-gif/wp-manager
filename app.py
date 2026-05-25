@@ -5547,6 +5547,7 @@ def get_sites_dashboard():
             'id': sid,
             'name': site.get('name') or site.get('wp_url') or '(無名サイト)',
             'wp_url': site.get('wp_url') or '',
+            'sheet_url': site.get('sheet_url') or '',
             'counts': {
                 'total': len(site_articles),
                 'pending': sum(1 for a in site_articles if a.get('status') == 'pending'),
@@ -7271,6 +7272,7 @@ def create_site():
         'wp_url': data.get('wp_url', '').rstrip('/'),
         'wp_user': data.get('wp_user', ''),
         'wp_password': data.get('wp_password', ''),
+        'sheet_url': data.get('sheet_url', ''),
     }
     sites.append(site)
     settings['sites'] = sites
@@ -7293,6 +7295,8 @@ def update_site(site_id):
             s['wp_user'] = data.get('wp_user', s['wp_user'])
             if data.get('wp_password') and not is_masked_value(data['wp_password']):
                 s['wp_password'] = data['wp_password']
+            if 'sheet_url' in data:
+                s['sheet_url'] = str(data['sheet_url']).strip()
             break
     save_settings(settings)
     return jsonify({'success': True})
