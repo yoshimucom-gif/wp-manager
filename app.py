@@ -4466,7 +4466,9 @@ def login_required(f):
 @app.route('/settings')
 @app.route('/plugins')
 def index():
-    return render_template('index.html')
+    # プラグインバージョン表記を index.html 側でハードコードしない（同期忘れ防止）。
+    # PLUGIN_DOWNLOADS が唯一の Source of Truth。
+    return render_template('index.html', plugin_downloads=PLUGIN_DOWNLOADS)
 
 @app.route('/favicon.ico')
 def favicon():
