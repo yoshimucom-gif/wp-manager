@@ -92,6 +92,13 @@ class Affiros_Rewrite_Engine {
             $content = Affiros_Rewrite_Marker_Inserter::insert($content, $article_type, $new_title);
         }
 
+        // Gutenberg ブロック化（Classic ブロック化を防ぐ）
+        // 注: マーカー挿入の後にブロック化することで、マーカー（HTMLコメント）も
+        //     ブロック区切り位置に保持される。
+        if (class_exists('Affiros_Rewrite_Gutenberg')) {
+            $content = Affiros_Rewrite_Gutenberg::convert($content);
+        }
+
         return [
             'post_id' => $post_id,
             'original_title' => $post['title'],
