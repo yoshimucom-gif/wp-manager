@@ -236,35 +236,17 @@
                 return;
             }
 
-            if (!confirm(targetIds.length + '件の記事をバックグラウンドジョブとしてキューに入れます。\n10分ごとに3記事ずつ自動処理されます。\n画面を閉じても処理は継続します。\n\nキューに入れますか?')) return;
+            if (!confirm(targetIds.length + '件の記事に商品を挿入します。実行しますか？')) return;
 
             const mode = $('input[name=aipi_bulk_mode]').val() || 'marker';
             const design = $('input[name=aipi_bulk_design]').val() || 'vertical';
 
-            const $btn = $(this).prop('disabled', true).text('キュー追加中...');
+            $(this).prop('disabled', true);
+            $('.aipi-progress').show();
+            $('.aipi-progress-log').html('');
+            bulkStopped = false;
 
-            $.post(aiPI.ajaxUrl, {
-                action: 'ai_pi_enqueue_bulk',
-                nonce: aiPI.nonce,
-                post_ids: targetIds,
-                mode: mode,
-                design: design,
-            }).done(function(resp) {
-                if (!resp.success) {
-                    alert('キュー追加失敗: ' + (resp.data && resp.data.message ? resp.data.message : '不明'));
-                    return;
-                }
-                if (confirm(
-                    '✅ ' + resp.data.count + '件をキューに追加しました\nJob ID: ' + resp.data.job_id + '\n\n' +
-                    '実行履歴ページに移動して進捗を確認しますか？\n（画面を閉じても処理は継続します）'
-                )) {
-                    location.href = resp.data.history_url;
-                }
-            }).fail(function(xhr) {
-                alert('通信エラー: HTTP ' + xhr.status);
-            }).always(function() {
-                $btn.prop('disabled', false).text('一括処理を開始');
-            });
+            processBulkOne(targetIds, 0, mode, design);
         });
 
         $('.aipi-stop-bulk').on('click', function() {

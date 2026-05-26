@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros プロダクトインサーター
  * Description: AIが記事内容を解析し、Amazon・楽天市場の最適な商品アフィリエイトカードを自動挿入するプラグイン
- * Version: 2.0.1
+ * Version: 1.9.6
  * Author: AI Product Inserter
  * License: GPL v2 or later
  * Text Domain: ai-product-inserter
@@ -51,24 +51,7 @@ require_once AI_PI_PATH . 'admin/meta-box.php';
 require_once AI_PI_PATH . 'admin/bulk-process.php';
 require_once AI_PI_PATH . 'admin/ajax-handler.php';
 require_once AI_PI_PATH . 'admin/design-preview.php';
-require_once AI_PI_PATH . 'admin/history-page.php';
 require_once AI_PI_PATH . 'includes/plugin-updater.php';
-require_once AI_PI_PATH . 'includes/job-queue.php';
-require_once AI_PI_PATH . 'includes/job-worker.php';
-
-// バックグラウンドジョブワーカーを初期化（activate 中の wp_schedule_event を避ける）
-add_action('plugins_loaded', function () {
-    if (class_exists('AI_PI_Worker')) {
-        AI_PI_Worker::init();
-    }
-});
-
-// 無効化時に cron を解除
-register_deactivation_hook(__FILE__, function () {
-    if (class_exists('AI_PI_Worker')) {
-        AI_PI_Worker::clear_schedule();
-    }
-});
 
 /**
  * Affiros9 サーバーをアップデートサーバーとして登録。
@@ -188,15 +171,6 @@ function ai_pi_admin_menu() {
         'manage_options',
         'ai-product-inserter-bulk',
         'ai_pi_render_bulk_page'
-    );
-
-    add_submenu_page(
-        'ai-product-inserter',
-        '実行履歴',
-        '実行履歴',
-        'manage_options',
-        'ai-product-inserter-history',
-        'ai_pi_render_history_page'
     );
 
     add_submenu_page(

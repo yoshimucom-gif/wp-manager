@@ -336,31 +336,64 @@ function affiros_rewrite_render_rewrite_page() {
         async function runBulkRewrite() {
             const ids = $('.affiros-pick:checked').map(function() { return parseInt($(this).val(), 10); }).get();
             if (!ids.length) return;
-            if (!confirm(ids.length + '件の記事をバックグラウンドジョブとしてキューに入れます。\n10分ごとに3記事ずつ自動処理されます。\n画面を閉じても処理は継続します。\n\nキューに入れますか?')) return;
+            if (!confirm(ids.length + '件の記事をリライトし、即座にWordPress投稿へ上書き保存します。\n（リビジョン機能で1件ずつ元に戻せます）\n\n実行しますか?')) return;
 
-            const $btn = $('#affiros-bulk-rewrite-btn').prop('disabled', true).text('キュー追加中...');
+            bulkAbort = false;
+            // 実行中にタブを閉じる/離脱すると残りが処理されないため、ブラウザの離脱警告を出す
+            window.onbeforeunload = function() {
+                return '一括リライトを実行中です。このページを離れると残りの記事は処理されません。';
+            };
+            $('#affiros-bulk-modal').css('display', 'flex');
+            $('#affiros-bulk-total').text(ids.length);
+            $('#affiros-bulk-done').text(0);
+            $('#affiros-bulk-progress').css('width', '0%');
+            $('#affiros-bulk-log').html('');
+            $('#affiros-bulk-close').hide();
+            $('#affiros-bulk-cancel').show();
+            $('#affiros-bulk-status').text('開始しています...');
 
-            $.post(AffirosRewrite.ajaxUrl, Object.assign({
-                action: 'affiros_rewrite_enqueue_bulk',
-                nonce: AffirosRewrite.nonce,
-                post_ids: ids,
-            }, rewriteOpts())).done(function(resp) {
-                if (!resp.success) {
-                    alert('キュー追加失敗: ' + (resp.data?.message || '不明'));
-                    return;
+            let done = 0, succeeded = 0, failed = 0;
+            for (const id of ids) {
+                if (bulkAbort) {
+                    appendBulkLog('中止しました', 'warn');
+                    break;
                 }
-                const url = resp.data.history_url;
-                if (confirm(
-                    '✅ ' + resp.data.count + '件をキューに追加しました（Job ID: ' + resp.data.job_id + '）\n\n' +
-                    '実行履歴ページに移動して進捗を確認しますか？\n（画面を閉じても処理は継続します）'
-                )) {
-                    location.href = url;
+                appendBulkLog('[' + (done + 1) + '/' + ids.length + '] post #' + id + ' リライト中...', 'info');
+                $('#affiros-bulk-status').text('[' + (done + 1) + '/' + ids.length + '] post #' + id + ' をリライト中...');
+
+                try {
+                    const result = await jqXhrPromise($.post(AffirosRewrite.ajaxUrl, Object.assign({
+                        action: 'affiros_rewrite_run_single',
+                        nonce: AffirosRewrite.nonce,
+                        post_id: id,
+                    }, rewriteOpts())));
+                    if (!result.success) throw new Error(result.data?.message || 'unknown');
+
+                    const saved = await jqXhrPromise($.post(AffirosRewrite.ajaxUrl, {
+                        action: 'affiros_rewrite_save',
+                        nonce: AffirosRewrite.nonce,
+                        post_id: id,
+                        title: result.data.rewritten_title,
+                        content: result.data.rewritten_content,
+                    }));
+                    if (!saved.success) throw new Error(saved.data?.message || 'save failed');
+                    const t = result.data.article_type ? ' [' + result.data.article_type + (result.data.article_type_auto ? '/自動判定' : '') + ']' : '';
+                    const mk = result.data.markers_inserted ? ' +マーカー' : '';
+                    appendBulkLog('  ✓ #' + id + ' 保存完了' + t + mk, 'success');
+                    succeeded++;
+                } catch (e) {
+                    appendBulkLog('  ✗ #' + id + ' 失敗: ' + e.message, 'error');
+                    failed++;
                 }
-            }).fail(function(xhr) {
-                alert('通信エラー: HTTP ' + xhr.status);
-            }).always(function() {
-                $btn.prop('disabled', false).html('✍ 選択した記事を一括リライト');
-            });
+                done++;
+                $('#affiros-bulk-done').text(done);
+                $('#affiros-bulk-progress').css('width', (done / ids.length * 100) + '%');
+            }
+
+            window.onbeforeunload = null;
+            $('#affiros-bulk-status').text('完了: 成功 ' + succeeded + ' / 失敗 ' + failed + ' / 全 ' + ids.length);
+            $('#affiros-bulk-close').show();
+            $('#affiros-bulk-cancel').hide();
         }
 
         function jqXhrPromise(jqXhr) {
