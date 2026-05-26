@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros プロダクトインサーター
  * Description: AIが記事内容を解析し、Amazon・楽天市場の最適な商品アフィリエイトカードを自動挿入するプラグイン
- * Version: 2.0.0
+ * Version: 2.0.1
  * Author: AI Product Inserter
  * License: GPL v2 or later
  * Text Domain: ai-product-inserter
@@ -56,8 +56,12 @@ require_once AI_PI_PATH . 'includes/plugin-updater.php';
 require_once AI_PI_PATH . 'includes/job-queue.php';
 require_once AI_PI_PATH . 'includes/job-worker.php';
 
-// バックグラウンドジョブワーカーを初期化
-AI_PI_Worker::init();
+// バックグラウンドジョブワーカーを初期化（activate 中の wp_schedule_event を避ける）
+add_action('plugins_loaded', function () {
+    if (class_exists('AI_PI_Worker')) {
+        AI_PI_Worker::init();
+    }
+});
 
 // 無効化時に cron を解除
 register_deactivation_hook(__FILE__, function () {

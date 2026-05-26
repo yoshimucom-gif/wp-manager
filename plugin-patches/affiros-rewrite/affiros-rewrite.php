@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros リライター
  * Description: WordPress記事をClaude APIでリライトする。WP_Queryで内部処理するためホスティングWAFの影響を受けない（403回避）。
- * Version: 0.5.0
+ * Version: 0.5.1
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-rewrite
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('AFFIROS_REWRITE_VERSION', '0.5.0');
+define('AFFIROS_REWRITE_VERSION', '0.5.1');
 define('AFFIROS_REWRITE_PATH', plugin_dir_path(__FILE__));
 define('AFFIROS_REWRITE_URL', plugin_dir_url(__FILE__));
 
@@ -34,7 +34,12 @@ require_once AFFIROS_REWRITE_PATH . 'admin/history-page.php';
 require_once AFFIROS_REWRITE_PATH . 'admin/ajax-handler.php';
 
 // バックグラウンドジョブワーカーを初期化（cron スケジュール登録 + ハンドラ）
-Affiros_Rewrite_Worker::init();
+// プラグイン loaded 完了後に走らせる（activate 中の wp_schedule_event を避ける）
+add_action('plugins_loaded', function () {
+    if (class_exists('Affiros_Rewrite_Worker')) {
+        Affiros_Rewrite_Worker::init();
+    }
+});
 
 /**
  * Affiros9 サーバーをアップデートサーバーとして登録。
