@@ -27,6 +27,13 @@ class Affiros_Rewrite_Engine {
             return new WP_Error('post_not_found', '記事が見つかりません');
         }
 
+        // 既存の商品カード・マーカーを除去してから Claude に渡す。
+        // これによりリライトは「完全に新規」のテキストとして行え、
+        // 新マーカーを設定パターン通りに置き直せる（重複・位置ズレ防止）。
+        if (class_exists('Affiros_Rewrite_Pre_Cleanup')) {
+            $post['content'] = Affiros_Rewrite_Pre_Cleanup::clean($post['content']);
+        }
+
         // 元記事が長すぎる場合、末尾を失ったまま上書きしてしまうのを防ぐため中断する
         $source_len = mb_strlen((string)$post['content']);
         if ($source_len > self::MAX_SOURCE_CHARS) {
@@ -209,7 +216,7 @@ class Affiros_Rewrite_Engine {
 - 元記事の事実関係、固有名詞、商品名、価格などの数値情報は保持する
 - 重複表現や冗長な段落を整理する
 - WordPress本文として使えるHTML形式で出力する（h2, h3, p, ul, ol, strong, em, span class="marker" など）
-- 既存の <!--ai-product:...--> や <!--more--> などのHTMLコメントは原文の位置に残す
+- <!--more--> などのHTMLコメントは原文の位置に残す（ただし商品カードマーカーは含めない）
 - WordPressショートコード（[xxx]）はそのまま残す
 {$type_section}
 {$char_section}
