@@ -3296,7 +3296,7 @@ function openSchedulePublishModal() {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = tomorrow.toISOString().slice(0, 10);
   document.getElementById('sched-start-date').value = tomorrowStr;
-  document.getElementById('sched-start-time').value = '10:00';
+  // 開始時刻は10:00固定（サーバー側で start_hour=10）
 
   // 1日上限を設定値から読む
   const capEl = document.getElementById('s-schedule-daily-cap');
