@@ -2111,6 +2111,8 @@ function showPage(name, opts = {}) {
   document.getElementById('page-' + pageName)?.classList.add('active');
   const nav = document.getElementById('nav-' + name);
   if (nav) nav.classList.add('active');
+  // 対応履歴(articles) は site-scoped 側にもボタンがあるので両方ハイライト
+  if (name === 'articles') document.getElementById('nav-articles-scoped')?.classList.add('active');
   if (isArticleType) document.getElementById('nav-create')?.classList.add('active');
   if (['quality', 'title-definition', 'ad-insertion'].includes(name)) document.getElementById('nav-definitions')?.classList.add('active');
   localStorage.setItem('currentPage', name);
