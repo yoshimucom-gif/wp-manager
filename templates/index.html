@@ -1233,14 +1233,15 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
               <div><code>slug</code> — URL末尾（英数ハイフン推奨）</div>
               <div><code>article_type</code> — <code>ranking</code> / <code>brand</code> / <code>column</code></div>
               <div><code>ad_keywords</code> — 商品検索用キーワード</div>
-              <div><code>site</code> — 登録済みサイト名 or ID</div>
-              <div><code>quality</code> — 品質定義名 or ID</div>
               <div><code>schedule_date</code> — 公開予定日（<code>2026-06-15</code> 形式）</div>
               <div><code>memo</code> — メモ（任意）</div>
-              <div><code>content</code> — 本文（既に書いた記事があれば直接登録できる）</div>
             </div>
-            <div class="form-help" style="margin-top:10px">
-              ヘッダー行が<strong>「タイトル」「キーワード」「カテゴリ」「スラッグ」「記事種類」</strong> 等の日本語でも認識します。
+            <div class="form-help" style="margin-top:10px;line-height:1.7">
+              <strong>自動付与される項目：</strong><br>
+              ・<strong>投稿先サイト</strong> ＝ 現在選択中のサイト<br>
+              ・<strong>品質定義</strong> ＝ <code>article_type</code> に対応するプリセット
+              （ranking → ランキング品質、brand → 商標品質、column → コラム品質）<br><br>
+              ヘッダー行は<strong>「タイトル」「キーワード」「カテゴリ」「スラッグ」「記事種類」</strong> 等の日本語でも認識します。
             </div>
           </div>
         </div>
@@ -2224,12 +2225,18 @@ async function runImport() {
     statusEl.style.color = '#ef6262';
     return;
   }
+  if (!currentSiteId) {
+    statusEl.textContent = '先にサイトを選択してください（左サイドバーから）';
+    statusEl.style.color = '#ef6262';
+    return;
+  }
   btn.disabled = true;
   statusEl.style.color = 'var(--muted)';
   statusEl.textContent = `📤 アップロード中: ${file.name} (${(file.size/1024).toFixed(1)} KB)`;
   resultEl.innerHTML = '';
   const fd = new FormData();
   fd.append('file', file);
+  fd.append('site_id', currentSiteId);
   try {
     const res = await fetch('/api/import', { method: 'POST', body: fd });
     const data = await res.json();
@@ -2259,10 +2266,11 @@ async function runImport() {
 }
 
 function downloadImportTemplate() {
-  const header = 'title,keywords,category,slug,article_type,ad_keywords,site,quality,schedule_date,memo';
-  const sample1 = '"防水ボディバッグおすすめ15選｜雨でも安心の人気モデル比較","防水 ボディバッグ おすすめ","ファッション小物","waterproof-bodybag-ranking","ranking","防水 ボディバッグ","","",""';
-  const sample2 = '"防水バッグの選び方完全ガイド｜耐水圧と用途別の見極め方","防水バッグ 選び方","ファッション小物","how-to-choose-waterproof-bag","column","防水バッグ","","",""';
-  const csv = '﻿' + [header, sample1, sample2].join('\n');  // BOM for Excel UTF-8
+  const header = 'title,keywords,category,slug,article_type,ad_keywords,schedule_date,memo';
+  const sample1 = '"防水ボディバッグおすすめ15選｜雨でも安心の人気モデル比較","防水 ボディバッグ おすすめ","ファッション小物","waterproof-bodybag-ranking","ranking","防水 ボディバッグ","",""';
+  const sample2 = '"防水バッグの選び方完全ガイド｜耐水圧と用途別の見極め方","防水バッグ 選び方","ファッション小物","how-to-choose-waterproof-bag","column","防水バッグ","",""';
+  const sample3 = '"○○ブランド防水バッグの口コミ｜メリット・デメリットを解説","○○ブランド 口コミ","ファッション小物","brand-name-review","brand","○○ブランド 防水バッグ","",""';
+  const csv = '﻿' + [header, sample1, sample2, sample3].join('\n');  // BOM for Excel UTF-8
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

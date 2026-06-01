@@ -5985,9 +5985,16 @@ def import_excel():
         data_rows = rows[1:]
 
     settings = load_settings()
-    site_fallback = request.form.get('site_id') or None
+    site_fallback = request.form.get('site_id') or settings.get('current_site_id') or None
     sites = settings.get('sites', [])
     quality_list = load_quality()
+
+    # article_type → デフォルト品質ID のマッピング（CSV に quality 列が無いとき自動採用）
+    quality_by_type = {}
+    for q in quality_list:
+        atype = (q.get('article_type') or '').strip()
+        if atype and atype not in quality_by_type:
+            quality_by_type[atype] = q.get('id')
 
     def cell(row, field):
         idx = header_map.get(field)
@@ -6005,10 +6012,16 @@ def import_excel():
         title = cell(row, 'title')
         if not title:
             continue
-        content = cell(row, 'content')
         article_type = normalize_article_type(cell(row, 'article_type'), 'ranking')
         keywords = cell(row, 'keywords')
         ad_keywords = cell(row, 'ad_keywords') or infer_ad_keywords_from_title(title, keywords, article_type)
+        # 品質ID: CSV指定があれば優先、無ければ article_type に紐づくプリセットを自動採用
+        quality_id = (
+            resolve_id(cell(row, 'quality'), quality_list)
+            or quality_by_type.get(article_type)
+        )
+        # サイトID: CSV指定があれば優先、無ければフロントから渡された現在サイト
+        site_id = resolve_id(cell(row, 'site'), sites) or site_fallback
         article = {
             'id': str(uuid.uuid4()),
             'title': title,
@@ -6021,17 +6034,13 @@ def import_excel():
             'schedule_date': cell(row, 'schedule_date'),
             'memo': cell(row, 'memo'),
             'status': 'pending',
-            'content': content,
+            'content': '',
             'created_at': now_iso(),
-            'quality_id': resolve_id(cell(row, 'quality'), quality_list),
-            'site_id': resolve_id(cell(row, 'site'), sites) or site_fallback,
+            'quality_id': quality_id,
+            'site_id': site_id,
             'wp_post_id': None,
             'wp_url': None,
         }
-        if content:
-            article['status'] = 'generated'
-            article['generated_at'] = now_iso()
-            apply_score_fields(article)
         articles.append(article)
         imported += 1
 
