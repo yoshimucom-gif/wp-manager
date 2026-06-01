@@ -878,11 +878,8 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
   <nav class="nav">
     <!-- サイトスコープのメニュー（現在サイトが選択されている時のみ表示） -->
     <div class="nav-site-scoped" id="nav-site-scoped" style="display:none">
-      <div class="nav-item" onclick="showPage('kw-plan')" id="nav-kw-plan">
-        カテゴリー設定
-      </div>
-      <div class="nav-item" onclick="showPage('title-ideas')" id="nav-title-ideas">
-        タイトル案
+      <div class="nav-item" onclick="showPage('import')" id="nav-import">
+        インポート
       </div>
       <div class="nav-item" onclick="showPage('batch')" id="nav-batch">
         一括処理
@@ -1205,121 +1202,47 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         </div>
       </div>
 
-      <!-- Title Ideas Page -->
-      <div class="page" id="page-title-ideas">
+      <!-- Import Page -->
+      <div class="page" id="page-import">
         <div class="page-header">
-          <div class="page-title">タイトル案</div>
-          <div class="page-subtitle">キーワード群からタイトル案を作成し、ランキング・商標・コラムへ自動振り分けして一括処理へ送る</div>
+          <div class="page-title">インポート</div>
+          <div class="page-subtitle">CSV / Excel から記事を一括登録する</div>
         </div>
-        <div class="title-ideas-layout">
-          <div class="title-ideas-side">
-            <div class="settings-section">
-              <div class="section-header">// 生成条件</div>
-              <div class="form-group">
-                <label class="form-label">キーワード（1行1件）</label>
-                <textarea id="title-keywords" class="form-control" rows="10" oninput="updateTitleKeywordCount()" placeholder="例:
-ネックウォーマー おすすめ
-電熱ベスト 口コミ
-防寒手袋 比較"></textarea>
-                <div id="title-keyword-count" style="font-size:11px;color:var(--muted);margin-top:4px">0 / 30 件（品質と安定性を担保する上限）</div>
-              </div>
-              <div class="form-group">
-                <label class="form-label">1キーワードあたりのタイトル案数</label>
-                <input type="number" id="title-count" class="form-control" value="3" min="1" max="5">
-                <div style="font-size:11px;color:var(--muted);margin-top:4px">3案から1つ採用するのがSEO的に推奨（1KW=1記事でカニバリ回避）。</div>
-              </div>
-              <div class="form-group site-selector-group" id="title-site-group">
-                <label class="form-label">投稿先サイト</label>
-                <select id="title-site" class="form-control">
-                  <option value="">-- サイトを選択 --</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label class="form-label">記事種別</label>
-                <select id="title-type-filter" class="form-control">
-                  <option value="">自動振り分け（ランキング／コラム）</option>
-                  <option value="ranking">ランキング記事に固定</option>
-                  <option value="column">コラム記事に固定</option>
-                </select>
-                <div style="font-size:11px;color:var(--muted);margin-top:4px">固定するとプロンプトでも強制指示し、振り分け結果も上書きします。</div>
-              </div>
-              <div class="title-ideas-actions">
-                <button class="btn btn-primary" id="title-generate-btn" onclick="generateTitleIdeas()">タイトル案を生成</button>
-                <button class="btn btn-success" id="title-save-btn" onclick="saveSelectedTitleIdeas()" disabled>選択を一括処理へ送る</button>
-                <button class="btn btn-secondary btn-sm" onclick="fillTitleIdeaSample()">サンプル投入</button>
-              </div>
-              <div id="title-ideas-msg" style="margin-top:12px;font-size:12px;color:var(--muted)"></div>
+        <div style="max-width:760px">
+          <div class="settings-section">
+            <div class="section-header">// ファイルを選択</div>
+            <div class="form-help" style="margin-bottom:10px">
+              対応形式：<code>.csv</code> / <code>.xlsx</code> / <code>.xls</code>。<br>
+              先頭行をヘッダーとして解釈します（下のカラム名と一致する列を自動で取り込み）。
             </div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+              <input type="file" id="import-file" accept=".csv,.xlsx,.xls" class="form-control" style="flex:1;min-width:280px">
+              <button class="btn btn-primary" id="import-btn" onclick="runImport()">⬆ インポート実行</button>
+              <button class="btn btn-secondary btn-sm" onclick="downloadImportTemplate()">📄 テンプレ DL</button>
+            </div>
+            <div id="import-status" style="font-size:12px;color:var(--muted);min-height:18px"></div>
+            <div id="import-result" style="margin-top:10px"></div>
+          </div>
 
-            <!-- KWストック -->
-            <div class="settings-section" style="margin-top:12px">
-              <div class="section-header">// KWストック（大量処理）</div>
-              <div class="form-group">
-                <label class="form-label">キーワードをまとめて追加（1行1件・件数制限なし）</label>
-                <textarea id="kw-stock-input" class="form-control" rows="7" placeholder="500件でもOK。ここに貼り付けて「ストックに追加」。&#10;生成は30件ずつ自動で回します。"></textarea>
-              </div>
-              <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
-                <button class="btn btn-secondary btn-sm" onclick="addToKwStock()">＋ ストックに追加</button>
-                <button class="btn btn-danger btn-sm" onclick="clearKwStock()">クリア</button>
-                <span id="kw-stock-status" style="font-size:12px;color:var(--muted)">ストック: 0件</span>
-              </div>
-              <div style="display:flex;gap:8px;align-items:center">
-                <button class="btn btn-primary" id="stock-generate-btn" onclick="generateFromStock()" disabled>🔄 ストックから連続生成</button>
-                <button class="btn btn-danger btn-sm" id="stock-stop-btn" onclick="stopStockGeneration()" style="display:none">⏹ 中止</button>
-              </div>
-              <div id="kw-stock-progress" style="font-size:11px;color:var(--muted);margin-top:8px"></div>
+          <div class="settings-section" style="margin-top:14px">
+            <div class="section-header">// 対応カラム</div>
+            <div style="font-size:12px;line-height:1.9;color:var(--muted)">
+              <div><code>title</code> — タイトル <span style="color:#ef6262">（必須）</span></div>
+              <div><code>keywords</code> — SEOキーワード（カンマ区切り可）</div>
+              <div><code>category</code> — WP側のカテゴリ名</div>
+              <div><code>slug</code> — URL末尾（英数ハイフン推奨）</div>
+              <div><code>article_type</code> — <code>ranking</code> / <code>brand</code> / <code>column</code></div>
+              <div><code>ad_keywords</code> — 商品検索用キーワード</div>
+              <div><code>site</code> — 登録済みサイト名 or ID</div>
+              <div><code>quality</code> — 品質定義名 or ID</div>
+              <div><code>schedule_date</code> — 公開予定日（<code>2026-06-15</code> 形式）</div>
+              <div><code>memo</code> — メモ（任意）</div>
+              <div><code>content</code> — 本文（既に書いた記事があれば直接登録できる）</div>
+            </div>
+            <div class="form-help" style="margin-top:10px">
+              ヘッダー行が<strong>「タイトル」「キーワード」「カテゴリ」「スラッグ」「記事種類」</strong> 等の日本語でも認識します。
             </div>
           </div>
-          <div>
-            <div class="toolbar">
-              <button class="btn btn-secondary btn-sm" onclick="toggleTitleIdeaChecks(true)">全選択</button>
-              <button class="btn btn-secondary btn-sm" onclick="toggleTitleIdeaChecks(false)">全解除</button>
-              <button class="btn btn-secondary btn-sm" onclick="removeDuplicateTitleIdeas()">重複案を外す</button>
-              <div style="width:1px;background:var(--border);height:20px;margin:0 4px"></div>
-              <button class="btn btn-success btn-sm" id="title-save-btn2" onclick="saveSelectedTitleIdeas()" disabled>✚ 選択を一括処理へ</button>
-              <button class="btn btn-danger btn-sm" id="title-delete-btn" onclick="deleteSelectedTitleIdeas()" disabled>🗑 選択を削除</button>
-              <div style="flex:1"></div>
-              <span id="title-ideas-count" style="font-size:12px;color:var(--muted)">0件</span>
-            </div>
-            <div class="table-wrap">
-              <table style="min-width:1080px">
-                <thead>
-                  <tr>
-                    <th><input type="checkbox" id="title-check-all" onchange="toggleTitleIdeaChecks(this.checked)"></th>
-                    <th>キーワード</th>
-                    <th>振り分け</th>
-                    <th>カテゴリー</th>
-                    <th>タイトル案</th>
-                    <th>優先度</th>
-                    <th>スコア</th>
-                  </tr>
-                </thead>
-                <tbody id="title-ideas-body"></tbody>
-              </table>
-            </div>
-            <div id="title-ideas-empty" class="empty">
-              <div class="empty-icon">T</div>
-              <div>キーワードを入力してタイトル案を生成してください。</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- カテゴリー設定ページ -->
-      <div class="page" id="page-kw-plan">
-        <div class="page-header">
-          <div class="page-title">カテゴリー設定</div>
-          <div class="page-subtitle">カテゴリーを登録しておくと、タイトル案ページの生成時に自動で振り分けられます</div>
-        </div>
-        <div class="settings-section" style="max-width:640px">
-          <div class="section-header">// カテゴリー設定</div>
-          <div class="form-help" style="margin-bottom:10px">カテゴリー名を1行1つで貼り付けてください。スラッグは自動生成されます。</div>
-          <textarea id="kw-plan-textarea" class="form-control" rows="10"
-            placeholder="ファッション小物&#10;ベビー・キッズ&#10;キッチン・食卓&#10;..."
-            oninput="kwPlanOnTextareaInput(this.value)"
-            style="font-size:13px;resize:vertical;line-height:1.8;margin-bottom:8px"></textarea>
-          <div id="kw-plan-slug-status" style="font-size:11px;color:var(--muted);min-height:16px;margin-bottom:12px"></div>
-          <div id="kw-plan-cat-rows"></div>
         </div>
       </div>
 
@@ -2041,8 +1964,7 @@ const pageUrlMap = {
   ranking: 'ranking',
   brand: 'brand',
   column: 'column',
-  'title-ideas': 'title-ideas',
-  'kw-plan': 'kw-plan',
+  'import': 'import',
   batch: 'batch',
   articles: 'history',
   quality: 'quality',
@@ -2123,8 +2045,7 @@ function showPage(name, opts = {}) {
   if (!opts.skipLoad) {
     if (pageName === 'articles') { loadArticles(); resumePublishJobIfRunning(); }
     if (pageName === 'generate') { loadQualitySelects(); updateSiteSelects(); populateGenSelect(); }
-    if (pageName === 'title-ideas') { updateSiteSelects(); renderTitleIdeas(); updateTitleKeywordCount(); loadKwStock(); updateKwStockDisplay(); }
-    if (pageName === 'kw-plan') { kwPlanSyncTextarea(); kwPlanRenderCatRows(); }
+    if (pageName === 'import') { /* インポートページは初期化不要 */ }
     if (pageName === 'batch') { batchSelectedIds = null; loadQualitySelects(); loadArticles(); loadLatestBatchJob(); }
     if (pageName === 'quality') loadQuality();
     if (pageName === 'title-definition') loadTitleDefinition();
@@ -2289,6 +2210,66 @@ function scheduleDataSnapshotBackup() {
       console.warn('data snapshot backup failed', e);
     }
   }, 1200);
+}
+
+// ---- Import (CSV/Excel) ----
+async function runImport() {
+  const fileEl = document.getElementById('import-file');
+  const file = fileEl?.files?.[0];
+  const statusEl = document.getElementById('import-status');
+  const resultEl = document.getElementById('import-result');
+  const btn = document.getElementById('import-btn');
+  if (!file) {
+    statusEl.textContent = 'ファイルを選択してください';
+    statusEl.style.color = '#ef6262';
+    return;
+  }
+  btn.disabled = true;
+  statusEl.style.color = 'var(--muted)';
+  statusEl.textContent = `📤 アップロード中: ${file.name} (${(file.size/1024).toFixed(1)} KB)`;
+  resultEl.innerHTML = '';
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res = await fetch('/api/import', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      statusEl.style.color = '#ef6262';
+      statusEl.textContent = `エラー: ${data.error || res.status}`;
+      return;
+    }
+    statusEl.style.color = '#3ecf8e';
+    statusEl.textContent = `✅ ${data.imported || 0} 件を登録しました`;
+    resultEl.innerHTML = `
+      <div style="background:rgba(62,207,142,0.08);border-left:3px solid #3ecf8e;padding:10px 14px;border-radius:6px;font-size:13px;line-height:1.7">
+        <strong>${data.imported || 0} 件</strong> の記事を「対応履歴」に登録しました。<br>
+        次のステップ：<a href="#" onclick="showPage('articles');return false;" style="color:var(--accent)">対応履歴を開く</a> →
+        記事を選択 → <a href="#" onclick="showPage('batch');return false;" style="color:var(--accent)">一括処理</a> で生成 →
+        公開タイミングを「予約投稿割り当て」で分散
+      </div>
+    `;
+    fileEl.value = '';
+    toast(`${data.imported || 0} 件をインポートしました`, 'success');
+  } catch (e) {
+    statusEl.style.color = '#ef6262';
+    statusEl.textContent = `通信エラー: ${e.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function downloadImportTemplate() {
+  const header = 'title,keywords,category,slug,article_type,ad_keywords,site,quality,schedule_date,memo';
+  const sample1 = '"防水ボディバッグおすすめ15選｜雨でも安心の人気モデル比較","防水 ボディバッグ おすすめ","ファッション小物","waterproof-bodybag-ranking","ranking","防水 ボディバッグ","","",""';
+  const sample2 = '"防水バッグの選び方完全ガイド｜耐水圧と用途別の見極め方","防水バッグ 選び方","ファッション小物","how-to-choose-waterproof-bag","column","防水バッグ","","",""';
+  const csv = '﻿' + [header, sample1, sample2].join('\n');  // BOM for Excel UTF-8
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'affiros9-import-template.csv';
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ---- Sites ----
