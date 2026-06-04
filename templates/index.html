@@ -963,6 +963,61 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div id="dashboard-overview-section">
           <div class="dashboard-title">ダッシュボード</div>
           <div class="dashboard-subtitle" style="color:var(--muted);font-size:13px;margin-bottom:20px;">サイトを選んで記事作成・一括処理を開始してください。下のサイトカードをクリックすると、そのサイトの作業画面に入ります。</div>
+
+          <!-- 推奨ワークフロー & 処理の仕組み -->
+          <div style="background:linear-gradient(135deg, rgba(98,160,255,0.06) 0%, rgba(98,160,255,0.02) 100%);border:1px solid rgba(98,160,255,0.18);border-radius:10px;padding:18px 20px;margin-bottom:24px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <span style="font-size:18px">🧭</span>
+              <div style="font-weight:700;color:var(--accent);font-size:15px;">推奨ワークフロー</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.7">
+              <span style="background:rgba(98,160,255,0.12);color:var(--accent);padding:3px 10px;border-radius:999px;font-weight:600;">① インポート</span>
+              <span>→</span>
+              <span style="background:rgba(98,160,255,0.12);color:var(--accent);padding:3px 10px;border-radius:999px;font-weight:600;">② 一括処理（生成）</span>
+              <span>→</span>
+              <span style="background:rgba(98,160,255,0.12);color:var(--accent);padding:3px 10px;border-radius:999px;font-weight:600;">③ 対応履歴で確認</span>
+              <span>→</span>
+              <span style="background:rgba(98,160,255,0.12);color:var(--accent);padding:3px 10px;border-radius:999px;font-weight:600;">④ 予約投稿で公開分散</span>
+            </div>
+
+            <details style="margin-top:6px;">
+              <summary style="cursor:pointer;color:var(--accent);font-size:12px;font-weight:600;padding:4px 0;">⚙️ 処理の仕組み（バックグラウンド処理について）</summary>
+              <div style="margin-top:10px;font-size:12px;line-height:1.7;color:var(--muted);">
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px;">
+                  <thead>
+                    <tr style="background:rgba(255,255,255,0.04);">
+                      <th style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:left;color:var(--text);">処理</th>
+                      <th style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:left;color:var(--text);">場所</th>
+                      <th style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:left;color:var(--text);">バックグラウンド</th>
+                      <th style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:left;color:var(--text);">画面閉じてOK？</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td style="padding:6px 10px;">記事の一括生成</td><td style="padding:6px 10px;">本体（Affiros9）</td><td style="padding:6px 10px;color:#3ecf8e;">✅ あり</td><td style="padding:6px 10px;color:#3ecf8e;">✅ OK</td></tr>
+                    <tr style="background:rgba(255,255,255,0.02);"><td style="padding:6px 10px;">予約投稿割り当て</td><td style="padding:6px 10px;">本体（Affiros9）</td><td style="padding:6px 10px;color:#3ecf8e;">✅ あり</td><td style="padding:6px 10px;color:#3ecf8e;">✅ OK</td></tr>
+                    <tr><td style="padding:6px 10px;">WP一括投稿</td><td style="padding:6px 10px;">本体（Affiros9）</td><td style="padding:6px 10px;color:#3ecf8e;">✅ あり</td><td style="padding:6px 10px;color:#3ecf8e;">✅ OK</td></tr>
+                    <tr style="background:rgba(255,255,255,0.02);"><td style="padding:6px 10px;">リライト（プラグイン）</td><td style="padding:6px 10px;">WP管理画面</td><td style="padding:6px 10px;color:#ef6262;">❌ なし</td><td style="padding:6px 10px;color:#ef6262;">❌ NG</td></tr>
+                    <tr><td style="padding:6px 10px;">商品カード挿入（プラグイン）</td><td style="padding:6px 10px;">WP管理画面</td><td style="padding:6px 10px;color:#ef6262;">❌ なし</td><td style="padding:6px 10px;color:#ef6262;">❌ NG</td></tr>
+                  </tbody>
+                </table>
+
+                <div style="background:rgba(255,200,90,0.08);border-left:3px solid #ffb070;padding:10px 14px;border-radius:4px;margin-bottom:12px;">
+                  <strong style="color:#ffb070;">⚠️ 大量処理時のポイント</strong><br>
+                  <ul style="margin:6px 0 0 18px;padding:0;color:var(--muted);">
+                    <li>本体側の処理は<strong>画面閉じてOK</strong>。100件以上の生成・投稿はこちらが快適</li>
+                    <li>WPプラグイン側（リライト・商品挿入）はブラウザJSループ方式。<strong>タブを閉じると止まる</strong></li>
+                    <li>プラグイン側の大量処理は <strong>20〜30件/回 × 分割実行</strong>が現実的</li>
+                    <li>SiteGuard / WAF が連続POSTで403を返す場合は「管理ページアクセス制限」を一時OFF</li>
+                  </ul>
+                </div>
+
+                <div style="font-size:11px;color:var(--muted);">
+                  💡 <strong>運用イメージ</strong>：本体側で記事を一括生成 → WP に予約投稿で分散公開 → 必要に応じてプラグイン側で個別リライト・商品挿入を少量ずつ実行。
+                </div>
+              </div>
+            </details>
+          </div>
+
           <!-- site-cards-grid は JS で挿入される -->
         </div>
         <!-- サイト選択中のワークスペースホーム -->
