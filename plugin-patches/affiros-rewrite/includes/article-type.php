@@ -57,13 +57,34 @@ class Affiros_Rewrite_Article_Type {
                 return 'brand';
             }
         }
+        // 「○つのチェックポイント/ポイント/サイン/ステップ」等は column 寄り
+        // （ranking 判定の前にチェック）
+        if (preg_match('/[0-9０-９]+\s*つ\s*の?\s*(?:チェック|ポイント|サイン|ステップ|理由|秘訣|コツ|心得|注意点|特徴|失敗|落とし穴|教訓|タイミング|目安|基準)/u', $text)) {
+            return 'column';
+        }
         if (preg_match('/(?:とは|選び方|使い方|洗い方|原因|対策|方法|違い|必要|いつ|なぜ|ポイント)/u', $text)) {
             return 'column';
         }
-        if (preg_match('/(?:おすすめ|比較|ランキング|人気|厳選|ベスト|[0-9０-９]+\s*選)/u', $text)) {
+        // 「○選」は ranking 強シグナル
+        if (preg_match('/[0-90-9０-9]+\s*選/u', $text)) {
+            return 'ranking';
+        }
+        if (preg_match('/(?:おすすめ|比較|ランキング|人気|厳選|ベスト)/u', $text)) {
             return 'ranking';
         }
         return 'ranking';
+    }
+
+    /**
+     * タイトルに「ランキング系の強シグナル」が含まれるかを判定する。
+     * これが true の時のみ ①②③ 見出しをランキング項目として扱う。
+     */
+    public static function has_ranking_signal($title) {
+        $t = (string)$title;
+        return (bool) preg_match(
+            '/[0-9０-９]+\s*選|ランキング|おすすめ\s*[0-9０-９]+|ベスト\s*[0-9０-９]+|TOP\s*[0-9０-９]+/iu',
+            $t
+        );
     }
 
     /**

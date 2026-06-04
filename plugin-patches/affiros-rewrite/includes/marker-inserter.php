@@ -112,7 +112,7 @@ class Affiros_Rewrite_Marker_Inserter {
             } elseif ($pos === 'after_last_h2' && $last_h2_range) {
                 $insertions[] = [$last_h2_range[1], "\n" . $marker_block];
             } elseif ($pos === 'after_each_h3_rank') {
-                foreach (self::collect_h3_rank_insertions($text, $marker, $matome_range, $first_h2_range) as $ins) {
+                foreach (self::collect_h3_rank_insertions($text, $marker, $matome_range, $first_h2_range, $title) as $ins) {
                     $insertions[] = $ins;
                 }
             }
@@ -192,13 +192,20 @@ class Affiros_Rewrite_Marker_Inserter {
      * after_each_h3_rank: ランキング見出しのH3直後にマーカーを集める。
      * 本体 insert_card_markers 内の after_each_h3_rank 分岐の移植。
      */
-    private static function collect_h3_rank_insertions($text, $marker, $matome_range, $first_h2_range) {
-        // 「第N位」「No.N」「①②③」など各種フォーマットのランキングH3
+    private static function collect_h3_rank_insertions($text, $marker, $matome_range, $first_h2_range, $title = '') {
+        // 強シグナル（必ず ranking 文脈）：「第N位」「N位」「No.N」
         $h3_patterns = [
             '/<h3[^>]*>\s*(?:第\s*)?(?:\d+|[０-９]+)\s*位[\s:：、・　]*[^<]*?<\/h3>/iu',
             '/<h3[^>]*>\s*No\.?\s*(?:\d+|[０-９]+)[\s:：、・　]*[^<]*?<\/h3>/iu',
-            '/<h3[^>]*>\s*[①②③④⑤⑥⑦⑧⑨⑩][\s:：、・　]*[^<]*?<\/h3>/iu',
         ];
+        // ①②③ は弱シグナル：チェックポイント・ポイント・サイン・ステップ等で
+        // 使われがちなので、タイトルにランキング系の強シグナルがある時だけ採用する
+        $title_has_ranking_signal = class_exists('Affiros_Rewrite_Article_Type')
+            ? Affiros_Rewrite_Article_Type::has_ranking_signal($title)
+            : (bool) preg_match('/[0-9０-9]+\s*選|ランキング/u', (string)$title);
+        if ($title_has_ranking_signal) {
+            $h3_patterns[] = '/<h3[^>]*>\s*[①②③④⑤⑥⑦⑧⑨⑩][\s:：、・　]*[^<]*?<\/h3>/iu';
+        }
         $insertions = [];
         $seen = [];
         foreach ($h3_patterns as $re) {
@@ -213,8 +220,9 @@ class Affiros_Rewrite_Marker_Inserter {
                 }
             }
         }
-        // ゼロ件なら、最初のH2より後・まとめH2より前の全H3をランキングH3とみなしフォールバック
-        if (!$seen) {
+        // フォールバック（全H3挿入）はタイトルがランキング文脈の時だけ
+        // 旧版ではこの分岐が暴走してコラム記事のH3全部に商品カードが付くことがあった
+        if (!$seen && $title_has_ranking_signal) {
             $end_limit = $matome_range ? $matome_range[0] : strlen($text);
             $start_limit = $first_h2_range ? $first_h2_range[1] : 0;
             if (preg_match_all('/<h3[^>]*>[^<]*?<\/h3>/iu', $text, $matches, PREG_OFFSET_CAPTURE | PREG_SET_ORDER)) {
