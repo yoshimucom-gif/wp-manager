@@ -88,6 +88,8 @@ class Affiros_Rewrite_Post_Fetcher {
             while ($q->have_posts()) {
                 $q->the_post();
                 $post_id = get_the_ID();
+                $rw_count = (int) get_post_meta($post_id, '_affiros_rewrite_count', true);
+                $rw_last  = (string) get_post_meta($post_id, '_affiros_rewrite_last_at', true);
                 $items[] = [
                     'id' => $post_id,
                     'title' => get_the_title($post_id),
@@ -99,6 +101,8 @@ class Affiros_Rewrite_Post_Fetcher {
                     'link' => get_permalink($post_id),
                     'edit_link' => get_edit_post_link($post_id, 'raw'),
                     'word_count' => self::count_chars($post_id),
+                    'rewrite_count'   => $rw_count,
+                    'rewrite_last_at' => $rw_last !== '' ? mysql2date('Y-m-d H:i', $rw_last) : '',
                 ];
             }
             wp_reset_postdata();
@@ -134,6 +138,11 @@ class Affiros_Rewrite_Post_Fetcher {
 
     /**
      * 投稿を更新（リライト結果を保存）
+     *
+     * 保存成功時に以下のメタを更新する（リライト履歴トラッキング用・
+     * 本体ロジック・マーカー挿入・品質には一切影響しない）:
+     *   _affiros_rewrite_count   : 累計リライト回数
+     *   _affiros_rewrite_last_at : 最終リライト日時（mysql 形式）
      */
     public static function update_post($post_id, $new_content, $new_title = null) {
         $update = ['ID' => $post_id, 'post_content' => $new_content];
@@ -144,6 +153,10 @@ class Affiros_Rewrite_Post_Fetcher {
         if (is_wp_error($result)) {
             return $result;
         }
+        // リライト履歴を加算
+        $current_count = (int) get_post_meta($post_id, '_affiros_rewrite_count', true);
+        update_post_meta($post_id, '_affiros_rewrite_count', $current_count + 1);
+        update_post_meta($post_id, '_affiros_rewrite_last_at', current_time('mysql'));
         return ['success' => true, 'post_id' => $post_id];
     }
 

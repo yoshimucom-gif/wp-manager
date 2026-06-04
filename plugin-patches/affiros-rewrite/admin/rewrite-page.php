@@ -265,6 +265,7 @@ function affiros_rewrite_render_rewrite_page() {
             let html = '<table class="wp-list-table widefat striped affiros-post-table"><thead><tr>';
             html += '<th style="width:32px;"><input type="checkbox" id="affiros-check-all"></th>';
             html += '<th>タイトル</th><th style="width:120px;">カテゴリー</th><th style="width:70px;">文字数</th>';
+            html += '<th style="width:120px;">リライト履歴</th>';
             html += '<th style="width:90px;">更新日</th><th style="width:220px;">操作</th>';
             html += '</tr></thead><tbody>';
             items.forEach(function(p) {
@@ -275,6 +276,19 @@ function affiros_rewrite_render_rewrite_page() {
                 html += '</td>';
                 html += '<td>' + escapeHtml(p.category) + '</td>';
                 html += '<td>' + p.word_count + '</td>';
+                // リライト履歴カラム
+                var rwCount = parseInt(p.rewrite_count, 10) || 0;
+                var rwHtml = '';
+                if (rwCount === 0) {
+                    rwHtml = '<span style="color:#aaa;font-size:11px;">未実施</span>';
+                } else {
+                    var color = rwCount >= 5 ? '#c00' : (rwCount >= 3 ? '#d97706' : '#0a7a2f');
+                    rwHtml = '<span style="color:' + color + ';font-weight:600;">🔄 ' + rwCount + ' 回</span>';
+                    if (p.rewrite_last_at) {
+                        rwHtml += '<div style="font-size:10px;color:#888;margin-top:2px;">' + escapeHtml(p.rewrite_last_at) + '</div>';
+                    }
+                }
+                html += '<td>' + rwHtml + '</td>';
                 html += '<td>' + escapeHtml(p.modified) + '</td>';
                 html += '<td>';
                 html += '<button type="button" class="button button-primary button-small affiros-rewrite-btn" data-post-id="' + p.id + '">✍ リライト</button> ';
