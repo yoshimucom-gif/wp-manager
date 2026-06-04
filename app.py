@@ -4457,7 +4457,6 @@ def login_required(f):
 @app.route('/history')
 @app.route('/articles')
 @app.route('/quality')
-@app.route('/title-definition')
 @app.route('/ad-insertion')
 @app.route('/ads')
 @app.route('/sites')
@@ -7168,33 +7167,6 @@ def get_seo_news():
             'error': str(e)[:160],
             'fetched_at': now_iso()
         })
-
-
-# Title definition (タイトル生成ルール)
-@app.route('/api/title-definition', methods=['GET'])
-@login_required
-def get_title_definition():
-    return jsonify({
-        'definition': load_title_definition(),
-        'defaults': DEFAULT_TITLE_DEFINITION,
-    })
-
-
-@app.route('/api/title-definition', methods=['PUT'])
-@login_required
-@with_data_lock
-def update_title_definition():
-    data = request.get_json(silent=True) or {}
-    saved = save_title_definition(data)
-    return jsonify({'success': True, 'definition': saved})
-
-
-@app.route('/api/title-definition/reset', methods=['POST'])
-@login_required
-@with_data_lock
-def reset_title_definition():
-    saved = save_title_definition(dict(DEFAULT_TITLE_DEFINITION))
-    return jsonify({'success': True, 'definition': saved})
 
 
 # Ad insertion definition (記事種類ごとの広告マーカー挿入ルール)

@@ -908,7 +908,6 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
       <div class="nav-trigger" id="nav-definitions">定義設定</div>
       <div class="nav-menu">
         <div class="nav-link" onclick="showPage('quality')" id="nav-quality">品質定義</div>
-        <div class="nav-link" onclick="showPage('title-definition')" id="nav-title-definition">タイトル定義</div>
         <div class="nav-link" onclick="showPage('ad-insertion')" id="nav-ad-insertion">広告挿入定義</div>
       </div>
     </div>
@@ -1481,68 +1480,6 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <button class="btn btn-primary" onclick="openQualityModal()">+ 新規追加</button>
         </div>
         <div class="quality-grid" id="quality-grid"></div>
-      </div>
-
-      <!-- Title Definition Page -->
-      <div class="page" id="page-title-definition">
-        <div class="page-header">
-          <div class="page-title">タイトル定義</div>
-          <div class="page-subtitle">タイトル案生成のルールを管理（禁止ワード・文字数上限・ranking件数・タイトル例）</div>
-        </div>
-        <div style="max-width:780px">
-          <div class="settings-section">
-            <div class="section-header">// 文字数（最大）</div>
-            <div class="form-group" style="max-width:160px">
-              <label class="form-label">最大文字数</label>
-              <input type="number" id="td-char-max" class="form-control" min="1">
-            </div>
-            <div style="font-size:11px;color:var(--muted)">SERPでの表示切れを避けるため35以内を推奨。</div>
-          </div>
-
-          <div class="settings-section">
-            <div class="section-header">// 禁止表現（カンマ区切り）</div>
-            <div class="form-group">
-              <textarea id="td-forbidden-phrases" class="form-control" rows="3" placeholder="徹底比較, 完全ガイド, 決定版, 最強, 神, プロが選ぶ"></textarea>
-              <div style="font-size:11px;color:var(--muted);margin-top:4px">改行 or カンマで区切る。AIに「これを使うな」と指示する語のリスト。</div>
-            </div>
-          </div>
-
-          <div class="settings-section">
-            <div class="section-header">// Ranking（〇選）</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-              <div class="form-group">
-                <label class="form-label">デフォルト件数</label>
-                <input type="number" id="td-ranking-default" class="form-control" min="2" max="20">
-              </div>
-              <div class="form-group">
-                <label class="form-label">最大件数</label>
-                <input type="number" id="td-ranking-max" class="form-control" min="2" max="20">
-              </div>
-            </div>
-          </div>
-
-          <div class="settings-section">
-            <div class="section-header">// タイトル例（品質サンプル・few-shot）</div>
-            <div class="form-group">
-              <textarea id="td-example-titles" class="form-control" rows="10" placeholder="1行に1タイトル。ランキング・コラム両方の良いタイトル例を入れると精度が上がる。"></textarea>
-              <div style="font-size:11px;color:var(--muted);margin-top:4px">1行1タイトルで入力。「このくらいの質のタイトルを作れ」という品質基準例としてAIに渡す。ランキング5選前後・コラムを混ぜると効果的。</div>
-            </div>
-          </div>
-
-          <div class="settings-section">
-            <div class="section-header">// 追加指示（自由記述）</div>
-            <div class="form-group">
-              <textarea id="td-additional" class="form-control" rows="4" placeholder="（例）当サイトは女性向けなので柔らかい口調を意識する。価格訴求より使い勝手を優先。"></textarea>
-              <div style="font-size:11px;color:var(--muted);margin-top:4px">運用方針で都度足したいことをここに書く。タイトル生成プロンプトの末尾に挿入される。</div>
-            </div>
-          </div>
-
-          <div style="display:flex;gap:10px;margin-top:20px">
-            <button class="btn btn-primary" onclick="saveTitleDefinition()">💾 保存</button>
-            <button class="btn btn-secondary" onclick="resetTitleDefinition()">デフォルトに戻す</button>
-          </div>
-          <div id="td-msg" style="margin-top:10px;font-size:12px;color:var(--muted)"></div>
-        </div>
       </div>
 
       <!-- Ad Insertion Page -->
@@ -2121,7 +2058,6 @@ const pageUrlMap = {
   batch: 'batch',
   articles: 'history',
   quality: 'quality',
-  'title-definition': 'title-definition',
   'ad-insertion': 'ad-insertion',
   sites: 'sites',
   settings: 'api-settings',
@@ -2189,7 +2125,7 @@ function showPage(name, opts = {}) {
   // 対応履歴(articles) は site-scoped 側にもボタンがあるので両方ハイライト
   if (name === 'articles') document.getElementById('nav-articles-scoped')?.classList.add('active');
   if (isArticleType) document.getElementById('nav-create')?.classList.add('active');
-  if (['quality', 'title-definition', 'ad-insertion'].includes(name)) document.getElementById('nav-definitions')?.classList.add('active');
+  if (['quality', 'ad-insertion'].includes(name)) document.getElementById('nav-definitions')?.classList.add('active');
   localStorage.setItem('currentPage', name);
   if (isArticleType) {
     currentArticleType = name;
@@ -2201,7 +2137,6 @@ function showPage(name, opts = {}) {
     if (pageName === 'import') { /* インポートページは初期化不要 */ }
     if (pageName === 'batch') { batchSelectedIds = null; loadQualitySelects(); loadArticles(); loadLatestBatchJob(); }
     if (pageName === 'quality') loadQuality();
-    if (pageName === 'title-definition') loadTitleDefinition();
     if (pageName === 'ad-insertion') loadAdInsertion();
     if (pageName === 'sites') loadSites();
     if (pageName === 'settings') loadSettings();
@@ -5072,73 +5007,6 @@ async function startBatchGenerate() {
   } else {
     toast(data.error || '失敗', 'error');
     await loadArticles();
-  }
-}
-
-// ---- Title Definition ----
-async function loadTitleDefinition() {
-  const msg = document.getElementById('td-msg');
-  try {
-    const res = await fetch('/api/title-definition');
-    if (!res.ok) throw new Error('読み込みに失敗しました');
-    const data = await res.json();
-    const d = data.definition || {};
-    document.getElementById('td-char-max').value = d.char_max ?? 35;
-    document.getElementById('td-forbidden-phrases').value = (d.forbidden_phrases || []).join(', ');
-    document.getElementById('td-ranking-default').value = d.ranking_default_count ?? 5;
-    document.getElementById('td-ranking-max').value = d.ranking_max_count ?? 7;
-    document.getElementById('td-example-titles').value = (d.example_titles || []).join('\n');
-    document.getElementById('td-additional').value = d.additional_instructions || '';
-    if (msg) { msg.style.color = 'var(--muted)'; msg.textContent = 'タイトル定義を読み込みました。'; }
-  } catch (e) {
-    if (msg) { msg.style.color = 'var(--error)'; msg.textContent = '読み込みエラー: ' + e.message; }
-  }
-}
-
-function readListField(value) {
-  return String(value || '')
-    .split(/[,、，\n]+/)
-    .map(s => s.trim())
-    .filter(Boolean);
-}
-
-async function saveTitleDefinition() {
-  const msg = document.getElementById('td-msg');
-  const payload = {
-    char_max: parseInt(document.getElementById('td-char-max').value, 10) || 35,
-    forbidden_phrases: readListField(document.getElementById('td-forbidden-phrases').value),
-    ranking_default_count: parseInt(document.getElementById('td-ranking-default').value, 10) || 5,
-    ranking_max_count: parseInt(document.getElementById('td-ranking-max').value, 10) || 7,
-    example_titles: String(document.getElementById('td-example-titles').value || '')
-      .split('\n').map(s => s.trim()).filter(Boolean),
-    additional_instructions: document.getElementById('td-additional').value,
-  };
-  try {
-    const res = await fetch('/api/title-definition', {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    if (!res.ok || !data.success) throw new Error(data.error || '保存失敗');
-    if (msg) { msg.style.color = 'var(--success, #0a7a2f)'; msg.textContent = '✓ 保存しました。次回のタイトル案生成から反映されます。'; }
-    toast('タイトル定義を保存しました', 'success');
-  } catch (e) {
-    if (msg) { msg.style.color = 'var(--error)'; msg.textContent = '保存エラー: ' + e.message; }
-    toast('保存に失敗しました', 'error');
-  }
-}
-
-async function resetTitleDefinition() {
-  if (!confirm('タイトル定義をデフォルトに戻しますか？\n（現在の設定は失われます）')) return;
-  try {
-    const res = await fetch('/api/title-definition/reset', {method: 'POST'});
-    const data = await res.json();
-    if (!res.ok || !data.success) throw new Error(data.error || 'リセット失敗');
-    await loadTitleDefinition();
-    toast('デフォルトに戻しました', 'success');
-  } catch (e) {
-    toast('リセットに失敗しました: ' + e.message, 'error');
   }
 }
 
