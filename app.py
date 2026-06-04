@@ -850,14 +850,11 @@ def has_user_data(snapshot):
         q for q in quality
         if q.get('id') != 'default' or q.get('name') != '標準品質'
     ]
-    setting_keys = (
-        'sites', 'claude_api_key', 'article_css'
-    )
+    setting_keys = ('sites', 'claude_api_key')
     return any([
         bool(snapshot.get('articles')),
         bool(non_default_quality),
         any(bool(settings.get(k)) for k in setting_keys),
-        any(bool(v) for v in (settings.get('quality_style_references') or {}).values()),
     ])
 
 def restore_data_snapshot(snapshot):
@@ -873,12 +870,6 @@ def load_settings():
         "sites": [],
         "claude_api_key": "",
         "default_quality_id": "default",
-        "article_css": "",
-        "quality_style_references": {
-            "ranking": "",
-            "brand": "",
-            "column": "",
-        },
     })
     return apply_settings_env_fallbacks(settings)
 
@@ -1660,20 +1651,10 @@ def convert_html_to_gutenberg_blocks(content):
     return '\n\n'.join(block for block in blocks if block.strip())
 
 
-def safe_article_css(value):
-    css = str(value or '').strip()
-    if not css or looks_like_html(css):
-        return ''
-    return re.sub(r'</?\s*style\b[^>]*>', '', css, flags=re.I).strip()
-
-
 def prepare_article_content_for_publish(content, settings):
-    clean_content = convert_html_to_gutenberg_blocks(content)
-    article_css = safe_article_css(settings.get('article_css', ''))
-    if article_css:
-        css_block = wp_block('html', f'<style>{article_css}</style>')
-        return css_block + '\n\n' + clean_content
-    return clean_content
+    # 注: 旧 article_css 挿入は廃止（テーマ側で管理する設計に統一）。
+    # 第2引数の settings は呼び出し元との互換のため残す。
+    return convert_html_to_gutenberg_blocks(content)
 
 
 def normalize_article_type(value, default='ranking'):
@@ -4371,12 +4352,9 @@ def select_quality_definition(quality_list, quality_id=None, article_type='ranki
 
 
 def quality_style_reference_url(article_type, settings, quality=None):
-    quality_url = str((quality or {}).get('reference_url') or '').strip()
-    if quality_url:
-        return quality_url
-    refs = settings.get('quality_style_references') or {}
-    normalized = normalize_article_type(article_type, 'ranking')
-    return (refs.get(normalized) or '').strip()
+    # 品質定義 (quality) 内の reference_url が真の SoT。
+    # 旧 settings.quality_style_references フォールバックは廃止済み（引数 settings は互換のため残置）。
+    return str((quality or {}).get('reference_url') or '').strip()
 
 
 def fetch_quality_style_reference(article_type, settings, quality=None):
@@ -7300,33 +7278,6 @@ def delete_quality(quality_id):
     return jsonify({'success': True})
 
 
-@app.route('/api/quality/style-references', methods=['GET'])
-@login_required
-def get_quality_style_references():
-    settings = load_settings()
-    refs = settings.get('quality_style_references') or {}
-    return jsonify({
-        'ranking': refs.get('ranking', ''),
-        'brand': refs.get('brand', ''),
-        'column': refs.get('column', ''),
-    })
-
-
-@app.route('/api/quality/style-references', methods=['POST'])
-@login_required
-@with_data_lock
-def update_quality_style_references():
-    data = request.get_json(silent=True) or {}
-    settings = load_settings()
-    settings['quality_style_references'] = {
-        'ranking': data.get('ranking', '').strip(),
-        'brand': data.get('brand', '').strip(),
-        'column': data.get('column', '').strip(),
-    }
-    save_settings(settings)
-    return jsonify({'success': True, 'quality_style_references': settings['quality_style_references']})
-
-
 # Sites
 @app.route('/api/sites', methods=['GET'])
 @login_required
@@ -7439,7 +7390,6 @@ def get_settings():
         'claude_api_key': mask_secret(settings.get('claude_api_key', ''), 10),
         'claude_article_model': settings.get('claude_article_model', 'claude-sonnet-4-6'),
         'default_quality_id': settings.get('default_quality_id', 'default'),
-        'article_css': settings.get('article_css', ''),
         'amazon_access_key': mask_secret(settings.get('amazon_access_key', ''), 10),
         'amazon_secret_key': mask_secret(settings.get('amazon_secret_key', ''), 10),
         'amazon_partner_tag': settings.get('amazon_partner_tag', ''),
@@ -7490,10 +7440,6 @@ def update_settings():
             settings['claude_article_model'] = model_val
     if data.get('claude_api_key') and not is_masked_value(data['claude_api_key']):
         settings['claude_api_key'] = data['claude_api_key']
-    if 'article_css' in data:
-        if looks_like_html(data.get('article_css', '')):
-            return jsonify({'success': False, 'error': '記事CSS定義にはHTMLを保存できません。CSSだけを入力してください。'}), 400
-        settings['article_css'] = data['article_css']
     for key in ('amazon_access_key', 'amazon_secret_key', 'rakuten_app_id'):
         if data.get(key) and not is_masked_value(data[key]):
             settings[key] = data[key].strip()

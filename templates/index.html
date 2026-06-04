@@ -1621,16 +1621,6 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             </div>
           </div>
           <div class="settings-section">
-            <div class="section-header">// 記事CSS定義（全サイト共通）</div>
-            <div class="form-group">
-              <label class="form-label">CSSのみ（投稿時に記事の先頭へ style タグで自動挿入）</label>
-              <textarea id="s-article-css" class="form-control" rows="12" placeholder="/* テーマに合わせてCSSだけを記述 */
-h2 { border-left: 4px solid #e47911; padding-left: 10px; }
-table { width: 100%; border-collapse: collapse; }"></textarea>
-              <div style="font-size:11px;color:var(--muted);margin-top:4px">HTMLやGutenbergブロックはここに入れず、CSSだけを入力してください。</div>
-            </div>
-          </div>
-          <div class="settings-section">
             <div class="section-header">// デフォルト設定</div>
             <div class="form-group">
               <label class="form-label">デフォルト品質定義</label>
@@ -1661,7 +1651,6 @@ table { width: 100%; border-collapse: collapse; }"></textarea>
                 <li>サイト設定（投稿先WP情報）</li>
                 <li>品質定義（プリセット全部）</li>
                 <li>広告挿入定義</li>
-                <li>装飾設定 / 記事CSS</li>
               </ul>
             </div>
             <button class="btn btn-danger" onclick="resetAllArticles()" style="background:#ef6262;border-color:#ef6262;color:#fff;">
@@ -2262,9 +2251,7 @@ function snapshotHasUserData(snapshot) {
     (Array.isArray(snapshot.articles) && snapshot.articles.length) ||
     nonDefaultQuality ||
     (Array.isArray(settings.sites) && settings.sites.length) ||
-    settings.claude_api_key ||
-    settings.article_css ||
-    Object.values(settings.quality_style_references || {}).some(Boolean)
+    settings.claude_api_key
   );
 }
 
@@ -5299,7 +5286,6 @@ const SETTINGS_BACKUP_KEY = 'affiros9.apiSettingsBackup.v1';
 const SETTINGS_BACKUP_FIELDS = [
   'claude_api_key',
   'default_quality_id',
-  'article_css',
   'amazon_access_key',
   'amazon_secret_key',
   'amazon_partner_tag',
@@ -5356,7 +5342,6 @@ function collectSettingsFormData() {
     claude_api_key: document.getElementById('s-claude-key').value,
     claude_article_model: document.getElementById('s-article-model').value,
     default_quality_id: document.getElementById('s-default-quality').value,
-    article_css: document.getElementById('s-article-css').value,
     amazon_access_key: document.getElementById('s-amazon-access-key').value,
     amazon_secret_key: document.getElementById('s-amazon-secret-key').value,
     amazon_partner_tag: document.getElementById('s-amazon-partner-tag').value,
@@ -5439,7 +5424,6 @@ async function loadSettings() {
   document.getElementById('s-claude-key').value = s.claude_api_key || '';
   document.getElementById('s-article-model').value = s.claude_article_model || 'claude-sonnet-4-6';
   syncUsageEstimateConfigModel();   // 選択モデルに合わせてコスト単価を同期
-  document.getElementById('s-article-css').value = s.article_css || '';
   document.getElementById('s-amazon-access-key').value = s.amazon_access_key || '';
   document.getElementById('s-amazon-secret-key').value = s.amazon_secret_key || '';
   document.getElementById('s-amazon-partner-tag').value = s.amazon_partner_tag || '';
@@ -5495,13 +5479,6 @@ async function resetAllArticles() {
 
 async function saveSettings() {
   const data = collectSettingsFormData();
-  if (looksLikeHtml(data.article_css)) {
-    toast('記事CSS定義にはHTMLを保存できません。CSSだけを入力してください。', 'error');
-    const msgEl = document.getElementById('settings-msg');
-    msgEl.textContent = '✗ CSS欄にHTML/Gutenbergブロックが入っています';
-    msgEl.style.color = 'var(--error)';
-    return;
-  }
   const res = await fetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
   const result = await res.json();
   if (result.success) {
