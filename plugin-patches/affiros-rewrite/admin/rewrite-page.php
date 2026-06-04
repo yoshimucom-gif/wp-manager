@@ -40,24 +40,54 @@ function affiros_rewrite_render_rewrite_page() {
 
         <div class="affiros-rewrite-toolbar" style="display:flex;gap:10px;align-items:center;margin:18px 0;flex-wrap:wrap;">
             <input type="text" id="affiros-search" placeholder="タイトル・本文を検索..." style="flex:1;min-width:240px;padding:6px 10px;">
-            <select id="affiros-category" style="padding:6px;">
+            <select id="affiros-category" style="padding:6px 28px 6px 10px;min-width:160px;">
                 <option value="0">全カテゴリー</option>
                 <?php foreach ($categories as $c): ?>
                     <option value="<?php echo intval($c['id']); ?>"><?php echo esc_html($c['name']); ?> (<?php echo intval($c['count']); ?>)</option>
                 <?php endforeach; ?>
             </select>
-            <select id="affiros-status" style="padding:6px;">
+            <select id="affiros-status" style="padding:6px 28px 6px 10px;min-width:110px;">
                 <option value="publish">公開済</option>
                 <option value="draft">下書き</option>
                 <option value="any">すべて</option>
             </select>
-            <select id="affiros-per-page" style="padding:6px;">
+            <select id="affiros-per-page" style="padding:6px 28px 6px 10px;min-width:120px;">
                 <option value="20">20件/ページ</option>
                 <option value="50">50件/ページ</option>
                 <option value="100">100件/ページ</option>
             </select>
             <button type="button" class="button button-primary" id="affiros-fetch-btn">投稿を取得</button>
         </div>
+
+        <!-- 件数別目安（参考情報） -->
+        <details style="margin:0 0 14px;background:#f6f9fc;border:1px solid #cfd9e6;border-radius:4px;">
+            <summary style="padding:8px 12px;cursor:pointer;font-weight:600;color:#2271b1;">📊 件数別の所要時間・コスト目安（クリックで展開）</summary>
+            <table style="width:100%;border-collapse:collapse;font-size:12px;margin:0;">
+                <thead>
+                    <tr style="background:#f0f6fc;">
+                        <th style="padding:6px 10px;border-bottom:1px solid #ddd;text-align:left;">件数</th>
+                        <th style="padding:6px 10px;border-bottom:1px solid #ddd;text-align:left;">所要時間</th>
+                        <th style="padding:6px 10px;border-bottom:1px solid #ddd;text-align:left;">コスト目安</th>
+                        <th style="padding:6px 10px;border-bottom:1px solid #ddd;text-align:left;">実用性</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td style="padding:6px 10px;">5件</td><td style="padding:6px 10px;">5〜10分</td><td style="padding:6px 10px;">〜30円</td><td style="padding:6px 10px;color:#0a7a2f;">⭐⭐⭐⭐⭐ テスト最適</td></tr>
+                    <tr style="background:#fafafa;"><td style="padding:6px 10px;">10件</td><td style="padding:6px 10px;">10〜20分</td><td style="padding:6px 10px;">〜60円</td><td style="padding:6px 10px;color:#0a7a2f;">⭐⭐⭐⭐⭐ 快適</td></tr>
+                    <tr><td style="padding:6px 10px;">20件</td><td style="padding:6px 10px;">20〜40分</td><td style="padding:6px 10px;">〜120円</td><td style="padding:6px 10px;color:#0a7a2f;">⭐⭐⭐⭐ 日常運用◎</td></tr>
+                    <tr style="background:#fafafa;"><td style="padding:6px 10px;">50件</td><td style="padding:6px 10px;">50分〜1.5時間</td><td style="padding:6px 10px;">〜300円</td><td style="padding:6px 10px;color:#a06000;">⭐⭐⭐ ブラウザ拘束辛い</td></tr>
+                    <tr><td style="padding:6px 10px;">100件</td><td style="padding:6px 10px;">1.5〜3時間</td><td style="padding:6px 10px;">〜600円</td><td style="padding:6px 10px;color:#c00;">⭐⭐ 拷問レベル</td></tr>
+                </tbody>
+            </table>
+            <div style="padding:8px 12px;background:#fff8f0;border-top:1px solid #f0d8a0;font-size:11px;color:#8a5800;line-height:1.6;">
+                <strong>⚠️ 大量実行時の注意</strong><br>
+                ・ブラウザタブを閉じると残りは処理されません（JS ループ方式）<br>
+                ・PC スリープ・WiFi 切断で停止します<br>
+                ・SiteGuard / WAF が連続POST で 403 を返すことがあります（管理ページアクセス制限を一時OFF推奨）<br>
+                ・<strong>大量処理は 20〜30件ずつ × 数回の分割実行が現実的</strong><br>
+                ・100件以上を一晩で回したい場合は Affiros9 本体側のリライト機能を検討してください
+            </div>
+        </details>
 
         <!-- 除外フィルター -->
         <details style="margin-bottom:14px;background:#fff8f0;border:1px solid #f0d8a0;border-radius:4px;">
