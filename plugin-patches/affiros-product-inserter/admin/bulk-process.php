@@ -64,7 +64,34 @@ function ai_pi_render_bulk_page() {
                     <th>処理上限</th>
                     <td>
                         <input type="number" id="aipi_limit" value="5" min="1" max="200" style="width:80px;">
-                        <p class="description">最初は5件程度を推奨</p>
+                        <p class="description">最初は<strong>5件</strong>でテスト推奨。最大 <strong>200件</strong> まで指定可能。</p>
+                        <details style="margin-top:10px;background:#fafafa;border:1px solid #e0e0e0;border-radius:4px;">
+                            <summary style="padding:8px 12px;cursor:pointer;font-weight:600;color:#2271b1;">📊 件数別の所要時間・コスト目安（クリックで展開）</summary>
+                            <table style="width:100%;border-collapse:collapse;font-size:12px;margin:0;">
+                                <thead>
+                                    <tr style="background:#f0f6fc;">
+                                        <th style="padding:6px 10px;border-bottom:1px solid #ddd;text-align:left;">件数</th>
+                                        <th style="padding:6px 10px;border-bottom:1px solid #ddd;text-align:left;">所要時間</th>
+                                        <th style="padding:6px 10px;border-bottom:1px solid #ddd;text-align:left;">コスト目安</th>
+                                        <th style="padding:6px 10px;border-bottom:1px solid #ddd;text-align:left;">実用性</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td style="padding:6px 10px;">5件</td><td style="padding:6px 10px;">3〜5分</td><td style="padding:6px 10px;">〜5円</td><td style="padding:6px 10px;color:#0a7a2f;">⭐⭐⭐⭐⭐ テスト最適</td></tr>
+                                    <tr style="background:#fafafa;"><td style="padding:6px 10px;">20件</td><td style="padding:6px 10px;">15〜20分</td><td style="padding:6px 10px;">〜20円</td><td style="padding:6px 10px;color:#0a7a2f;">⭐⭐⭐⭐ 日常運用◎</td></tr>
+                                    <tr><td style="padding:6px 10px;">50件</td><td style="padding:6px 10px;">40〜50分</td><td style="padding:6px 10px;">〜50円</td><td style="padding:6px 10px;color:#a06000;">⭐⭐⭐ 我慢できる</td></tr>
+                                    <tr style="background:#fafafa;"><td style="padding:6px 10px;">100件</td><td style="padding:6px 10px;">1.5〜2時間</td><td style="padding:6px 10px;">〜100円</td><td style="padding:6px 10px;color:#a06000;">⭐⭐ ブラウザ拘束辛い</td></tr>
+                                    <tr><td style="padding:6px 10px;"><strong>200件（最大）</strong></td><td style="padding:6px 10px;">3〜4時間</td><td style="padding:6px 10px;">〜200円</td><td style="padding:6px 10px;color:#c00;">⭐ 非推奨（分割推奨）</td></tr>
+                                </tbody>
+                            </table>
+                            <div style="padding:8px 12px;background:#fff8f0;border-top:1px solid #f0d8a0;font-size:11px;color:#8a5800;line-height:1.6;">
+                                <strong>⚠️ 大量実行時の注意</strong><br>
+                                ・ブラウザタブを閉じると残りは処理されません（JS ループ方式）<br>
+                                ・PC スリープ・WiFi 切断で停止します<br>
+                                ・SiteGuard / WAF が連続POST で 403 を返すことがあります（管理ページアクセス制限を一時OFF推奨）<br>
+                                ・<strong>大量処理は 50件ずつ × 数回の分割実行が現実的</strong>
+                            </div>
+                        </details>
                     </td>
                 </tr>
             </table>
