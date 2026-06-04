@@ -1699,11 +1699,6 @@ table { width: 100%; border-collapse: collapse; }"></textarea>
               <label class="form-label">デフォルト品質定義</label>
               <select id="s-default-quality" class="form-control"></select>
             </div>
-            <div class="form-group">
-              <label class="form-label">予約投稿 1日あたりの上限件数（既定20）</label>
-              <input type="number" id="s-schedule-daily-cap" class="form-control" min="1" max="200" value="20" style="width:100px">
-              <div style="font-size:11px;color:var(--muted);margin-top:4px">対応履歴の「予約投稿割り当て」で使用。1〜200の整数。</div>
-            </div>
           </div>
           <button class="btn btn-primary" onclick="saveSettings()">💾 設定を保存</button>
           <div id="settings-msg" style="margin-top:10px;font-size:12px;color:var(--muted)"></div>
@@ -3444,10 +3439,8 @@ function openSchedulePublishModal() {
   document.getElementById('sched-start-date').value = tomorrowStr;
   // 開始時刻は10:00固定（サーバー側で start_hour=10）
 
-  // 1日上限を設定値から読む
-  const capEl = document.getElementById('s-schedule-daily-cap');
-  const cap = parseInt(capEl?.value, 10) || 20;
-  document.getElementById('sched-daily-cap').value = cap;
+  // 1日上限はモーダル内の入力が SoT（既定 20）。設定画面の項目は撤去済み。
+  document.getElementById('sched-daily-cap').value = 20;
 
   const summaryEl = document.getElementById('schedule-publish-summary');
   summaryEl.textContent = `選択中: ${targets.length} 件（生成済み本文あり）`;
@@ -5471,7 +5464,6 @@ function collectSettingsFormData() {
     amazon_partner_tag: document.getElementById('s-amazon-partner-tag').value,
     rakuten_app_id: document.getElementById('s-rakuten-app-id').value,
     rakuten_affiliate_id: document.getElementById('s-rakuten-affiliate-id').value,
-    schedule_daily_cap: parseInt(document.getElementById('s-schedule-daily-cap').value, 10) || 20,
   };
 }
 
@@ -5555,7 +5547,6 @@ async function loadSettings() {
   document.getElementById('s-amazon-partner-tag').value = s.amazon_partner_tag || '';
   document.getElementById('s-rakuten-app-id').value = s.rakuten_app_id || '';
   document.getElementById('s-rakuten-affiliate-id').value = s.rakuten_affiliate_id || '';
-  document.getElementById('s-schedule-daily-cap').value = s.schedule_daily_cap || 20;
   // 秘匿フィールドは再読み込み時に「隠す」状態へ戻す（表示中だった欄の取り残しを防ぐ）
   document.querySelectorAll('input[data-secret-field]').forEach(inp => {
     inp.type = 'password';
