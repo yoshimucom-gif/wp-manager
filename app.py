@@ -5819,6 +5819,35 @@ def bulk_delete():
     return jsonify({'success': True})
 
 
+@app.route('/api/articles/reset-all', methods=['POST'])
+@login_required
+@with_data_lock
+def reset_all_articles():
+    """全記事と関連ジョブをクリアする（設定・サイト・APIキー・品質定義は保持）。
+
+    インポート方式に移行したユーザーが過去の生成記事を一掃したいケースで使用。
+    """
+    data = request.get_json(silent=True) or {}
+    confirm_phrase = str(data.get('confirm') or '').strip()
+    if confirm_phrase != 'RESET':
+        return jsonify({'error': '確認フレーズが一致しません'}), 400
+
+    before_count = len(load_articles())
+
+    # 記事を空に
+    save_articles([])
+
+    # 関連ジョブも掃除（残置しても害ないがリセットの意図に合わせて消す）
+    for key in ('batch_jobs', 'publish_jobs', 'title_idea_jobs'):
+        save_doc(key, [])
+
+    return jsonify({
+        'success': True,
+        'deleted_articles': before_count,
+        'cleared_jobs': ['batch_jobs', 'publish_jobs', 'title_idea_jobs'],
+    })
+
+
 @app.route('/api/articles/score', methods=['POST'])
 @login_required
 @with_data_lock

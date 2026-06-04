@@ -1639,6 +1639,36 @@ table { width: 100%; border-collapse: collapse; }"></textarea>
           </div>
           <button class="btn btn-primary" onclick="saveSettings()">💾 設定を保存</button>
           <div id="settings-msg" style="margin-top:10px;font-size:12px;color:var(--muted)"></div>
+
+          <!-- データリセット（危険ゾーン） -->
+          <div class="settings-section" style="margin-top:32px;border:1px solid rgba(239,98,98,0.35);background:rgba(239,98,98,0.04);">
+            <div class="section-header" style="color:#ef6262;">// データリセット（危険ゾーン）</div>
+            <div style="font-size:12px;line-height:1.7;color:var(--muted);margin-bottom:14px;">
+              インポート方式に運用統一した際など、過去の生成記事データを<strong>一括で削除</strong>したい場合に使います。<br>
+              <strong style="color:#ef6262;">この操作は元に戻せません。</strong>
+            </div>
+            <div style="background:rgba(0,0,0,0.18);border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:12px;line-height:1.8;">
+              <div style="color:#ef6262;font-weight:600;margin-bottom:6px;">🗑 削除されるもの</div>
+              <ul style="margin:0 0 6px 18px;padding:0;color:var(--muted);">
+                <li>全記事（対応履歴の全件）</li>
+                <li>バッチ生成ジョブ履歴</li>
+                <li>WP一括投稿ジョブ履歴</li>
+                <li>タイトル案生成ジョブ履歴（オーファン）</li>
+              </ul>
+              <div style="color:#3ecf8e;font-weight:600;margin:8px 0 6px;">✅ 残されるもの</div>
+              <ul style="margin:0 0 0 18px;padding:0;color:var(--muted);">
+                <li>API キー（Claude / Amazon / 楽天）</li>
+                <li>サイト設定（投稿先WP情報）</li>
+                <li>品質定義（プリセット全部）</li>
+                <li>広告挿入定義</li>
+                <li>装飾設定 / 記事CSS</li>
+              </ul>
+            </div>
+            <button class="btn btn-danger" onclick="resetAllArticles()" style="background:#ef6262;border-color:#ef6262;color:#fff;">
+              🗑 全記事データを削除する
+            </button>
+            <div id="reset-articles-msg" style="margin-top:10px;font-size:12px;color:var(--muted)"></div>
+          </div>
         </div>
       </div>
 
@@ -5425,6 +5455,42 @@ async function loadSettings() {
   await loadQuality();
   if (s.default_quality_id) document.getElementById('s-default-quality').value = s.default_quality_id;
   scheduleDataSnapshotBackup();
+}
+
+async function resetAllArticles() {
+  const msgEl = document.getElementById('reset-articles-msg');
+  const count = (allArticles || []).length;
+  if (!confirm(
+    `現在 ${count} 件の記事と関連ジョブを全て削除します。\n\n` +
+    '【削除されるもの】\n' +
+    '・全記事（対応履歴）\n' +
+    '・バッチ生成ジョブ履歴\n' +
+    '・WP一括投稿ジョブ履歴\n\n' +
+    '【残されるもの】\n' +
+    '・APIキー / サイト設定 / 品質定義 / 広告挿入定義 / 装飾設定\n\n' +
+    'この操作は元に戻せません。本当に続けますか？'
+  )) return;
+  const phrase = prompt('最終確認：削除を実行するには、半角大文字で "RESET" と入力してください。');
+  if (phrase !== 'RESET') {
+    if (msgEl) { msgEl.style.color = 'var(--muted)'; msgEl.textContent = 'キャンセルされました'; }
+    return;
+  }
+  if (msgEl) { msgEl.style.color = 'var(--muted)'; msgEl.textContent = '削除中...'; }
+  try {
+    const res = await fetch('/api/articles/reset-all', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ confirm: 'RESET' }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+    if (msgEl) { msgEl.style.color = '#3ecf8e'; msgEl.textContent = `✅ ${data.deleted_articles} 件の記事と関連ジョブを削除しました`; }
+    toast(`${data.deleted_articles} 件の記事をリセットしました`, 'success');
+    await loadArticles();
+  } catch (e) {
+    if (msgEl) { msgEl.style.color = '#ef6262'; msgEl.textContent = 'エラー: ' + e.message; }
+    toast('リセット失敗: ' + e.message, 'error');
+  }
 }
 
 async function saveSettings() {
