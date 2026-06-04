@@ -20,10 +20,24 @@ add_action('wp_ajax_affiros_rewrite_fetch_posts', function () {
         'search' => sanitize_text_field($_POST['search'] ?? ''),
         'category' => intval($_POST['category'] ?? 0),
         'status' => sanitize_text_field($_POST['status'] ?? 'publish'),
+        'exclude_tags' => array_map('intval', (array)($_POST['exclude_tags'] ?? [])),
+        'exclude_categories' => array_map('intval', (array)($_POST['exclude_categories'] ?? [])),
+        'exclude_keywords' => sanitize_text_field((string)($_POST['exclude_keywords'] ?? '')),
     ];
 
     $result = Affiros_Rewrite_Post_Fetcher::fetch($args);
     wp_send_json_success($result);
+});
+
+/**
+ * タグ一覧取得（除外フィルタUI用）
+ */
+add_action('wp_ajax_affiros_rewrite_fetch_tags', function () {
+    check_ajax_referer('affiros_rewrite_nonce', 'nonce');
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(['message' => '権限がありません']);
+    }
+    wp_send_json_success(['tags' => Affiros_Rewrite_Post_Fetcher::get_tags()]);
 });
 
 /**

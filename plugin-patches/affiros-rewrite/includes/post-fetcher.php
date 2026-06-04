@@ -25,6 +25,22 @@ class Affiros_Rewrite_Post_Fetcher {
         $search = trim((string)($args['search'] ?? ''));
         $category = intval($args['category'] ?? 0);
 
+        // 除外条件
+        $exclude_tags = array_map('intval', (array)($args['exclude_tags'] ?? []));
+        $exclude_tags = array_values(array_filter($exclude_tags, function ($v) { return $v > 0; }));
+        $exclude_cats = array_map('intval', (array)($args['exclude_categories'] ?? []));
+        $exclude_cats = array_values(array_filter($exclude_cats, function ($v) { return $v > 0; }));
+        $exclude_kw_raw = trim((string)($args['exclude_keywords'] ?? ''));
+        // カンマ・改行・スペース区切りでキーワード分解
+        $exclude_keywords = [];
+        if ($exclude_kw_raw !== '') {
+            $parts = preg_split('/[,、\r\n\s]+/u', $exclude_kw_raw);
+            foreach ($parts as $p) {
+                $p = trim($p);
+                if ($p !== '') $exclude_keywords[] = $p;
+            }
+        }
+
         $query_args = [
             'post_type' => 'post',
             'post_status' => $status,
@@ -40,8 +56,33 @@ class Affiros_Rewrite_Post_Fetcher {
         if ($category > 0) {
             $query_args['cat'] = $category;
         }
+        if (!empty($exclude_cats)) {
+            $query_args['category__not_in'] = $exclude_cats;
+        }
+        if (!empty($exclude_tags)) {
+            $query_args['tag__not_in'] = $exclude_tags;
+        }
+
+        // 除外キーワード（タイトルに含む記事を除外）。posts_where フィルタで実装。
+        // 一発限りで適用後即外す（他クエリへの副作用を防ぐ）。
+        $where_filter = null;
+        if (!empty($exclude_keywords)) {
+            $where_filter = function ($where) use ($exclude_keywords) {
+                global $wpdb;
+                foreach ($exclude_keywords as $kw) {
+                    $like = '%' . $wpdb->esc_like($kw) . '%';
+                    $where .= $wpdb->prepare(" AND {$wpdb->posts}.post_title NOT LIKE %s", $like);
+                }
+                return $where;
+            };
+            add_filter('posts_where', $where_filter, 10, 1);
+        }
 
         $q = new WP_Query($query_args);
+
+        if ($where_filter !== null) {
+            remove_filter('posts_where', $where_filter, 10);
+        }
         $items = [];
         if ($q->have_posts()) {
             while ($q->have_posts()) {
@@ -126,5 +167,15 @@ class Affiros_Rewrite_Post_Fetcher {
         return array_map(function ($c) {
             return ['id' => $c->term_id, 'name' => $c->name, 'count' => $c->count];
         }, $cats);
+    }
+
+    /**
+     * タグ一覧取得（除外フィルタ用）
+     */
+    public static function get_tags() {
+        $tags = get_tags(['hide_empty' => false, 'orderby' => 'name']);
+        return array_map(function ($t) {
+            return ['id' => $t->term_id, 'name' => $t->name, 'count' => $t->count];
+        }, $tags);
     }
 }

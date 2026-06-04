@@ -11,6 +11,7 @@ function affiros_rewrite_render_rewrite_page() {
     $settings = affiros_rewrite_get_settings();
     $has_api_key = !empty($settings['claude_api_key']);
     $categories = Affiros_Rewrite_Post_Fetcher::get_categories();
+    $tags = Affiros_Rewrite_Post_Fetcher::get_tags();
     ?>
     <div class="wrap affiros-wrap">
         <h1>Affiros リライト</h1>
@@ -57,6 +58,38 @@ function affiros_rewrite_render_rewrite_page() {
             </select>
             <button type="button" class="button button-primary" id="affiros-fetch-btn">投稿を取得</button>
         </div>
+
+        <!-- 除外フィルター -->
+        <details style="margin-bottom:14px;background:#fff8f0;border:1px solid #f0d8a0;border-radius:4px;">
+            <summary style="padding:10px 14px;cursor:pointer;font-weight:600;color:#8a5800;">🚫 除外設定（タグ・カテゴリ・キーワードで一覧から除外）</summary>
+            <div style="padding:12px 14px;border-top:1px solid #f0d8a0;display:flex;gap:12px;flex-wrap:wrap;">
+                <label style="display:flex;flex-direction:column;gap:4px;min-width:240px;flex:1;">
+                    <span style="font-size:12px;color:#666;">除外タグ（複数選択可）</span>
+                    <select id="affiros-exclude-tags" multiple size="5" style="padding:4px;min-height:110px;">
+                        <?php foreach ($tags as $t): ?>
+                            <option value="<?php echo intval($t['id']); ?>"><?php echo esc_html($t['name']); ?> (<?php echo intval($t['count']); ?>)</option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+                <label style="display:flex;flex-direction:column;gap:4px;min-width:240px;flex:1;">
+                    <span style="font-size:12px;color:#666;">除外カテゴリ（複数選択可）</span>
+                    <select id="affiros-exclude-cats" multiple size="5" style="padding:4px;min-height:110px;">
+                        <?php foreach ($categories as $c): ?>
+                            <option value="<?php echo intval($c['id']); ?>"><?php echo esc_html($c['name']); ?> (<?php echo intval($c['count']); ?>)</option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+                <label style="display:flex;flex-direction:column;gap:4px;min-width:240px;flex:1;">
+                    <span style="font-size:12px;color:#666;">除外キーワード（タイトルに含む記事を除外。カンマ区切りで複数可）</span>
+                    <textarea id="affiros-exclude-kw" rows="5" placeholder="PR, レビュー, スポンサード" style="padding:6px;font-family:inherit;"></textarea>
+                    <span style="font-size:11px;color:#888;">例: 「PR」「レビュー」など、リライトしたくない記事のタイトル特徴語</span>
+                </label>
+            </div>
+            <div style="padding:8px 14px;border-top:1px solid #f0d8a0;background:#fff;">
+                <button type="button" class="button" id="affiros-clear-excludes">除外条件をクリア</button>
+                <span class="description" style="margin-left:8px;color:#666;">変更後は「投稿を取得」を押して反映してください</span>
+            </div>
+        </details>
 
         <!-- リライト共通オプション -->
         <div style="margin-bottom:14px;padding:12px;background:#fafafa;border:1px solid #e0e0e0;border-radius:4px;">
@@ -166,6 +199,9 @@ function affiros_rewrite_render_rewrite_page() {
         function fetchPosts(page) {
             currentPage = page || 1;
             $('#affiros-result').html('<div style="padding:40px;text-align:center;">読み込み中...</div>');
+            var excludeTags = $('#affiros-exclude-tags').val() || [];
+            var excludeCats = $('#affiros-exclude-cats').val() || [];
+            var excludeKw   = ($('#affiros-exclude-kw').val() || '').trim();
             $.post(AffirosRewrite.ajaxUrl, {
                 action: 'affiros_rewrite_fetch_posts',
                 nonce: AffirosRewrite.nonce,
@@ -174,6 +210,9 @@ function affiros_rewrite_render_rewrite_page() {
                 search: $('#affiros-search').val(),
                 category: $('#affiros-category').val(),
                 status: $('#affiros-status').val(),
+                'exclude_tags[]':       excludeTags,
+                'exclude_categories[]': excludeCats,
+                exclude_keywords:       excludeKw,
             }).done(function(resp) {
                 if (!resp.success) {
                     $('#affiros-result').html('<div style="padding:40px;color:#c00;">エラー: ' + (resp.data?.message || '不明') + '</div>');
@@ -410,6 +449,12 @@ function affiros_rewrite_render_rewrite_page() {
 
         // --- イベントバインド ---
         $('#affiros-fetch-btn').on('click', function() { fetchPosts(1); });
+        $('#affiros-clear-excludes').on('click', function() {
+            $('#affiros-exclude-tags').val([]);
+            $('#affiros-exclude-cats').val([]);
+            $('#affiros-exclude-kw').val('');
+            fetchPosts(1);
+        });
         $('#affiros-result').on('change', '#affiros-check-all', function() {
             $('.affiros-pick').prop('checked', $(this).prop('checked'));
             updateBulkBar();
