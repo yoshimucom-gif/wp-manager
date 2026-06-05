@@ -1826,6 +1826,63 @@ def _has_ranking_signal(title):
     ))
 
 
+def validate_marker_insertion(stats, article_type, title=''):
+    """insert_card_markers が返した stats を解析して挿入結果を判定する。
+
+    Returns dict: {
+      status:   'ok' | 'warning' | 'error',
+      problems: list[str],
+      summary:  str,
+    }
+
+    ok      : 期待通り挿入完了
+    warning : 一部ルール失敗、ランクマーカー不足等
+    error   : 緊急フォールバック発動 / マーカー総数0 / ranking N選なのにランクH3 0個
+    """
+    problems = []
+    status = 'ok'
+
+    if not isinstance(stats, dict):
+        return {'status': 'error', 'problems': ['stats が取得できませんでした'], 'summary': 'stats不正'}
+
+    if stats.get('fallback_used'):
+        problems.append('全ルール失敗→末尾に緊急フォールバックで1個だけ挿入')
+        status = 'error'
+
+    failed = list(stats.get('rules_failed') or [])
+    if failed:
+        problems.append('未適用ルール: ' + ' / '.join(failed))
+        if status == 'ok':
+            status = 'warning'
+
+    # ranking特有: タイトルに「○選」があるのにランクマーカー0 = 異常
+    if article_type == 'ranking':
+        expected_n = None
+        if title:
+            t = str(title).translate(str.maketrans('０１２３４５６７８９', '0123456789'))
+            m = re.search(r'([1-9][0-9]?)\s*選', t)
+            if m:
+                n = int(m.group(1))
+                if 2 <= n <= 30:
+                    expected_n = n
+        if expected_n:
+            actual = int((stats.get('per_position') or {}).get('after_each_h3_rank', 0))
+            if actual == 0:
+                problems.append(f'ランキング{expected_n}選なのにランクH3マーカーが0個')
+                status = 'error'
+            elif actual < expected_n:
+                problems.append(f'ランクH3マーカー {actual}/{expected_n}個（不足）')
+                if status == 'ok':
+                    status = 'warning'
+
+    if int(stats.get('marker_count', 0)) == 0:
+        problems.append('マーカーが1個も入っていない')
+        status = 'error'
+
+    summary = '正常' if status == 'ok' else ' / '.join(problems)
+    return {'status': status, 'problems': problems, 'summary': summary}
+
+
 def coerce_title_article_type(value, keyword='', title=''):
     """
     タイトル案生成フロー専用のタイプ正規化。
@@ -3517,9 +3574,25 @@ def insert_card_markers(html, article_type='ranking', patterns=None, title=None)
     patterns 未指定なら DEFAULT_CARD_INSERTION_PATTERNS から取得。
 
     Returns: (new_html, stats_dict)
-    stats: {marker_count, rules_applied, positions}
+    stats: {
+      marker_count: int 実挿入マーカー総数
+      rules_attempted: int ルール総数
+      rules_applied: int 挿入に成功したルール数
+      rules_failed: list[str] 失敗ルールの position 名
+      per_position: dict[str, int] 位置別の挿入件数
+      fallback_used: bool 緊急フォールバック発動
+      positions: list[str] レガシー互換
+    }
     """
-    stats = {'marker_count': 0, 'rules_applied': 0, 'positions': []}
+    stats = {
+        'marker_count': 0,
+        'rules_attempted': 0,
+        'rules_applied': 0,
+        'rules_failed': [],
+        'per_position': {},
+        'fallback_used': False,
+        'positions': [],
+    }
     if not html:
         return html, stats
     # patterns 未指定なら 永続化された広告挿入定義 をロードする
@@ -3549,6 +3622,8 @@ def insert_card_markers(html, article_type='ranking', patterns=None, title=None)
     # プラグイン側でこの印を見たら商品選定を1回だけ実施し全マーカーに同一商品を配置する。
     is_brand = (article_type == 'brand')
 
+    stats['rules_attempted'] = len(rules)
+
     for rule in rules:
         pos = rule.get('position')
         design = rule.get('design', 'vertical')
@@ -3556,48 +3631,32 @@ def insert_card_markers(html, article_type='ranking', patterns=None, title=None)
         repeat = max(1, int(rule.get('repeat', 1)))
         marker = _build_marker(design, count, brand=is_brand)
         marker_block = ('\n' + marker) * repeat
+        placed = 0  # このルールで何個マーカーを置いたか
 
         if pos == 'top':
             insertions.append((0, marker_block + '\n'))
-            stats['rules_applied'] += 1
-            stats['marker_count'] += repeat
-            stats['positions'].append(pos)
+            placed = repeat
         elif pos == 'bottom':
             insertions.append((len(text), '\n' + marker_block))
-            stats['rules_applied'] += 1
-            stats['marker_count'] += repeat
-            stats['positions'].append(pos)
+            placed = repeat
         elif pos == 'before_first_h2' and first_h2_range:
             insertions.append((first_h2_range[0], marker_block + '\n'))
-            stats['rules_applied'] += 1
-            stats['marker_count'] += repeat
-            stats['positions'].append(pos)
+            placed = repeat
         elif pos == 'after_first_h2' and first_h2_range:
             insertions.append((first_h2_range[1], '\n' + marker_block))
-            stats['rules_applied'] += 1
-            stats['marker_count'] += repeat
-            stats['positions'].append(pos)
+            placed = repeat
         elif pos == 'before_matome_h2' and matome_range:
             insertions.append((matome_range[0], marker_block + '\n'))
-            stats['rules_applied'] += 1
-            stats['marker_count'] += repeat
-            stats['positions'].append(pos)
+            placed = repeat
         elif pos == 'after_matome_h2' and matome_range:
             insertions.append((matome_range[1], '\n' + marker_block))
-            stats['rules_applied'] += 1
-            stats['marker_count'] += repeat
-            stats['positions'].append(pos)
+            placed = repeat
         elif pos == 'after_last_h2':
-            # キーワードに依存せず記事内の最後のH2直後に挿入。
-            # after_matome_h2 はFAQ等のH2が末尾にある場合まとめから離れるため、
-            # 安定性重視の場合はこちらを推奨。
             h2s_all = list(re.finditer(_H2_BLOCK_RE, text, re.IGNORECASE))
             if h2s_all:
                 last_h2 = h2s_all[-1]
                 insertions.append((last_h2.end(), '\n' + marker_block))
-                stats['rules_applied'] += 1
-                stats['marker_count'] += repeat
-                stats['positions'].append(pos)
+                placed = repeat
         elif pos == 'after_each_h3_rank':
             # h3ランキング見出し直下に1個ずつ
             # 「第1位」「1位」「No.1」は常にランキング文脈なので採用。
@@ -3623,10 +3682,8 @@ def insert_card_markers(html, article_type='ranking', patterns=None, title=None)
                         continue
                     matched_positions.add(m.start())
                     insertions.append((m.end(), '\n' + marker))
-                    stats['marker_count'] += 1
+                    placed += 1
             # フォールバック（全H3 挿入）もランキング文脈の時だけ。
-            # 旧版は無条件でフォールバックを動かしていたため、column 記事の
-            # 全 H3 に商品カードが入る暴走を引き起こしていた。
             if not matched_positions and title_has_ranking:
                 end_limit = matome_range[0] if matome_range else len(text)
                 start_limit = first_h2_range[1] if first_h2_range else 0
@@ -3635,27 +3692,34 @@ def insert_card_markers(html, article_type='ranking', patterns=None, title=None)
                     if m.start() < start_limit or m.start() >= end_limit:
                         continue
                     insertions.append((m.end(), '\n' + marker))
-                    stats['marker_count'] += 1
+                    placed += 1
                     matched_positions.add(m.start())
                 if matched_positions:
                     print(f'[MARKER] after_each_h3_rank: fallback to all-H3-in-body used ({len(matched_positions)} markers)', flush=True)
+
+        # ルール毎の集計
+        if placed > 0:
             stats['rules_applied'] += 1
+            stats['marker_count'] += placed
+            stats['per_position'][pos] = stats['per_position'].get(pos, 0) + placed
             stats['positions'].append(pos)
+        else:
+            stats['rules_failed'].append(pos)
 
     # 後ろから挿入してインデックスずれを防ぐ
     insertions.sort(key=lambda x: x[0], reverse=True)
-    for pos, marker_text in insertions:
-        text = text[:pos] + marker_text + text[pos:]
+    for ins_pos, marker_text in insertions:
+        text = text[:ins_pos] + marker_text + text[ins_pos:]
 
     # ── 絶対フォールバック ─────────────────────────────────────────────────
-    # 全ルール適用後にマーカーが1つも挿入できていない場合（H2なし等の構造的理由）、
-    # 記事末尾に必ず1つ挿入する。WPプラグインの「マーカーが見つかりません」エラーを
-    # 根絶するための最終安全網。
+    # 全ルール適用後にマーカーが1つも挿入できていない場合、記事末尾に1つだけ
+    # 強制挿入する。WPプラグインの「マーカーが見つかりません」エラー根絶用。
     if stats['marker_count'] == 0 and rules:
         fallback_marker = _build_marker('vertical', brand=(article_type == 'brand'))
         text = text + '\n' + fallback_marker
         stats['marker_count'] += 1
-        stats['rules_applied'] += 1
+        stats['fallback_used'] = True
+        stats['per_position']['bottom_fallback'] = 1
         stats['positions'].append('bottom_fallback')
         print(f'[MARKER] fallback: article_type={article_type}, all rules failed → inserted at bottom', flush=True)
     # ──────────────────────────────────────────────────────────────────────
@@ -5082,7 +5146,10 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                     usage_parts = [build_article_usage(prompt, raw_content, message)]
                 stage = 'inject affiliate markers'
                 update_job(current_title=article.get('title', ''), message=f"商品カードマーカー挿入中: {article.get('title', '')}")
-                raw_content, marker_stats = insert_card_markers(raw_content, article_type, title=article.get('title') if isinstance(article, dict) else None)
+                _gen_title = article.get('title') if isinstance(article, dict) else None
+                raw_content, marker_stats = insert_card_markers(raw_content, article_type, title=_gen_title)
+                marker_validation = validate_marker_insertion(marker_stats, article_type, _gen_title or '')
+                print(f'[MARKER-VALIDATE] BATCH: {marker_validation["status"]} / {marker_validation["summary"]}', flush=True)
                 card_stats = {'h3_count': 0, 'matched_count': 0, 'products_available': 0,
                               'fallback_count': 0, 'marker_count': marker_stats.get('marker_count', 0), 'mode': 'marker_only'}
                 if card_stats.get('h3_count') and not card_stats.get('matched_count'):
@@ -5152,6 +5219,8 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                             a['generated_at'] = generated_at
                             a['updated_at'] = generated_at
                             a['content_hash'] = content_hash(content)
+                            a['marker_status'] = marker_validation.get('status', '')
+                            a['marker_summary'] = marker_validation.get('summary', '')
                             usage = combine_article_usages(usage_parts)
                             append_generation_usage(a, usage, run_id, generated_at, content)
                             apply_score_fields(a)
@@ -5227,10 +5296,13 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                         post_content, enhance_warning = safe_enhance_generated_article_html(post_content, article, article_type)
                         if enhance_warning:
                             postprocess_warnings.append(enhance_warning)
+                        _post_title = article.get('title') if isinstance(article, dict) else None
                         post_content, post_marker_stats = insert_card_markers(
                             post_content, article_type,
-                            title=article.get('title') if isinstance(article, dict) else None,
+                            title=_post_title,
                         )
+                        post_marker_validation = validate_marker_insertion(post_marker_stats, article_type, _post_title or '')
+                        marker_validation = post_marker_validation  # 後段の保存で使う
                         post_generated_at = now_iso()
                         with _DATA_LOCK:
                             current_articles = load_articles()
@@ -5254,6 +5326,8 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                                         'marker_count': post_marker_stats.get('marker_count', 0),
                                         'mode': 'marker_only',
                                     }
+                                    a['marker_status'] = post_marker_validation.get('status', '')
+                                    a['marker_summary'] = post_marker_validation.get('summary', '')
                                     warnings = pipeline_warnings + postprocess_warnings
                                     if warnings:
                                         a['generation_warning'] = ' / '.join(dict.fromkeys(warnings))
@@ -6220,7 +6294,10 @@ def generate_article(article_id):
 
             print(f'[GEN-SSE] BEFORE inject: products={len(products) if products else 0}, content_len={len(full_content)}, has_card={"aff-product-card" in full_content}', flush=True)
             # プラグイン連携前提でマーカー挿入に固定（UIセレクタ廃止）
-            full_content, marker_stats = insert_card_markers(full_content, article_type, title=article_work.get('title') if isinstance(article_work, dict) else None)
+            _gen_title = article_work.get('title') if isinstance(article_work, dict) else None
+            full_content, marker_stats = insert_card_markers(full_content, article_type, title=_gen_title)
+            marker_validation = validate_marker_insertion(marker_stats, article_type, _gen_title or '')
+            print(f'[MARKER-VALIDATE] SSE: {marker_validation["status"]} / {marker_validation["summary"]}', flush=True)
             card_stats = {'h3_count': 0, 'matched_count': 0, 'products_available': 0, 'fallback_count': 0,
                           'marker_count': marker_stats.get('marker_count', 0), 'mode': 'marker_only'}
             _cards_msg = f'広告マーカー挿入: {card_stats["marker_count"]}件（プラグイン処理）'
@@ -6313,6 +6390,8 @@ def generate_article(article_id):
                             a['last_generation_title'] = article_work.get('title', a.get('title', ''))
                             a['last_generation_keywords'] = article_work.get('keywords', a.get('keywords', ''))
                             a['card_injection_stats'] = card_stats
+                            a['marker_status'] = marker_validation.get('status', '')
+                            a['marker_summary'] = marker_validation.get('summary', '')
                             usage = combine_article_usages(usage_parts)
                             append_generation_usage(a, usage, generation_run_id, generated_at, clean_content)
                             apply_score_fields(a)
@@ -6427,7 +6506,10 @@ def generate_article_direct(article_id):
         else:
             raise ValueError('Claude APIキーが設定されていません')
         # プラグイン連携前提でマーカー挿入に固定（UIセレクタ廃止）
-        raw_content, _marker_stats = insert_card_markers(raw_content, article_type, title=article_work.get('title') if isinstance(article_work, dict) else None)
+        _gen_title = article_work.get('title') if isinstance(article_work, dict) else None
+        raw_content, _marker_stats = insert_card_markers(raw_content, article_type, title=_gen_title)
+        marker_validation = validate_marker_insertion(_marker_stats, article_type, _gen_title or '')
+        print(f'[MARKER-VALIDATE] SYNC: {marker_validation["status"]} / {marker_validation["summary"]}', flush=True)
         clean_content, enhance_warning = safe_enhance_generated_article_html(raw_content, article_work, article_type)
         clean_content = strip_summary_table_sections(clean_content)
         validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
@@ -6471,6 +6553,8 @@ def generate_article_direct(article_id):
                     else:
                         a.pop('generation_warning', None)
                     a.pop('last_generation_interrupted', None)
+                    a['marker_status'] = marker_validation.get('status', '')
+                    a['marker_summary'] = marker_validation.get('summary', '')
                     append_generation_usage(a, usage, str(uuid.uuid4()), generated_at, clean_content)
                     apply_score_fields(a)
                     saved_article = a

@@ -1247,6 +1247,14 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             <option value="published">PUSH済</option>
             <option value="error">エラー</option>
           </select>
+          <select id="article-marker-filter" style="font-size:12px;" onchange="filterArticles()" title="マーカー検証結果で絞り込み">
+            <option value="">マーカー状態：全て</option>
+            <option value="ok">✅ 正常のみ</option>
+            <option value="warning">⚠️ 警告のみ</option>
+            <option value="error">❌ 異常のみ</option>
+            <option value="warning_or_error">⚠️/❌ 要対応のみ</option>
+            <option value="unknown">未計測のみ</option>
+          </select>
           <select id="article-sort" style="font-size:12px;" onchange="filterArticles()" title="並び順">
             <option value="generated_desc">生成日時↓</option>
             <option value="generated_asc">生成日時↑</option>
@@ -1270,6 +1278,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
                 <th>キーワード</th>
                 <th>スコア</th>
                 <th>ステータス</th>
+                <th>マーカー</th>
                 <th>生成日時</th>
                 <th>操作</th>
               </tr>
@@ -2945,6 +2954,7 @@ function filterArticles() {
   const q = document.getElementById('search-input').value.toLowerCase();
   const typeFilter = document.getElementById('article-type-filter')?.value || '';
   const statusFilter = document.getElementById('article-status-filter')?.value || '';
+  const markerFilter = document.getElementById('article-marker-filter')?.value || '';
   const sortKey = document.getElementById('article-sort')?.value || 'generated_desc';
 
   // 対応履歴ページは「やった結果」のみ。未生成系は常に除外（一括処理ページの担当）。
@@ -2974,6 +2984,19 @@ function filterArticles() {
     filtered = filtered.filter(a => ['published', 'scheduled', 'updated'].includes(a.status));
   } else if (statusFilter === 'error') {
     filtered = filtered.filter(a => a.status === 'error');
+  }
+
+  // マーカー状態フィルタ
+  if (markerFilter === 'ok') {
+    filtered = filtered.filter(a => a.marker_status === 'ok');
+  } else if (markerFilter === 'warning') {
+    filtered = filtered.filter(a => a.marker_status === 'warning');
+  } else if (markerFilter === 'error') {
+    filtered = filtered.filter(a => a.marker_status === 'error');
+  } else if (markerFilter === 'warning_or_error') {
+    filtered = filtered.filter(a => a.marker_status === 'warning' || a.marker_status === 'error');
+  } else if (markerFilter === 'unknown') {
+    filtered = filtered.filter(a => !a.marker_status);
   }
 
   // 検索（タイトル / キーワード）
@@ -3074,6 +3097,7 @@ function renderArticles(articles) {
       <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)" title="${esc(a.keywords)}">${esc(a.keywords)}</td>
       <td>${scoreBadge(a)}</td>
       <td>${statusBadge(a.status)}${statusDetail}</td>
+      <td>${markerStatusBadge(a)}</td>
       <td style="color:var(--muted);font-size:11px;white-space:nowrap">${a.generated_at ? fmtDate(a.generated_at) : '—'}</td>
       <td>
         <div style="display:flex;flex-direction:column;gap:3px;width:88px">
@@ -3100,6 +3124,17 @@ function statusBadge(status) {
   };
   const [icon, label] = map[status] || ['?', status];
   return `<span class="badge badge-${status}">${icon} ${label}</span>`;
+}
+
+function markerStatusBadge(a) {
+  if (!a) return '<span style="color:#aaa;font-size:11px">—</span>';
+  const st = a.marker_status || '';
+  const summary = a.marker_summary || '';
+  if (!st) return '<span style="color:#aaa;font-size:11px" title="未計測">—</span>';
+  if (st === 'ok') return '<span style="color:#3ecf8e;font-weight:600;font-size:12px" title="マーカー正常">✅ 正常</span>';
+  if (st === 'warning') return `<span style="color:#d97706;font-weight:600;font-size:12px" title="${esc(summary)}">⚠️ 警告</span>`;
+  if (st === 'error')   return `<span style="color:#ef6262;font-weight:600;font-size:12px" title="${esc(summary)}">❌ 異常</span>`;
+  return `<span style="color:#aaa;font-size:11px">${esc(st)}</span>`;
 }
 
 function scoreBadge(item) {
