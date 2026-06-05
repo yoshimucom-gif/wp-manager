@@ -99,12 +99,10 @@ class AI_PI_Post_Meta {
         if (!empty($args['insertion_filter'])) {
             switch ($args['insertion_filter']) {
                 case 'has_marker':
-                    // マーカーを含む記事のみ
-                    $meta_query[] = [
-                        'key' => '_ai_pi_inserted',
-                        'compare' => 'NOT EXISTS',
-                    ];
-                    // 本文にマーカーがあるかは別途確認が必要（meta_queryでは難しい）
+                    // 本文にマーカーがあれば「処理が必要」と判定する（マーカー有り = SoT）。
+                    // 旧版は _ai_pi_inserted フラグ無しを条件に入れていたが、これだと
+                    // 過去に処理した記事をリライト等でマーカーが再導入されたケースを
+                    // 検知できない問題があった。よって meta 制約は付けない。
                     break;
                 case 'uninserted':
                     $meta_query[] = [

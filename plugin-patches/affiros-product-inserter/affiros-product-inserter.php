@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros プロダクトインサーター
  * Description: AIが記事内容を解析し、Amazon・楽天市場の最適な商品アフィリエイトカードを自動挿入するプラグイン
- * Version: 1.9.7
+ * Version: 1.9.8
  * Author: AI Product Inserter
  * License: GPL v2 or later
  * Text Domain: ai-product-inserter
