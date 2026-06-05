@@ -95,8 +95,17 @@ class Affiros_Rewrite_Engine {
         $new_title = $parsed['title'] ?: $post['title'];
 
         // マーカー挿入（記事タイプが確定しかつ insert_markers が true）
+        $marker_stats = null;
+        $marker_validation = null;
         if (!empty($opts['insert_markers']) && $article_type) {
-            $content = Affiros_Rewrite_Marker_Inserter::insert($content, $article_type, $new_title);
+            $ins_result = Affiros_Rewrite_Marker_Inserter::insert($content, $article_type, $new_title);
+            $content = is_array($ins_result) ? ($ins_result['html'] ?? $content) : $ins_result;
+            $marker_stats = is_array($ins_result) ? ($ins_result['stats'] ?? null) : null;
+            if (class_exists('Affiros_Rewrite_Marker_Validator') && $marker_stats) {
+                $marker_validation = Affiros_Rewrite_Marker_Validator::check(
+                    $marker_stats, $article_type, $new_title
+                );
+            }
         }
 
         // Gutenberg ブロック化（Classic ブロック化を防ぐ）
@@ -117,6 +126,8 @@ class Affiros_Rewrite_Engine {
             'article_type' => $article_type,
             'article_type_auto' => ($requested_type === 'auto'),
             'markers_inserted' => !empty($opts['insert_markers']) && $article_type,
+            'marker_stats' => $marker_stats,
+            'marker_validation' => $marker_validation,
         ];
     }
 

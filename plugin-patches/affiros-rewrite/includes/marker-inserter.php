@@ -58,64 +58,103 @@ class Affiros_Rewrite_Marker_Inserter {
     }
 
     /**
-     * 記事タイプに応じてマーカーを挿入する。本体 insert_card_markers の移植。
+     * 記事タイプに応じてマーカーを挿入する。
      *
-     * @param string $html         リライト後のHTML
-     * @param string $article_type 'ranking' | 'brand' | 'column'
-     * @param string $title        記事タイトル（先頭introH2判定に使用）
-     * @return string  マーカー挿入後のHTML
+     * @return array {
+     *   'html'  => string マーカー挿入後のHTML
+     *   'stats' => array {
+     *     'rules_attempted' => int 設定上のルール総数
+     *     'rules_applied'   => int 挿入に成功したルール数
+     *     'rules_failed'    => array 失敗したルールの position 名
+     *     'marker_count'    => int 実際に挿入したマーカー総数
+     *     'per_position'    => array { position名 => 挿入数 }
+     *     'fallback_used'   => bool 緊急フォールバック発動フラグ
+     *   }
+     * }
      */
     public static function insert($html, $article_type, $title = '') {
+        $stats = [
+            'rules_attempted' => 0,
+            'rules_applied'   => 0,
+            'rules_failed'    => [],
+            'marker_count'    => 0,
+            'per_position'    => [],
+            'fallback_used'   => false,
+        ];
         if ($html === '' || $html === null) {
-            return $html;
+            return ['html' => $html, 'stats' => $stats];
         }
         $patterns = self::get_patterns();
         $rules = $patterns[$article_type] ?? [];
         if (!$rules) {
-            return $html;
+            return ['html' => $html, 'stats' => $stats];
         }
+        $stats['rules_attempted'] = count($rules);
 
         $text = (string)$html;
-
-        // 本体 insert_card_markers と同じ前処理:
-        // 先頭の導入H2を削除し、早見表/比較表セクションを削除する。
         $text = self::strip_leading_introduction_h2($text, $title);
         $text = self::strip_summary_table_sections($text);
 
-        $matome_range = self::find_matome_h2_range($text);
+        $matome_range   = self::find_matome_h2_range($text);
         $first_h2_range = self::find_first_h2_range($text);
         $last_h2_range  = self::find_last_h2_range($text);
 
-        // [挿入バイト位置, 挿入文字列] のリスト
-        $insertions = [];
+        $insertions = [];   // [挿入バイト位置, 挿入文字列]
+        $rule_applied = []; // 各ルールが何個マーカーを置いたか
 
-        foreach ($rules as $rule) {
+        foreach ($rules as $idx => $rule) {
             $pos = $rule['position'] ?? '';
             $design = $rule['design'] ?? 'vertical';
             $count = $rule['count'] ?? null;
             $repeat = max(1, intval($rule['repeat'] ?? 1));
             $marker = self::build_marker($design, $count);
             $marker_block = str_repeat("\n" . $marker, $repeat);
+            $rule_applied[$idx] = 0;
 
             if ($pos === 'top') {
                 $insertions[] = [0, $marker_block . "\n"];
+                $rule_applied[$idx] += $repeat;
             } elseif ($pos === 'bottom') {
                 $insertions[] = [strlen($text), "\n" . $marker_block];
+                $rule_applied[$idx] += $repeat;
             } elseif ($pos === 'before_first_h2' && $first_h2_range) {
                 $insertions[] = [$first_h2_range[0], $marker_block . "\n"];
+                $rule_applied[$idx] += $repeat;
             } elseif ($pos === 'after_first_h2' && $first_h2_range) {
                 $insertions[] = [$first_h2_range[1], "\n" . $marker_block];
+                $rule_applied[$idx] += $repeat;
             } elseif ($pos === 'before_matome_h2' && $matome_range) {
                 $insertions[] = [$matome_range[0], $marker_block . "\n"];
+                $rule_applied[$idx] += $repeat;
             } elseif ($pos === 'after_matome_h2' && $matome_range) {
                 $insertions[] = [$matome_range[1], "\n" . $marker_block];
+                $rule_applied[$idx] += $repeat;
             } elseif ($pos === 'after_last_h2' && $last_h2_range) {
                 $insertions[] = [$last_h2_range[1], "\n" . $marker_block];
+                $rule_applied[$idx] += $repeat;
             } elseif ($pos === 'after_each_h3_rank') {
-                foreach (self::collect_h3_rank_insertions($text, $marker, $matome_range, $first_h2_range, $title) as $ins) {
+                $h3_ins = self::collect_h3_rank_insertions($text, $marker, $matome_range, $first_h2_range, $title);
+                foreach ($h3_ins as $ins) {
                     $insertions[] = $ins;
+                    $rule_applied[$idx]++;
                 }
             }
+
+            if ($rule_applied[$idx] > 0) {
+                $stats['rules_applied']++;
+                $stats['marker_count'] += $rule_applied[$idx];
+                $stats['per_position'][$pos] = ($stats['per_position'][$pos] ?? 0) + $rule_applied[$idx];
+            } else {
+                $stats['rules_failed'][] = $pos;
+            }
+        }
+
+        // 緊急フォールバック: マーカーが1個も入らなかったときに記事末尾へ vertical を1個挿入
+        if ($stats['marker_count'] === 0) {
+            $insertions[] = [strlen($text), "\n" . self::build_marker('vertical')];
+            $stats['marker_count']++;
+            $stats['per_position']['bottom_fallback'] = 1;
+            $stats['fallback_used'] = true;
         }
 
         // 後ろから挿入してバイト位置のズレを防ぐ
@@ -123,7 +162,7 @@ class Affiros_Rewrite_Marker_Inserter {
         foreach ($insertions as $ins) {
             $text = substr($text, 0, $ins[0]) . $ins[1] . substr($text, $ins[0]);
         }
-        return $text;
+        return ['html' => $text, 'stats' => $stats];
     }
 
     /**

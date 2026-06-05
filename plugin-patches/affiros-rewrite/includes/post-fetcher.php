@@ -40,6 +40,7 @@ class Affiros_Rewrite_Post_Fetcher {
                 if ($p !== '') $exclude_keywords[] = $p;
             }
         }
+        $marker_filter = (string)($args['marker_filter'] ?? '');
 
         $query_args = [
             'post_type' => 'post',
@@ -61,6 +62,37 @@ class Affiros_Rewrite_Post_Fetcher {
         }
         if (!empty($exclude_tags)) {
             $query_args['tag__not_in'] = $exclude_tags;
+        }
+
+        // マーカー状態フィルタ（WP_Query の meta_query で絞り込み）
+        if ($marker_filter !== '') {
+            $mq = ['relation' => 'AND'];
+            switch ($marker_filter) {
+                case 'ok':
+                    $mq[] = ['key' => '_affiros_marker_status', 'value' => 'ok', 'compare' => '='];
+                    break;
+                case 'warning':
+                    $mq[] = ['key' => '_affiros_marker_status', 'value' => 'warning', 'compare' => '='];
+                    break;
+                case 'error':
+                    $mq[] = ['key' => '_affiros_marker_status', 'value' => 'error', 'compare' => '='];
+                    break;
+                case 'warning_or_error':
+                    $mq[] = [
+                        'relation' => 'OR',
+                        ['key' => '_affiros_marker_status', 'value' => 'warning', 'compare' => '='],
+                        ['key' => '_affiros_marker_status', 'value' => 'error',   'compare' => '='],
+                    ];
+                    break;
+                case 'unknown':
+                    $mq[] = ['key' => '_affiros_marker_status', 'compare' => 'NOT EXISTS'];
+                    break;
+            }
+            if (count($mq) > 1) {
+                $query_args['meta_query'] = isset($query_args['meta_query'])
+                    ? array_merge_recursive($query_args['meta_query'], $mq)
+                    : $mq;
+            }
         }
 
         // 除外キーワード（タイトルに含む記事を除外）。posts_where フィルタで実装。
@@ -90,6 +122,8 @@ class Affiros_Rewrite_Post_Fetcher {
                 $post_id = get_the_ID();
                 $rw_count = (int) get_post_meta($post_id, '_affiros_rewrite_count', true);
                 $rw_last  = (string) get_post_meta($post_id, '_affiros_rewrite_last_at', true);
+                $mk_status  = (string) get_post_meta($post_id, '_affiros_marker_status', true);
+                $mk_summary = (string) get_post_meta($post_id, '_affiros_marker_summary', true);
                 $items[] = [
                     'id' => $post_id,
                     'title' => get_the_title($post_id),
@@ -103,6 +137,8 @@ class Affiros_Rewrite_Post_Fetcher {
                     'word_count' => self::count_chars($post_id),
                     'rewrite_count'   => $rw_count,
                     'rewrite_last_at' => $rw_last !== '' ? mysql2date('Y-m-d H:i', $rw_last) : '',
+                    'marker_status'   => $mk_status,
+                    'marker_summary'  => $mk_summary,
                 ];
             }
             wp_reset_postdata();
@@ -149,7 +185,7 @@ class Affiros_Rewrite_Post_Fetcher {
      *      新マーカーが入っているのに再挿入できない問題が起きる。
      *      ユーザー操作で意図的に除外した _ai_pi_excluded は保持する。
      */
-    public static function update_post($post_id, $new_content, $new_title = null) {
+    public static function update_post($post_id, $new_content, $new_title = null, $marker_validation = null) {
         $update = ['ID' => $post_id, 'post_content' => $new_content];
         if ($new_title) {
             $update['post_title'] = $new_title;
@@ -163,7 +199,6 @@ class Affiros_Rewrite_Post_Fetcher {
         update_post_meta($post_id, '_affiros_rewrite_count', $current_count + 1);
         update_post_meta($post_id, '_affiros_rewrite_last_at', current_time('mysql'));
         // 2) 商品挿入プラグインの挿入状態メタをクリア
-        //    （ユーザーが手動 ON にした _ai_pi_excluded は保持）
         $clear_keys = [
             '_ai_pi_inserted',
             '_ai_pi_inserted_at',
@@ -173,6 +208,14 @@ class Affiros_Rewrite_Post_Fetcher {
         ];
         foreach ($clear_keys as $k) {
             delete_post_meta($post_id, $k);
+        }
+        // 3) マーカー挿入検証結果を保存（投稿一覧で「マーカー異常」を表示するため）
+        if (is_array($marker_validation)) {
+            update_post_meta($post_id, '_affiros_marker_status', (string)($marker_validation['status'] ?? ''));
+            update_post_meta($post_id, '_affiros_marker_summary', (string)($marker_validation['summary'] ?? ''));
+        } else {
+            delete_post_meta($post_id, '_affiros_marker_status');
+            delete_post_meta($post_id, '_affiros_marker_summary');
         }
         return ['success' => true, 'post_id' => $post_id];
     }

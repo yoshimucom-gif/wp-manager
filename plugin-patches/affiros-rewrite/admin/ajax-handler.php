@@ -23,6 +23,7 @@ add_action('wp_ajax_affiros_rewrite_fetch_posts', function () {
         'exclude_tags' => array_map('intval', (array)($_POST['exclude_tags'] ?? [])),
         'exclude_categories' => array_map('intval', (array)($_POST['exclude_categories'] ?? [])),
         'exclude_keywords' => sanitize_text_field((string)($_POST['exclude_keywords'] ?? '')),
+        'marker_filter' => sanitize_text_field((string)($_POST['marker_filter'] ?? '')),
     ];
 
     $result = Affiros_Rewrite_Post_Fetcher::fetch($args);
@@ -94,10 +95,23 @@ add_action('wp_ajax_affiros_rewrite_save', function () {
         wp_send_json_error(['message' => '本文が空です']);
     }
 
+    // 検証結果（marker_validation）をJSONで受け取って投稿メタへ伝播させる
+    $marker_validation = null;
+    $mv_raw = $_POST['marker_validation'] ?? '';
+    if (is_string($mv_raw) && $mv_raw !== '') {
+        $decoded = json_decode(wp_unslash($mv_raw), true);
+        if (is_array($decoded)) {
+            $marker_validation = $decoded;
+        }
+    } elseif (is_array($mv_raw)) {
+        $marker_validation = $mv_raw;
+    }
+
     $result = Affiros_Rewrite_Post_Fetcher::update_post(
         $post_id,
         $content,
-        $title !== '' ? $title : null
+        $title !== '' ? $title : null,
+        $marker_validation
     );
     if (is_wp_error($result)) {
         wp_send_json_error(['message' => $result->get_error_message()]);

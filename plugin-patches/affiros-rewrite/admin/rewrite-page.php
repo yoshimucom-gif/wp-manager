@@ -51,6 +51,14 @@ function affiros_rewrite_render_rewrite_page() {
                 <option value="draft">下書き</option>
                 <option value="any">すべて</option>
             </select>
+            <select id="affiros-marker-filter" style="padding:6px 28px 6px 10px;min-width:170px;" title="マーカー検証結果でフィルタ">
+                <option value="">マーカー状態：全て</option>
+                <option value="ok">✅ 正常のみ</option>
+                <option value="warning">⚠️ 警告のみ</option>
+                <option value="error">❌ 異常のみ</option>
+                <option value="warning_or_error">⚠️/❌ 要対応のみ</option>
+                <option value="unknown">未計測のみ</option>
+            </select>
             <select id="affiros-per-page" style="padding:6px 28px 6px 10px;min-width:120px;">
                 <option value="20">20件/ページ</option>
                 <option value="50">50件/ページ</option>
@@ -232,6 +240,7 @@ function affiros_rewrite_render_rewrite_page() {
             var excludeTags = $('#affiros-exclude-tags').val() || [];
             var excludeCats = $('#affiros-exclude-cats').val() || [];
             var excludeKw   = ($('#affiros-exclude-kw').val() || '').trim();
+            var markerFilter = $('#affiros-marker-filter').val() || '';
             $.post(AffirosRewrite.ajaxUrl, {
                 action: 'affiros_rewrite_fetch_posts',
                 nonce: AffirosRewrite.nonce,
@@ -243,6 +252,7 @@ function affiros_rewrite_render_rewrite_page() {
                 'exclude_tags[]':       excludeTags,
                 'exclude_categories[]': excludeCats,
                 exclude_keywords:       excludeKw,
+                marker_filter:          markerFilter,
             }).done(function(resp) {
                 if (!resp.success) {
                     $('#affiros-result').html('<div style="padding:40px;color:#c00;">エラー: ' + (resp.data?.message || '不明') + '</div>');
@@ -266,6 +276,7 @@ function affiros_rewrite_render_rewrite_page() {
             html += '<th style="width:32px;"><input type="checkbox" id="affiros-check-all"></th>';
             html += '<th>タイトル</th><th style="width:120px;">カテゴリー</th><th style="width:70px;">文字数</th>';
             html += '<th style="width:120px;">リライト履歴</th>';
+            html += '<th style="width:140px;">マーカー状態</th>';
             html += '<th style="width:90px;">更新日</th><th style="width:220px;">操作</th>';
             html += '</tr></thead><tbody>';
             items.forEach(function(p) {
@@ -289,6 +300,22 @@ function affiros_rewrite_render_rewrite_page() {
                     }
                 }
                 html += '<td>' + rwHtml + '</td>';
+                // マーカー状態カラム
+                var mkHtml = '';
+                if (!p.marker_status) {
+                    mkHtml = '<span style="color:#aaa;font-size:11px;">未計測</span>';
+                } else if (p.marker_status === 'ok') {
+                    mkHtml = '<span style="color:#0a7a2f;font-weight:600;">✅ 正常</span>';
+                } else if (p.marker_status === 'warning') {
+                    mkHtml = '<span style="color:#d97706;font-weight:600;">⚠️ 警告</span>'
+                          + '<div style="font-size:10px;color:#888;margin-top:2px;">' + escapeHtml(p.marker_summary || '') + '</div>';
+                } else if (p.marker_status === 'error') {
+                    mkHtml = '<span style="color:#c00;font-weight:600;">❌ 異常</span>'
+                          + '<div style="font-size:10px;color:#c00;margin-top:2px;">' + escapeHtml(p.marker_summary || '') + '</div>';
+                } else {
+                    mkHtml = '<span style="color:#aaa;font-size:11px;">' + escapeHtml(p.marker_status) + '</span>';
+                }
+                html += '<td>' + mkHtml + '</td>';
                 html += '<td>' + escapeHtml(p.modified) + '</td>';
                 html += '<td>';
                 html += '<button type="button" class="button button-primary button-small affiros-rewrite-btn" data-post-id="' + p.id + '">✍ リライト</button> ';
@@ -374,9 +401,20 @@ function affiros_rewrite_render_rewrite_page() {
             const tags = [];
             if (data.article_type) tags.push('タイプ: ' + data.article_type + (data.article_type_auto ? '（自動判定）' : ''));
             if (data.markers_inserted) tags.push('マーカー挿入: ✓');
+            // マーカー検証結果バッジ
+            const mv = data.marker_validation || null;
+            if (mv && mv.status) {
+                const label = mv.status === 'ok' ? '✅ マーカー正常'
+                            : mv.status === 'warning' ? '⚠️ マーカー警告'
+                            : '❌ マーカー異常';
+                tags.push(label + (mv.summary && mv.status !== 'ok' ? '（' + mv.summary + '）' : ''));
+            }
             const tagsLine = tags.length ? ' / ' + tags.join(' / ') : '';
             $('#affiros-modal-usage').text('モデル: ' + (data.model || '?') + ' / ' + tokens + tagsLine);
-            $('#affiros-modal').data('post-id', data.post_id).css('display', 'flex');
+            // 検証結果を保存時に forward するため data 属性に格納
+            $('#affiros-modal').data('post-id', data.post_id)
+                               .data('marker-validation', mv ? JSON.stringify(mv) : '')
+                               .css('display', 'flex');
         }
 
         function closeResultModal() { $('#affiros-modal').hide(); }
@@ -385,6 +423,7 @@ function affiros_rewrite_render_rewrite_page() {
             const postId = $('#affiros-modal').data('post-id');
             const title = $('#affiros-modal-new-title').val();
             const content = $('#affiros-modal-new-content').val();
+            const markerValidation = $('#affiros-modal').data('marker-validation') || '';
             if (!content.trim()) { alert('本文が空です'); return; }
             if (!confirm('この内容でWordPress投稿を上書き保存します。\n（WordPressのリビジョン機能で元に戻せます）\n\nよろしいですか?')) return;
             const $btn = $('#affiros-modal-save').prop('disabled', true).text('保存中...');
@@ -394,6 +433,7 @@ function affiros_rewrite_render_rewrite_page() {
                 post_id: postId,
                 title: title,
                 content: content,
+                marker_validation: markerValidation,
             }).done(function(resp) {
                 if (!resp.success) {
                     alert('保存失敗: ' + (resp.data?.message || '不明'));
@@ -452,17 +492,25 @@ function affiros_rewrite_render_rewrite_page() {
                     }, rewriteOpts())));
                     if (!result.success) throw new Error(result.data?.message || 'unknown');
 
+                    const mvObj = result.data.marker_validation || null;
                     const saved = await jqXhrPromise($.post(AffirosRewrite.ajaxUrl, {
                         action: 'affiros_rewrite_save',
                         nonce: AffirosRewrite.nonce,
                         post_id: id,
                         title: result.data.rewritten_title,
                         content: result.data.rewritten_content,
+                        marker_validation: mvObj ? JSON.stringify(mvObj) : '',
                     }));
                     if (!saved.success) throw new Error(saved.data?.message || 'save failed');
                     const t = result.data.article_type ? ' [' + result.data.article_type + (result.data.article_type_auto ? '/自動判定' : '') + ']' : '';
                     const mk = result.data.markers_inserted ? ' +マーカー' : '';
-                    appendBulkLog('  ✓ #' + id + ' 保存完了' + t + mk, 'success');
+                    const mvStatus = mvObj && mvObj.status
+                        ? (mvObj.status === 'ok' ? ' ✅マーカーOK'
+                           : mvObj.status === 'warning' ? ' ⚠️マーカー警告:' + (mvObj.summary || '')
+                           : ' ❌マーカー異常:' + (mvObj.summary || ''))
+                        : '';
+                    appendBulkLog('  ✓ #' + id + ' 保存完了' + t + mk + mvStatus,
+                        mvObj && mvObj.status === 'error' ? 'warn' : 'success');
                     succeeded++;
                 } catch (e) {
                     appendBulkLog('  ✗ #' + id + ' 失敗: ' + e.message, 'error');
