@@ -139,10 +139,15 @@ class Affiros_Rewrite_Post_Fetcher {
     /**
      * 投稿を更新（リライト結果を保存）
      *
-     * 保存成功時に以下のメタを更新する（リライト履歴トラッキング用・
-     * 本体ロジック・マーカー挿入・品質には一切影響しない）:
-     *   _affiros_rewrite_count   : 累計リライト回数
-     *   _affiros_rewrite_last_at : 最終リライト日時（mysql 形式）
+     * 保存成功時に以下を実行:
+     *   1. リライト履歴メタ更新
+     *      _affiros_rewrite_count   : 累計リライト回数
+     *      _affiros_rewrite_last_at : 最終リライト日時（mysql 形式）
+     *   2. 商品挿入プラグイン(affiros-product-inserter)のフラグをクリア
+     *      リライトで本文が完全に書き直されたので、過去の挿入状態は無効。
+     *      これをクリアしないと「マーカー有り未処理記事」フィルタで除外され、
+     *      新マーカーが入っているのに再挿入できない問題が起きる。
+     *      ユーザー操作で意図的に除外した _ai_pi_excluded は保持する。
      */
     public static function update_post($post_id, $new_content, $new_title = null) {
         $update = ['ID' => $post_id, 'post_content' => $new_content];
@@ -153,10 +158,22 @@ class Affiros_Rewrite_Post_Fetcher {
         if (is_wp_error($result)) {
             return $result;
         }
-        // リライト履歴を加算
+        // 1) リライト履歴を加算
         $current_count = (int) get_post_meta($post_id, '_affiros_rewrite_count', true);
         update_post_meta($post_id, '_affiros_rewrite_count', $current_count + 1);
         update_post_meta($post_id, '_affiros_rewrite_last_at', current_time('mysql'));
+        // 2) 商品挿入プラグインの挿入状態メタをクリア
+        //    （ユーザーが手動 ON にした _ai_pi_excluded は保持）
+        $clear_keys = [
+            '_ai_pi_inserted',
+            '_ai_pi_inserted_at',
+            '_ai_pi_products',
+            '_ai_pi_backup',
+            '_ai_pi_expired',
+        ];
+        foreach ($clear_keys as $k) {
+            delete_post_meta($post_id, $k);
+        }
         return ['success' => true, 'post_id' => $post_id];
     }
 

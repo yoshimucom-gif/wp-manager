@@ -4464,9 +4464,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.2.1',
     },
     'rewrite': {
-        'file': 'affiros-rewrite-0.4.15.zip',
+        'file': 'affiros-rewrite-0.4.16.zip',
         'name': 'Affiros リライター',
-        'version': '0.4.15',
+        'version': '0.4.16',
     },
     'categorizer': {
         'file': 'affiros-categorizer-0.1.0.zip',
