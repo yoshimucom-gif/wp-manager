@@ -164,51 +164,15 @@ function ai_pi_render_preview_page() {
             </div>
         </div>
 
-        <!-- ③ Pros/Cons -->
+        <!-- ③ ランキング -->
         <div class="aipi-preview-card">
-            <h2>③ Pros/Cons カード（proscons）<span class="aipi-preview-card__marker">&lt;!--ai-product:proscons--&gt;</span></h2>
-            <p class="aipi-preview-card__desc">
-                <span class="aipi-preview-tag aipi-preview-tag--cvr">CVR向上</span>
-                メリット・デメリットを明示することで購入前の不安を解消する、RINKER系で定番の信頼性パターン。Pros は商品の特徴説明から、Cons は価格やレビューから自動生成。主役商品の解説部分（ランキング1位の詳細、ブランド記事のメイン商品）に配置。
-            </p>
-            <div class="aipi-preview-render-area">
-                <?php echo AI_PI_Card_Renderer::render($sample_product_a, 'proscons'); ?>
-            </div>
-        </div>
-
-        <!-- ④ ランキング -->
-        <div class="aipi-preview-card">
-            <h2>④ ランキングカード（ranking）<span class="aipi-preview-card__marker">&lt;!--ai-product:ranking:3--&gt;</span></h2>
+            <h2>③ ランキングカード（ranking）<span class="aipi-preview-card__marker">&lt;!--ai-product:ranking:3--&gt;</span></h2>
             <p class="aipi-preview-card__desc">
                 <span class="aipi-preview-tag aipi-preview-tag--cvr">最終提示</span>
                 判断軸付きでTOP3〜10を順位表示。「結局おすすめは？」という読者の疑問への回答として、まとめH2の直後に置くのが鉄板。
             </p>
             <div class="aipi-preview-render-area">
                 <?php echo AI_PI_Card_Renderer::render_ranking($multi_products, $criteria_sample); ?>
-            </div>
-        </div>
-
-        <!-- ⑤ スコアカード -->
-        <div class="aipi-preview-card">
-            <h2>⑤ スコアカード（score）<span class="aipi-preview-card__marker">&lt;!--ai-product:score--&gt;</span></h2>
-            <p class="aipi-preview-card__desc">
-                <span class="aipi-preview-tag aipi-preview-tag--cvr">評価訴求</span>
-                評価スコアを大きなバッジとゲージで前面に出す1商品カード。「この商品って実際どう？」という読者の疑問に数値で即答する。レビューデータが取れない商品ではスコア表示を省き、通常の商品カードとして描画される。
-            </p>
-            <div class="aipi-preview-render-area">
-                <?php echo AI_PI_Card_Renderer::render($sample_product_a, 'score'); ?>
-            </div>
-        </div>
-
-        <!-- ⑥ ミニカード -->
-        <div class="aipi-preview-card">
-            <h2>⑥ ミニカード（mini）<span class="aipi-preview-card__marker">&lt;!--ai-product:mini--&gt;</span></h2>
-            <p class="aipi-preview-card__desc">
-                <span class="aipi-preview-tag aipi-preview-tag--versatile">軽量・本文馴染み</span>
-                サムネイル・商品名・価格・ボタンだけの1行コンパクトカード。本文の流れを止めずにさりげなく商品へ誘導したい位置に。縦置きカードが重すぎる箇所の差し込み用。
-            </p>
-            <div class="aipi-preview-render-area">
-                <?php echo AI_PI_Card_Renderer::render($sample_product_b, 'mini'); ?>
             </div>
         </div>
 
@@ -238,28 +202,10 @@ function ai_pi_render_preview_page() {
                     <td>ランキング記事の冒頭、まとめH2の前（1記事に1〜2個）</td>
                 </tr>
                 <tr>
-                    <td><strong>proscons</strong></td>
-                    <td><code>&lt;!--ai-product:proscons--&gt;</code></td>
-                    <td>CVR（信頼性アピールで後押し）</td>
-                    <td>主役商品の解説部分、ブランド記事のメイン商品（1記事に2〜3個）</td>
-                </tr>
-                <tr>
                     <td><strong>ranking</strong></td>
                     <td><code>&lt;!--ai-product:ranking:N--&gt;</code></td>
                     <td>「結局どれ？」への最終提示</td>
                     <td>まとめH2の直後（1記事に1個）</td>
-                </tr>
-                <tr>
-                    <td><strong>score</strong></td>
-                    <td><code>&lt;!--ai-product:score--&gt;</code></td>
-                    <td>評価スコアを数値で前面に</td>
-                    <td>主役商品の評価セクション、レビューまとめH3直下（1記事に1〜2個）</td>
-                </tr>
-                <tr>
-                    <td><strong>mini</strong></td>
-                    <td><code>&lt;!--ai-product:mini--&gt;</code></td>
-                    <td>軽量。本文に馴染む1行カード</td>
-                    <td>本文中のさりげない商品言及位置（1記事に複数可）</td>
                 </tr>
             </tbody>
         </table>
@@ -278,14 +224,13 @@ function ai_pi_render_preview_page() {
                     <td>
                         冒頭 → <code>&lt;!--ai-product:compare:5--&gt;</code>（概要一覧）<br>
                         各H3直下 → <code>&lt;!--ai-product:vertical--&gt;</code>（個別解説）<br>
-                        1位の解説部分 → <code>&lt;!--ai-product:proscons--&gt;</code>（深掘り）<br>
                         まとめ後 → <code>&lt;!--ai-product:ranking:3--&gt;</code>（結論TOP3）
                     </td>
                 </tr>
                 <tr>
                     <td><strong>ブランド/商標記事</strong></td>
                     <td>
-                        最初のH2直後 → <code>&lt;!--ai-product:proscons--&gt;</code>（主役を信頼性アピール）<br>
+                        最初のH2直後 → <code>&lt;!--ai-product:vertical--&gt;</code>（主役紹介）<br>
                         まとめ前 → <code>&lt;!--ai-product:vertical--&gt;</code>（CTA強化）
                     </td>
                 </tr>
@@ -304,7 +249,7 @@ function ai_pi_render_preview_page() {
         </p>
 
         <p style="margin-top: 30px;">
-            <a href="<?php echo esc_url(admin_url('admin.php?page=ai-product-inserter')); ?>" class="button">← 設定画面に戻る</a>
+            <a href="<?php echo esc_url(admin_url('admin.php?page=ai-product-inserter-settings')); ?>" class="button">← 設定画面に戻る</a>
         </p>
     </div>
     <?php

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros プロダクトインサーター
  * Description: AIが記事内容を解析し、Amazon・楽天市場の最適な商品アフィリエイトカードを自動挿入するプラグイン
- * Version: 1.9.8
+ * Version: 1.9.9
  * Author: AI Product Inserter
  * License: GPL v2 or later
  * Text Domain: ai-product-inserter
@@ -136,14 +136,25 @@ function ai_pi_deactivate() {
  */
 add_action('admin_menu', 'ai_pi_admin_menu');
 function ai_pi_admin_menu() {
+    // 親メニュー = 一括処理（最初に開くページ）
     add_menu_page(
         'AI商品挿入',
         'AI商品挿入',
         'manage_options',
         'ai-product-inserter',
-        'ai_pi_render_settings_page',
+        'ai_pi_render_bulk_page',
         'dashicons-cart',
         59
+    );
+
+    // サブメニューの並び: 一括処理 → 設定 → デザインプレビュー → 処理ログ
+    add_submenu_page(
+        'ai-product-inserter',
+        '一括処理',
+        '一括処理',
+        'manage_options',
+        'ai-product-inserter',     // 親と同じスラッグ = デフォルト表示
+        'ai_pi_render_bulk_page'
     );
 
     add_submenu_page(
@@ -151,7 +162,7 @@ function ai_pi_admin_menu() {
         '設定',
         '設定',
         'manage_options',
-        'ai-product-inserter',
+        'ai-product-inserter-settings',
         'ai_pi_render_settings_page'
     );
 
@@ -162,15 +173,6 @@ function ai_pi_admin_menu() {
         'manage_options',
         'ai-product-inserter-preview',
         'ai_pi_render_preview_page'
-    );
-
-    add_submenu_page(
-        'ai-product-inserter',
-        '一括処理',
-        '一括処理',
-        'manage_options',
-        'ai-product-inserter-bulk',
-        'ai_pi_render_bulk_page'
     );
 
     add_submenu_page(
