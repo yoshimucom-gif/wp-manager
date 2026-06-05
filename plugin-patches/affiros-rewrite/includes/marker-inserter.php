@@ -182,20 +182,36 @@ class Affiros_Rewrite_Marker_Inserter {
 
     /**
      * 「まとめ」を含むH2の [開始, 終了] バイト位置を返す。無ければ null。
-     * 本体 _find_matome_h2_range の移植。
+     *
+     * ⚠️ 旧版は preg_match で「最初に見つかった」H2 を返していたが、これだと
+     * 記事中ほどに「○○の選び方まとめ」のような区切り見出しがあると、本物の
+     * まとめではなく途中位置にマーカーが入る事故が発生していた。
+     * 新版は preg_match_all で全候補を取得し、最後（記事末尾側）の H2 を返す。
+     * さらに「○○の選び方まとめ」「比較まとめ」「一覧まとめ」のような
+     * 区切り見出しは除外する。
      */
     private static function find_matome_h2_range($html) {
-        $re = '/<h2[^>]*>(?:(?!<\/h2>)[\s\S])*?(?:まとめ|総まとめ|結論|要点)(?:(?!<\/h2>)[\s\S])*?<\/h2>/iu';
-        if (preg_match($re, $html, $m, PREG_OFFSET_CAPTURE)) {
-            $start = $m[0][1];
-            return [$start, $start + strlen($m[0][0])];
+        $re = '/<h2[^>]*>(?:(?!<\/h2>)[\s\S])*?(?:まとめ|総まとめ|結論|要点|おわりに|最後に|総括|ベストバイ)(?:(?!<\/h2>)[\s\S])*?<\/h2>/iu';
+        if (!preg_match_all($re, $html, $matches, PREG_OFFSET_CAPTURE | PREG_SET_ORDER)) {
+            return null;
         }
-        return null;
+        // 区切り見出しを除外
+        $section_re = '/(?:選び方|選定|比較|一覧|早見|ポイント|チェック|シーン|目的|用途|使い方|レビュー)\s*まとめ/iu';
+        $non_section = [];
+        foreach ($matches as $m) {
+            $inner = preg_replace('/<[^>]+>/', '', $m[0][0]);
+            if (!preg_match($section_re, $inner)) {
+                $non_section[] = $m;
+            }
+        }
+        $pool = !empty($non_section) ? $non_section : $matches;
+        $chosen = end($pool);
+        $start = $chosen[0][1];
+        return [$start, $start + strlen($chosen[0][0])];
     }
 
     /**
      * 記事の最初のH2の [開始, 終了] バイト位置を返す。無ければ null。
-     * 本体 _find_first_h2_range の移植。
      */
     private static function find_first_h2_range($html) {
         $re = '/<h2[^>]*>(?:(?!<\/h2>)[\s\S])*?<\/h2>/iu';
@@ -207,17 +223,16 @@ class Affiros_Rewrite_Marker_Inserter {
     }
 
     /**
-     * 記事の最後のH2の [開始, 終了] バイト位置を返す。無ければ null。
-     * まとめH2が存在する場合はそれを返す（= after_matome_h2 と同等）。
-     * まとめH2が無い場合は最後のH2を探す。
+     * 記事の **本当に最後の** H2 の [開始, 終了] バイト位置を返す。
+     *
+     * ⚠️ 旧版は「まとめH2があればそれを返す」実装だったため、記事中の
+     * 「○○の選び方まとめ」H2 にヒットして、after_last_h2 ルールでも本物の
+     * 末尾 H2 に挿入されない事故が頻発していた。
+     *
+     * 新版はまとめキーワードを一切見ず、純粋に「全 H2 のうち最後の1個」を
+     * 返す。after_matome_h2 とは明確に役割を分ける。
      */
     private static function find_last_h2_range($html) {
-        // まず まとめH2 を試みる（after_matome_h2 との一貫性）
-        $matome = self::find_matome_h2_range($html);
-        if ($matome) {
-            return $matome;
-        }
-        // 全H2を探して最後を返す
         $re = '/<h2[^>]*>(?:(?!<\/h2>)[\s\S])*?<\/h2>/iu';
         if (preg_match_all($re, $html, $matches, PREG_OFFSET_CAPTURE | PREG_SET_ORDER)) {
             $last = end($matches);

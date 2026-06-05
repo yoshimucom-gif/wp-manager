@@ -3454,10 +3454,11 @@ def load_ad_insertion_patterns():
             merged[t] = [dict(r) for r in DEFAULT_CARD_INSERTION_PATTERNS.get(t, [])]
 
     # ── after_matome_h2 → after_last_h2 自動マイグレーション ──────────────
-    # brand / column の after_matome_h2 はキーワード検出が失敗すると last H2 に
-    # フォールバックするが、そもそも after_last_h2 を直接使う方が確実。
-    # ranking は after_matome_h2 の「まとめ狙い」に意図がある場合があるので残す。
-    _MIGRATE_TYPES = ('brand', 'column')
+    # after_matome_h2 はキーワード検出が「最初のまとめ含む H2」を返す実装で、
+    # 記事中ほどに「○○の選び方まとめ」のような区切り見出しがあると本物の
+    # まとめではなく途中位置にマーカーが入る事故が頻発していた。
+    # ranking も含めて全タイプを after_last_h2 に強制移行する。
+    _MIGRATE_TYPES = ('ranking', 'brand', 'column')
     migrated = False
     for t in _MIGRATE_TYPES:
         for rule in merged.get(t, []):
@@ -3526,11 +3527,16 @@ def _find_matome_h2_range(html):
 
     ⚠️ NON-NEGOTIABLE（広告挿入定義の信頼性）:
       after_matome_h2 / before_matome_h2 のマーカーは「まとめH2」を基準に置く。
-      旧実装はキーワード一致のみで、まとめが「総括」「ベストバイ」等のSEO見出し
-      （生成プロンプト自体が推奨）になるとマッチせず、マーカーが0個＝定義が
-      まるごと無効化されていた（「定義が効かない」の主因）。
-      キーワードで見つからない場合は、記事構造上まとめにあたる "最後のH2" へ
-      確実にフォールバックする。
+
+      旧実装は「最初に見つかった」まとめ含む H2 を返していたため、
+      記事中ほどに「用途・シーン別の選び方まとめ」のような区切り見出しが
+      あると、本物のまとめではなく途中のセクション末尾にマーカーが入って
+      しまう事故が頻発していた。
+
+      新実装は **最後にマッチした** H2 を返す（記事末尾のまとめが本物）。
+      また、区切り見出しっぽい H2（「○○の選び方まとめ」等）は除外する。
+
+      キーワードで見つからない場合は「最後のH2」へフォールバックする。
     """
     kw = re.compile(
         r'(?:<!--\s*wp:heading[^>]*-->\s*)?'
@@ -3540,9 +3546,23 @@ def _find_matome_h2_range(html):
         r'(?:\s*<!--\s*/wp:heading\s*-->)?',
         re.IGNORECASE
     )
-    m = kw.search(html)
-    if m:
-        return m.start(), m.end()
+    matches = list(kw.finditer(html))
+    if matches:
+        # 区切り見出しっぽい H2（「○○の選び方まとめ」「○○比較まとめ」「○○一覧まとめ」等）を
+        # 除外し、本当の「まとめ」セクションを優先採用する。
+        section_marker_re = re.compile(
+            r'(?:選び方|選定|比較|一覧|早見|ポイント|チェック|シーン|目的|用途|使い方|レビュー)\s*まとめ',
+            re.IGNORECASE
+        )
+        non_section = []
+        for m in matches:
+            inner = re.sub(r'<[^>]+>', '', m.group(0))
+            if not section_marker_re.search(inner):
+                non_section.append(m)
+        # 区切り見出しを除外した候補がある時はそれの最後を採用、
+        # 全部区切り見出しだったら全候補の最後を採用（妥協）。
+        chosen = (non_section or matches)[-1]
+        return chosen.start(), chosen.end()
     # キーワード不一致 → 最後のH2をまとめとみなす（確実に解決させる）
     h2s = list(re.finditer(_H2_BLOCK_RE, html, re.IGNORECASE))
     if h2s:
@@ -4558,9 +4578,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.2.1',
     },
     'rewrite': {
-        'file': 'affiros-rewrite-0.4.18.zip',
+        'file': 'affiros-rewrite-0.4.19.zip',
         'name': 'Affiros リライター',
-        'version': '0.4.18',
+        'version': '0.4.19',
     },
     'categorizer': {
         'file': 'affiros-categorizer-0.1.0.zip',
