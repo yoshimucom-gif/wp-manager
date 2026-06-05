@@ -1800,11 +1800,30 @@ def infer_title_article_type(keyword='', title=''):
         has_specific_name = bool(re.search(r'[A-Za-z][A-Za-z0-9-]{2,}|[A-Z]{2,}\s*-?\s*\d+|[A-Za-z]+\s*\d+', text))
         if has_specific_name and not re.search(r'(?:おすすめ|比較|ランキング|選び方|人気|厳選)', text):
             return 'brand'
+    # 「○つの○○」パターンは column（ranking判定より前に評価）
+    # 例: 4つの理由 / 5つのチェックポイント / 3つのコツ / 2つの注意点
+    if re.search(r'[0-9０-９]+\s*つ\s*の?\s*(?:チェック|ポイント|サイン|ステップ|理由|秘訣|コツ|心得|注意点|特徴|失敗|落とし穴|教訓|タイミング|目安|基準|メリット|デメリット|効果|条件|原則|ルール|ヒント|アドバイス|パターン|方法|手順|段階|タイプ|種類|違い)', text):
+        return 'column'
     if re.search(r'(?:とは|選び方|使い方|洗い方|原因|対策|方法|違い|必要|いつ|なぜ|ポイント)', text):
         return 'column'
-    if re.search(r'(?:おすすめ|比較|ランキング|人気|厳選|ベスト|[0-9０-９]+\s*選)', text):
+    # 「○選」は ranking 強シグナル
+    if re.search(r'[0-9０-９]+\s*選', text):
+        return 'ranking'
+    if re.search(r'(?:おすすめ|比較|ランキング|人気|厳選|ベスト)', text):
         return 'ranking'
     return 'ranking'
+
+
+def _has_ranking_signal(title):
+    """タイトルに明確な「ランキング系シグナル」が含まれるかを判定する。
+    これが True の時のみ ①②③ H3 を ranking 項目として扱う。
+    """
+    if not title:
+        return False
+    return bool(re.search(
+        r'[0-9０-9]+\s*選|ランキング|おすすめ\s*[0-9０-9]+|ベスト\s*[0-9０-9]+|TOP\s*[0-9０-9]+',
+        str(title), re.IGNORECASE
+    ))
 
 
 def coerce_title_article_type(value, keyword='', title=''):
@@ -3215,30 +3234,34 @@ def strip_leading_introduction_h2(html, title=None):
     h2_inner = re.sub(r'<[^>]+>', '', m.group(2)).strip()
 
     # (a) intro キーワード
+    # ⚠️ 過去版は「完全ガイド/おすすめ/比較/ランキング/選び方/...」を含めていたが、
+    # これらは正規のSEO見出しで頻出する語のため、含まれているだけで削除すると
+    # 「○○の選び方」「コルクマット完全ガイド」みたいな正当な H2 まで誤削除し、
+    # before_first_h2 の対象 H2 が消えてマーカーが入らなくなる事故が発生していた。
+    # 「明らかに intro（記事の導入）」とわかる語に絞る。
     intro_keywords = [
-        'とは', '結論', '選ぶポイント', '選定ポイント', '本記事の', '解説',
-        'について', 'を知る', '記事のポイント',
-        '完全ガイド', '完全攻略', '徹底ガイド', '徹底解説', '徹底比較',
-        'おすすめ', '比較', 'ランキング', '選び方', '選定基準',
+        'とは', '結論', '本記事の', 'について', 'を知る', '記事のポイント',
+        'この記事では', 'この記事の目的', 'はじめに',
     ]
     is_intro = any(kw in h2_inner for kw in intro_keywords)
 
-    # (b) タイトルとの類似度
+    # (b) タイトルそのものの繰り返し H2 だけ削除（誤削除を抑える）
+    # 旧版は「共通文字 70% 以上」で削除していたが、これだと
+    # タイトル「○○の選び方完全ガイド」/ H2「○○の選び方」のように
+    # 包含関係はあるが正当な H2 まで削除してしまう問題があった。
+    # 今は「タイトルと H2 がほぼ同一」のときだけ削除する。
     if not is_intro and title:
         def _normalize(s):
             return re.sub(r'[\s\|｜・:：－—\-　]+', '', str(s)).lower()
         norm_title = _normalize(title)
         norm_h2 = _normalize(h2_inner)
-        if norm_title and norm_h2:
-            # 包含関係 or 強い文字オーバーラップ
-            if norm_h2 in norm_title or norm_title in norm_h2:
+        if norm_title and norm_h2 and len(norm_h2) >= 8:
+            # 完全一致 / 一方が他方をほぼ全部含むケースのみ
+            if norm_h2 == norm_title:
                 is_intro = True
-            else:
-                # 共通文字の割合（タイトル基準）
-                common = sum(1 for c in set(norm_title) if c in set(norm_h2))
-                ratio = common / max(1, len(set(norm_title)))
-                if ratio >= 0.7:
-                    is_intro = True
+            elif (norm_h2 in norm_title and len(norm_h2) >= len(norm_title) * 0.85) or \
+                 (norm_title in norm_h2 and len(norm_title) >= len(norm_h2) * 0.85):
+                is_intro = True
 
     if not is_intro:
         return text
@@ -3577,15 +3600,21 @@ def insert_card_markers(html, article_type='ranking', patterns=None, title=None)
                 stats['positions'].append(pos)
         elif pos == 'after_each_h3_rank':
             # h3ランキング見出し直下に1個ずつ
-            # 「第1位」「1位」「No.1」「①」など各種フォーマットに対応
+            # 「第1位」「1位」「No.1」は常にランキング文脈なので採用。
+            # ①②③ は「ポイント」「チェック」「ステップ」等の用途でも頻出するため、
+            # タイトルにランキング系の強シグナル（○選/ランキング/おすすめN/ベストN/TOP N）が
+            # ある時だけ ranking H3 として扱う。これを怠ると「4つの理由」のような
+            # column 記事に商品カードが入って読者に意味不明な配置になる。
+            title_has_ranking = _has_ranking_signal(title)
             h3_patterns = [
-                # 第N位 / N位 / 第N位:
+                # 第N位 / N位
                 r'<h3[^>]*>\s*(?:第\s*)?(?:\d+|[０-９]+)\s*位[\s:：、・　]*[^<]*?</h3>',
-                # No.N / No N
+                # No.N
                 r'<h3[^>]*>\s*No\.?\s*(?:\d+|[０-９]+)[\s:：、・　]*[^<]*?</h3>',
-                # ①②③… (丸数字)
-                r'<h3[^>]*>\s*[①②③④⑤⑥⑦⑧⑨⑩][\s:：、・　]*[^<]*?</h3>',
             ]
+            if title_has_ranking:
+                # ①②③ パターン
+                h3_patterns.append(r'<h3[^>]*>\s*[①②③④⑤⑥⑦⑧⑨⑩][\s:：、・　]*[^<]*?</h3>')
             matched_positions = set()
             for pat in h3_patterns:
                 rx = re.compile(pat, re.IGNORECASE)
@@ -3595,9 +3624,10 @@ def insert_card_markers(html, article_type='ranking', patterns=None, title=None)
                     matched_positions.add(m.start())
                     insertions.append((m.end(), '\n' + marker))
                     stats['marker_count'] += 1
-            # 上記でゼロ件なら、まとめH2より前の全H3 をランキングH3とみなしてフォールバック
-            if not matched_positions:
-                # 早見表削除済み・先頭intro削除済みなので、最初のH2より後・まとめH2より前の H3 を対象
+            # フォールバック（全H3 挿入）もランキング文脈の時だけ。
+            # 旧版は無条件でフォールバックを動かしていたため、column 記事の
+            # 全 H3 に商品カードが入る暴走を引き起こしていた。
+            if not matched_positions and title_has_ranking:
                 end_limit = matome_range[0] if matome_range else len(text)
                 start_limit = first_h2_range[1] if first_h2_range else 0
                 fallback_rx = re.compile(r'<h3[^>]*>[^<]*?</h3>', re.IGNORECASE)
@@ -4464,9 +4494,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.2.1',
     },
     'rewrite': {
-        'file': 'affiros-rewrite-0.4.16.zip',
+        'file': 'affiros-rewrite-0.4.17.zip',
         'name': 'Affiros リライター',
-        'version': '0.4.16',
+        'version': '0.4.17',
     },
     'categorizer': {
         'file': 'affiros-categorizer-0.1.0.zip',

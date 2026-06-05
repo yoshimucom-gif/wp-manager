@@ -253,11 +253,14 @@ class Affiros_Rewrite_Marker_Inserter {
         $match_end = $m[0][1] + strlen($m[0][0]);
         $h2_inner = trim(preg_replace('/<[^>]+>/', '', $m[2][0]));
 
+        // (a) intro キーワード
+        // ⚠️ 過去版は「完全ガイド/おすすめ/比較/ランキング/選び方/...」を含めていたが、
+        // これらは正規のSEO見出しで頻出する語のため、含まれているだけで削除すると
+        // 「○○の選び方」「コルクマット完全ガイド」みたいな正当な H2 まで誤削除し、
+        // before_first_h2 のマーカーが入らなくなる事故が発生していた。
         $intro_keywords = [
-            'とは', '結論', '選ぶポイント', '選定ポイント', '本記事の', '解説',
-            'について', 'を知る', '記事のポイント',
-            '完全ガイド', '完全攻略', '徹底ガイド', '徹底解説', '徹底比較',
-            'おすすめ', '比較', 'ランキング', '選び方', '選定基準',
+            'とは', '結論', '本記事の', 'について', 'を知る', '記事のポイント',
+            'この記事では', 'この記事の目的', 'はじめに',
         ];
         $is_intro = false;
         foreach ($intro_keywords as $kw) {
@@ -267,29 +270,20 @@ class Affiros_Rewrite_Marker_Inserter {
             }
         }
 
-        // タイトルとの類似度（タイトル繰り返しH2の対策）
+        // (b) タイトルそのものの繰り返し H2 だけ削除（誤削除を抑える）
         if (!$is_intro && $title !== '') {
             $norm = function ($s) {
                 return mb_strtolower(preg_replace('/[\s\|｜・:：－—\-　]+/u', '', (string)$s), 'UTF-8');
             };
             $nt = $norm($title);
             $nh = $norm($h2_inner);
-            if ($nt !== '' && $nh !== '') {
-                if (mb_strpos($nt, $nh) !== false || mb_strpos($nh, $nt) !== false) {
+            if ($nt !== '' && $nh !== '' && mb_strlen($nh) >= 8) {
+                if ($nh === $nt) {
                     $is_intro = true;
-                } else {
-                    $t_chars = self::unique_chars($nt);
-                    $h_chars = self::unique_chars($nh);
-                    $common = 0;
-                    foreach ($t_chars as $c) {
-                        if (in_array($c, $h_chars, true)) {
-                            $common++;
-                        }
-                    }
-                    $ratio = $common / max(1, count($t_chars));
-                    if ($ratio >= 0.7) {
-                        $is_intro = true;
-                    }
+                } elseif (mb_strpos($nt, $nh) !== false && mb_strlen($nh) >= mb_strlen($nt) * 0.85) {
+                    $is_intro = true;
+                } elseif (mb_strpos($nh, $nt) !== false && mb_strlen($nt) >= mb_strlen($nh) * 0.85) {
+                    $is_intro = true;
                 }
             }
         }
@@ -301,8 +295,16 @@ class Affiros_Rewrite_Marker_Inserter {
     }
 
     /**
-     * サマリー/比較系のH2セクションを削除する。
-     * 本体 strip_summary_table_sections の移植。
+     * 「早見表」セクションだけを削除する。
+     *
+     * ⚠️ 旧版は「比較表/比較一覧/一覧表/スペック比較/スペック表/主要スペック/
+     * ラインナップ/商品比較」も削除キーワードに入れており、コラム記事の正規の
+     * 比較表セクションを丸ごと消して内容欠落＋マーカー位置ずれを引き起こす
+     * 原因になっていた。比較表はユーザーの正当なコンテンツなので削除しない。
+     * 生成プロンプトで「作るな」と明示している「早見表」だけを掃除する。
+     *
+     * (b) の「H2直後にtable」マッチも、コラム記事の正規 H2 + table 構造を
+     * 丸ごと消す副作用があったため削除した。
      */
     private static function strip_summary_table_sections($html) {
         if ($html === '' || $html === null) {
@@ -310,33 +312,19 @@ class Affiros_Rewrite_Marker_Inserter {
         }
         $text = (string)$html;
 
-        // (a) 比較・要約系キーワードを含むH2のセクション削除
-        $kw = '早見表|比較表|比較一覧|一覧表|スペック比較|スペック表|主要スペック|ラインナップ|商品比較|一目で|早分かり|早わかり';
+        $kw = '早見表|早分かり|早わかり|一目でわかる|一目で分かる';
         $pat_keyword = '/(?:<!--\s*wp:heading[^>]*-->\s*)?'
             . '<h2[^>]*>(?:(?!<\/h2>)[\s\S])*?(?:' . $kw . ')(?:(?!<\/h2>)[\s\S])*?<\/h2>'
             . '(?:\s*<!--\s*\/wp:heading\s*-->)?'
             . '[\s\S]*?'
             . '(?=<h2|<!--\s*wp:heading|<h3[^>]*>\s*(?:<!--\s*wp:[^>]*-->\s*)?(?:第\s*)?[\d０-９]+\s*位|$)/iu';
-        // (b) H2直後に table が来ているセクションも削除
-        $pat_table = '/(?:<!--\s*wp:heading[^>]*-->\s*)?'
-            . '<h2[^>]*>(?:(?!<\/h2>)[\s\S])*?<\/h2>'
-            . '(?:\s*<!--\s*\/wp:heading\s*-->)?'
-            . '\s*(?:<!--\s*wp:[^>]*-->\s*)?\s*<table\b[\s\S]*?<\/table>'
-            . '(?:\s*<!--\s*\/wp:[^>]*-->)?'
-            . '[\s\S]*?'
-            . '(?=<h2|<!--\s*wp:heading|<h3[^>]*>\s*(?:<!--\s*wp:[^>]*-->\s*)?(?:第\s*)?[\d０-９]+\s*位|$)/iu';
 
-        // 各パターンを2回適用（複数セクション対策）。
-        // preg_replace は失敗時（バックトラック上限等）に null を返すので、
-        // その場合は前処理を諦めて元のHTMLを保つ。
-        foreach ([$pat_keyword, $pat_table] as $pat) {
-            for ($i = 0; $i < 2; $i++) {
-                $replaced = preg_replace($pat, '', $text);
-                if ($replaced === null) {
-                    return (string)$html;
-                }
-                $text = $replaced;
+        for ($i = 0; $i < 2; $i++) {  // 複数早見表に対応
+            $replaced = preg_replace($pat_keyword, '', $text);
+            if ($replaced === null) {
+                return (string)$html;
             }
+            $text = $replaced;
         }
         return $text;
     }
