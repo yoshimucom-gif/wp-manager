@@ -6829,11 +6829,22 @@ def publish_article(article_id):
                 a['wp_post_id'] = post_data['id']
                 a['wp_url'] = post_data.get('link', '')
                 a['published_at'] = now_iso()
+                # 成功したので過去のエラー痕跡を消す（対応履歴に古い⚠️を残さない）
+                a.pop('last_publish_error', None)
+                a.pop('last_publish_attempted_at', None)
                 break
         save_articles(articles)
         return jsonify({'success': True, 'wp_url': post_data.get('link', ''), 'wp_post_id': post_data['id']})
     except requests.exceptions.RequestException as e:
-        return jsonify({'error': f'WordPress投稿エラー: {describe_wp_request_error(e)}'}), 500
+        err_msg = describe_wp_request_error(e)
+        # 失敗を articles.json に記録して対応履歴で視認可能にする
+        for a in articles:
+            if a['id'] == article_id:
+                a['last_publish_error'] = err_msg
+                a['last_publish_attempted_at'] = now_iso()
+                break
+        save_articles(articles)
+        return jsonify({'error': f'WordPress投稿エラー: {err_msg}'}), 500
 
 
 @app.route('/api/articles/<article_id>/unlink-wp', methods=['POST'])
@@ -6870,6 +6881,16 @@ def repair_article_post(article_id):
         return jsonify({'error': '記事が見つかりません'}), 404
 
     settings = load_settings()
+
+    def _record_publish_error(err_text):
+        """失敗を articles.json に記録（対応履歴の⚠️バッジ用）。"""
+        for a in articles:
+            if a['id'] == article_id:
+                a['last_publish_error'] = err_text
+                a['last_publish_attempted_at'] = now_iso()
+                break
+        save_articles(articles)
+
     try:
         post_data, clean_content, repair_info = update_wordpress_post_from_article(article, settings)
         for a in articles:
@@ -6880,6 +6901,9 @@ def repair_article_post(article_id):
                 a['wp_url'] = post_data.get('link', a.get('wp_url', ''))
                 a['repaired_at'] = now_iso()
                 a['updated_at'] = now_iso()
+                # 成功したので過去のエラー痕跡を消す
+                a.pop('last_publish_error', None)
+                a.pop('last_publish_attempted_at', None)
                 apply_score_fields(a)
                 break
         save_articles(articles)
@@ -6893,18 +6917,25 @@ def repair_article_post(article_id):
             'wp_matches_sent': repair_info.get('wp_matches_sent'),
         })
     except ValueError as e:
+        _record_publish_error(str(e))
         return jsonify({'error': str(e)}), 400
     except requests.exceptions.HTTPError as e:
         status_code = e.response.status_code if e.response is not None else 0
         if status_code == 404:
+            err_msg = f'WordPress側で投稿ID {article.get("wp_post_id")} が見つかりません（削除された可能性）'
+            _record_publish_error(err_msg)
             return jsonify({
-                'error': f'WordPress側で投稿ID {article.get("wp_post_id")} が見つかりません（削除された可能性）',
+                'error': err_msg,
                 'wp_post_not_found': True,
                 'wp_post_id': article.get('wp_post_id'),
             }), 404
-        return jsonify({'error': f'WordPress上書き更新エラー: {str(e)}'}), 500
+        err_msg = f'WordPress上書き更新エラー: {str(e)}'
+        _record_publish_error(err_msg)
+        return jsonify({'error': err_msg}), 500
     except requests.exceptions.RequestException as e:
-        return jsonify({'error': f'WordPress上書き更新エラー: {str(e)}'}), 500
+        err_msg = f'WordPress上書き更新エラー: {describe_wp_request_error(e)}'
+        _record_publish_error(err_msg)
+        return jsonify({'error': err_msg}), 500
 
 
 @app.route('/api/articles/bulk-repair-posts', methods=['POST'])
@@ -7052,16 +7083,21 @@ def batch_publish():
             except Exception as e:
                 return False, None, None, str(e)
 
+        # 失敗バッファ: {article_id: error_text}
+        fail_buf = {}
+
         def _flush_buf(force=False):
-            """result_buf を articles.json に一括書き込み（10件ごと or 強制）"""
+            """result_buf / fail_buf を articles.json に一括書き込み（10件ごと or 強制）"""
             with result_lock:
-                if not result_buf:
+                if not result_buf and not fail_buf:
                     return
                 # force=True か 10件以上溜まった時のみ書き込む
-                if not force and len(result_buf) < 10:
+                if not force and (len(result_buf) + len(fail_buf)) < 10:
                     return
                 to_write = dict(result_buf)
+                to_fail = dict(fail_buf)
                 result_buf.clear()
+                fail_buf.clear()
             with _DATA_LOCK:
                 arts = load_articles()
                 for a in arts:
@@ -7071,6 +7107,14 @@ def batch_publish():
                         a['wp_post_id']   = entry[0]
                         a['wp_url']       = entry[1]
                         a['published_at'] = entry[2]
+                        # 成功したので過去のエラー痕跡を消す
+                        a.pop('last_publish_error', None)
+                        a.pop('last_publish_attempted_at', None)
+                        continue
+                    err = to_fail.get(a['id'])
+                    if err:
+                        a['last_publish_error'] = err
+                        a['last_publish_attempted_at'] = now_iso()
                 save_articles(arts)
 
         done = 0
@@ -7095,6 +7139,9 @@ def batch_publish():
                         j = _PUBLISH_JOBS[job_id]
                         j['failed'] += 1
                         j['errors'].append({'title': article['title'], 'error': err})
+                    # 失敗を fail_buf に積んで articles.json にも反映させる
+                    with result_lock:
+                        fail_buf[article['id']] = err or 'unknown error'
 
                 done += 1
                 with _PUBLISH_JOBS_LOCK:
@@ -7205,19 +7252,33 @@ def _run_sched_publish_worker(job_id, targets):
         settings = load_settings()
 
     for article in targets:
+        def _record_sched_error(err_text):
+            """schedule-publish の失敗を articles.json に記録（対応履歴の⚠️表示用）。"""
+            with _DATA_LOCK:
+                arts = load_articles()
+                for a in arts:
+                    if a['id'] == article['id']:
+                        a['last_publish_error'] = err_text
+                        a['last_publish_attempted_at'] = now_iso()
+                        break
+                save_articles(arts)
+
         raw_sched = (article.get('schedule_date') or '').strip()
         if not raw_sched:
             _SCHED_PUBLISH_JOBS[job_id]['error'] += 1
             _SCHED_PUBLISH_JOBS[job_id]['errors'].append(
                 {'title': article.get('title', ''), 'error': '予約日（schedule_date）が未設定です'})
+            _record_sched_error('予約日（schedule_date）が未設定です')
             _SCHED_PUBLISH_JOBS[job_id]['completed'] += 1
             continue
 
         sched_dt = _parse_schedule_date(raw_sched)
         if sched_dt is None:
+            err = f'予約日の形式が不正です: {raw_sched}'
             _SCHED_PUBLISH_JOBS[job_id]['error'] += 1
             _SCHED_PUBLISH_JOBS[job_id]['errors'].append(
-                {'title': article.get('title', ''), 'error': f'予約日の形式が不正です: {raw_sched}'})
+                {'title': article.get('title', ''), 'error': err})
+            _record_sched_error(err)
             _SCHED_PUBLISH_JOBS[job_id]['completed'] += 1
             continue
 
@@ -7228,6 +7289,7 @@ def _run_sched_publish_worker(job_id, targets):
             _SCHED_PUBLISH_JOBS[job_id]['error'] += 1
             _SCHED_PUBLISH_JOBS[job_id]['errors'].append(
                 {'title': article.get('title', ''), 'error': 'サイト未設定'})
+            _record_sched_error('サイト未設定')
             _SCHED_PUBLISH_JOBS[job_id]['completed'] += 1
             continue
 
@@ -7264,17 +7326,24 @@ def _run_sched_publish_worker(job_id, targets):
                         a['wp_url'] = post_data.get('link', '')
                         a['scheduled_at'] = sched_dt_str
                         a['published_at'] = now_iso()
+                        # 成功したので過去のエラー痕跡を消す
+                        a.pop('last_publish_error', None)
+                        a.pop('last_publish_attempted_at', None)
                         break
                 save_articles(articles)
             _SCHED_PUBLISH_JOBS[job_id]['success'] += 1
         except requests.exceptions.RequestException as e:
+            err = describe_wp_request_error(e)
             _SCHED_PUBLISH_JOBS[job_id]['error'] += 1
             _SCHED_PUBLISH_JOBS[job_id]['errors'].append(
-                {'title': article.get('title', ''), 'error': describe_wp_request_error(e)})
+                {'title': article.get('title', ''), 'error': err})
+            _record_sched_error(err)
         except Exception as e:
+            err = str(e)
             _SCHED_PUBLISH_JOBS[job_id]['error'] += 1
             _SCHED_PUBLISH_JOBS[job_id]['errors'].append(
-                {'title': article.get('title', ''), 'error': str(e)})
+                {'title': article.get('title', ''), 'error': err})
+            _record_sched_error(err)
 
         _SCHED_PUBLISH_JOBS[job_id]['completed'] += 1
 

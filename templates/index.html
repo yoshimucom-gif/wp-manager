@@ -1246,6 +1246,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             <option value="generated">生成済</option>
             <option value="published">PUSH済</option>
             <option value="error">エラー</option>
+            <option value="publish_failed">⚠️ PUSH失敗のみ</option>
           </select>
           <select id="article-marker-filter" style="font-size:12px;" onchange="filterArticles()" title="マーカー検証結果で絞り込み">
             <option value="">マーカー状態：全て</option>
@@ -2974,13 +2975,16 @@ function filterArticles() {
   // 記事種別
   if (typeFilter) filtered = filtered.filter(a => (a.article_type || 'ranking') === typeFilter);
 
-  // 状態（4択 - 未生成は除外済）
+  // 状態（5択 - 未生成は除外済）
   if (statusFilter === 'generated') {
     filtered = filtered.filter(a => a.status === 'generated');
   } else if (statusFilter === 'published') {
     filtered = filtered.filter(a => ['published', 'scheduled', 'updated'].includes(a.status));
   } else if (statusFilter === 'error') {
     filtered = filtered.filter(a => a.status === 'error');
+  } else if (statusFilter === 'publish_failed') {
+    // 直近のWP PUSH試行で失敗した記事（403/WAF等）。再試行対象。
+    filtered = filtered.filter(a => !!a.last_publish_error);
   }
 
   // マーカー状態フィルタ
@@ -3070,6 +3074,15 @@ function renderArticles(articles) {
     const statusDetail = statusDetailText
       ? `<div style="font-size:10px;color:${statusDetailColor};margin-top:4px">${esc(statusDetailText)}</div>`
       : '';
+    // WP PUSH失敗のサブライン（403等）。成功すれば last_publish_error は消えるので、
+    // ここに表示が残っている＝直近の試行で失敗したまま、を意味する。
+    const publishErrText = a.last_publish_error || '';
+    const publishErrAt = a.last_publish_attempted_at
+      ? ` (${fmtDate(a.last_publish_attempted_at)})`
+      : '';
+    const publishErrBadge = publishErrText
+      ? `<div style="font-size:10px;color:var(--danger);margin-top:4px;font-weight:600" title="${esc(publishErrText)}">⚠️ 前回PUSH失敗${publishErrAt}</div>`
+      : '';
     // 行アクションは固定2×2グリッド。出ないボタンは空スロットにして
     // 他ボタンの位置が動かないようにする（並びのがちゃがちゃ防止）。
     const _bs = 'style="font-size:11px;padding:3px 7px;width:100%"';
@@ -3093,7 +3106,7 @@ function renderArticles(articles) {
       <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.title)}">${esc(a.title)}</td>
       <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)" title="${esc(a.keywords)}">${esc(a.keywords)}</td>
       <td>${scoreBadge(a)}</td>
-      <td>${statusBadge(a.status)}${statusDetail}</td>
+      <td>${statusBadge(a.status)}${statusDetail}${publishErrBadge}</td>
       <td>${markerStatusBadge(a)}</td>
       <td style="color:var(--muted);font-size:11px;white-space:nowrap">${a.generated_at ? fmtDate(a.generated_at) : '—'}</td>
       <td>
