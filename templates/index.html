@@ -1810,6 +1810,30 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.1 (2026-06-08) — Claudeのハルシネーション抑制＋ブランドミスマッチ検出</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: リライタの7選記事で 4-6位 の H3 商品名が候補リスト外（「エレコム」「山崎実業」「LIKENNY」等の架空ブランド）になり、商品挿入時に全く違う商品が貼られるミスマッチが発生していた。</li>
+              <li><strong>A. プロンプト最強化（本体・リライタ両方）</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>「候補リスト外のブランドを書くのは厳禁。挿入時にミスマッチ事故が発生する」を断定的に明示</li>
+                  <li>「ランキング多様性のために記憶を元にブランド名を出さない」を強調</li>
+                  <li>候補にブランドが少ない場合は「同じブランドの別商品バリエーション」で構成するよう指示</li>
+                </ul>
+              </li>
+              <li><strong>B. ブランドミスマッチ検出（インサーター v1.9.14）</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>extract_brand_from_h3()</code>: H3「N位：BRAND CATEGORY」の BRAND 部分を抽出</li>
+                  <li>挿入商品の <code>brand</code> プロパティと双方向 substring 一致で判定</li>
+                  <li>不一致なら <code>_ai_pi_brand_mismatch_count</code> / <code>_ai_pi_brand_mismatch_details</code> メタに記録</li>
+                  <li>バルク処理 UI で「⚠️ ブランド不一致 N件」を黄色で表示</li>
+                  <li>完了サマリにも累計件数を表示してユーザーが対応判断できるように</li>
+                </ul>
+              </li>
+              <li><strong>リライタ v0.4.28 / インサーター v1.9.14 同期</strong>。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.0 (2026-06-08) — ランキング4位以降の注意点ブロック・向いている人ulを物理削除</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>4位以降の装飾を SEO + CV 観点で最適化</strong> — ランキング H3 のうち 4位以降から「注意点赤字ブロック」と「向いている人 ul」を物理削除。1〜3位のみ詳細解説を維持する密度勾配を強制適用。</li>

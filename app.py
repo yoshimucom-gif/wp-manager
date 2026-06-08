@@ -212,7 +212,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.0'
+APP_VERSION = '1.7.1'
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -1105,6 +1105,27 @@ def article_html_output_rules():
 
   詳細なキャッチコピー・効能語は本文 <p> 内や商品カード内で表現すればよい。
   H3 では**識別しやすさと商品検索精度**を最優先で短くまとめる。
+
+  【ハルシネーション禁止（最重要）】
+  以下が「商品候補リスト」として渡されている場合、**そのリストに含まれる
+  ブランド名・商品名のみを使用すること**。リストに無いブランド名・商品名を
+  H3 に書くと、後段の商品挿入処理で別商品が挿入される事故（ミスマッチ）が
+  発生する。
+
+  ❌ NG: 候補リストに「Ezprotekt」「サムコス」「TLS LIFE」しかないのに、
+     ランキング多様性のために「エレコム」「山崎実業」「LIKENNY」などを
+     **記憶を元に想像で書く**こと。それらは Amazon/楽天 に該当商品が
+     無いため、挿入時に全く違う商品が貼られる。
+
+  ✅ OK: 候補リストにあるブランドが少ない場合は、**同じブランドの別商品
+     バリエーション**（例: Ezprotekt の通常モデルと耐衝撃モデル）で
+     ランキングを構成する。多様性より候補リスト遵守を優先する。
+
+  ✅ OK: どうしても多様性が欲しい場合は、候補リストの中で**ブランドが
+     違うもの**を選ぶ。候補に無いブランドを勝手に追加するのは厳禁。
+
+  **候補リスト外のブランドを書いた時点でその H3 は無効と判断される**。
+  記事品質スコアでも減点対象になる。
 
 - 文章の冗長を避ける（SEO Helpful Content 観点・重要）:
   Google は「内容の薄い長文」を低品質と判断する。情報の密度を保ち、
@@ -5531,9 +5552,9 @@ def favicon():
 PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugin-downloads')
 PLUGIN_DOWNLOADS = {
     'product-inserter': {
-        'file': 'affiros-product-inserter-1.9.13.zip',
+        'file': 'affiros-product-inserter-1.9.14.zip',
         'name': 'Affiros プロダクトインサーター',
-        'version': '1.9.13',
+        'version': '1.9.14',
     },
     'decoration': {
         'file': 'affiros-decoration-1.2.1.zip',
@@ -5541,9 +5562,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.2.1',
     },
     'rewrite': {
-        'file': 'affiros-rewrite-0.4.27.zip',
+        'file': 'affiros-rewrite-0.4.28.zip',
         'name': 'Affiros リライター',
-        'version': '0.4.27',
+        'version': '0.4.28',
     },
     'categorizer': {
         'file': 'affiros-categorizer-0.1.0.zip',

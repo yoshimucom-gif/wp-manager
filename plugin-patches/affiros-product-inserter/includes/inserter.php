@@ -110,6 +110,23 @@ class AI_PI_Inserter {
             update_post_meta($post_id, '_ai_pi_total_usage', $result['usage']);
             update_post_meta($post_id, '_ai_pi_status', $verification['status']);
 
+            // ハルシネーション検出結果を保存（per_heading モードのみ提供される）
+            $bm_count = intval($result['brand_match_count'] ?? 0);
+            $bmm_count = intval($result['brand_mismatch_count'] ?? 0);
+            $bmm_details = $result['brand_mismatch_details'] ?? [];
+            $total_judged = $bm_count + $bmm_count;
+            if ($total_judged > 0) {
+                update_post_meta($post_id, '_ai_pi_brand_match_count', $bm_count);
+                update_post_meta($post_id, '_ai_pi_brand_mismatch_count', $bmm_count);
+                update_post_meta($post_id, '_ai_pi_brand_mismatch_details', $bmm_details);
+                $result['brand_mismatch_count'] = $bmm_count;
+                $result['brand_mismatch_details'] = $bmm_details;
+            } else {
+                delete_post_meta($post_id, '_ai_pi_brand_match_count');
+                delete_post_meta($post_id, '_ai_pi_brand_mismatch_count');
+                delete_post_meta($post_id, '_ai_pi_brand_mismatch_details');
+            }
+
             if ($verification['residual_before'] > 0) {
                 update_post_meta($post_id, '_ai_pi_residual_markers', $verification['residual_before']);
                 self::log_failure(
@@ -600,13 +617,68 @@ class AI_PI_Inserter {
             $content
         );
 
+        // ハルシネーション検出: 各マーカーの H3 ブランドと挿入商品ブランドを比較
+        $brand_mismatch_count = 0;
+        $brand_match_count = 0;
+        $mismatch_details = [];
+        foreach ($marker_headings as $idx => $h3_text) {
+            if (!isset($selections_by_index[$idx])) continue;
+            $sel = $selections_by_index[$idx];
+            $product = AI_PI_Product_Selector::find_by_id($all_candidates_pool, $sel['product_id']);
+            if (!$product) continue;
+            $h3_brand = self::extract_brand_from_h3($h3_text);
+            $product_brand = $product['brand'] ?? '';
+            // ブランド名の双方向 substring 一致（大小無視）で判定
+            // 例: H3「LIKENNY」 vs 商品ブランド「GEJ-Tech」 → 不一致
+            //     H3「Ezprotekt」 vs 商品ブランド「Ezprotekt」 → 一致
+            if ($h3_brand && $product_brand) {
+                $match = (mb_stripos($product_brand, $h3_brand) !== false)
+                    || (mb_stripos($h3_brand, $product_brand) !== false);
+                if ($match) {
+                    $brand_match_count++;
+                } else {
+                    $brand_mismatch_count++;
+                    $mismatch_details[] = [
+                        'h3_text'       => $h3_text,
+                        'h3_brand'      => $h3_brand,
+                        'product_title' => $product['title'] ?? '',
+                        'product_brand' => $product_brand,
+                    ];
+                }
+            }
+        }
+
         return [
             'new_content' => $new_content,
             'products' => $selected_products,
             'headings' => $marker_headings,
             'queries' => $search_queries,
             'usage' => $total_usage,
+            'brand_match_count'    => $brand_match_count,
+            'brand_mismatch_count' => $brand_mismatch_count,
+            'brand_mismatch_details' => $mismatch_details,
         ];
+    }
+
+    /**
+     * H3 テキストからブランド名を抽出する。
+     * 「N位：BRAND CATEGORY (識別語)」のような形式から、順位部分を除いた
+     * 最初の語（スペースまたは括弧まで）を返す。
+     *
+     * 例:
+     *   「1位：Ezprotekt キャスターストッパー（5個セット）」 → "Ezprotekt"
+     *   「5位：エレコム キャスタースリップストッパー」 → "エレコム"
+     */
+    private static function extract_brand_from_h3($h3_text) {
+        if (!$h3_text) return '';
+        $text = (string)$h3_text;
+        // 順位プレフィックス除去
+        $text = preg_replace('/^[\s　]*(?:第)?[0-9０-９]+\s*位\s*[:：][\s　]*/u', '', $text);
+        // 最初の語（スペース・括弧まで）を取得
+        if (preg_match('/^([^\s（(]+)/u', $text, $m)) {
+            return trim($m[1]);
+        }
+        return '';
     }
 
     /**

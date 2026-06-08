@@ -257,7 +257,7 @@
         });
 
         // 一括処理の集計（push 後に最終サマリーで使う）
-        let bulkSummary = { total: 0, success: 0, partial: 0, failure: 0, residual_total: 0 };
+        let bulkSummary = { total: 0, success: 0, partial: 0, failure: 0, residual_total: 0, brand_mismatch_total: 0 };
 
         function processBulkOne(ids, index, mode, design) {
             if (bulkStopped || index >= ids.length) {
@@ -281,9 +281,14 @@
                 bulkSummary.total++;
                 if (response.success) {
                     const d = response.data;
+                    const bmm = parseInt(d.brand_mismatch_count || 0, 10);
+                    if (bmm > 0) bulkSummary.brand_mismatch_total += bmm;
                     if (d.result === 'success') {
                         bulkSummary.success++;
-                        appendLog('success', '✅ ID:' + d.post_id + ' ' + escapeHtml(d.title || '') + ' (商品' + d.product_count + '個挿入)');
+                        const bmmTag = bmm > 0
+                            ? ' <span style="color:#a06000">⚠️ ブランド不一致 ' + bmm + '件</span>'
+                            : '';
+                        appendLog('success', '✅ ID:' + d.post_id + ' ' + escapeHtml(d.title || '') + ' (商品' + d.product_count + '個挿入)' + bmmTag);
                     } else if (d.result === 'partial') {
                         // 確実性ガード違反：raw マーカーが残ったので退避された
                         bulkSummary.partial++;
@@ -329,10 +334,14 @@
                 msg += '<br><span style="font-weight:normal">退避された残存マーカー: '
                     + s.residual_total + ' 件。「⚠️ マーカー残存」フィルタで再処理してください。</span>';
             }
+            if (s.brand_mismatch_total > 0) {
+                msg += '<br><span style="font-weight:normal;color:#a06000">⚠️ ブランド不一致: '
+                    + s.brand_mismatch_total + ' 件（H3 商品名と実商品のブランドが違う）。記事を確認して必要なら H3 を修正してください。</span>';
+            }
             msg += '</div>';
             $('.aipi-progress-log').prepend(msg);
             // 次のバッチに備えて集計をリセット
-            bulkSummary = { total: 0, success: 0, partial: 0, failure: 0, residual_total: 0 };
+            bulkSummary = { total: 0, success: 0, partial: 0, failure: 0, residual_total: 0, brand_mismatch_total: 0 };
         }
 
         function appendLog(type, message) {

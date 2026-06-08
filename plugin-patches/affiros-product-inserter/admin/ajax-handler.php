@@ -152,16 +152,18 @@ function ai_pi_ajax_bulk_process_one() {
     // 挿入後検証の結果に応じて success / partial を区別する。
     // partial = カードはいくつか入ったが raw マーカーが残った（uninserted コメントに退避済み）
     $status = $result['status'] ?? 'success';
+    $bmm_count = intval($result['brand_mismatch_count'] ?? 0);
     wp_send_json_success([
-        'post_id'         => $post_id,
-        'title'           => get_the_title($post_id),
-        'result'          => $status === 'success' ? 'success' : 'partial',
-        'status'          => $status,
-        'product_count'   => count($result['products'] ?? []),
-        'residual_count'  => intval($result['residual_before_neutralize'] ?? 0),
-        'edit_url'        => get_edit_post_link($post_id, ''),
-        'message'         => $status === 'success'
-            ? null
+        'post_id'              => $post_id,
+        'title'                => get_the_title($post_id),
+        'result'               => $status === 'success' ? 'success' : 'partial',
+        'status'               => $status,
+        'product_count'        => count($result['products'] ?? []),
+        'residual_count'       => intval($result['residual_before_neutralize'] ?? 0),
+        'brand_mismatch_count' => $bmm_count,
+        'edit_url'             => get_edit_post_link($post_id, ''),
+        'message'              => $status === 'success'
+            ? ($bmm_count > 0 ? sprintf('挿入完了。ただしブランドミスマッチが %d 件あります（H3 商品名と実商品ブランドが不一致）。', $bmm_count) : null)
             : sprintf('マーカー %d 件が挿入できず退避しました。再処理してください。', intval($result['residual_before_neutralize'] ?? 0)),
     ]);
 }
