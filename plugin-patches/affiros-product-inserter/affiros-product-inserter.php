@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros プロダクトインサーター
  * Description: AIが記事内容を解析し、Amazon・楽天市場の最適な商品アフィリエイトカードを自動挿入するプラグイン
- * Version: 1.9.11
+ * Version: 1.9.12
  * Author: AI Product Inserter
  * License: GPL v2 or later
  * Text Domain: ai-product-inserter
@@ -34,9 +34,37 @@ if (defined('AI_PI_VERSION')) {
     return;
 }
 
-define('AI_PI_VERSION', '1.9.1');
+define('AI_PI_VERSION', '1.9.12');
 define('AI_PI_PATH', plugin_dir_path(__FILE__));
 define('AI_PI_URL', plugin_dir_url(__FILE__));
+
+/**
+ * 1.9.11 で商品挿入のデフォルトモデルを Sonnet 4.6 → Haiku 4.5 に変更したが、
+ * 既存ユーザーの wp_options には Sonnet が保存されたまま残るため、コードの
+ * default 変更だけでは反映されない。
+ *
+ * このマイグレーションは「保存値が旧 default の Sonnet 4.6」だった人だけを
+ * Haiku 4.5 に1回だけ書き換える。明示的に Opus/Haiku を選んでいる人は対象外。
+ * 一度走ったら ai_pi_default_model_migrated フラグで二度走らないように記録する。
+ *
+ * 想定外の自動切替を避けたい場合は wp-config.php に
+ *   define('AI_PI_SKIP_HAIKU_MIGRATION', true);
+ * を入れるとスキップする。
+ */
+add_action('plugins_loaded', function () {
+    if (defined('AI_PI_SKIP_HAIKU_MIGRATION') && AI_PI_SKIP_HAIKU_MIGRATION) {
+        return;
+    }
+    if (get_option('ai_pi_default_model_migrated')) {
+        return;
+    }
+    $settings = get_option('ai_pi_settings');
+    if (is_array($settings) && ($settings['claude_model'] ?? '') === 'claude-sonnet-4-6') {
+        $settings['claude_model'] = 'claude-haiku-4-5-20251001';
+        update_option('ai_pi_settings', $settings);
+    }
+    update_option('ai_pi_default_model_migrated', '1.9.11');
+}, 5);
 
 // モジュール読み込み
 require_once AI_PI_PATH . 'includes/claude-api.php';
@@ -73,7 +101,7 @@ function ai_pi_activate() {
         add_option('ai_pi_settings', [
             // API
             'claude_api_key' => '',
-            'claude_model' => 'claude-sonnet-4-6',
+            'claude_model' => 'claude-haiku-4-5-20251001',
             'amazon_access_key' => '',
             'amazon_secret_key' => '',
             'amazon_partner_tag' => '',
