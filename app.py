@@ -7160,23 +7160,67 @@ def get_latest_publish_job():
 
 
 # Scheduled (future) publish
-def _run_sched_publish_worker(job_id, targets, daily_cap, start_date):
-    """予約投稿をバックグラウンドで処理するワーカー。"""
-    start_hour = 10
-    spacing_minutes = max(5, (12 * 60) // daily_cap)
+def _parse_schedule_date(raw):
+    """記事の schedule_date 文字列を datetime に正規化する。
 
+    受け付ける形式:
+      YYYY-MM-DD            → 時刻なし。10:00 を補完する。
+      YYYY-MM-DD HH:MM      → 秒は 00 を補完。
+      YYYY-MM-DD HH:MM:SS
+      YYYY/MM/DD …          → スラッシュも許容
+      YYYY-MM-DDTHH:MM[:SS] → ISO 区切り T も許容
+
+    不正な形式は None を返す。
+    """
+    if not raw:
+        return None
+    s = str(raw).strip().replace('/', '-').replace('T', ' ')
+    formats = [
+        '%Y-%m-%d %H:%M:%S',
+        '%Y-%m-%d %H:%M',
+        '%Y-%m-%d',
+    ]
+    for fmt in formats:
+        try:
+            dt = datetime.strptime(s, fmt)
+            if fmt == '%Y-%m-%d':
+                # 時刻が無い場合のフォールバック。CSV にカラム追加するほどでは
+                # ないので 10:00 固定にしておく。明示時刻を入れたければ
+                # "YYYY-MM-DD HH:MM" で書ける。
+                dt = dt.replace(hour=10)
+            return dt
+        except ValueError:
+            continue
+    return None
+
+
+def _run_sched_publish_worker(job_id, targets):
+    """予約投稿をバックグラウンドで処理するワーカー。
+
+    各記事の schedule_date を WP の `date` フィールドに使い、status=future で
+    送信する。スケジュールの組み立て（10:00 開始・daily_cap・spacing 等）は
+    廃止した。1記事=1スケジュールの単純モデル。
+    """
     with _DATA_LOCK:
         settings = load_settings()
 
-    for idx, article in enumerate(targets):
-        day_offset = idx // daily_cap
-        slot = idx % daily_cap
-        total_minutes = start_hour * 60 + slot * spacing_minutes
-        total_minutes = min(total_minutes, 23 * 60 + 59)
-        sched_dt = datetime(
-            start_date.year, start_date.month, start_date.day,
-            total_minutes // 60, total_minutes % 60, 0,
-        ) + timedelta(days=day_offset)
+    for article in targets:
+        raw_sched = (article.get('schedule_date') or '').strip()
+        if not raw_sched:
+            _SCHED_PUBLISH_JOBS[job_id]['error'] += 1
+            _SCHED_PUBLISH_JOBS[job_id]['errors'].append(
+                {'title': article.get('title', ''), 'error': '予約日（schedule_date）が未設定です'})
+            _SCHED_PUBLISH_JOBS[job_id]['completed'] += 1
+            continue
+
+        sched_dt = _parse_schedule_date(raw_sched)
+        if sched_dt is None:
+            _SCHED_PUBLISH_JOBS[job_id]['error'] += 1
+            _SCHED_PUBLISH_JOBS[job_id]['errors'].append(
+                {'title': article.get('title', ''), 'error': f'予約日の形式が不正です: {raw_sched}'})
+            _SCHED_PUBLISH_JOBS[job_id]['completed'] += 1
+            continue
+
         sched_dt_str = sched_dt.strftime('%Y-%m-%dT%H:%M:%S')
 
         wp_url, wp_user, wp_password = get_site_credentials(article, settings)
@@ -7240,17 +7284,13 @@ def _run_sched_publish_worker(job_id, targets, daily_cap, start_date):
 @app.route('/api/schedule-publish', methods=['POST'])
 @login_required
 def schedule_publish():
-    """予約投稿をバックグラウンドジョブとして開始し、job_id を即返す。"""
-    from datetime import date as _date
+    """予約投稿をバックグラウンドジョブとして開始し、job_id を即返す。
+
+    各記事の `schedule_date` を WP の公開日時として使う。アプリ側で
+    一括の開始日・1日上限・時刻を持つロジックは廃止した。
+    """
     data = request.get_json(silent=True) or {}
     article_ids = data.get('article_ids') or []
-    start_date_str = str(data.get('start_date') or '').strip()
-    daily_cap = clamp_int(data.get('daily_cap', 20), 20, 1, 200)
-
-    try:
-        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
-    except ValueError:
-        start_date = _date.today() + timedelta(days=1)
 
     with _DATA_LOCK:
         articles = load_articles()
@@ -7271,7 +7311,7 @@ def schedule_publish():
     }
     threading.Thread(
         target=_run_sched_publish_worker,
-        args=(job_id, targets, daily_cap, start_date),
+        args=(job_id, targets),
         daemon=True,
     ).start()
 
@@ -7529,7 +7569,6 @@ def get_settings():
         'amazon_partner_tag': settings.get('amazon_partner_tag', ''),
         'rakuten_app_id': mask_secret(settings.get('rakuten_app_id', ''), 10),
         'rakuten_affiliate_id': settings.get('rakuten_affiliate_id', ''),
-        'schedule_daily_cap': int(settings.get('schedule_daily_cap') or 20),
     }
     return jsonify(safe)
 
@@ -7582,9 +7621,8 @@ def update_settings():
     for key in ('amazon_partner_tag', 'rakuten_affiliate_id'):
         if key in data:
             settings[key] = str(data.get(key) or '').strip()
-    if 'schedule_daily_cap' in data:
-        settings['schedule_daily_cap'] = clamp_int(data['schedule_daily_cap'], 20, 1, 200)
     # card_insertion_mode はUIから廃止。マーカー挿入固定なので保存しない
+    # schedule_daily_cap は廃止。schedule_date を記事ごとに持つ方式に変更
     save_settings(settings)
     return jsonify({'success': True})
 

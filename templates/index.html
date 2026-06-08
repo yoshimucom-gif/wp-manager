@@ -1398,7 +1398,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
               <div><code>slug</code> — URL末尾（英数ハイフン推奨）</div>
               <div><code>article_type</code> — <code>ranking</code> / <code>brand</code> / <code>column</code></div>
               <div><code>ad_keywords</code> — 商品検索用キーワード</div>
-              <div><code>schedule_date</code> — 公開予定日（<code>2026-06-15</code> 形式）</div>
+              <div><code>schedule_date</code> — 公開予定日 <code>2026-06-15</code> または <code>2026-06-15 14:30</code>（時刻なしは10:00補完）</div>
               <div><code>memo</code> — メモ（任意）</div>
             </div>
             <div class="form-help" style="margin-top:10px;line-height:1.7">
@@ -1991,18 +1991,15 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
 
 <!-- Schedule Publish Modal -->
 <div class="modal-overlay" id="schedule-publish-modal">
-  <div class="modal" style="width:460px">
-    <div class="modal-title">// 予約投稿 割り当て</div>
-    <div id="schedule-publish-summary" style="font-size:13px;margin-bottom:16px;color:var(--muted)"></div>
-    <div class="form-group">
-      <label class="form-label">開始日</label>
-      <input type="date" id="sched-start-date" class="form-control" oninput="updateSchedPreview()">
+  <div class="modal" style="width:560px">
+    <div class="modal-title">// 予約投稿</div>
+    <div id="schedule-publish-summary" style="font-size:13px;margin-bottom:12px;color:var(--muted)"></div>
+    <div id="sched-preview" style="font-size:12px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px;margin-top:4px;line-height:1.7;max-height:320px;overflow-y:auto"></div>
+    <div class="form-help" style="margin-top:10px;font-size:11px;line-height:1.6">
+      各記事の <code>schedule_date</code>（公開予定日）で予約投稿します。<br>
+      <code>YYYY-MM-DD</code> 形式は 10:00 を自動補完。<code>YYYY-MM-DD HH:MM</code> 形式なら指定時刻を使用します。<br>
+      予約日が未設定の記事はエラー扱いとなり送信されません（記事編集画面で設定してください）。
     </div>
-    <div class="form-group">
-      <label class="form-label">1日の上限件数</label>
-      <input type="number" id="sched-daily-cap" class="form-control" min="1" max="200" value="20" style="width:100px" oninput="updateSchedPreview()">
-    </div>
-    <div id="sched-preview" style="font-size:12px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px;margin-top:4px;line-height:1.8"></div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeSchedulePublishModal()">キャンセル</button>
       <button class="btn btn-primary" id="sched-exec-btn" onclick="execSchedulePublish()">📅 予約投稿を実行</button>
@@ -3407,6 +3404,12 @@ async function quickPublish(id) {
 // ---- Schedule Publish ----
 let _scheduleTargetIds = [];
 
+function _schedEscapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function openSchedulePublishModal() {
   const ids = getSelectedIds();
   const targets = ids.filter(id => {
@@ -3419,40 +3422,42 @@ function openSchedulePublishModal() {
   }
   _scheduleTargetIds = targets;
 
-  // 開始日のデフォルト = 明日
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = tomorrow.toISOString().slice(0, 10);
-  document.getElementById('sched-start-date').value = tomorrowStr;
-  // 開始時刻は10:00固定（サーバー側で start_hour=10）
-
-  // 1日上限はモーダル内の入力が SoT（既定 20）。設定画面の項目は撤去済み。
-  document.getElementById('sched-daily-cap').value = 20;
+  // 対象記事の schedule_date 設定状況を集計
+  const articles = targets
+    .map(id => allArticles.find(a => a.id === id))
+    .filter(Boolean);
+  const withDate = articles.filter(a => String(a.schedule_date || '').trim());
+  const withoutDate = articles.filter(a => !String(a.schedule_date || '').trim());
 
   const summaryEl = document.getElementById('schedule-publish-summary');
-  summaryEl.textContent = `選択中: ${targets.length} 件（生成済み本文あり）`;
+  summaryEl.innerHTML =
+    `選択: <strong>${articles.length}</strong> 件 / `
+    + `予約日設定済み: <strong style="color:#16a34a">${withDate.length}</strong> 件 / `
+    + `未設定: <strong style="color:#dc2626">${withoutDate.length}</strong> 件`;
 
-  updateSchedPreview();
-  document.getElementById('schedule-publish-modal').classList.add('open');
-}
+  // プレビュー: schedule_date 順にソート
+  const sorted = [...withDate].sort((a, b) =>
+    String(a.schedule_date).localeCompare(String(b.schedule_date)));
 
-function updateSchedPreview() {
-  const count = _scheduleTargetIds.length;
-  const cap = Math.max(1, parseInt(document.getElementById('sched-daily-cap').value, 10) || 20);
-  const days = Math.ceil(count / cap);
-  const startDate = document.getElementById('sched-start-date').value;
-
-  let preview = `${count} 件を ${days} 日分に割り当て（1日最大 ${cap} 件）\n`;
-  preview += `初回公開: ${startDate} 10:00\n`;
-  preview += `※ 今すぐ全件WPに送信。以降はWPが自動公開します。\n`;
-
-  if (startDate) {
-    const endD = new Date(startDate);
-    endD.setDate(endD.getDate() + days - 1);
-    preview += `最終公開日: ${endD.toISOString().slice(0, 10)}`;
+  let preview = '';
+  if (sorted.length) {
+    preview += '<div style="font-weight:600;margin-bottom:6px;color:var(--fg)">📅 予約投稿スケジュール</div>';
+    sorted.forEach(a => {
+      preview += `<div><code>${_schedEscapeHtml(a.schedule_date)}</code> — ${_schedEscapeHtml(a.title)}</div>`;
+    });
   }
+  if (withoutDate.length) {
+    preview += '<div style="font-weight:600;margin-top:10px;color:#dc2626">⚠️ 予約日未設定（送信されません）</div>';
+    withoutDate.forEach(a => {
+      preview += `<div style="color:#dc2626">${_schedEscapeHtml(a.title)}</div>`;
+    });
+  }
+  if (!preview) {
+    preview = '<div>選択された記事がありません</div>';
+  }
+  document.getElementById('sched-preview').innerHTML = preview;
 
-  document.getElementById('sched-preview').textContent = preview;
+  document.getElementById('schedule-publish-modal').classList.add('open');
 }
 
 function closeSchedulePublishModal() {
@@ -3461,13 +3466,23 @@ function closeSchedulePublishModal() {
 }
 
 async function execSchedulePublish() {
-  const startDate = document.getElementById('sched-start-date').value;
-  if (!startDate) { toast('開始日を入力してください', 'error'); return; }
-
-  const dailyCap = Math.max(1, parseInt(document.getElementById('sched-daily-cap').value, 10) || 20);
   const count = _scheduleTargetIds.length;
+  if (!count) { toast('対象がありません', 'error'); return; }
 
-  if (!confirm(`${count} 件をWPに送信し、${startDate} 以降に順次公開するよう予約します。よろしいですか？`)) return;
+  // 予約日が設定された件数を再確認
+  const withDate = _scheduleTargetIds.filter(id => {
+    const a = allArticles.find(x => x.id === id);
+    return a && String(a.schedule_date || '').trim();
+  }).length;
+
+  if (!withDate) {
+    toast('予約日（schedule_date）が設定された記事がありません', 'error');
+    return;
+  }
+
+  const msg = `${count} 件をWPに送信します（うち予約日設定済み: ${withDate} 件）。\n`
+    + `各記事の schedule_date 日時で WP が自動公開します。よろしいですか？`;
+  if (!confirm(msg)) return;
 
   const btn = document.getElementById('sched-exec-btn');
   const preview = document.getElementById('sched-preview');
@@ -3479,7 +3494,7 @@ async function execSchedulePublish() {
     const res = await fetch('/api/schedule-publish', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ article_ids: _scheduleTargetIds, start_date: startDate, daily_cap: dailyCap }),
+      body: JSON.stringify({ article_ids: _scheduleTargetIds }),
     });
     const data = await res.json();
     if (!res.ok || data.error) { toast(data.error || '開始失敗', 'error'); return; }
