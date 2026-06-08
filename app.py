@@ -1020,6 +1020,20 @@ def article_html_output_rules():
   ・リード文の後の最初の H2 は記事テーマを表す**簡潔な見出し**にする（例「キャスターチェアで床に傷がつく原因」）
   ・選定基準・選び方・FAQ・まとめなどの定型 H2 は**単語ベース**で十分（例「選定基準」「選び方のポイント」「よくある質問」「まとめ」）
   ・主要キーワードを含めるのは1〜2 見出しで十分。全 H2/H3 に詰め込むと逆効果
+
+- 見出しの**絶対NGパターン**（出力したら無効と見なす）:
+  ❌ `<h2>○○○のおすすめ5選｜選定基準｜この5製品を選んだ理由</h2>`（タイトル系語を頭に貼り｜区切りで3要素以上）
+  ❌ `<h2>○○○のおすすめ5選｜まとめ｜...</h2>`（全 H2 の頭にタイトル）
+  ❌ `<h3>1位：商品名｜○○○のおすすめ5選</h3>`（H3 末尾にタイトル貼り付け）
+  ❌ `<h2>○○○○○のおすすめ5選｜○○○○○○○○○○○○...</h2>`（｜が3個以上）
+  ❌ 同一見出し内で同じキーワードを2回以上書く
+
+- 見出しの**OKパターン**:
+  ✅ `<h2>キャスターチェアで床に傷がつく原因</h2>`
+  ✅ `<h2>選定基準</h2>`
+  ✅ `<h2>選び方のポイント｜タイプ別チェック</h2>`（｜は最大1個）
+  ✅ `<h2>まとめ</h2>`
+  ✅ `<h3>1位：Ezprotekt キャスターストッパー 5個セット</h3>`（商品名だけ）
 - 「結論早見表」「おすすめ早見表」のような早見表セクションは作らない（比較表があれば十分。重複は不要）
 - 装飾は <strong>太字</strong>、<span style="color:#d32f2f">赤字</span>、<mark>マーカー</mark>、<ul><li>リスト</li></ul>、<table>表</table> だけを使う
 - 装飾目的の複雑なdiv、独自class、吹き出し、ボックス、カード、GutenbergブロックHTMLは出力しない
@@ -1158,7 +1172,13 @@ def clean_visible_commerce_urls(root):
             text_node.replace_with(NavigableString(strip_visible_commerce_urls_text(value)))
 
 
-def sanitize_generated_html(content):
+def sanitize_generated_html(content, title=None, keywords=None):
+    """Claude が出力した HTML を安全にクリーンアップし、品質ガードを通す。
+
+    title / keywords を渡すと、見出しの SEO 過剰最適化（タイトル丸ごとコピペ・
+    ｜の乱用・同一語の重複）を機械的に除去する。これらは Claude が
+    プロンプトをスルーしたときの最後の砦。
+    """
     html = strip_wp_block_artifacts(strip_generated_noise(content))
     html = re.sub(r'<\s*(script|style|iframe|object|embed|form|input|textarea|button)\b[\s\S]*?<\s*/\s*\1\s*>', '', html, flags=re.I)
     html = re.sub(r'<\s*(script|style|iframe|object|embed|form|input|textarea|button)\b[^>]*?/?>', '', html, flags=re.I)
@@ -1186,7 +1206,54 @@ def sanitize_generated_html(content):
         html = ''.join(_serialize_child(child) for child in root.contents)
     if not BeautifulSoup:
         html = strip_non_affiliate_commerce_links_regex(balance_common_html_tags(html))
-    return strip_wp_block_artifacts(html).strip().strip('`').strip()
+    html = strip_wp_block_artifacts(html).strip().strip('`').strip()
+
+    # === 見出し品質ガード（title が渡された場合のみ） ===
+    # 1) タイトル丸ごとコピペ除去（完全一致）
+    # 2) タイトルの長い部分文字列の貼り付けも除去
+    # 3) ｜の乱用抑制（1見出し1区切りまで）
+    # 4) 同見出し内のキーワード重複除去
+    # 5) 削除後に見出し冒頭に残る孤立助詞（で / の / に / を / が / は / と）を整理
+    #
+    # 順番が重要: substring → prefix → separator → dedup → orphan particles。
+    # 2パス回すことで「1回除去 → 残った｜だけ縮約」のような連鎖を吸収。
+    if title:
+        for _ in range(2):
+            html = strip_title_substring_from_headings(html, title=title)
+            html = strip_title_prefix_from_headings(html, title=title)
+            html = reduce_heading_separators(html)
+            html = collapse_repeated_keyword_in_heading(html, title=title, keywords=keywords)
+        html = trim_orphan_particles_from_heading_start(html)
+    return html
+
+
+def trim_orphan_particles_from_heading_start(html):
+    """見出しの冒頭にタイトル除去で取り残された単独助詞を整理する。
+    例「で床に傷がつく前に対策しよう」→「床に傷がつく前に対策しよう」"""
+    if not html:
+        return html
+    def fix(m):
+        opening = m.group(1)
+        inner = m.group(2)
+        closing = m.group(3)
+        # 単独助詞: で／の／に／を／が／は／と。続く文字が漢字／カタカナ（実体語）の
+        # ときだけ削除する。「でも〜」「では〜」のような正当な接続詞は ひらがなが
+        # 続くため対象外。
+        new_inner = re.sub(r'^[\s　]*[でをにがはとの](?=[一-龥ァ-ヶー])', '', inner)
+        # 区切り記号で始まった場合も整理（例: 「｜選定基準」→「選定基準」）
+        new_inner = re.sub(r'^[\s　]*[｜|：:・\-―—][\s　]*', '', new_inner)
+        if new_inner == inner:
+            return m.group(0)
+        bare = re.sub(r'<[^>]+>', '', new_inner).strip()
+        if len(bare) < 2:
+            return m.group(0)
+        return f'{opening}{new_inner}{closing}'
+    return re.sub(
+        r'(<h[23][^>]*>)(.*?)(</h[23]>)',
+        fix,
+        html,
+        flags=re.IGNORECASE | re.DOTALL
+    )
 
 
 def primary_article_keyword(article):
@@ -1499,7 +1566,11 @@ def enhance_generated_article_html_fallback(html, keyword, article_type):
 
 
 def enhance_generated_article_html(content, article, article_type):
-    html = sanitize_generated_html(content)
+    html = sanitize_generated_html(
+        content,
+        title=article.get('title') if article else None,
+        keywords=article.get('keywords') if article else None,
+    )
     keyword = primary_article_keyword({**article, 'article_type': article_type})
     if not html:
         return format_block_html(html)
@@ -1543,7 +1614,11 @@ def safe_enhance_generated_article_html(content, article, article_type):
             )
         except Exception:
             pass
-        html = sanitize_generated_html(content)
+        html = sanitize_generated_html(
+            content,
+            title=article.get('title') if article else None,
+            keywords=article.get('keywords') if article else None,
+        )
         # 警告は記事に保存しない（ユーザー側でノイズになるため）
         return format_block_html(html), ''
 
@@ -3280,6 +3355,154 @@ def _find_best_product_match(query_name, products, threshold=0.4):
             best_score = score
             best_idx = idx
     return best_idx if (best_idx is not None and best_score >= threshold) else None
+
+
+def reduce_heading_separators(html):
+    """1つの見出し内で「｜」「|」を 2個以上使っているケースを抑制する。
+
+    Claude は「<h2>○○の選び方｜5つのチェックポイント」のような区切り例を
+    強く真似する傾向があり、油断すると全H2が「タイトル｜小タイトル｜
+    キーワード｜...」のような3区切り以上の見出しになる。
+
+    挙動: 1見出し内の｜が2個以上あれば、最初の1個だけ残し、残りはスペースに
+    置換する（情報は失わない）。文字列「｜」「|」を対象。
+    """
+    if not html:
+        return html
+
+    def fix(m):
+        opening = m.group(1)
+        inner = m.group(2)
+        closing = m.group(3)
+        # 装飾タグを除いた bare text で｜数を数える
+        bare = re.sub(r'<[^>]+>', '', inner)
+        sep_count = bare.count('｜') + bare.count('|')
+        if sep_count < 2:
+            return m.group(0)
+        # 1個目だけ残し、2個目以降は半角スペースへ
+        seen = [False]
+        def repl(_):
+            if not seen[0]:
+                seen[0] = True
+                return '｜'
+            return ' '
+        new_inner = re.sub(r'[｜|]', repl, inner)
+        return f'{opening}{new_inner}{closing}'
+
+    return re.sub(
+        r'(<h[23][^>]*>)(.*?)(</h[23]>)',
+        fix,
+        html,
+        flags=re.IGNORECASE | re.DOTALL
+    )
+
+
+def collapse_repeated_keyword_in_heading(html, title=None, keywords=None):
+    """1つの見出し内で同じキーワードが2回以上書かれているケースを抑制する。
+
+    例（Claude がやらかすパターン）:
+      「キャスターチェアによる床の傷を防止する**キャスターチェア床傷防止**
+       おすすめ5選｜ランキング」
+    のように、タイトル相当語＋同義の短縮語が二重に並ぶ。
+
+    挙動:
+    - title / keywords から「重要語」候補を抽出（4文字以上の連続語）
+    - 同一見出し内で同じ語が2回以上出ていれば、2回目以降を空文字に置換
+    - 装飾タグ（<mark> 等）の中身は保護
+    """
+    if not html:
+        return html
+
+    candidates = []
+    if title:
+        # 4文字以上の連続する漢字／カタカナ／ひらがなを重要語として扱う
+        candidates += re.findall(r'[一-龥ぁ-ゖ]{4,}', str(title))
+        candidates += re.findall(r'[ァ-ヶー]{4,}', str(title))
+    if keywords:
+        for kw in re.split(r'[,、\s]+', str(keywords)):
+            kw = kw.strip()
+            if len(kw) >= 4:
+                candidates.append(kw)
+
+    # 重複削除＋長い語優先（短い語が長い語の部分文字列だと干渉するため）
+    candidates = sorted(set(candidates), key=lambda s: -len(s))
+    if not candidates:
+        return html
+
+    def fix(m):
+        opening = m.group(1)
+        inner = m.group(2)
+        closing = m.group(3)
+        new_inner = inner
+        for word in candidates:
+            occurrences = [match.start() for match in re.finditer(re.escape(word), new_inner)]
+            if len(occurrences) >= 2:
+                # 最初の出現以外を削る（末尾から削るとインデックスがずれない）
+                for pos in reversed(occurrences[1:]):
+                    new_inner = new_inner[:pos] + new_inner[pos+len(word):]
+        return f'{opening}{new_inner}{closing}'
+
+    return re.sub(
+        r'(<h[23][^>]*>)(.*?)(</h[23]>)',
+        fix,
+        html,
+        flags=re.IGNORECASE | re.DOTALL
+    )
+
+
+def strip_title_substring_from_headings(html, title=None, min_length=8):
+    """見出しに含まれる「タイトルの長い連続部分文字列」を除去する。
+
+    strip_title_prefix_from_headings はタイトル全文と完全一致のときだけ
+    効くが、Claude はタイトルの前半（例「キャスターチェアによる床の傷を
+    防止する」のうち末尾の「おすすめ商品5選」を切り落とした部分）だけを
+    コピペしてくる場合もある。これを補うため、タイトルの部分文字列で
+    かつ min_length 文字以上のものを見出し内で検出して除去する。
+
+    動作:
+    - title の長さ方向に長い順から候補 substring を生成
+    - 各見出しでヒットすれば、その substring と直後/直前の区切り記号を
+      まとめて1回だけ削除
+    - 削った結果が空・極端に短い場合は維持（誤マッチ回避）
+    """
+    if not html or not title:
+        return html
+    norm_title = str(title).strip()
+    if len(norm_title) < min_length:
+        return html
+
+    sep_pattern = r'[\s　]*[｜|｜:：・\-―—]+[\s　]*'
+
+    def fix(m):
+        opening = m.group(1)
+        inner = m.group(2)
+        closing = m.group(3)
+        # 長い順に title の部分文字列を作って一番長いマッチを採用
+        # 全 substring を作るのはコスト高なので、長さを小さくしながら try する
+        for length in range(len(norm_title), min_length - 1, -1):
+            for start in range(0, len(norm_title) - length + 1):
+                candidate = norm_title[start:start + length]
+                if candidate and candidate in inner:
+                    # 区切り記号と一緒に削る（前後どちらでも）
+                    pat_after = re.escape(candidate) + sep_pattern
+                    new_inner, n = re.subn(pat_after, '', inner, count=1)
+                    if n == 0:
+                        pat_before = sep_pattern + re.escape(candidate)
+                        new_inner, n = re.subn(pat_before, '', inner, count=1)
+                    if n == 0:
+                        new_inner = inner.replace(candidate, '', 1)
+                    bare_after = re.sub(r'<[^>]+>', '', new_inner).strip()
+                    if len(bare_after) < 2:
+                        return m.group(0)
+                    return f'{opening}{new_inner}{closing}'
+        return m.group(0)
+
+    return re.sub(
+        r'(<h[23][^>]*>)(.*?)(</h[23]>)',
+        fix,
+        html,
+        flags=re.IGNORECASE | re.DOTALL
+    )
 
 
 def strip_title_prefix_from_headings(html, title=None):
@@ -5901,12 +6124,19 @@ def update_article(article_id):
 @with_data_lock
 def recover_generated_content(article_id):
     data = request.get_json(silent=True) or {}
-    clean_content = sanitize_generated_html(data.get('content', ''))
+    articles = load_articles()
+    article_for_title = next((a for a in articles if a['id'] == article_id), {}) or {}
+    sanitize_title = data.get('title') or article_for_title.get('title')
+    sanitize_keywords = data.get('keywords') or article_for_title.get('keywords')
+    clean_content = sanitize_generated_html(
+        data.get('content', ''),
+        title=sanitize_title,
+        keywords=sanitize_keywords,
+    )
     content_chars = len(html_to_text(clean_content))
     if content_chars < 500:
         return jsonify({'success': False, 'error': f'復旧できる本文が短すぎます（{content_chars}文字）'}), 400
 
-    articles = load_articles()
     for article in articles:
         if article['id'] != article_id:
             continue
@@ -6782,7 +7012,11 @@ def update_wordpress_post_from_article(article, settings):
     if not all([wp_url, wp_user, wp_password]):
         raise ValueError('サイトが設定されていません。記事にサイトを紐付けてください。')
 
-    clean_content = sanitize_generated_html(article.get('content', ''))
+    clean_content = sanitize_generated_html(
+        article.get('content', ''),
+        title=article.get('title'),
+        keywords=article.get('keywords'),
+    )
     validation_error = validate_generated_article(
         article,
         article.get('article_type', 'ranking'),
