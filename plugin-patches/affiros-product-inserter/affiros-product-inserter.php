@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros プロダクトインサーター
  * Description: AIが記事内容を解析し、Amazon・楽天市場の最適な商品アフィリエイトカードを自動挿入するプラグイン
- * Version: 1.9.12
+ * Version: 1.9.13
  * Author: AI Product Inserter
  * License: GPL v2 or later
  * Text Domain: ai-product-inserter
@@ -34,7 +34,7 @@ if (defined('AI_PI_VERSION')) {
     return;
 }
 
-define('AI_PI_VERSION', '1.9.12');
+define('AI_PI_VERSION', '1.9.13');
 define('AI_PI_PATH', plugin_dir_path(__FILE__));
 define('AI_PI_URL', plugin_dir_url(__FILE__));
 
@@ -65,6 +65,51 @@ add_action('plugins_loaded', function () {
     }
     update_option('ai_pi_default_model_migrated', '1.9.11');
 }, 5);
+
+/**
+ * 確実性ガード: 公開済み記事に raw な <!--ai-product:...--> が残っていれば
+ * WP 管理画面のすべてのページ上部にハッキリと警告を出す。
+ *
+ * 残存マーカーは読者に表示されてしまうコメントノイズで、商品挿入が
+ * 失敗したまま気付かれていない致命的状態。1件でもあれば即座にユーザーが
+ * 認識できるようにする。
+ *
+ * パフォーマンス対策: 結果を 5 分キャッシュ。クリック時のリンクで
+ * 一括処理画面 (residual フィルタ) に直接遷移できる。
+ */
+add_action('admin_notices', function () {
+    if (!current_user_can('manage_options')) return;
+
+    $cached = get_transient('ai_pi_residual_count_publish');
+    if ($cached === false) {
+        if (class_exists('AI_PI_Post_Meta')) {
+            $count = AI_PI_Post_Meta::count_published_with_raw_markers();
+            set_transient('ai_pi_residual_count_publish', $count, 5 * MINUTE_IN_SECONDS);
+            $cached = $count;
+        } else {
+            return;
+        }
+    }
+    if ((int)$cached <= 0) return;
+
+    $url = admin_url('admin.php?page=ai-product-inserter&filter=has_marker');
+    printf(
+        '<div class="notice notice-error" style="border-left-color:#d63638;"><p>'
+        . '<strong>⚠️ AI商品挿入: 公開済み記事に商品挿入マーカーが残っています（%d 件）</strong><br>'
+        . '読者にコメントノイズとして見えている可能性があります。'
+        . '<a href="%s">→ 一括処理画面で再処理する</a>'
+        . '</p></div>',
+        (int)$cached,
+        esc_url($url)
+    );
+});
+
+/**
+ * 投稿の保存・削除があった場合、上記キャッシュを破棄して再カウントさせる。
+ * 一括処理での書き換え直後にも警告状態が即座に更新される。
+ */
+add_action('save_post',   function () { delete_transient('ai_pi_residual_count_publish'); });
+add_action('deleted_post', function () { delete_transient('ai_pi_residual_count_publish'); });
 
 // モジュール読み込み
 require_once AI_PI_PATH . 'includes/claude-api.php';

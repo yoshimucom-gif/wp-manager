@@ -48,6 +48,7 @@ function ai_pi_render_bulk_page() {
                     <th>処理対象</th>
                     <td>
                         <label><input type="radio" name="aipi_filter" value="has_marker" checked> マーカー(<code>&lt;!--ai-product...--&gt;</code>)を含む未処理記事</label><br>
+                        <label><input type="radio" name="aipi_filter" value="residual"> <span style="color:#d63638;font-weight:600;">⚠️ マーカー残存（前回挿入に失敗・要再処理）</span></label><br>
                         <label><input type="radio" name="aipi_filter" value="uninserted"> 未挿入の記事すべて</label><br>
                         <label><input type="radio" name="aipi_filter" value="expired"> ⚠️24時間経過の記事（再取得）</label><br>
                         <label><input type="radio" name="aipi_filter" value="all"> 全件（挿入済みも再処理）</label>

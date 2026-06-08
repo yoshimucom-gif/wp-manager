@@ -124,6 +124,16 @@ class AI_PI_Post_Meta {
                         'compare' => '=',
                     ];
                     break;
+                case 'residual':
+                    // 直前の挿入で raw マーカーが残った（→ uninserted コメントに退避済み）
+                    // 記事を抽出。再処理推奨対象。
+                    $meta_query[] = [
+                        'key' => '_ai_pi_residual_markers',
+                        'value' => '0',
+                        'compare' => '>',
+                        'type'    => 'NUMERIC',
+                    ];
+                    break;
             }
         }
 
@@ -132,7 +142,7 @@ class AI_PI_Post_Meta {
 
         $ids = get_posts($query_args);
 
-        // 'has_marker'フィルタは追加で本文チェック
+        // 'has_marker'フィルタは追加で本文チェック（生 raw マーカー）
         if (!empty($args['insertion_filter']) && $args['insertion_filter'] === 'has_marker') {
             $filtered = [];
             foreach ($ids as $id) {
@@ -145,5 +155,31 @@ class AI_PI_Post_Meta {
         }
 
         return $ids;
+    }
+
+    /**
+     * 公開済み (publish) 記事のうち、生 raw マーカーが残ったままになっている
+     * 件数を返す。WP 管理画面の admin_notices で警告に使う。
+     *
+     * 「raw マーカー」とは <!--ai-product--> 系であり、退避済みの
+     * <!--ai-product-uninserted:...--> は含めない（編集者向けタグなので
+     * 公開記事に残っていても表示上のノイズにならない）。
+     *
+     * パフォーマンス: posts テーブルの post_content を LIKE スキャンする。
+     * publish 限定なので運用サイトでは数千件程度に収まる前提。
+     */
+    public static function count_published_with_raw_markers() {
+        global $wpdb;
+        $like = '%<!--' . $wpdb->esc_like(' ai-product') . '%';
+        // 'ai-product' の前後にスペースの揺らぎがあるので2パターンチェック
+        $like2 = '%<!--' . $wpdb->esc_like('ai-product') . '%';
+        $sql = $wpdb->prepare(
+            "SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->posts} p
+             WHERE p.post_type='post' AND p.post_status='publish'
+               AND (p.post_content LIKE %s OR p.post_content LIKE %s)
+               AND p.post_content REGEXP '<!--[[:space:]]*ai-product(:[a-z]+(:[a-z0-9]+)?)?[[:space:]]*-->'",
+            $like, $like2
+        );
+        return (int) $wpdb->get_var($sql);
     }
 }

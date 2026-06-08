@@ -88,6 +88,17 @@ class AI_PI_Inserter {
 
             if (is_wp_error($updated)) return $updated;
 
+            // === 確実性検証: 挿入後にマーカーが本当に全部消えたかを確認する ===
+            // ここまでで「success」扱いだが、Claude が候補を選べなかった・カード描画が
+            // スキップされた等で本文に <!--ai-product--> が残っているケースがある。
+            // 残存していたら最終手段としてマーカーを「未挿入コメント」に置換して
+            // 読者に raw マーカーが見えないように退避する。
+            $verification = self::verify_and_neutralize_residual_markers($post_id);
+            $result['residual_before_neutralize'] = $verification['residual_before'];
+            $result['residual_after_neutralize']  = $verification['residual_after'];
+            $result['neutralized_count']          = $verification['neutralized'];
+            $result['status']                     = $verification['status']; // success / partial / failure
+
             update_post_meta($post_id, '_ai_pi_inserted', 1);
             update_post_meta($post_id, '_ai_pi_inserted_at', current_time('mysql'));
             // 再挿入＝商品データを取り直したので 24h 期限切れフラグを解除
@@ -97,8 +108,21 @@ class AI_PI_Inserter {
             update_post_meta($post_id, '_ai_pi_position', $position);
             update_post_meta($post_id, '_ai_pi_products', $result['products']);
             update_post_meta($post_id, '_ai_pi_total_usage', $result['usage']);
+            update_post_meta($post_id, '_ai_pi_status', $verification['status']);
 
-            self::log_success($post_id, $mode, $result['usage']);
+            if ($verification['residual_before'] > 0) {
+                update_post_meta($post_id, '_ai_pi_residual_markers', $verification['residual_before']);
+                self::log_failure(
+                    $post_id,
+                    sprintf(
+                        '部分挿入: マーカー残存 %d 件を退避（未挿入コメント化）。再処理推奨。',
+                        $verification['residual_before']
+                    )
+                );
+            } else {
+                delete_post_meta($post_id, '_ai_pi_residual_markers');
+                self::log_success($post_id, $mode, $result['usage']);
+            }
 
             return $result;
 
@@ -106,6 +130,71 @@ class AI_PI_Inserter {
             self::log_failure($post_id, $e->getMessage());
             return new WP_Error('exception', $e->getMessage());
         }
+    }
+
+    /**
+     * 挿入後の確実性検証：
+     *
+     * post_content に <!--ai-product:...--> が残っていれば、
+     * <!--ai-product-uninserted:original--> のような形に置換する。
+     *
+     * これにより:
+     *   - 公開済み記事の本文に raw マーカーが見えてしまう事故を防ぐ
+     *   - has_marker フィルタからは外れるが、新しい uninserted フィルタで
+     *     再処理対象として正しく拾える
+     *   - 元のデザイン指示は uninserted コメント内に温存される
+     *
+     * @return array {
+     *   residual_before: int  上書き直後に残っていたマーカー数
+     *   residual_after:  int  退避処理後に残っているマーカー数（0でなければ更に異常）
+     *   neutralized:     int  退避した数
+     *   status:          string 'success' | 'partial' | 'failure'
+     * }
+     */
+    private static function verify_and_neutralize_residual_markers($post_id) {
+        $post = get_post($post_id);
+        $content = $post ? $post->post_content : '';
+        $marker_re = '/<!--\s*ai-product(?::([a-z]+)(?::([a-z0-9]+))?)?\s*-->/i';
+
+        $residual_before = preg_match_all($marker_re, $content, $matches);
+
+        if ($residual_before <= 0) {
+            return [
+                'residual_before' => 0,
+                'residual_after'  => 0,
+                'neutralized'     => 0,
+                'status'          => 'success',
+            ];
+        }
+
+        // 残存マーカーを uninserted コメントに置換（読者に見えるのは HTML コメントなので
+        // 表示上ノイズにならないが、編集者には明確に「未挿入の残り物」と分かるラベル）
+        $neutralized = 0;
+        $new_content = preg_replace_callback($marker_re, function ($m) use (&$neutralized) {
+            $neutralized++;
+            $design = isset($m[1]) ? $m[1] : 'default';
+            $mod = isset($m[2]) ? $m[2] : '';
+            $tag = $mod !== '' ? "{$design}:{$mod}" : $design;
+            return "<!-- ai-product-uninserted:{$tag} -->";
+        }, $content);
+
+        if ($new_content !== $content) {
+            wp_update_post([
+                'ID' => $post_id,
+                'post_content' => $new_content,
+            ]);
+        }
+
+        // 再計測（理屈上 0 になるはず）
+        $post_after = get_post($post_id);
+        $residual_after = preg_match_all($marker_re, $post_after->post_content, $m2);
+
+        return [
+            'residual_before' => $residual_before,
+            'residual_after'  => $residual_after,
+            'neutralized'     => $neutralized,
+            'status'          => $neutralized >= $residual_before ? 'partial' : 'failure',
+        ];
     }
 
     /**

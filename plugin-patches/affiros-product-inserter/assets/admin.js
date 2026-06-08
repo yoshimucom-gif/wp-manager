@@ -256,9 +256,13 @@
             }
         });
 
+        // 一括処理の集計（push 後に最終サマリーで使う）
+        let bulkSummary = { total: 0, success: 0, partial: 0, failure: 0, residual_total: 0 };
+
         function processBulkOne(ids, index, mode, design) {
             if (bulkStopped || index >= ids.length) {
-                appendLog('', '✅ すべての処理が完了しました');
+                // === 最終サマリ ===
+                renderBulkSummary(ids.length);
                 $('.aipi-start-bulk').prop('disabled', false);
                 return;
             }
@@ -274,13 +278,26 @@
                 mode: mode,
                 design: design,
             }).done(function(response) {
+                bulkSummary.total++;
                 if (response.success) {
                     const d = response.data;
                     if (d.result === 'success') {
+                        bulkSummary.success++;
                         appendLog('success', '✅ ID:' + d.post_id + ' ' + escapeHtml(d.title || '') + ' (商品' + d.product_count + '個挿入)');
+                    } else if (d.result === 'partial') {
+                        // 確実性ガード違反：raw マーカーが残ったので退避された
+                        bulkSummary.partial++;
+                        bulkSummary.residual_total += parseInt(d.residual_count || 0, 10);
+                        appendLog('warning', '⚠️ ID:' + d.post_id + ' ' + escapeHtml(d.title || '')
+                            + ' - 部分挿入（残存マーカー ' + (d.residual_count || 0) + ' 件を退避）'
+                            + ' <a href="' + (d.edit_url || '#') + '" target="_blank">編集</a>');
                     } else {
+                        bulkSummary.failure++;
                         appendLog('failure', '❌ ID:' + d.post_id + ' ' + escapeHtml(d.title || '') + ' - ' + (d.message || 'エラー'));
                     }
+                } else {
+                    bulkSummary.failure++;
+                    appendLog('failure', '❌ ID:' + postId + ' レスポンス異常');
                 }
 
                 // 次の記事を処理（2秒ディレイ：API負荷軽減）
@@ -288,11 +305,34 @@
                     processBulkOne(ids, index + 1, mode, design);
                 }, 2000);
             }).fail(function() {
+                bulkSummary.total++;
+                bulkSummary.failure++;
                 appendLog('failure', '❌ ID:' + postId + ' 通信エラー');
                 setTimeout(function() {
                     processBulkOne(ids, index + 1, mode, design);
                 }, 3000);
             });
+        }
+
+        function renderBulkSummary(planned) {
+            const s = bulkSummary;
+            const hasIssue = (s.partial + s.failure) > 0;
+            const color = hasIssue ? '#d63638' : '#0a7a2f';
+            const icon  = hasIssue ? '⚠️' : '✅';
+            let msg = '<div style="margin:12px 0;padding:12px 14px;border-left:4px solid ' + color
+                + ';background:' + (hasIssue ? '#fdf0f0' : '#f0faf2') + ';font-weight:600;">'
+                + icon + ' 一括処理完了: 計画 ' + planned + ' 件 / 処理 ' + s.total + ' 件'
+                + '（成功 <span style="color:#0a7a2f">' + s.success + '</span>'
+                + ' / 部分挿入 <span style="color:#a06000">' + s.partial + '</span>'
+                + ' / 失敗 <span style="color:#d63638">' + s.failure + '</span>）';
+            if (s.residual_total > 0) {
+                msg += '<br><span style="font-weight:normal">退避された残存マーカー: '
+                    + s.residual_total + ' 件。「⚠️ マーカー残存」フィルタで再処理してください。</span>';
+            }
+            msg += '</div>';
+            $('.aipi-progress-log').prepend(msg);
+            // 次のバッチに備えて集計をリセット
+            bulkSummary = { total: 0, success: 0, partial: 0, failure: 0, residual_total: 0 };
         }
 
         function appendLog(type, message) {
