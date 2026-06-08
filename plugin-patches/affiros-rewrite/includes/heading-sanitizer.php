@@ -36,6 +36,43 @@ class Affiros_Rewrite_Heading_Sanitizer {
             $html = self::collapse_repeated_keyword($html, $title, $keywords);
         }
         $html = self::trim_orphan_particles($html);
+        // 「この記事でわかること」等のメタ目次 H2 セクションを丸ごと削除
+        $html = self::remove_meta_toc_sections($html);
+        return $html;
+    }
+
+    /**
+     * 「この記事でわかること」「目次」のような無価値メタH2セクションを
+     * H2 から次の H2 / 末尾までまるごと除去する。
+     * リード文と内容が重複し SEO 的にも価値が無いため。
+     */
+    private static function remove_meta_toc_sections($html) {
+        if (!$html) return $html;
+
+        $meta_re = '/(?:この記事(?:で(?:わかること|学べること|得られる(?:こと|情報))?|の(?:ポイント|要点|概要|まとめ))'
+                 . '|本記事(?:の(?:概要|要点|ポイント|内容))'
+                 . '|目次|もくじ|読む前(?:に|の)(?:チェック|確認)'
+                 . '|先に結論|結論から(?:言う|お伝え)|3行(?:で)?(?:わかる|要約))/iu';
+
+        if (!preg_match_all('/<h2\b[^>]*>(.*?)<\/h2>/isu', $html, $matches, PREG_OFFSET_CAPTURE)) {
+            return $html;
+        }
+
+        $sections_to_remove = [];
+        $positions = $matches[0];
+        $inners = $matches[1];
+        for ($i = 0; $i < count($positions); $i++) {
+            $bare = trim(preg_replace('/<[^>]+>/u', '', $inners[$i][0]));
+            if (preg_match($meta_re, $bare)) {
+                $start = $positions[$i][1];
+                $end = ($i + 1 < count($positions)) ? $positions[$i + 1][1] : strlen($html);
+                $sections_to_remove[] = [$start, $end];
+            }
+        }
+        // 末尾から削ればインデックスがズレない
+        foreach (array_reverse($sections_to_remove) as $range) {
+            $html = substr($html, 0, $range[0]) . substr($html, $range[1]);
+        }
         return $html;
     }
 

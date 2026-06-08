@@ -212,7 +212,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.6.4'
+APP_VERSION = '1.6.5'
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -1058,6 +1058,18 @@ def article_html_output_rules():
   5. 「選定基準」「よくある質問」「まとめ」のような **裸単語 1 つだけの
      見出しも避ける**。最低でも主要キーワードを 1 語含める
 
+  【ステップ4: メタ目次H2の禁止（重要）】
+  以下のような「記事の目次・要約」を意味する**メタセクション**は H2 で
+  作らないこと。リード文で既に同じ役割を果たしており重複になる:
+    ❌ 「この記事でわかること」
+    ❌ 「この記事のポイント」
+    ❌ 「目次」「もくじ」
+    ❌ 「本記事の概要」「記事の要点」
+    ❌ 「読む前にチェック」「先に結論」（単独セクションとしては不要）
+  リード文（記事冒頭の <p>）で「この記事では○○を解説します」と1〜2文で
+  伝えれば十分。冒頭から本題セクション（原因／選定基準／ランキング等）に
+  直接入ること。
+
   【ランキング H3 の商品名（重要・SEO + 商品検索の両面で最適化）】
   H3 の商品名は WordPress プラグイン側で Amazon／楽天 API の検索クエリにも
   使われるため、適切な長さと構造が必要。
@@ -1283,6 +1295,45 @@ def sanitize_generated_html(content, title=None, keywords=None):
             html = reduce_heading_separators(html)
             html = collapse_repeated_keyword_in_heading(html, title=title, keywords=keywords)
         html = trim_orphan_particles_from_heading_start(html)
+
+    # === メタ目次セクション除去 ===
+    # 「この記事でわかること」「目次」「本記事の概要」等は SEO 的に無価値で
+    # リード文と重複するため、H2 セクション丸ごと削除する。
+    # プロンプトで禁止しているがスルーされたときの保険。
+    html = remove_meta_toc_sections(html)
+    return html
+
+
+def remove_meta_toc_sections(html):
+    """「この記事でわかること」「目次」のような無価値メタH2セクションを
+    H2 から次の H2 / 末尾までを丸ごと除去する。
+    リード文と内容が重複し SEO 的にも価値が無いため。"""
+    if not html:
+        return html
+    meta_titles_re = re.compile(
+        r'(?:この記事(?:で(?:わかること|学べること|得られる(?:こと|情報))?|の(?:ポイント|要点|概要|まとめ))'
+        r'|本記事(?:の(?:概要|要点|ポイント|内容))'
+        r'|目次|もくじ|読む前(?:に|の)(?:チェック|確認)'
+        r'|先に結論|結論から(?:言う|お伝え)|3行(?:で)?(?:わかる|要約))',
+        re.IGNORECASE | re.UNICODE
+    )
+    # H2 開始位置をすべて取得し、メタ H2 → 次の H2 までをまるごと削る
+    h2_re = re.compile(r'<h2\b[^>]*>(.*?)</h2>', re.IGNORECASE | re.DOTALL)
+    matches = list(h2_re.finditer(html))
+    if not matches:
+        return html
+
+    sections_to_remove = []
+    for i, m in enumerate(matches):
+        bare = re.sub(r'<[^>]+>', '', m.group(1)).strip()
+        if meta_titles_re.search(bare):
+            start = m.start()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(html)
+            sections_to_remove.append((start, end))
+
+    # 末尾から削れば index が崩れない
+    for start, end in reversed(sections_to_remove):
+        html = html[:start] + html[end:]
     return html
 
 
@@ -5150,9 +5201,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.2.1',
     },
     'rewrite': {
-        'file': 'affiros-rewrite-0.4.21.zip',
+        'file': 'affiros-rewrite-0.4.22.zip',
         'name': 'Affiros リライター',
-        'version': '0.4.21',
+        'version': '0.4.22',
     },
     'categorizer': {
         'file': 'affiros-categorizer-0.1.0.zip',

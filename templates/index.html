@@ -1810,6 +1810,25 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.6.5 (2026-06-08) — 「この記事でわかること」等のメタ目次H2を全種別で禁止</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>「この記事でわかること」「目次」「本記事の概要」等の無価値メタH2を全記事種別から排除</strong> — リード文（記事冒頭の <p>）と内容が完全に重複するため、SEO 的に無価値かつ読者にもノイズになる。プロンプトで明示的に禁止＋後処理で物理削除する二重防御。</li>
+              <li><strong>検出対象パターン</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>「この記事でわかること」「この記事で学べること」「この記事で得られること／情報」</li>
+                  <li>「この記事のポイント／要点／概要／まとめ」</li>
+                  <li>「本記事の概要／要点／ポイント／内容」</li>
+                  <li>「目次」「もくじ」</li>
+                  <li>「読む前にチェック／確認」</li>
+                  <li>「先に結論」「結論から言う／お伝え」「3行で／要約」</li>
+                </ul>
+              </li>
+              <li><strong>後処理ガード</strong>: 該当 H2 セクションを次の H2 までまるごと削除（本体・リライタ両方）。</li>
+              <li><strong>リライタプラグイン v0.4.22 同期</strong>。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.6.4 (2026-06-08) — sanitize が enhance で無効化される根本バグ修正</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>「sanitize で見出しを綺麗にした直後に keyword_heading_text が｜キーワードを付け直す」根本バグを修正</strong> — v1.6.0〜v1.6.3 で実装した見出し清掃が、enhance_generated_article_html の <code>keyword_heading_text</code> ループで上書きされ完全に無効化されていた。実装が無駄働きしていたという**重大な設計バグ**。
