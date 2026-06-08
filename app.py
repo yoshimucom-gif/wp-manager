@@ -2701,17 +2701,38 @@ def score_article_content(title, content, keywords=''):
     caps, penalties, critical_suggestions = scoring_caps_and_penalties(title, html, text, keywords)
     suggestions.extend(critical_suggestions)
 
-    if char_count >= 3500:
+    # N選 に応じて文字数の閾値を動的に調整する。
+    # 基準は「5選で 3000字以上を満点」「N選で (N-5)*500 を加算」とする。
+    # この調整がないと 10選記事は 3000字程度で評価が頭打ちになってしまい、
+    # 「件数の割に薄い記事」が高得点になる構造的バグを起こす。
+    ranking_count = extract_ranking_count({'title': title or '', 'keywords': keywords or ''})
+    if ranking_count and ranking_count > 5:
+        # 5選=満点3500基準、10選=6000基準、15選=8500基準 …
+        scale_extra = (ranking_count - 5) * 500
+        threshold_full = 3500 + scale_extra
+        threshold_high = 2500 + scale_extra
+        threshold_mid = 1600 + scale_extra
+        threshold_low = 900 + scale_extra
+    else:
+        threshold_full = 3500
+        threshold_high = 2500
+        threshold_mid = 1600
+        threshold_low = 900
+
+    if char_count >= threshold_full:
         score += 25
-    elif char_count >= 2500:
+    elif char_count >= threshold_high:
         score += 21
-    elif char_count >= 1600:
+    elif char_count >= threshold_mid:
         score += 16
-    elif char_count >= 900:
+    elif char_count >= threshold_low:
         score += 10
     else:
         score += 4
-        suggestions.append('本文量が少ないため、検索意図に対する回答・比較軸・具体例を追加してください。')
+        if ranking_count and ranking_count > 5:
+            suggestions.append(f'本文量が{ranking_count}選の規模に対して薄いです。各商品の解説・選定基準・FAQを厚くしてください（目安 {threshold_full}文字以上）。')
+        else:
+            suggestions.append('本文量が少ないため、検索意図に対する回答・比較軸・具体例を追加してください。')
 
     title_len = len(title or '')
     if 24 <= title_len <= 42:
@@ -2976,39 +2997,60 @@ def parse_target_chars(value):
     return target if target > 0 else DEFAULT_ARTICLE_TARGET_CHARS
 
 
-def effective_target_chars(quality=None):
-    return parse_target_chars((quality or {}).get('target_chars'))
+def effective_target_chars(quality=None, article=None):
+    """目標文字数を返す。
+
+    旧仕様: quality preset の target_chars を返すだけ。
+    新仕様: article から N選を読み取り、5選より大きければ自動でスケールする。
+            1商品あたり約500字の解説余裕を確保するため、(N-5) * 500 を加算。
+            上限 14000 字（Claude API のトークン上限・コスト・記事の使いやすさを考慮）。
+
+    例（base=3000 の場合）:
+      5選  →  3000
+      10選 →  5500
+      15選 →  8000
+      20選 → 10500
+      30選 → 14000（上限張り付き）
+    """
+    base = parse_target_chars((quality or {}).get('target_chars'))
+    if not article:
+        return base
+    ranking_count = extract_ranking_count(article) if isinstance(article, dict) else None
+    if not ranking_count or ranking_count <= 5:
+        return base
+    extra = (ranking_count - 5) * 500
+    return min(base + extra, 14000)
 
 
-def minimum_required_content_chars(quality=None):
+def minimum_required_content_chars(quality=None, article=None):
     """検証用の最低文字数。これより短いと「生成失敗」扱いになる。
 
     冗長化を避けるため、target に対する比率は意図的に低めに設定。
     自然に書いた結果として短くなっても合格扱いとする。
     """
-    target = effective_target_chars(quality)
+    target = effective_target_chars(quality, article=article)
     # 300文字を底辺に、目標の30%程度を最低限の合格ライン。
     # これ以下なら「途中で止まった/構造不足」の可能性が高い。
     return max(300, int(target * 0.3))
 
 
-def claude_max_tokens_for_quality(quality=None, floor=3200, ceiling=12000):
-    target = effective_target_chars(quality)
+def claude_max_tokens_for_quality(quality=None, floor=3200, ceiling=18000, article=None):
+    target = effective_target_chars(quality, article=article)
     return max(floor, min(ceiling, int(target * 2.2) + 2400))
 
 
-def claude_segment_max_tokens(quality=None, total=1):
-    segment_target = max(900, math.ceil(effective_target_chars(quality) / max(total, 1)))
-    return max(2400, min(5500, int(segment_target * 1.8) + 1200))
+def claude_segment_max_tokens(quality=None, total=1, article=None):
+    segment_target = max(900, math.ceil(effective_target_chars(quality, article=article) / max(total, 1)))
+    return max(2400, min(8000, int(segment_target * 1.8) + 1200))
 
 
-def claude_continuation_max_tokens(quality=None):
-    return claude_max_tokens_for_quality(quality, floor=1800, ceiling=4500)
+def claude_continuation_max_tokens(quality=None, article=None):
+    return claude_max_tokens_for_quality(quality, floor=1800, ceiling=6500, article=article)
 
 
-def build_article_completion_prompt(quality, article_type, has_decoration=False):
-    target = effective_target_chars(quality)
-    minimum = minimum_required_content_chars(quality)
+def build_article_completion_prompt(quality, article_type, has_decoration=False, article=None):
+    target = effective_target_chars(quality, article=article)
+    minimum = minimum_required_content_chars(quality, article=article)
     upper = max(target, int(target * 1.15))
     normalized_type = normalize_article_type(article_type, 'ranking')
     extras = []
@@ -4158,8 +4200,8 @@ def build_quality_structure_html_prompt(quality, limit=6000):
 
 
 def build_article_continuation_prompt(article, article_type, quality, current_content, validation_error):
-    target = effective_target_chars(quality)
-    minimum = minimum_required_content_chars(quality)
+    target = effective_target_chars(quality, article=article)
+    minimum = minimum_required_content_chars(quality, article=article)
     current_chars = len(html_to_text(current_content))
     remaining = max(800, target - current_chars)
     current_tail = str(current_content or '')[-18000:]
@@ -4206,8 +4248,8 @@ def build_article_continuation_prompt(article, article_type, quality, current_co
 
 
 def build_article_polish_prompt(article, article_type, quality, current_content, warning_text=''):
-    target = effective_target_chars(quality)
-    minimum = minimum_required_content_chars(quality)
+    target = effective_target_chars(quality, article=article)
+    minimum = minimum_required_content_chars(quality, article=article)
     current_chars = len(html_to_text(current_content))
     current_tail = str(current_content or '')[-20000:]
     normalized_type = normalize_article_type(article_type, 'ranking')
@@ -4291,7 +4333,7 @@ def ranking_subject(article):
 
 def should_use_segmented_generation(article_type, quality=None, article=None):
     normalized = normalize_article_type(article_type, 'ranking')
-    target = effective_target_chars(quality)
+    target = effective_target_chars(quality, article=article)
     if normalized == 'ranking':
         count = extract_ranking_count(article) if article else 0
         # 件数が多い（7以上）か、目標文字数が多い場合は分割。
@@ -4490,9 +4532,9 @@ def build_segment_common_context(base_prompt):
 
 
 def build_segment_prompt(base_prompt, article, article_type, quality, step, index, total, current_content):
-    section_target = segment_target_chars(quality, total)
+    section_target = segment_target_chars(quality, total, article=article)
     previous_tail = str(current_content or '')[-14000:]
-    quality_prompt = build_quality_prompt(quality)
+    quality_prompt = build_quality_prompt(quality, article=article)
     common_context = build_segment_common_context(base_prompt)
     main_keyword = primary_article_keyword({**article, 'article_type': article_type})
     return f"""WordPressに投稿する記事本文の一部を書いてください。
@@ -4516,7 +4558,7 @@ def build_segment_prompt(base_prompt, article, article_type, quality, step, inde
 - 出力はWordPress本文HTMLのみ。説明文、作業メモ、Markdown、コードフェンスは禁止。
 - 既に書いた内容を繰り返さず、現在までの本文の続きとして自然につなげてください。
 - この分割記事は全{total}工程中の{index}工程目です。
-- 文字数の目安: 記事全体で約{effective_target_chars(quality)}文字、今回の工程で約{section_target}文字。
+- 文字数の目安: 記事全体で約{effective_target_chars(quality, article=article)}文字、今回の工程で約{section_target}文字。
   ただしこれは **ガイドライン** であって厳格な制約ではありません。
   情報を水増しせず、必要十分な内容で自然に書く方を優先してください。
   冗長な繰り返しや同じ内容の言い換えは避ける。自然に書いた結果として目安より短くなるのは構わない。
@@ -4535,8 +4577,8 @@ def build_segment_prompt(base_prompt, article, article_type, quality, step, inde
 """
 
 
-def segment_target_chars(quality, total):
-    target = effective_target_chars(quality)
+def segment_target_chars(quality, total, article=None):
+    target = effective_target_chars(quality, article=article)
     per_segment = math.ceil(target / max(total, 1))
     # target に応じて min/max を動的に。
     # target が小さい時に min 900 で押し上げて全体文字数を超過する問題を抑える。
@@ -4585,7 +4627,7 @@ def generate_segmented_article_sync(client, base_prompt, article, article_type, 
     full_content = ''
     usage_parts = []
     total = len(steps)
-    segment_max_tokens = claude_segment_max_tokens(quality, total)
+    segment_max_tokens = claude_segment_max_tokens(quality, total, article=article)
     for index, step in enumerate(steps, 1):
         if on_step:
             on_step(index, total, step.get('name', ''))
@@ -4625,7 +4667,7 @@ def generate_segmented_article_sse(client, base_prompt, article, article_type, q
     full_content = ''
     usage_parts = []
     total = len(steps)
-    segment_max_tokens = claude_segment_max_tokens(quality, total)
+    segment_max_tokens = claude_segment_max_tokens(quality, total, article=article)
     for index, step in enumerate(steps, 1):
         name = step.get('name', '')
         yield f"data: {json.dumps({'status': 'segment', 'round': index, 'total': total, 'message': f'分割生成中: {name}（{index}/{total}）'})}\n\n"
@@ -4782,7 +4824,7 @@ def _looks_truncated(content):
 
 def validate_generated_article(article, article_type, content, quality=None):
     content_chars = len(html_to_text(content))
-    min_chars = minimum_required_content_chars(quality)
+    min_chars = minimum_required_content_chars(quality, article=article)
     if content_chars < min_chars:
         return f'生成本文が短すぎます（{content_chars}文字）。最低{min_chars}文字以上必要です。途中で止まっている可能性が高いため保存しません。'
 
@@ -4826,14 +4868,14 @@ def build_article_type_prompt(article_type):
     return prompts.get(article_type, '')
 
 
-def build_quality_prompt(quality):
+def build_quality_prompt(quality, article=None):
     if not quality:
         quality = {}
     parts = []
     base = quality.get('prompt', '')
     if base:
         parts.append(base)
-    target = effective_target_chars(quality)
+    target = effective_target_chars(quality, article=article)
     parts.append(f"目標文字数: {target}文字前後を目安にしてください。")
     if quality.get('tone'):
         parts.append(f"文体: {quality.get('tone')}で統一してください。")
@@ -5387,11 +5429,15 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
     quality_list = load_quality()
     quality_cache = {}
 
-    def resolve_quality_for(art_type):
+    def resolve_quality_for(art_type, article=None):
+        # quality preset 自体は art_type 単位でキャッシュしてよいが、
+        # quality_prompt は記事ごとに N選 (ranking_count) に応じて
+        # target_chars が変わるので、毎回ビルドし直す必要がある。
         if art_type not in quality_cache:
             q = select_quality_definition(quality_list, quality_id, art_type)
-            quality_cache[art_type] = (q, build_quality_prompt(q))
-        return quality_cache[art_type]
+            quality_cache[art_type] = q
+        q = quality_cache[art_type]
+        return q, build_quality_prompt(q, article=article)
 
     style_reference_cache = {}
 
@@ -5467,7 +5513,7 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                             break
                     save_articles(current_articles)
                 article_type = normalize_article_type(article.get('article_type') or batch_article_type, batch_article_type)
-                quality, quality_prompt = resolve_quality_for(article_type)
+                quality, quality_prompt = resolve_quality_for(article_type, article=article)
                 # 品質定義の「書き方参考URL」を一括生成でも使う。
                 # （以前は False ハードコードで、参考URLが一括生成では完全に無視されていた。
                 #   単体生成(SSE)では使われるのに不整合だった）。
@@ -5533,7 +5579,8 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                 prompt += build_article_completion_prompt(
                     quality,
                     article_type,
-                    has_decoration=False
+                    has_decoration=False,
+                    article=article,
                 )
 
                 stage = 'generate content'
@@ -5551,7 +5598,7 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                     )
                 else:
                     update_job(current_title=article.get('title', ''), message=f"Claudeで本文生成中: {article.get('title', '')}")
-                    message = create_claude_message(client, prompt, max_tokens=claude_max_tokens_for_quality(quality))
+                    message = create_claude_message(client, prompt, max_tokens=claude_max_tokens_for_quality(quality, article=article))
                     raw_content = anthropic_message_text(message)
                     usage_parts = [build_article_usage(prompt, raw_content, message)]
                 stage = 'inject affiliate markers'
@@ -5586,7 +5633,7 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                         content,
                         validation_error
                     )
-                    continuation_message = create_claude_message(client, continuation_prompt, max_tokens=claude_continuation_max_tokens(quality))
+                    continuation_message = create_claude_message(client, continuation_prompt, max_tokens=claude_continuation_max_tokens(quality, article=article))
                     continuation_text = anthropic_message_text(continuation_message)
                     usage_parts.append(build_article_usage(continuation_prompt, continuation_text, continuation_message))
                     if not html_to_text(continuation_text).strip():
@@ -5663,7 +5710,7 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                             )
                             polish_message = create_claude_message(
                                 client, polish_prompt,
-                                max_tokens=claude_max_tokens_for_quality(quality, floor=2400, ceiling=7000)
+                                max_tokens=claude_max_tokens_for_quality(quality, floor=2400, ceiling=7000, article=article)
                             )
                             polished_raw = anthropic_message_text(polish_message)
                             polished_content, enhance_warning = safe_enhance_generated_article_html(
@@ -6630,7 +6677,7 @@ def generate_article(article_id):
         save_articles(articles)
     quality_list = load_quality()
     quality = select_quality_definition(quality_list, quality_id, article_type)
-    quality_prompt = build_quality_prompt(quality)
+    quality_prompt = build_quality_prompt(quality, article=article_work)
     article_type_prompt = build_article_type_prompt(article_type)
     ranking_count_prompt = (
         build_ranking_count_prompt(article_work, article_type) +
@@ -6688,7 +6735,8 @@ def generate_article(article_id):
             prompt += build_article_completion_prompt(
                 quality,
                 article_type,
-                has_decoration=False
+                has_decoration=False,
+                article=article_work,
             )
 
             usage_parts = []
@@ -6705,7 +6753,7 @@ def generate_article(article_id):
                     client,
                     prompt,
                     'Claude生成中です。応答待ちです。',
-                    max_tokens=claude_max_tokens_for_quality(quality)
+                    max_tokens=claude_max_tokens_for_quality(quality, article=article_work)
                 )
                 usage_parts.append(build_article_usage(prompt, full_content, final_message))
 
@@ -6744,7 +6792,7 @@ def generate_article(article_id):
                     client,
                     continuation_prompt,
                     f'続きを生成中です（{continuation_round}回目）。Claude応答待ちです。',
-                    max_tokens=claude_continuation_max_tokens(quality)
+                    max_tokens=claude_continuation_max_tokens(quality, article=article_work)
                 )
                 full_content += continuation_text
                 usage_parts.append(build_article_usage(continuation_prompt, continuation_text, continuation_message))
@@ -6897,7 +6945,7 @@ def generate_article_direct(article_id):
 カテゴリー: {article_work.get('category', '')}
 
 品質要件:
-{build_quality_prompt(quality)}
+{build_quality_prompt(quality, article=article_work)}
 
 {build_article_type_prompt(article_type)}
 {build_ranking_count_prompt(article_work, article_type)}
@@ -6906,7 +6954,7 @@ def generate_article_direct(article_id):
 {article_html_output_rules()}
 {build_product_context_prompt(products, article_type)}
 {build_quality_structure_html_prompt(quality)}
-{build_article_completion_prompt(quality, article_type)}
+{build_article_completion_prompt(quality, article_type, article=article_work)}
 """
         if client and should_use_segmented_generation(article_type, quality, article_work):
             raw_content, usage_parts = generate_segmented_article_sync(
@@ -6917,7 +6965,7 @@ def generate_article_direct(article_id):
                 quality
             )
         elif client:
-            message = create_claude_message(client, base_prompt, max_tokens=claude_max_tokens_for_quality(quality))
+            message = create_claude_message(client, base_prompt, max_tokens=claude_max_tokens_for_quality(quality, article=article_work))
             raw_content = anthropic_message_text(message)
             usage_parts = [build_article_usage(base_prompt, raw_content, message)]
         else:
