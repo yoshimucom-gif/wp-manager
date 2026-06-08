@@ -38,7 +38,88 @@ class Affiros_Rewrite_Heading_Sanitizer {
         $html = self::trim_orphan_particles($html);
         // 「この記事でわかること」等のメタ目次 H2 セクションを丸ごと削除
         $html = self::remove_meta_toc_sections($html);
+        // 「選定基準」「選び方」等の同テーマ重複 H2 セクションを削除
+        $html = self::remove_duplicate_theme_sections($html);
+        // まとめ後の追記パラグラフ連発を削減
+        $html = self::trim_excessive_post_matome_paragraphs($html);
         return $html;
+    }
+
+    /**
+     * 同テーマの H2 セクションが複数ある場合、2回目以降を物理削除する。
+     * 「○○の選定基準」と「N選を選ぶ際の選定基準」のような重複を解消。
+     */
+    private static function remove_duplicate_theme_sections($html) {
+        if (!$html) return $html;
+        $theme_patterns = [
+            'selection' => '/選定(?:基準|方法)|評価軸|評価基準|ランキング(?:の)?基準|判断軸/u',
+            'howto'     => '/選び方(?!のポイント)|比較ポイント|判断基準|選定のポイント/u',
+        ];
+        if (!preg_match_all('/<h2\b[^>]*>(.*?)<\/h2>/isu', $html, $matches, PREG_OFFSET_CAPTURE)) {
+            return $html;
+        }
+        $positions = $matches[0];
+        $inners = $matches[1];
+        if (count($positions) < 2) return $html;
+
+        $seen_themes = [];
+        $duplicates = [];
+        foreach ($positions as $i => $pos) {
+            $bare = trim(preg_replace('/<[^>]+>/u', '', $inners[$i][0]));
+            foreach ($theme_patterns as $theme => $pat) {
+                if (preg_match($pat, $bare)) {
+                    if (isset($seen_themes[$theme])) {
+                        $start = $pos[1];
+                        $end = ($i + 1 < count($positions)) ? $positions[$i + 1][1] : strlen($html);
+                        $duplicates[] = [$start, $end];
+                    } else {
+                        $seen_themes[$theme] = true;
+                    }
+                    break;
+                }
+            }
+        }
+        if (empty($duplicates)) return $html;
+        foreach (array_reverse($duplicates) as $range) {
+            $html = substr($html, 0, $range[0]) . substr($html, $range[1]);
+        }
+        return $html;
+    }
+
+    /**
+     * まとめ H2 以降の <p> が 6 個以上連ねられている場合、最初の 4 個までを
+     * 残してそれ以降を削除する。
+     */
+    private static function trim_excessive_post_matome_paragraphs($html) {
+        if (!$html) return $html;
+        if (!preg_match('/<h2[^>]*>[^<]*(?:まとめ|総括|結論)/iu', $html, $m, PREG_OFFSET_CAPTURE)) {
+            return $html;
+        }
+        $matome_start = $m[0][1];
+        $head = substr($html, 0, $matome_start);
+        $tail = substr($html, $matome_start);
+
+        if (!preg_match_all('/<p\b[^>]*>.*?<\/p>/isu', $tail, $pm, PREG_OFFSET_CAPTURE)) {
+            return $html;
+        }
+        $p_positions = $pm[0];
+        if (count($p_positions) <= 6) return $html;
+
+        // 最初の 5 個までは残す。それ以降を削除。
+        $keep_threshold = 5;
+        $removals = [];
+        foreach ($p_positions as $idx => $pos) {
+            if ($idx < $keep_threshold) continue;
+            $start = $pos[1];
+            $end = $pos[1] + strlen($pos[0]);
+            $removals[] = [$start, $end];
+        }
+        if (empty($removals)) return $html;
+        // 末尾から削れば index が崩れない
+        foreach (array_reverse($removals) as $range) {
+            $tail = substr($tail, 0, $range[0]) . substr($tail, $range[1]);
+        }
+        return $head . $tail;
     }
 
     /**

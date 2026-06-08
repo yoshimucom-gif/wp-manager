@@ -1810,6 +1810,23 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.6.9 (2026-06-08) — 「選定基準2つ問題」「まとめ後の追記10連発」を物理削除で潰す</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>同テーマH2セクションの重複自動削除</strong> — 「○○の選定基準｜4つの評価軸」と「N選を選ぶ際の選定基準」のような重複 H2 を検出して、2回目以降を物理削除（次の H2 までセクション丸ごと）。検出対象: 選定基準・評価軸・評価基準・ランキング基準・判断軸・選び方・比較ポイント・選定のポイント。</li>
+              <li><strong>まとめ後の追記パラグラフ連発を強制削減</strong> — まとめ H2 以降の <code>&lt;p&gt;</code> が 6 個以上ある場合、最初の 5 個までを残してそれ以降を物理削除。「商品を選んだあとは…」「フェルト素材のストッパーは消耗品…」のような追記10連発を防ぐ。</li>
+              <li><strong>密度勾配の文字数指示を強化</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>1位: 400〜500字 / 2-3位: 300〜400字</li>
+                  <li>4位以降: **150〜250字** （250字超過は水増しと判断）</li>
+                  <li>最下位2件: 100〜200字</li>
+                </ul>
+              </li>
+              <li><strong>プロンプトで「N選を選ぶ際の○○」「ランキングの判断基準」などメタ言及H2を明示的に禁止</strong>。</li>
+              <li><strong>リライタプラグイン v0.4.26 同期</strong>。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.6.8 (2026-06-08) — リライタにリビジョン復元機能を追加（200記事一括ロールバック可）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>リライタプラグイン v0.4.25 に「リビジョン復元」サブメニューを追加</strong> — WP の標準リビジョン機能を使って「リライト直前」の状態に戻す。

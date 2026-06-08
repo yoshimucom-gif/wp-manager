@@ -212,7 +212,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.6.8'
+APP_VERSION = '1.6.9'
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -1122,11 +1122,23 @@ def article_html_output_rules():
      - 共通の注意点（キャスター径確認・素材摩耗等）は「選定基準」または
        「選び方」セクションで**1回だけ**まとめて書く
 
+  ❌ 同じテーマで H2 セクションを 2 つ以上作らない（重要）
+     - 「選定基準」を 2 つの H2 で書かない（× 「○○の選定基準」と「N選を選ぶ際の選定基準」を併記）
+     - 「選び方」「比較ポイント」「評価軸」「判断基準」も同様。1記事に1セクションのみ
+     - 「N選を選ぶ際の○○」「ランキングの判断基準」のような **N選 や記事構造に
+       言及する H2** は作らない（「選定基準」を1回書けば十分）
+     - **「選定基準」と「選び方」は別テーマなので両方あって良いが、
+       重複した内容（選定軸）を 2 回書かない**
+
   ❌ まとめセクションの肥大化・追記の連鎖
-     - まとめは要点整理＋自然な CTA で締める
+     - まとめは要点整理＋用途別 ul ＋自然な CTA で締める
+     - **<h2>まとめ から記事末尾までの <p> タグは合計 5 個以内**
      - 「商品を選んだあとは○○してください」「また、どの商品を選んだとしても」
-       「この記事で紹介した○○は」「ぜひ商品ページを確認して」のような
-       **追記セクションを連ねない**（最大1パラグラフで完結）
+       「この記事で紹介した○○は」「ぜひ商品ページを確認して」「床傷対策は」
+       「フェルト素材のストッパーは消耗品」「賃貸物件の方は退去時のことを」
+       「すでに傷が入っている場合でも」「小さな傷が広がる前に」「購入前には必ず」
+       「この記事が、自分に合った一品を見つけるための」のような
+       **追記パラグラフを6個以上連ねるのは絶対禁止**
      - 「迷ったときは」「初めての方は」のような迷い解消文は1ヶ所まで
 
   ❌ 「向いている人 ul」「向いていない人 ul」の濫用
@@ -1334,7 +1346,101 @@ def sanitize_generated_html(content, title=None, keywords=None):
     # リード文と重複するため、H2 セクション丸ごと削除する。
     # プロンプトで禁止しているがスルーされたときの保険。
     html = remove_meta_toc_sections(html)
+    # === 重複セクション削除 ===
+    # 「○○の選定基準」と「N選を選ぶ際の選定基準」のような同テーマ重複 H2 を
+    # 検出し、2回目以降のセクションをまるごと削除する。
+    html = remove_duplicate_theme_sections(html)
+    # === まとめ後の追記パラグラフ削減 ===
+    # 「<h2>まとめ」以降に <p> が 6 個以上並んでいたら、要約 ul・最初の 4 個
+    # 程度を残して残りを削る。
+    html = trim_excessive_post_matome_paragraphs(html)
     return html
+
+
+def remove_duplicate_theme_sections(html):
+    """同テーマの H2 セクションが複数ある場合、2回目以降を物理削除する。
+    対象テーマ:
+      - 「選定基準」「評価軸」「評価基準」「判断軸」「ランキング基準」
+      - 「選び方」「比較ポイント」「判断基準」「選定方法」
+
+    「選定基準」と「選び方」は別テーマとして扱い、両方残す。
+    同テーマ内で 2 つ目以降の H2 → 次の H2 までを除去。
+    """
+    if not html:
+        return html
+    # 各 H2 をテーマでタグ付け
+    theme_patterns = [
+        ('selection', re.compile(r'選定(?:基準|方法)|評価軸|評価基準|ランキング(?:の)?基準|判断軸')),
+        ('howto',     re.compile(r'選び方(?!のポイント)|比較ポイント|判断基準|選定のポイント')),
+    ]
+    h2_re = re.compile(r'<h2\b[^>]*>(.*?)</h2>', re.IGNORECASE | re.DOTALL)
+    matches = list(h2_re.finditer(html))
+    if len(matches) < 2:
+        return html
+
+    seen_themes = {}
+    duplicates_to_remove = []
+    for i, m in enumerate(matches):
+        bare = re.sub(r'<[^>]+>', '', m.group(1)).strip()
+        for theme_name, pat in theme_patterns:
+            if pat.search(bare):
+                if theme_name in seen_themes:
+                    # 2回目以降 → 削除対象
+                    start = m.start()
+                    end = matches[i + 1].start() if i + 1 < len(matches) else len(html)
+                    duplicates_to_remove.append((start, end))
+                else:
+                    seen_themes[theme_name] = True
+                break
+
+    if not duplicates_to_remove:
+        return html
+    # 末尾から削れば index が崩れない
+    for start, end in reversed(duplicates_to_remove):
+        html = html[:start] + html[end:]
+    return html
+
+
+def trim_excessive_post_matome_paragraphs(html):
+    """まとめ H2 以降の <p> が 6 個以上連ねられている場合、最初の 4 個と
+    末尾の ul（用途別おすすめ等）以外を物理削除する。
+    まとめが追記パラグラフで肥大化する事故を防ぐ。"""
+    if not html:
+        return html
+    matome_match = re.search(r'<h2[^>]*>[^<]*(?:まとめ|総括|結論)', html, re.IGNORECASE)
+    if not matome_match:
+        return html
+    head = html[:matome_match.start()]
+    tail = html[matome_match.start():]
+
+    # まとめ部の <p> を列挙
+    p_pattern = re.compile(r'<p\b[^>]*>.*?</p>', re.IGNORECASE | re.DOTALL)
+    p_matches = list(p_pattern.finditer(tail))
+    if len(p_matches) <= 5:
+        return html  # 既に5個以下なら何もしない
+
+    # 最初の 5 個の <p> までは残す。それ以降の <p> を削除対象。
+    # 「<!--ai-product:compare:5-->」マーカーや ul は保護。
+    keep_threshold = 5
+    keep_positions = set()
+    for idx, m in enumerate(p_matches):
+        if idx < keep_threshold:
+            keep_positions.add(id(m))
+
+    # 削除対象の <p> 範囲を集める
+    removals = []
+    for idx, m in enumerate(p_matches):
+        if id(m) in keep_positions:
+            continue
+        removals.append((m.start(), m.end()))
+
+    if not removals:
+        return html
+    # 末尾から削る
+    new_tail = tail
+    for start, end in reversed(removals):
+        new_tail = new_tail[:start] + new_tail[end:]
+    return head + new_tail
 
 
 def remove_meta_toc_sections(html):
@@ -3252,14 +3358,18 @@ def build_ranking_structure_prompt(article, article_type):
 
 ランキングの「密度勾配」ルール（重要・冗長を避けるため）:
 全{count}件を均等な分量で書くと冗長になり SEO Helpful Content 評価が下がる。
-順位に応じて**情報密度に勾配**をつける:
+順位に応じて**情報密度に勾配**をつける。**以下の文字数上限を守ること**:
 
-  1位       : **厚く書く** （400〜500字、特徴2段落＋注意点1段落＋向いている人 ul）
+  1位       : **400〜500字** （厚く・特徴2段落＋注意点1段落＋向いている人 ul）
               読者が最も注目する位置。独自性・強み・選定理由を具体的に。
-  2-3位     : **やや厚く** （300〜400字、特徴1〜2段落＋注意点1段落＋ul最小限）
-  4位以降   : **簡潔に** （150〜250字、特徴1段落＋注意点1〜2文）
-              比較対象としての位置づけ。「向いている人 ul」は省略可。
-  最下位の2件 : **最も簡潔に** （100〜200字）
+  2-3位     : **300〜400字** （やや厚く・特徴1〜2段落＋注意点1段落＋ul最小限）
+  4-{max(count-3, 4)}位 : **150〜250字** （簡潔に・特徴1段落＋注意点1〜2文・ul省略可）
+              比較対象としての位置づけ。
+  最下位の2件 : **100〜200字** （最も簡潔に。比較対象としての存在意義のみ示す）
+
+**4位以降の解説が 250字を超えたら水増しと判断して書き直す**こと。
+各順位の最後に文字数チェックを行い、目安を超えていたら情報の本質だけ残して
+圧縮する。
 
 共通注意点の一元化（重要）:
 - 「対応キャスター径の確認」「素材の摩耗」「公式情報での確認」のような
@@ -5307,9 +5417,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.2.1',
     },
     'rewrite': {
-        'file': 'affiros-rewrite-0.4.25.zip',
+        'file': 'affiros-rewrite-0.4.26.zip',
         'name': 'Affiros リライター',
-        'version': '0.4.25',
+        'version': '0.4.26',
     },
     'categorizer': {
         'file': 'affiros-categorizer-0.1.0.zip',
