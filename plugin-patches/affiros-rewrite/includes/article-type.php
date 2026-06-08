@@ -88,6 +88,26 @@ class Affiros_Rewrite_Article_Type {
     }
 
     /**
+     * タイトル / キーワードから「N選」の N を抽出する。
+     * 本体 extract_ranking_count の移植。
+     * 範囲外（1 や 31以上）は null を返す。
+     *
+     * @return int|null
+     */
+    public static function extract_ranking_count($title, $keywords = '', $category = '') {
+        $source = implode(' ', [(string)$title, (string)$keywords, (string)$category]);
+        // 全角数字を半角に
+        $source = mb_convert_kana($source, 'n');
+        if (preg_match('/([1-9][0-9]?)\s*選/u', $source, $m)) {
+            $n = intval($m[1]);
+            if ($n >= 2 && $n <= 30) {
+                return $n;
+            }
+        }
+        return null;
+    }
+
+    /**
      * 記事タイプの日本語ラベル。本体 article_type_label の移植。
      */
     public static function label($article_type) {

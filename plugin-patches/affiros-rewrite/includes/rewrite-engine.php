@@ -62,6 +62,20 @@ class Affiros_Rewrite_Engine {
         }
         $merged['article_type'] = $article_type;
 
+        // === N選 スケール ===
+        // ユーザーが target_chars を明示していない（=0「元記事に合わせる」）場合のみ、
+        // タイトルから N選を読み取って自動的に下限を引き上げる。
+        // 5選で 3000字基準、(N-5)*500 を加算、上限 14000字。
+        if (intval($merged['target_chars'] ?? 0) <= 0) {
+            $rc = Affiros_Rewrite_Article_Type::extract_ranking_count($post['title']);
+            if ($rc && $rc > 5) {
+                $source_chars = mb_strlen(trim(strip_tags($post['content'])));
+                $n_target = min(14000, 3000 + ($rc - 5) * 500);
+                // 元記事よりさらに長くする方向だけで補正（短縮はしない）
+                $merged['target_chars'] = max($source_chars, $n_target);
+            }
+        }
+
         $prompt = self::build_prompt($post, $merged);
 
         // 目標文字数に応じて出力上限を決める（固定だと長文指定で途中切れする）
@@ -93,6 +107,17 @@ class Affiros_Rewrite_Engine {
         }
         $content = $parsed['content'];
         $new_title = $parsed['title'] ?: $post['title'];
+
+        // === 見出し品質ガード（後処理） ===
+        // タイトル丸ごとコピペ・｜の乱用・キーワード重複・孤立助詞を機械的に整える。
+        // プロンプト指示と二重防御の関係。
+        if (class_exists('Affiros_Rewrite_Heading_Sanitizer')) {
+            $content = Affiros_Rewrite_Heading_Sanitizer::sanitize(
+                $content,
+                $new_title,
+                $post['title'] // 元記事タイトルもキーワード候補として扱う
+            );
+        }
 
         // マーカー挿入（記事タイプが確定しかつ insert_markers が true）
         $marker_stats = null;
@@ -217,6 +242,26 @@ class Affiros_Rewrite_Engine {
         $original_title = $post['title'];
         $original_content = mb_substr((string)$post['content'], 0, self::MAX_SOURCE_CHARS);
 
+        $heading_rules = <<<HEADING
+見出し（H2/H3）のルール:
+- 記事冒頭は必ず <p> リード文（2〜4段落）から始める。冒頭にいきなり <h2> を置かない
+- 記事タイトルや主要キーワードを **全 H2/H3 に詰め込まない**。SEO狙いの繰り返しは過剰最適化として逆効果
+- 「｜」記号での区切りは記事全体で**最大2回まで**。1見出しに｜を3個以上入れない
+- 同じ意味の語を同一見出し内で2回以上書かない（例「○○を防止する○○防止...」のような重複は厳禁）
+- 定型 H2（選定基準・選び方・FAQ・まとめ）は**単語ベース**で十分（例「選定基準」「選び方」「よくある質問」「まとめ」）
+
+見出しの**絶対NGパターン**（出力したら無効と見なす）:
+NG: <h2>○○○○○○のおすすめ5選｜選定基準｜この5製品を選んだ理由</h2>（タイトル系語を頭に貼り｜区切りで3要素以上）
+NG: <h2>○○○○○○のおすすめ5選｜まとめ｜...</h2>（全 H2 の頭にタイトル）
+NG: <h3>1位：商品名｜○○○○○○のおすすめ5選</h3>（H3 末尾にタイトル貼り付け）
+
+見出しの**OKパターン**:
+OK: <h2>選定基準</h2>
+OK: <h2>選び方のポイント｜タイプ別チェック</h2>（｜は最大1個）
+OK: <h2>まとめ</h2>
+OK: <h3>1位：Ezprotekt キャスターストッパー 5個セット</h3>（商品名だけ）
+HEADING;
+
         $prompt = <<<PROMPT
 以下のWordPress記事をリライトしてください。
 
@@ -229,6 +274,8 @@ class Affiros_Rewrite_Engine {
 - WordPress本文として使えるHTML形式で出力する（h2, h3, p, ul, ol, strong, em, span class="marker" など）
 - <!--more--> などのHTMLコメントは原文の位置に残す（ただし商品カードマーカーは含めない）
 - WordPressショートコード（[xxx]）はそのまま残す
+
+{$heading_rules}
 {$type_section}
 {$char_section}
 

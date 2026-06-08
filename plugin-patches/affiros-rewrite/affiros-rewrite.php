@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros リライター
  * Description: WordPress記事をClaude APIでリライトする。WP_Queryで内部処理するためホスティングWAFの影響を受けない（403回避）。
- * Version: 0.4.19
+ * Version: 0.4.20
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-rewrite
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('AFFIROS_REWRITE_VERSION', '0.4.19');
+define('AFFIROS_REWRITE_VERSION', '0.4.20');
 define('AFFIROS_REWRITE_PATH', plugin_dir_path(__FILE__));
 define('AFFIROS_REWRITE_URL', plugin_dir_url(__FILE__));
 
@@ -25,6 +25,7 @@ require_once AFFIROS_REWRITE_PATH . 'includes/post-fetcher.php';
 require_once AFFIROS_REWRITE_PATH . 'includes/marker-inserter.php';
 require_once AFFIROS_REWRITE_PATH . 'includes/marker-validator.php';
 require_once AFFIROS_REWRITE_PATH . 'includes/article-type.php';
+require_once AFFIROS_REWRITE_PATH . 'includes/heading-sanitizer.php';
 require_once AFFIROS_REWRITE_PATH . 'includes/rewrite-engine.php';
 require_once AFFIROS_REWRITE_PATH . 'includes/gutenberg-converter.php';
 require_once AFFIROS_REWRITE_PATH . 'includes/pre-cleanup.php';
