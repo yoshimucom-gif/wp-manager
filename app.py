@@ -212,7 +212,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.6.9'
+APP_VERSION = '1.7.0'
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -1350,11 +1350,125 @@ def sanitize_generated_html(content, title=None, keywords=None):
     # 「○○の選定基準」と「N選を選ぶ際の選定基準」のような同テーマ重複 H2 を
     # 検出し、2回目以降のセクションをまるごと削除する。
     html = remove_duplicate_theme_sections(html)
+    # === ランキング4位以降の注意点ブロック・ul を削除 ===
+    # SEO + CV 観点で、信頼性アピール（注意点赤字）と差別化情報（向いている人 ul）
+    # は上位3商品に集中させる。後位に同じスタイルを貼ると冗長＆広告感が出る。
+    html = strip_lower_rank_decorations(html)
     # === まとめ後の追記パラグラフ削減 ===
     # 「<h2>まとめ」以降に <p> が 6 個以上並んでいたら、要約 ul・最初の 4 個
     # 程度を残して残りを削る。
     html = trim_excessive_post_matome_paragraphs(html)
     return html
+
+
+def strip_lower_rank_decorations(html):
+    """ランキング H3 のうち 4位以降から「注意点赤字ブロック」と
+    「向いている人 ul」を物理削除する。1〜3位は保持。
+
+    SEO + CV 観点で、後位に同じ装飾を貼ると以下の悪影響:
+      - 冗長で広告感を増幅
+      - 「全商品にネガティブ要素」で読者の離脱率上昇
+      - 情報密度が下がり Helpful Content 評価が低下
+
+    検出対象:
+      - <p><span style="color:#d32f2f"><strong>注意点：...</strong>...</span></p>
+      - <p>注意点：...</p>（プレーンな場合）
+      - <ul> 内の <li> の最初の <strong> が「向いている人」「向いていない人」
+        「セット内容」「価格帯」「対応床材」「対応用途」「対応サイズ」
+        「サイズ・素材」「タイプ」「強み」「差別化ポイント」「1位との違い」
+        「評価軸スコア」「サイズ」 等で始まるもの
+    """
+    if not html:
+        return html
+
+    rank_h3_re = re.compile(r'<h3[^>]*>([^<]*)</h3>', re.IGNORECASE)
+    rank_num_re = re.compile(r'^(?:第)?([1-9][0-9]?)\s*位[:：]', re.UNICODE)
+
+    # H3 を順番に走査して、各 H3 の rank を判定し、4位以降のセクション内容を
+    # フィルタする。
+    h3_iter = list(re.finditer(r'<h3[^>]*>(.*?)</h3>', html, re.IGNORECASE | re.DOTALL))
+    if not h3_iter:
+        return html
+
+    # 各 H3 のセクション範囲（次の H3 / H2 まで）を確定
+    h2_h3_positions = []
+    for m in re.finditer(r'<(?:h2|h3)\b[^>]*>', html, re.IGNORECASE):
+        h2_h3_positions.append(m.start())
+    h2_h3_positions.append(len(html))
+
+    removals = []  # (start, end) 範囲のリスト
+
+    for h3 in h3_iter:
+        bare = re.sub(r'<[^>]+>', '', h3.group(1)).strip()
+        rank_match = rank_num_re.match(bare)
+        if not rank_match:
+            continue
+        rank = int(rank_match.group(1))
+        if rank <= 3:
+            continue  # 1〜3位は維持
+
+        # このH3セクションの範囲（次の h2/h3 まで）
+        h3_start = h3.start()
+        next_pos = len(html)
+        for p in h2_h3_positions:
+            if p > h3_start:
+                next_pos = p
+                break
+        section = html[h3_start:next_pos]
+
+        # 注意点ブロック（赤字 span 含む）を探す
+        # パターン1: <p><span style="color:#d32f2f"><strong>注意点：...</strong>...</span></p>
+        notice_re = re.compile(
+            r'<p[^>]*>\s*<span[^>]*color:\s*#d32f2f[^>]*>\s*<strong>\s*注意点\s*[:：]\s*</strong>[\s\S]*?</span>\s*</p>',
+            re.IGNORECASE
+        )
+        # パターン2: <p>注意点：...</p>（赤字なし、太字なし）
+        notice_plain_re = re.compile(
+            r'<p[^>]*>\s*(?:<strong>\s*)?注意点\s*[:：][\s\S]*?</p>',
+            re.IGNORECASE
+        )
+        # 検出して削除範囲を記録（section内のオフセットを html 全体のオフセットに変換）
+        for nm in notice_re.finditer(section):
+            removals.append((h3_start + nm.start(), h3_start + nm.end()))
+        for nm in notice_plain_re.finditer(section):
+            # 既に notice_re でカバーされてないか確認
+            abs_start = h3_start + nm.start()
+            abs_end = h3_start + nm.end()
+            if not any(s <= abs_start and abs_end <= e for s, e in removals):
+                removals.append((abs_start, abs_end))
+
+        # 「向いている人 ul」を探す
+        # <ul>...<li><strong>向いている人</strong>...</li>...</ul>
+        ul_re = re.compile(r'<ul\b[^>]*>([\s\S]*?)</ul>', re.IGNORECASE)
+        target_labels = (
+            '向いている人', '向いていない人', 'セット内容', '価格帯',
+            '対応床材', '対応用途', '対応サイズ', 'サイズ・素材',
+            'タイプ', '強み', '差別化ポイント', '1位との違い',
+            '評価軸スコア', 'サイズ',
+        )
+        for um in ul_re.finditer(section):
+            ul_inner = um.group(1)
+            # ul の最初の <li> 内の <strong> を取得
+            first_strong = re.search(
+                r'<li[^>]*>\s*<strong[^>]*>\s*([^<]+)\s*</strong>',
+                ul_inner, re.IGNORECASE
+            )
+            if not first_strong:
+                continue
+            label = first_strong.group(1).strip()
+            if any(label.startswith(t) for t in target_labels):
+                abs_start = h3_start + um.start()
+                abs_end = h3_start + um.end()
+                removals.append((abs_start, abs_end))
+
+    if not removals:
+        return html
+    # 重複削除＋並び替え（末尾から削るので start 降順）
+    removals = sorted(set(removals), key=lambda r: -r[0])
+    new_html = html
+    for start, end in removals:
+        new_html = new_html[:start] + new_html[end:]
+    return new_html
 
 
 def remove_duplicate_theme_sections(html):
@@ -3358,18 +3472,28 @@ def build_ranking_structure_prompt(article, article_type):
 
 ランキングの「密度勾配」ルール（重要・冗長を避けるため）:
 全{count}件を均等な分量で書くと冗長になり SEO Helpful Content 評価が下がる。
-順位に応じて**情報密度に勾配**をつける。**以下の文字数上限を守ること**:
+順位に応じて**情報密度に勾配**をつける。**以下の文字数上限と装飾ルールを守ること**:
 
-  1位       : **400〜500字** （厚く・特徴2段落＋注意点1段落＋向いている人 ul）
-              読者が最も注目する位置。独自性・強み・選定理由を具体的に。
-  2-3位     : **300〜400字** （やや厚く・特徴1〜2段落＋注意点1段落＋ul最小限）
-  4-{max(count-3, 4)}位 : **150〜250字** （簡潔に・特徴1段落＋注意点1〜2文・ul省略可）
-              比較対象としての位置づけ。
-  最下位の2件 : **100〜200字** （最も簡潔に。比較対象としての存在意義のみ示す）
+  1-3位 :
+    **300〜500字**（厚く・特徴1〜2段落 ＋ 注意点赤字ブロック ＋ 向いている人 ul）
+    読者が最も注目し購入検討対象になる位置。独自性・強み・選定理由を具体的に。
+    注意点赤字ブロックは <p><span style="color:#d32f2f"><strong>注意点：</strong>...</span></p> の形式で1つだけ。
+    ul は「向いている人 / 向いていない人 / セット内容 / 強み」程度に絞る。
 
-**4位以降の解説が 250字を超えたら水増しと判断して書き直す**こと。
-各順位の最後に文字数チェックを行い、目安を超えていたら情報の本質だけ残して
-圧縮する。
+  4位以降 :
+    **150〜250字**（簡潔に・本文 <p> のみ）
+    比較対象としての位置づけ。**注意点赤字ブロックも ul も付けない**。
+    商品特徴を本文で1段落、注意があれば本文に1〜2文で自然に組み込む。
+    ❌ 「<p><span style="color:#d32f2f"><strong>注意点：</strong>...」 ← 禁止
+    ❌ 「<ul><li><strong>向いている人</strong>：...」 ← 禁止
+
+  最下位の2件 :
+    **100〜200字**（最も簡潔に・比較対象としての存在意義のみ示す）
+    注意点ブロック・ul ともに禁止
+
+**4位以降に赤字注意点ブロックや ul を付けるのは厳禁**。
+冗長な広告感を演出してしまい、SEO 的にも CV 的にもマイナス。
+信頼性アピールは上位3商品で十分。
 
 共通注意点の一元化（重要）:
 - 「対応キャスター径の確認」「素材の摩耗」「公式情報での確認」のような
@@ -5417,9 +5541,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.2.1',
     },
     'rewrite': {
-        'file': 'affiros-rewrite-0.4.26.zip',
+        'file': 'affiros-rewrite-0.4.27.zip',
         'name': 'Affiros リライター',
-        'version': '0.4.26',
+        'version': '0.4.27',
     },
     'categorizer': {
         'file': 'affiros-categorizer-0.1.0.zip',

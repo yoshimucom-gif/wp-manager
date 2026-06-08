@@ -1810,6 +1810,29 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.0 (2026-06-08) — ランキング4位以降の注意点ブロック・向いている人ulを物理削除</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>4位以降の装飾を SEO + CV 観点で最適化</strong> — ランキング H3 のうち 4位以降から「注意点赤字ブロック」と「向いている人 ul」を物理削除。1〜3位のみ詳細解説を維持する密度勾配を強制適用。</li>
+              <li><strong>背景</strong>: 全10商品に同じ装飾を貼ると以下の悪影響:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>冗長で広告感を増幅 → ユーザー離脱率上昇</li>
+                  <li>「全商品にネガティブ要素」の連発 → CV 率低下</li>
+                  <li>情報密度が下がり Google Helpful Content 評価マイナス</li>
+                </ul>
+              </li>
+              <li><strong>削除対象 H3</strong>: 4位以降 〜 最下位までのランキング H3 セクション内の:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>&lt;p&gt;&lt;span style="color:#d32f2f"&gt;&lt;strong&gt;注意点：...&lt;/strong&gt;...&lt;/span&gt;&lt;/p&gt;</code>（赤字注意点ブロック）</li>
+                  <li><code>&lt;ul&gt;&lt;li&gt;&lt;strong&gt;向いている人/向いていない人/セット内容/価格帯/対応床材...&lt;/strong&gt;:...&lt;/li&gt;</code>（差別化 ul）</li>
+                </ul>
+              </li>
+              <li><strong>1〜3位は維持</strong>: 信頼性アピール用の注意点ブロックと差別化情報の ul は上位3商品にのみ集中。</li>
+              <li><strong>プロンプト強化</strong>: 「4位以降に赤字注意点ブロックや ul を付けるのは厳禁」を明示。本体・リライタ両方に同期。</li>
+              <li><strong>リライタプラグイン v0.4.27 同期</strong>。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.6.9 (2026-06-08) — 「選定基準2つ問題」「まとめ後の追記10連発」を物理削除で潰す</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>同テーマH2セクションの重複自動削除</strong> — 「○○の選定基準｜4つの評価軸」と「N選を選ぶ際の選定基準」のような重複 H2 を検出して、2回目以降を物理削除（次の H2 までセクション丸ごと）。検出対象: 選定基準・評価軸・評価基準・ランキング基準・判断軸・選び方・比較ポイント・選定のポイント。</li>

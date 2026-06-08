@@ -40,9 +40,99 @@ class Affiros_Rewrite_Heading_Sanitizer {
         $html = self::remove_meta_toc_sections($html);
         // 「選定基準」「選び方」等の同テーマ重複 H2 セクションを削除
         $html = self::remove_duplicate_theme_sections($html);
+        // ランキング4位以降の注意点ブロック・ul を削除
+        $html = self::strip_lower_rank_decorations($html);
         // まとめ後の追記パラグラフ連発を削減
         $html = self::trim_excessive_post_matome_paragraphs($html);
         return $html;
+    }
+
+    /**
+     * ランキング H3 のうち 4 位以降から「注意点赤字ブロック」と
+     * 「向いている人 ul」を物理削除する。1〜3 位は維持。
+     */
+    private static function strip_lower_rank_decorations($html) {
+        if (!$html) return $html;
+
+        // H2 / H3 の位置を全部集める（セクション境界判定用）
+        preg_match_all('/<(?:h2|h3)\b[^>]*>/iu', $html, $boundary_matches, PREG_OFFSET_CAPTURE);
+        $boundaries = array_map(function($m){ return $m[1]; }, $boundary_matches[0]);
+        $boundaries[] = strlen($html);
+
+        // ランキング H3 を全部走査
+        if (!preg_match_all('/<h3\b[^>]*>(.*?)<\/h3>/isu', $html, $h3_matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE)) {
+            return $html;
+        }
+
+        $target_labels = [
+            '向いている人', '向いていない人', 'セット内容', '価格帯',
+            '対応床材', '対応用途', '対応サイズ', 'サイズ・素材',
+            'タイプ', '強み', '差別化ポイント', '1位との違い',
+            '評価軸スコア', 'サイズ',
+        ];
+
+        $removals = [];
+
+        foreach ($h3_matches as $m) {
+            $h3_start = $m[0][1];
+            $bare = trim(preg_replace('/<[^>]+>/u', '', $m[1][0]));
+            if (!preg_match('/^(?:第)?([1-9][0-9]?)\s*位[:：]/u', $bare, $rm)) continue;
+            $rank = intval($rm[1]);
+            if ($rank <= 3) continue;
+
+            // 次の境界（h2/h3）まで
+            $next_pos = strlen($html);
+            foreach ($boundaries as $bp) {
+                if ($bp > $h3_start) { $next_pos = $bp; break; }
+            }
+            $section = substr($html, $h3_start, $next_pos - $h3_start);
+
+            // 注意点赤字ブロック
+            $notice_re = '/<p[^>]*>\s*<span[^>]*color:\s*#d32f2f[^>]*>\s*<strong>\s*注意点\s*[:：]\s*<\/strong>[\s\S]*?<\/span>\s*<\/p>/iu';
+            if (preg_match_all($notice_re, $section, $nm, PREG_OFFSET_CAPTURE)) {
+                foreach ($nm[0] as $nh) {
+                    $removals[] = [$h3_start + $nh[1], $h3_start + $nh[1] + strlen($nh[0])];
+                }
+            }
+            // 注意点プレーン
+            $notice_plain_re = '/<p[^>]*>\s*(?:<strong>\s*)?注意点\s*[:：][\s\S]*?<\/p>/iu';
+            if (preg_match_all($notice_plain_re, $section, $nm2, PREG_OFFSET_CAPTURE)) {
+                foreach ($nm2[0] as $nh) {
+                    $abs_start = $h3_start + $nh[1];
+                    $abs_end = $abs_start + strlen($nh[0]);
+                    $dup = false;
+                    foreach ($removals as $r) {
+                        if ($r[0] <= $abs_start && $abs_end <= $r[1]) { $dup = true; break; }
+                    }
+                    if (!$dup) $removals[] = [$abs_start, $abs_end];
+                }
+            }
+
+            // 「向いている人 ul」
+            if (preg_match_all('/<ul\b[^>]*>([\s\S]*?)<\/ul>/iu', $section, $ul_matches, PREG_OFFSET_CAPTURE)) {
+                foreach ($ul_matches[0] as $idx => $um) {
+                    $ul_inner = $ul_matches[1][$idx][0];
+                    if (preg_match('/<li[^>]*>\s*<strong[^>]*>\s*([^<]+)\s*<\/strong>/iu', $ul_inner, $sm)) {
+                        $label = trim($sm[1]);
+                        foreach ($target_labels as $t) {
+                            if (mb_strpos($label, $t) === 0) {
+                                $removals[] = [$h3_start + $um[1], $h3_start + $um[1] + strlen($um[0])];
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (empty($removals)) return $html;
+        // start 降順に並べて末尾から削除
+        usort($removals, function($a, $b){ return $b[0] - $a[0]; });
+        $new_html = $html;
+        foreach ($removals as $r) {
+            $new_html = substr($new_html, 0, $r[0]) . substr($new_html, $r[1]);
+        }
+        return $new_html;
     }
 
     /**
