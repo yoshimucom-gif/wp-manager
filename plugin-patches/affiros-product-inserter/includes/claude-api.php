@@ -18,7 +18,7 @@ class AI_PI_Claude_API {
     public function __construct($config = null) {
         $settings = is_array($config) ? $config : get_option('ai_pi_settings', []);
         $this->api_key = $settings['claude_api_key'] ?? '';
-        $this->model = $settings['claude_model'] ?? 'claude-sonnet-4-6';
+        $this->model = $settings['claude_model'] ?? 'claude-haiku-4-5-20251001';
     }
 
     /**

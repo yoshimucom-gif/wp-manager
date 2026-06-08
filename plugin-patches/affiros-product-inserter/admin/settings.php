@@ -28,7 +28,7 @@ function ai_pi_sanitize_settings($input) {
 
     // API系（UIで編集可）
     $output['claude_api_key']      = sanitize_text_field($input['claude_api_key'] ?? ($existing['claude_api_key'] ?? ''));
-    $output['claude_model']        = sanitize_text_field($input['claude_model'] ?? ($existing['claude_model'] ?? 'claude-sonnet-4-6'));
+    $output['claude_model']        = sanitize_text_field($input['claude_model'] ?? ($existing['claude_model'] ?? 'claude-haiku-4-5-20251001'));
     $output['amazon_access_key']   = sanitize_text_field($input['amazon_access_key'] ?? ($existing['amazon_access_key'] ?? ''));
     $output['amazon_secret_key']   = sanitize_text_field($input['amazon_secret_key'] ?? ($existing['amazon_secret_key'] ?? ''));
     $output['amazon_partner_tag']  = sanitize_text_field($input['amazon_partner_tag'] ?? ($existing['amazon_partner_tag'] ?? ''));
@@ -85,10 +85,11 @@ function ai_pi_render_settings_page() {
                     <th><label>Claudeモデル</label></th>
                     <td>
                         <select name="ai_pi_settings[claude_model]">
-                            <option value="claude-opus-4-7" <?php selected($settings['claude_model'] ?? '', 'claude-opus-4-7'); ?>>Claude Opus 4.7（最高品質）</option>
-                            <option value="claude-sonnet-4-6" <?php selected($settings['claude_model'] ?? '', 'claude-sonnet-4-6'); ?>>Claude Sonnet 4.6（推奨）</option>
-                            <option value="claude-haiku-4-5-20251001" <?php selected($settings['claude_model'] ?? '', 'claude-haiku-4-5-20251001'); ?>>Claude Haiku 4.5（最安）</option>
+                            <option value="claude-haiku-4-5-20251001" <?php selected($settings['claude_model'] ?? '', 'claude-haiku-4-5-20251001'); ?>>Claude Haiku 4.5（推奨・最安）</option>
+                            <option value="claude-sonnet-4-6" <?php selected($settings['claude_model'] ?? '', 'claude-sonnet-4-6'); ?>>Claude Sonnet 4.6（高品質）</option>
+                            <option value="claude-opus-4-7" <?php selected($settings['claude_model'] ?? '', 'claude-opus-4-7'); ?>>Claude Opus 4.7（最高品質・割高）</option>
                         </select>
+                        <p class="description">商品選定タスクは Haiku で十分な精度が出ます。Sonnet/Opus は記事のニュアンス読解が特に重要なときだけ。</p>
                     </td>
                 </tr>
                 <tr>
