@@ -1007,7 +1007,19 @@ def article_html_output_rules():
 - tableを使う場合は <table><thead><tbody><tr><th><td> を正しく閉じ、tableの外に他要素が漏れないようにする
 - WordPress/Gutenbergコメント（<!-- wp:... -->、<!-- /wp:... -->）は出力しない
 - H2は主要セクション、H3はH2内の小項目に使う。メリット、デメリット・注意点、よくある質問を作る場合は、H2の直下に各項目・各質問を <h3 class="wp-block-heading">...</h3> で分ける
-- 見出し（H2/H3）は **SEO を意識して具体的に**。「選び方」「よくある質問」「まとめ」のような単語だけの見出しは避け、主要キーワードや検索意図に沿った語を自然に含める（例:「冷感ヘッドバンドの選び方｜5つのチェックポイント」「冷感ヘッドバンドのよくある質問」「まとめ｜用途で選ぶのが失敗しないコツ」）。ただし全見出しにキーワードを詰め込みすぎない（過剰最適化を避ける）
+
+- 記事冒頭は必ず <p> のリード文（2〜4段落、読者を本題に引き込む導入）から始める。**冒頭にいきなり <h2> を置かない**（WordPress 側でタイトルが上に表示されるため、本文の最初は段落であるべき）
+
+- 見出し（H2/H3）の書き方の禁止事項:
+  1. **記事タイトルの全文または大部分をすべての H2 の頭に貼り付ける**のは厳禁。例えばタイトルが「キャスターチェアによる床の傷を防止する」なら、それを「キャスターチェアによる床の傷を防止する｜選定基準」「キャスターチェアによる床の傷を防止する｜まとめ」のように全 H2 に繰り返さない。読者には冗長で、SEO 的にも逆効果（過剰最適化）。
+  2. **H3 にタイトルや主要キーワードをサフィックスとして付ける**のも厳禁（例「1位：商品名｜キャスターチェアによる床の傷を防止する」のような形）。
+  3. 「｜」記号を使った区切り見出しは記事全体で最大 2 回まで。3 個目以降は通常の見出し文として書く。
+  4. 同じ意味の語を重複させない（例「キャスターチェアによる床の傷を防止する**キャスターチェア床傷防止**おすすめ5選」のような重複は厳禁）。
+
+- 見出しの書き方の推奨:
+  ・リード文の後の最初の H2 は記事テーマを表す**簡潔な見出し**にする（例「キャスターチェアで床に傷がつく原因」）
+  ・選定基準・選び方・FAQ・まとめなどの定型 H2 は**単語ベース**で十分（例「選定基準」「選び方のポイント」「よくある質問」「まとめ」）
+  ・主要キーワードを含めるのは1〜2 見出しで十分。全 H2/H3 に詰め込むと逆効果
 - 「結論早見表」「おすすめ早見表」のような早見表セクションは作らない（比較表があれば十分。重複は不要）
 - 装飾は <strong>太字</strong>、<span style="color:#d32f2f">赤字</span>、<mark>マーカー</mark>、<ul><li>リスト</li></ul>、<table>表</table> だけを使う
 - 装飾目的の複雑なdiv、独自class、吹き出し、ボックス、カード、GutenbergブロックHTMLは出力しない
@@ -3270,6 +3282,63 @@ def _find_best_product_match(query_name, products, threshold=0.4):
     return best_idx if (best_idx is not None and best_score >= threshold) else None
 
 
+def strip_title_prefix_from_headings(html, title=None):
+    """記事の H2/H3 から、タイトルそのもの（または極めて類似する文字列）を
+    プレフィックス／サフィックスとして付けた SEO 過剰最適化を除去する。
+
+    Claude が「全見出しに主要キーワードを入れろ」と解釈して、タイトルを
+    全 H2 にコピペしてくる事故に対する後処理ガード。プロンプト側でも
+    禁止しているが、稀にスルーされるので二重防御。
+
+    例:
+      <h2>キャスターチェアによる床の傷を防止する｜選定基準</h2>
+        → <h2>選定基準</h2>
+      <h2>キャスターチェアによる床の傷を防止する｜まとめ｜...</h2>
+        → <h2>まとめ｜...</h2>
+      <h3>1位：商品名｜キャスターチェアによる床の傷を防止する</h3>
+        → <h3>1位：商品名</h3>
+
+    残った見出しが空・極端に短い場合は削除を見送る（誤マッチ回避）。
+    """
+    if not title or not html:
+        return html
+
+    norm_title = str(title).strip()
+    if len(norm_title) < 6:
+        # 短すぎるタイトルは記事内の自然な言及と誤マッチするので保護
+        return html
+
+    # 区切り記号として扱う候補
+    sep_pattern = r'[\s　]*[｜|｜:：・\-―—]+[\s　]*'
+
+    title_re = re.escape(norm_title)
+    # 前方プレフィックス: "<タイトル>[区切り]<本来の見出し>"
+    prefix_re = re.compile(r'^' + title_re + sep_pattern, re.IGNORECASE)
+    # 後方サフィックス: "<本来の見出し>[区切り]<タイトル>"
+    suffix_re = re.compile(sep_pattern + title_re + r'$', re.IGNORECASE)
+
+    def fix(match):
+        opening = match.group(1)
+        inner = match.group(2)
+        closing = match.group(3)
+        # 内部の HTML タグ（<mark> 等）を除いた素テキストで判定
+        bare = re.sub(r'<[^>]+>', '', inner).strip()
+        new_bare = prefix_re.sub('', bare, count=1)
+        new_bare = suffix_re.sub('', new_bare, count=1)
+        if new_bare == bare:
+            return match.group(0)  # 変化なし
+        if len(new_bare) < 2:
+            return match.group(0)  # 削りすぎ → 維持
+        return f'{opening}{new_bare}{closing}'
+
+    return re.sub(
+        r'(<h[23][^>]*>)(.*?)(</h[23]>)',
+        fix,
+        html,
+        flags=re.IGNORECASE | re.DOTALL
+    )
+
+
 def strip_leading_introduction_h2(html, title=None):
     """記事冒頭の introduction-style H2 を物理削除し、リード段落を露出させる。
 
@@ -3631,6 +3700,8 @@ def insert_card_markers(html, article_type='ranking', patterns=None, title=None)
     # まずは前処理: 早見表削除と先頭introH2削除
     text = strip_leading_introduction_h2(text, title=title)
     text = strip_summary_table_sections(text)
+    # タイトルを全H2/H3にコピペする SEO 過剰最適化を検出して除去
+    text = strip_title_prefix_from_headings(text, title=title)
 
     matome_range = _find_matome_h2_range(text)
     first_h2_range = _find_first_h2_range(text)
