@@ -122,3 +122,57 @@ add_action('wp_ajax_affiros_rewrite_save', function () {
         'view_link' => get_permalink($post_id),
     ]);
 });
+
+/**
+ * リライト履歴がある投稿一覧（リビジョン復元 UI 用）
+ */
+add_action('wp_ajax_affiros_rewrite_restore_list', function () {
+    check_ajax_referer('affiros_rewrite_nonce', 'nonce');
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(['message' => '権限がありません']);
+    }
+    $args = [
+        'page' => intval($_POST['page'] ?? 1),
+        'per_page' => intval($_POST['per_page'] ?? 20),
+    ];
+    $result = Affiros_Rewrite_Revision_Restorer::list_rewritten_posts($args);
+    wp_send_json_success($result);
+});
+
+/**
+ * リビジョン復元プレビュー（差分情報を確認）
+ */
+add_action('wp_ajax_affiros_rewrite_restore_preview', function () {
+    check_ajax_referer('affiros_rewrite_nonce', 'nonce');
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(['message' => '権限がありません']);
+    }
+    $post_id = intval($_POST['post_id'] ?? 0);
+    if (!$post_id) {
+        wp_send_json_error(['message' => '記事IDが不正です']);
+    }
+    $result = Affiros_Rewrite_Revision_Restorer::preview($post_id);
+    if (is_wp_error($result)) {
+        wp_send_json_error(['message' => $result->get_error_message()]);
+    }
+    wp_send_json_success($result);
+});
+
+/**
+ * リビジョン復元を1件実行
+ */
+add_action('wp_ajax_affiros_rewrite_restore_one', function () {
+    check_ajax_referer('affiros_rewrite_nonce', 'nonce');
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(['message' => '権限がありません']);
+    }
+    $post_id = intval($_POST['post_id'] ?? 0);
+    if (!$post_id) {
+        wp_send_json_error(['message' => '記事IDが不正です']);
+    }
+    $result = Affiros_Rewrite_Revision_Restorer::restore_one($post_id);
+    if (is_wp_error($result)) {
+        wp_send_json_error(['message' => $result->get_error_message()]);
+    }
+    wp_send_json_success($result);
+});

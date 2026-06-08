@@ -1,0 +1,271 @@
+<?php
+/**
+ * リビジョン復元ページ
+ *
+ * リライト済み記事を WP のリビジョンから「リライト直前」の状態に
+ * 一括で戻す UI。
+ */
+
+if (!defined('ABSPATH')) exit;
+
+function affiros_rewrite_render_restore_page() {
+    if (!current_user_can('manage_options')) {
+        wp_die(__('権限がありません', 'affiros-rewrite'));
+    }
+    ?>
+    <div class="wrap">
+        <h1>⏮ リビジョン復元</h1>
+
+        <div class="notice notice-warning" style="padding:12px 16px;margin:14px 0">
+            <p style="margin:0 0 6px"><strong>⚠️ リビジョン復元の注意点</strong></p>
+            <ul style="margin:0 0 0 18px;list-style:disc">
+                <li>WordPress 標準のリビジョン機能を使って「リライト直前」の状態に戻します</li>
+                <li><strong>リライト後に手動編集や商品挿入を行った変更は失われます</strong>（リライト直前の状態にリセットされるため）</li>
+                <li>復元は1件ごとに即時反映されます。元に戻したくない場合は実行前にリビジョンプレビューでご確認ください</li>
+                <li>WP のリビジョン保存が無効化されているサイト（<code>WP_POST_REVISIONS = false</code>）では復元できません</li>
+            </ul>
+        </div>
+
+        <p>
+            <button type="button" class="button button-primary" id="affiros-restore-load">📋 リライト済み記事を読み込む</button>
+            <button type="button" class="button button-secondary" id="affiros-restore-bulk" disabled style="margin-left:8px">⏮ 選択した記事をまとめて復元</button>
+            <span id="affiros-restore-bulk-count" style="margin-left:8px;color:#666"></span>
+        </p>
+
+        <div id="affiros-restore-status" style="margin:12px 0;padding:8px 12px;border-radius:4px;display:none"></div>
+
+        <table class="wp-list-table widefat fixed striped" id="affiros-restore-table" style="display:none">
+            <thead>
+                <tr>
+                    <th style="width:30px"><input type="checkbox" id="affiros-restore-checkall"></th>
+                    <th style="width:60px">ID</th>
+                    <th>タイトル</th>
+                    <th style="width:90px">状態</th>
+                    <th style="width:80px">リライト回数</th>
+                    <th style="width:130px">最終リライト</th>
+                    <th style="width:100px">リビジョン数</th>
+                    <th style="width:180px">操作</th>
+                </tr>
+            </thead>
+            <tbody id="affiros-restore-tbody"></tbody>
+        </table>
+
+        <div id="affiros-restore-pagination" style="margin-top:12px"></div>
+    </div>
+
+    <script>
+    (function($){
+        const ajaxUrl = '<?php echo esc_js(admin_url('admin-ajax.php')); ?>';
+        const nonce = '<?php echo esc_js(wp_create_nonce('affiros_rewrite_nonce')); ?>';
+        let currentPage = 1;
+        let totalPages = 1;
+
+        function setStatus(text, type) {
+            const $s = $('#affiros-restore-status');
+            const colors = {
+                info: ['#0a5d9e', '#e8f3fa'],
+                ok: ['#0a7a2f', '#e8f9ee'],
+                warn: ['#a06000', '#fef4e0'],
+                err: ['#c00', '#fde8e8'],
+            };
+            const [color, bg] = colors[type] || colors.info;
+            $s.show().css({color, background: bg}).text(text);
+        }
+
+        function updateBulkCount() {
+            const n = $('.affiros-restore-row:checked').length;
+            $('#affiros-restore-bulk-count').text(n > 0 ? '(' + n + '件選択中)' : '');
+            $('#affiros-restore-bulk').prop('disabled', n === 0);
+        }
+
+        function loadList(page) {
+            page = page || 1;
+            currentPage = page;
+            setStatus('読み込み中...', 'info');
+            $.post(ajaxUrl, {
+                action: 'affiros_rewrite_restore_list',
+                nonce: nonce,
+                page: page,
+                per_page: 20,
+            }).done(function(resp){
+                if (!resp.success) {
+                    setStatus('エラー: ' + (resp.data?.message || '不明'), 'err');
+                    return;
+                }
+                const data = resp.data;
+                totalPages = data.total_pages || 1;
+                renderTable(data.items);
+                renderPagination(data.total, data.page, data.total_pages);
+                if (data.items.length === 0) {
+                    setStatus('リライト履歴がある記事はありません', 'info');
+                    $('#affiros-restore-table').hide();
+                } else {
+                    setStatus(data.total + ' 件のリライト済み記事 (' + page + '/' + totalPages + ' ページ)', 'info');
+                    $('#affiros-restore-table').show();
+                }
+            }).fail(function(){
+                setStatus('通信エラー', 'err');
+            });
+        }
+
+        function renderTable(items) {
+            const rows = items.map(function(p){
+                const hasRev = p.has_revision;
+                const revBadge = hasRev
+                    ? '<span style="color:#0a7a2f;font-weight:600">' + p.revisions + '個</span>'
+                    : '<span style="color:#c00;font-weight:600">なし</span>';
+                const disabled = !hasRev ? 'disabled' : '';
+                const cb = hasRev
+                    ? '<input type="checkbox" class="affiros-restore-row" value="' + p.id + '">'
+                    : '';
+                return '<tr data-id="' + p.id + '">'
+                    + '<td>' + cb + '</td>'
+                    + '<td>' + p.id + '</td>'
+                    + '<td><a href="' + p.edit_url + '" target="_blank">' + escapeHtml(p.title) + '</a></td>'
+                    + '<td>' + p.status + '</td>'
+                    + '<td>' + p.rewrite_count + '</td>'
+                    + '<td>' + p.rewrite_last + '</td>'
+                    + '<td>' + revBadge + '</td>'
+                    + '<td>'
+                    +   '<button class="button button-small affiros-restore-preview" ' + disabled + '>👁 確認</button> '
+                    +   '<button class="button button-small button-primary affiros-restore-one" ' + disabled + '>⏮ 復元</button>'
+                    + '</td>'
+                    + '</tr>';
+            }).join('');
+            $('#affiros-restore-tbody').html(rows);
+            updateBulkCount();
+        }
+
+        function renderPagination(total, page, totalPg) {
+            const $p = $('#affiros-restore-pagination');
+            if (totalPg <= 1) { $p.empty(); return; }
+            let html = '<div style="display:flex;gap:6px;align-items:center">';
+            html += '<button class="button" id="affiros-restore-prev" ' + (page <= 1 ? 'disabled' : '') + '>← 前</button>';
+            html += '<span>' + page + ' / ' + totalPg + '</span>';
+            html += '<button class="button" id="affiros-restore-next" ' + (page >= totalPg ? 'disabled' : '') + '>次 →</button>';
+            html += '</div>';
+            $p.html(html);
+        }
+
+        function escapeHtml(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        // ボタン: 読み込み
+        $('#affiros-restore-load').on('click', function(){ loadList(1); });
+
+        // ボタン: 全選択
+        $(document).on('change', '#affiros-restore-checkall', function(){
+            const checked = $(this).is(':checked');
+            $('.affiros-restore-row').prop('checked', checked);
+            updateBulkCount();
+        });
+        $(document).on('change', '.affiros-restore-row', updateBulkCount);
+
+        // ページネーション
+        $(document).on('click', '#affiros-restore-prev', function(){
+            if (currentPage > 1) loadList(currentPage - 1);
+        });
+        $(document).on('click', '#affiros-restore-next', function(){
+            if (currentPage < totalPages) loadList(currentPage + 1);
+        });
+
+        // ボタン: 個別プレビュー
+        $(document).on('click', '.affiros-restore-preview', function(){
+            const $btn = $(this);
+            const id = $btn.closest('tr').data('id');
+            $btn.prop('disabled', true).text('確認中...');
+            $.post(ajaxUrl, {
+                action: 'affiros_rewrite_restore_preview',
+                nonce: nonce,
+                post_id: id,
+            }).done(function(resp){
+                if (!resp.success) {
+                    alert('プレビュー失敗: ' + (resp.data?.message || '不明'));
+                    return;
+                }
+                const d = resp.data;
+                alert(
+                    'リビジョン復元プレビュー (ID:' + d.post_id + ')\n\n'
+                    + '対象リビジョン: ' + d.target_modified + '\n'
+                    + '現在の更新日: ' + d.current_modified + '\n'
+                    + '最終リライト: ' + d.rewrite_last + '\n\n'
+                    + '【タイトル】\n'
+                    + '前: ' + d.title_before + '\n'
+                    + '後: ' + d.title_after + '\n\n'
+                    + '【本文文字数】\n'
+                    + '前: ' + d.content_chars_before + '字\n'
+                    + '後: ' + d.content_chars_after + '字\n\n'
+                    + '「復元」を押すと、対象リビジョンの状態に戻ります。'
+                );
+            }).always(function(){
+                $btn.prop('disabled', false).text('👁 確認');
+            });
+        });
+
+        // ボタン: 個別復元
+        $(document).on('click', '.affiros-restore-one', function(){
+            const $btn = $(this);
+            const id = $btn.closest('tr').data('id');
+            if (!confirm('ID:' + id + ' をリライト直前の状態に戻します。よろしいですか？')) return;
+            $btn.prop('disabled', true).text('復元中...');
+            $.post(ajaxUrl, {
+                action: 'affiros_rewrite_restore_one',
+                nonce: nonce,
+                post_id: id,
+            }).done(function(resp){
+                if (!resp.success) {
+                    alert('復元失敗: ' + (resp.data?.message || '不明'));
+                    $btn.prop('disabled', false).text('⏮ 復元');
+                    return;
+                }
+                $btn.closest('tr').css('background', '#e8f9ee').find('td:last').html('<span style="color:#0a7a2f">✅ 復元完了</span>');
+            }).fail(function(){
+                alert('通信エラー');
+                $btn.prop('disabled', false).text('⏮ 復元');
+            });
+        });
+
+        // ボタン: 一括復元
+        $('#affiros-restore-bulk').on('click', function(){
+            const ids = $('.affiros-restore-row:checked').map(function(){ return $(this).val(); }).get();
+            if (!ids.length) return;
+            if (!confirm(ids.length + ' 件の記事をリライト直前の状態に戻します。よろしいですか？')) return;
+            const $btn = $(this);
+            $btn.prop('disabled', true).text('実行中... 0/' + ids.length);
+            let done = 0, ok = 0, ng = 0;
+            const next = function() {
+                if (done >= ids.length) {
+                    setStatus('一括復元完了: 成功 ' + ok + ' / 失敗 ' + ng, ok && !ng ? 'ok' : 'warn');
+                    $btn.prop('disabled', false).text('⏮ 選択した記事をまとめて復元');
+                    return;
+                }
+                const id = ids[done];
+                $.post(ajaxUrl, {
+                    action: 'affiros_rewrite_restore_one',
+                    nonce: nonce,
+                    post_id: id,
+                }).done(function(resp){
+                    const $row = $('tr[data-id="' + id + '"]');
+                    if (resp.success) {
+                        ok++;
+                        $row.css('background', '#e8f9ee').find('td:last').html('<span style="color:#0a7a2f">✅ 復元完了</span>');
+                    } else {
+                        ng++;
+                        $row.css('background', '#fde8e8').find('td:last').html('<span style="color:#c00">❌ ' + (resp.data?.message || '失敗') + '</span>');
+                    }
+                }).fail(function(){
+                    ng++;
+                }).always(function(){
+                    done++;
+                    $btn.text('実行中... ' + done + '/' + ids.length);
+                    setTimeout(next, 300); // WP DB 負荷軽減
+                });
+            };
+            next();
+        });
+    })(jQuery);
+    </script>
+    <?php
+}

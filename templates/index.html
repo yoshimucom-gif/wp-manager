@@ -1810,6 +1810,23 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.6.8 (2026-06-08) — リライタにリビジョン復元機能を追加（200記事一括ロールバック可）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>リライタプラグイン v0.4.25 に「リビジョン復元」サブメニューを追加</strong> — WP の標準リビジョン機能を使って「リライト直前」の状態に戻す。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>WP管理画面 → Affiros リライト → ⏮ リビジョン復元 から利用</li>
+                  <li>リライト履歴メタ (<code>_affiros_rewrite_count &gt; 0</code>) の記事を一覧表示</li>
+                  <li>各記事の WP リビジョンから <code>_affiros_rewrite_last_at</code> より古い最新のものを「リライト直前」として選定</li>
+                  <li>個別復元（「確認」プレビュー → 「復元」）と一括復元（チェックボックスで複数選択）の両対応</li>
+                  <li>復元後は <code>wp_restore_post_revision()</code> でロールバック＋関連メタ（リライト履歴・マーカー検証）をクリア</li>
+                </ul>
+              </li>
+              <li><strong>背景</strong>: ユーザーが2日間で200記事ほどリライトしたが、過去版（v0.4.24以前）の冗長な記事を全件巻き戻したいニーズに対応。</li>
+              <li><strong>注意</strong>: リライト後に手動編集や商品挿入を行った変更も失われるため、UI に明示的な警告を表示。WP のリビジョン保存が無効化されているサイト（<code>WP_POST_REVISIONS=false</code>）では復元不可。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.6.7 (2026-06-08) — リライタが商品挿入プラグインと連携、商品ミスマッチを解消</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>リライタープラグイン v0.4.24 が商品挿入プラグインの API を呼べるように</strong> — WAF 経由で本体投稿できない（kaguashi 等の）サイト向けに、リライタ単体でランキング記事を書ける状態にする改修。</li>
