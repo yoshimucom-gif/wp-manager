@@ -212,7 +212,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.6.3'
+APP_VERSION = '1.6.4'
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -1361,22 +1361,31 @@ def primary_article_keyword(article):
 
 
 def keyword_heading_text(original, keyword, article_type='ranking'):
+    """見出しに主要キーワードを補強する。
+
+    ⚠️ 旧版の挙動は、sanitize_generated_html で「タイトル丸ごとコピペ」を
+    せっかく除去した直後に、この関数が「キャスター｜選定基準」「1位：商品名
+    ｜キャスター」のような形で**キーワードを後付けで貼り付け直していた**。
+    結果として post-process が完全に無効化され、全 H2/H3 にタイトル系の語が
+    付くバグが残り続けていた。
+
+    Claude 側のプロンプトで主要キーワードを 1〜2 見出しに自然に含める指示を
+    出している以上、ここで機械的にキーワードを差し込むのは**過剰最適化**を
+    引き起こすだけで百害あって一利なし。
+
+    新仕様: 「裸単語1つだけの見出し（『まとめ』『よくある質問』）」を
+    最小限に補強するのみ。順位付き H3 や 32 字以下の見出しに自動で
+    「｜キーワード」を付ける旧挙動は完全廃止。
+    """
     text = re.sub(r'\s+', ' ', str(original or '')).strip()
     if not keyword or keyword in text:
         return text
-    normalized = normalize_article_type(article_type, 'ranking')
+    # 裸の「まとめ」「よくある質問」だけ最低限の SEO 補強を行う。
+    # それ以外の見出しは Claude が書いた本文を尊重する。
     if text in ('まとめ', '総括'):
         return f'まとめ｜{keyword}選びで失敗しないために'
     if text in ('よくある質問', 'FAQ', 'Q&A'):
         return f'{keyword}のよくある質問'
-    if '選び方' in text:
-        return text.replace('選び方', f'{keyword}の選び方')
-    if normalized == 'ranking' and ('ランキング' in text or '個別解説' in text or 'おすすめ' in text):
-        return f'{keyword}{text}'
-    if re.search(r'(?:第?\s*)?[1-9][0-9]?\s*位', text):
-        return f'{text}｜{keyword}'
-    if len(text) <= 32:
-        return f'{keyword}｜{text}'
     return text
 
 

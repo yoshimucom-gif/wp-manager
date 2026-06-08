@@ -1810,6 +1810,24 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.6.4 (2026-06-08) — sanitize が enhance で無効化される根本バグ修正</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>「sanitize で見出しを綺麗にした直後に keyword_heading_text が｜キーワードを付け直す」根本バグを修正</strong> — v1.6.0〜v1.6.3 で実装した見出し清掃が、enhance_generated_article_html の <code>keyword_heading_text</code> ループで上書きされ完全に無効化されていた。実装が無駄働きしていたという**重大な設計バグ**。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>旧 keyword_heading_text の挙動:
+                    <br>　・順位付き H3「1位：商品名」→「1位：商品名｜キーワード」と末尾貼り付け
+                    <br>　・32文字以下の H2「選定基準」→「キーワード｜選定基準」と冒頭貼り付け
+                    <br>　・「ランキング」「おすすめ」を含む H2 → 頭にキーワードを連結
+                    <br>　= **すべての H2/H3 にタイトル系の語が必ず付く**過剰最適化を再生産</li>
+                  <li>新挙動: 裸の「まとめ」「よくある質問」だけ最低限補強。それ以外は Claude が書いた見出し（sanitize 済み）をそのまま尊重</li>
+                  <li>これで sanitize_generated_html の効果が本番でも反映されるようになる</li>
+                </ul>
+              </li>
+              <li><strong>ユーザーへのお詫び</strong> — 「徹底的に追求」と言いながらこの根本バグを v1.6.3 まで見落としていたのは私の重大ミス。お金をかけて再生成しても全く改善しない原因がこれだった。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.6.3 (2026-06-08) — 見出しSEO最適化の振り子修正・商品名H3の検索精度両立</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>「過剰最適化を消したら裸見出しになる」振り子問題を解消</strong> — v1.6.0 の sanitize は「タイトル丸ごとコピペ」を消すことに集中しすぎて「選定基準」「まとめ」だけの裸見出しを大量生成していた。プロンプトに「主要キーワード（タイトルから抽出した核となる短い語）を1〜2語、12〜30文字で自然に組み込む」を明示し、ちょうど良い具体性を狙う設計に修正。</li>
