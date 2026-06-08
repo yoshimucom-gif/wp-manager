@@ -44,7 +44,7 @@ class Affiros_Rewrite_Heading_Sanitizer {
      * 完全一致だけでなく部分文字列も検出するため、タイトルの前半だけを
      * コピペされた場合（「○○の傷を防止する」など）にも有効。
      */
-    private static function strip_title_substring($html, $title, $min_length = 8) {
+    private static function strip_title_substring($html, $title, $min_length = 12) {
         $norm = trim((string)$title);
         if (mb_strlen($norm) < $min_length) {
             return $html;
@@ -209,14 +209,22 @@ class Affiros_Rewrite_Heading_Sanitizer {
             '/(<h[23][^>]*>)(.*?)(<\/h[23]>)/isu',
             function ($m) {
                 $inner = $m[2];
-                // 助詞+漢字/カタカナ で始まるケース
+                $new_inner = $inner;
+                // (1) 助詞+漢字/カタカナ で始まるケース
                 $new_inner = preg_replace(
                     '/^[\s　]*[でをにがはとの](?=[\x{4E00}-\x{9FFF}\x{30A1}-\x{30F6}ー])/u',
                     '',
-                    $inner
+                    $new_inner
                 );
-                // 区切り記号で始まったら整理
+                // (2) 冒頭の区切り記号で始まったら整理
                 $new_inner = preg_replace('/^[\s　]*[｜|：:・\-―—][\s　]*/u', '', $new_inner);
+                // (3) 「のの」が連続したら「の」に
+                $new_inner = preg_replace('/のの+/u', 'の', $new_inner);
+                // (4) 連続した区切り記号「｜｜」→「｜」
+                $new_inner = preg_replace('/[｜|][\s　]*[｜|]/u', '｜', $new_inner);
+                // (5) 末尾の区切り取り残し
+                $new_inner = preg_replace('/[\s　]*[｜|：:・\-―—][\s　]*$/u', '', $new_inner);
+
                 if ($new_inner === $inner) {
                     return $m[0];
                 }

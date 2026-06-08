@@ -1810,6 +1810,23 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.6.3 (2026-06-08) — 見出しSEO最適化の振り子修正・商品名H3の検索精度両立</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>「過剰最適化を消したら裸見出しになる」振り子問題を解消</strong> — v1.6.0 の sanitize は「タイトル丸ごとコピペ」を消すことに集中しすぎて「選定基準」「まとめ」だけの裸見出しを大量生成していた。プロンプトに「主要キーワード（タイトルから抽出した核となる短い語）を1〜2語、12〜30文字で自然に組み込む」を明示し、ちょうど良い具体性を狙う設計に修正。</li>
+              <li><strong>sanitize の閾値変更（8→12文字）</strong> — タイトル全文の貼り付けだけを削り、「キャスターチェア」「床傷防止」のような共起語としての短いキーワードは見出しに残す。「のの」連続・末尾の余り区切り記号など整形パターンも追加。</li>
+              <li><strong>ランキング H3 商品名の SEO + 検索精度の両立</strong> — Amazon商品名そのまま貼り付け（70文字超）を禁止し、「順位＋ブランド名＋商品カテゴリ＋識別語1個」（15〜30文字）に絞るプロンプトを追加。プラグイン側で H3 がそのまま Amazon/楽天 API の検索クエリになるため、長すぎると関連性スコアが下がりヒット率低下、短すぎる（ブランドなし／カテゴリなし）と無関係商品が混入する問題を防ぐ。</li>
+              <li><strong>スコアロジック更新（SCORE_VERSION 維持）</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>共起語のない裸見出し（8文字未満で主要キーワードを含まない H2）が 3 個以上で減点</li>
+                  <li>ランキング H3 で商品名本体が 50 文字超（Amazon商品名そのまま）→ 減点</li>
+                  <li>ランキング H3 で商品名本体が 6 文字未満（ブランドなしの可能性）→ 減点</li>
+                </ul>
+              </li>
+              <li><strong>リライタプラグイン v0.4.21 同期</strong> — heading-sanitizer の min_length・整形パターン、rewrite-engine のプロンプトを本体と同期。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.6.2 (2026-06-08) — 一括処理プログレスバーの「中／完了」矛盾表示を修正</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>「一括生成中 100%」と「一括生成完了」が同時表示される矛盾を解消</strong> — プログレスバーのラベル <code>#batch-progress-label</code> が起動時の固定文言「一括生成中」のまま完了後も書き換わっていなかった。実行中／完了／キャンセル／強制終了／異常終了 で動的にラベル表示と色を切り替えるように修正。</li>
