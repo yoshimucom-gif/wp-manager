@@ -65,18 +65,43 @@ class Affiros_Rewrite_Engine {
         // === N選 スケール ===
         // ユーザーが target_chars を明示していない（=0「元記事に合わせる」）場合のみ、
         // タイトルから N選を読み取って自動的に下限を引き上げる。
-        // 5選で 3000字基準、(N-5)*500 を加算、上限 14000字。
+        // ※冗長を避けるため上限は適正密度の130%でクランプ。
         if (intval($merged['target_chars'] ?? 0) <= 0) {
             $rc = Affiros_Rewrite_Article_Type::extract_ranking_count($post['title']);
             if ($rc && $rc > 5) {
                 $source_chars = mb_strlen(trim(strip_tags($post['content'])));
                 $n_target = min(14000, 3000 + ($rc - 5) * 500);
-                // 元記事よりさらに長くする方向だけで補正（短縮はしない）
-                $merged['target_chars'] = max($source_chars, $n_target);
+                // 元記事冗長を引き継がないよう適正密度の 1.3 倍を上限とする
+                $merged['target_chars'] = min(
+                    max($source_chars, $n_target),
+                    (int)($n_target * 1.3)
+                );
             }
         }
 
-        $prompt = self::build_prompt($post, $merged);
+        // === 商品コンテキスト取得（B方式・product-inserter 連携） ===
+        // ranking 記事の場合、商品挿入プラグインの AI_PI_Product_Selector を呼んで
+        // Amazon/楽天の候補商品を取得し、Claude プロンプトに含める。
+        // これにより Claude は「実在する商品」を見ながら H3 を書けるため、
+        // 商品挿入時に H3 と挿入商品がミスマッチする事故を防げる。
+        // product-inserter プラグインが無効/未インストールの場合は静かにスキップ。
+        $product_candidates = [];
+        if ($article_type === 'ranking' && class_exists('AI_PI_Product_Selector')) {
+            $search_keyword = self::resolve_product_search_keyword($post, $merged);
+            if ($search_keyword !== '') {
+                $rc_for_pool = Affiros_Rewrite_Article_Type::extract_ranking_count($post['title']) ?: 5;
+                // N選数より多めに候補を取って Claude が選びやすくする
+                $per_source = min(15, max(8, $rc_for_pool + 3));
+                try {
+                    $product_candidates = AI_PI_Product_Selector::fetch_candidates($search_keyword, $per_source);
+                } catch (Exception $e) {
+                    $product_candidates = [];
+                    error_log('[affiros-rewrite] 商品候補取得失敗: ' . $e->getMessage());
+                }
+            }
+        }
+
+        $prompt = self::build_prompt($post, $merged, $product_candidates);
 
         // 目標文字数に応じて出力上限を決める（固定だと長文指定で途中切れする）
         $max_tokens = self::calc_max_tokens($merged['target_chars'] ?? 0);
@@ -153,6 +178,7 @@ class Affiros_Rewrite_Engine {
             'markers_inserted' => !empty($opts['insert_markers']) && $article_type,
             'marker_stats' => $marker_stats,
             'marker_validation' => $marker_validation,
+            'product_candidates_count' => count($product_candidates),
         ];
     }
 
@@ -167,6 +193,79 @@ class Affiros_Rewrite_Engine {
         }
         $est = (int)ceil($target * 2.5) + 1000;
         return max(2000, min(32000, $est));
+    }
+
+    /**
+     * 商品検索用のキーワードを記事メタ（タイトル等）から解決する。
+     *
+     * 優先順位:
+     *   1. opts.ad_keywords が指定されていればそれを使う
+     *   2. opts.keywords があれば先頭の1個を使う
+     *   3. タイトルから「N選」「おすすめ」等の修飾語を除いた核を抽出
+     */
+    private static function resolve_product_search_keyword($post, $opts) {
+        $ad = trim((string)($opts['ad_keywords'] ?? ''));
+        if ($ad !== '') {
+            $first = trim(preg_split('/[,、]/u', $ad)[0]);
+            if ($first !== '') return $first;
+        }
+        $kw = trim((string)($opts['keywords'] ?? ''));
+        if ($kw !== '') {
+            $first = trim(preg_split('/[,、]/u', $kw)[0]);
+            if ($first !== '') return $first;
+        }
+        $title = (string)($post['title'] ?? '');
+        // 「【2026年版】」「おすすめ」「商品N選」「N選」等の評価語・修飾語を除去
+        $cleaned = preg_replace(
+            '/【[^】]*】|\[[^\]]*\]|（[^）]*）|\([^)]*\)|'
+            . '(?:おすすめ|ベスト|人気|厳選|まとめ|完全ガイド|徹底比較|'
+            . '解説|紹介|レビュー|2[0-9]{3}年版|最新)|'
+            . '[0-9０-9]+\s*選/u',
+            ' ',
+            $title
+        );
+        $cleaned = trim(preg_replace('/\s+/u', ' ', $cleaned));
+        return $cleaned;
+    }
+
+    /**
+     * 取得した商品候補リストを Claude プロンプト用のテキストに整形する。
+     */
+    private static function format_product_candidates_section($candidates) {
+        if (empty($candidates)) {
+            return '';
+        }
+        // 取得しすぎないよう最大 15 件に絞る
+        $candidates = array_slice($candidates, 0, 15);
+        $lines = [];
+        foreach ($candidates as $idx => $p) {
+            $no = $idx + 1;
+            $source = $p['source'] ?? '?';
+            $brand = $p['brand'] ?? '';
+            $title = $p['title'] ?? '';
+            $price = isset($p['price']) ? number_format((float)$p['price']) : '?';
+            $rating = isset($p['rating']) ? sprintf('%.1f', (float)$p['rating']) : '';
+            $review = isset($p['review_count']) ? '(' . (int)$p['review_count'] . '件)' : '';
+            $meta = $rating !== '' ? "★{$rating}{$review}" : '';
+            $brand_part = $brand !== '' ? "[{$brand}] " : '';
+            $lines[] = "{$no}. {$brand_part}{$title} / 価格約¥{$price} / {$source} {$meta}";
+        }
+        $list_text = implode("\n", $lines);
+
+        return <<<PRODUCTS
+
+商品候補リスト（Amazon/楽天 API から取得した実在商品）:
+ランキング記事を書く際は、以下の候補リストから商品を選んで H3 を組み立ててください。
+**架空の商品名を H3 に書かない**。候補リストの商品名（ブランド名＋商品カテゴリ）を
+H3 に使うことで、後段の商品挿入処理で正しい商品カードが挿入されます。
+
+{$list_text}
+
+商品 H3 の書き方:
+- 「N位：ブランド名 商品カテゴリ（識別語1個）」の形式に絞る（15〜30文字）
+- 例: 「1位：Ezprotekt キャスターストッパー（5個セット）」
+- 候補リストの商品タイトルが長すぎる場合は、ブランド名＋商品カテゴリ部分だけ抽出する
+PRODUCTS;
     }
 
     /**
@@ -198,7 +297,7 @@ class Affiros_Rewrite_Engine {
     /**
      * Claude へ投げる prompt
      */
-    private static function build_prompt($post, $opts) {
+    private static function build_prompt($post, $opts, $product_candidates = []) {
         $mode_map = [
             'seo' => 'SEO観点で検索意図を満たし、見出し構造・キーワード網羅性を強化する',
             'readability' => '読みやすさを最優先に、段落分け・改行・冗長表現の整理に重点を置く',
@@ -238,6 +337,9 @@ class Affiros_Rewrite_Engine {
         // 記事タイプ別の指示（本体 build_article_type_prompt 準拠）
         $type_prompt = self::article_type_prompt($opts['article_type'] ?? '');
         $type_section = $type_prompt !== '' ? "\n" . $type_prompt : '';
+
+        // 商品候補セクション（ranking 記事で商品候補を取得できたとき）
+        $products_section = self::format_product_candidates_section($product_candidates);
 
         $original_title = $post['title'];
         $original_content = mb_substr((string)$post['content'], 0, self::MAX_SOURCE_CHARS);
@@ -335,6 +437,7 @@ HEADING;
 
 {$heading_rules}
 {$type_section}
+{$products_section}
 {$char_section}
 
 出力フォーマット（必ずこの形式で出力すること）:

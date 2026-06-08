@@ -1810,6 +1810,24 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.6.7 (2026-06-08) — リライタが商品挿入プラグインと連携、商品ミスマッチを解消</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>リライタープラグイン v0.4.24 が商品挿入プラグインの API を呼べるように</strong> — WAF 経由で本体投稿できない（kaguashi 等の）サイト向けに、リライタ単体でランキング記事を書ける状態にする改修。</li>
+              <li><strong>商品ミスマッチ問題の解消</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>従来: リライタが商品データを知らずに H3「1位：架空の商品名」を書き、商品挿入プラグインが Amazon API で別商品をヒットさせていた</li>
+                  <li>新版: リライタが <code>AI_PI_Product_Selector::fetch_candidates()</code> を直接呼び、Amazon/楽天の実在候補商品を取得</li>
+                  <li>その候補リストを Claude プロンプトに含めて「候補から選んで H3 を書く」と指示</li>
+                  <li>商品挿入時のミスマッチが物理的に発生しない構造に</li>
+                </ul>
+              </li>
+              <li><strong>キーワード解決</strong>: ad_keywords → keywords → タイトル（修飾語除去）の優先順で商品検索キーワードを抽出。</li>
+              <li><strong>フォールバック</strong>: product-inserter プラグインが未インストール/無効でも静かにスキップ。リライト自体は続行。</li>
+              <li><strong>N選スケールの上限クランプ</strong>: 元記事が冗長（9000字等）でも、適正密度の1.3倍を上限としてリライト時に短縮（v1.6.6 の冗長抑制と整合）。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.6.6 (2026-06-08) — 冗長抑制（共通＋ランキング密度勾配）で記事の SEO 密度を最適化</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>共通の冗長抑制ルール追加</strong> — Google Helpful Content 観点で「内容の薄い長文」を防ぐ:
