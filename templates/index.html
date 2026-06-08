@@ -1810,6 +1810,37 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.6.6 (2026-06-08) — 冗長抑制（共通＋ランキング密度勾配）で記事の SEO 密度を最適化</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>共通の冗長抑制ルール追加</strong> — Google Helpful Content 観点で「内容の薄い長文」を防ぐ:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>「対応キャスター径の確認」「公式情報をご確認ください」のような責任回避フレーズを記事全体で3回まで</li>
+                  <li>共通の注意点は「選定基準」「選び方」セクションで1回だけ書く（商品個別で繰り返さない）</li>
+                  <li>まとめ後の追記パラグラフを連ねない（「商品を選んだあとは…」「また、どの商品を…」等）</li>
+                  <li>15文字以上の連続フレーズを記事内で複数商品にわたって使い回さない</li>
+                </ul>
+              </li>
+              <li><strong>ランキング記事の「密度勾配」ルール追加</strong> — 全件均等は冗長:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>1位: 厚く（400〜500字、ul 含む）</li>
+                  <li>2-3位: やや厚く（300〜400字）</li>
+                  <li>4位以降: 簡潔に（150〜250字、ul は省略可）</li>
+                  <li>最下位2件: 最も簡潔に（100〜200字）</li>
+                  <li>共通注意点は商品個別では繰り返さず、選定基準セクションに一元化</li>
+                </ul>
+              </li>
+              <li><strong>スコア側に冗長検出を追加</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>「公式情報」「公式サイト」「ご確認ください」が10回以上で警告／15回以上で減点</li>
+                  <li>15文字以上の同一フレーズが3回以上現れる箇所が3件以上で減点</li>
+                  <li>まとめセクション以降に &lt;p&gt; が8個以上並んでいたら減点</li>
+                </ul>
+              </li>
+              <li><strong>リライタ v0.4.23 同期</strong> — 冗長抑制と密度勾配ルールをプラグインプロンプトにも適用。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.6.5 (2026-06-08) — 「この記事でわかること」等のメタ目次H2を全種別で禁止</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>「この記事でわかること」「目次」「本記事の概要」等の無価値メタH2を全記事種別から排除</strong> — リード文（記事冒頭の <p>）と内容が完全に重複するため、SEO 的に無価値かつ読者にもノイズになる。プロンプトで明示的に禁止＋後処理で物理削除する二重防御。</li>
