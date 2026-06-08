@@ -1821,7 +1821,7 @@ def _has_ranking_signal(title):
     if not title:
         return False
     return bool(re.search(
-        r'[0-9０-9]+\s*選|ランキング|おすすめ\s*[0-9０-9]+|ベスト\s*[0-9０-9]+|TOP\s*[0-9０-9]+',
+        r'[0-9０-９]+\s*選|ランキング|おすすめ\s*[0-9０-９]+|ベスト\s*[0-9０-９]+|TOP\s*[0-9０-９]+',
         str(title), re.IGNORECASE
     ))
 
