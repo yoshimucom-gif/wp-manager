@@ -1810,6 +1810,13 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.6.2 (2026-06-08) — 一括処理プログレスバーの「中／完了」矛盾表示を修正</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>「一括生成中 100%」と「一括生成完了」が同時表示される矛盾を解消</strong> — プログレスバーのラベル <code>#batch-progress-label</code> が起動時の固定文言「一括生成中」のまま完了後も書き換わっていなかった。実行中／完了／キャンセル／強制終了／異常終了 で動的にラベル表示と色を切り替えるように修正。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.6.1 (2026-06-08) — 「対応履歴で確認」ボタン修正</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>個別記事作成ページの「対応履歴で確認」ボタンが反応しない問題を修正</strong> — <code>showPage('history')</code> という存在しないページIDを呼んでいた（正しくは <code>'articles'</code>）。ボタンを押しても無反応になっていた。</li>
@@ -4997,6 +5004,7 @@ function renderBatchJobStatus(job) {
   const percentEl = document.getElementById('batch-progress-percent');
   const countEl = document.getElementById('batch-progress-count');
   const currentEl = document.getElementById('batch-progress-current');
+  const labelEl = document.getElementById('batch-progress-label');
   if (!el) return;
   const generatingCount = allArticles.filter(a => a.status === 'generating').length;
   const queuedCount = allArticles.filter(a => a.status === 'queued').length;
@@ -5018,6 +5026,29 @@ function renderBatchJobStatus(job) {
   if (percentEl) percentEl.textContent = `${percent}%`;
   if (countEl) countEl.textContent = `${done}/${total}件`;
   if (currentEl) currentEl.textContent = job?.current_title ? `処理中: ${job.current_title}` : '';
+  // ラベル文言は実行中／完了で切り替える（旧版は「一括生成中」固定で、完了後も
+  // 「一括生成中 100%」と矛盾表示になっていた）。
+  if (labelEl) {
+    if (isRunning) {
+      labelEl.textContent = '一括生成中';
+      labelEl.style.color = '';
+    } else if (job?.status === 'completed') {
+      labelEl.textContent = `✅ 完了（成功 ${completed}件${failed ? ` / エラー ${failed}件` : ''}）`;
+      labelEl.style.color = '#16a34a';
+    } else if (job?.status === 'cancelled') {
+      labelEl.textContent = '⏹ キャンセル済み';
+      labelEl.style.color = '#a06000';
+    } else if (job?.status === 'terminated') {
+      labelEl.textContent = '✕ 強制終了';
+      labelEl.style.color = '#dc2626';
+    } else if (job?.status === 'crashed' || job?.status === 'crashed_on_restart') {
+      labelEl.textContent = '⚠️ 異常終了';
+      labelEl.style.color = '#dc2626';
+    } else {
+      labelEl.textContent = '一括生成';
+      labelEl.style.color = '';
+    }
+  }
   if (isRunning) {
     const queueInfo = queuedCount ? ` / 待機 ${queuedCount}件` : '';
     const cancelBtn = job?.id
