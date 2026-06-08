@@ -72,18 +72,26 @@ function ai_pi_render_bulk_page() {
                                     <tr style="background:#f0f6fc;">
                                         <th style="padding:6px 10px;border-bottom:1px solid #ddd;text-align:left;">件数</th>
                                         <th style="padding:6px 10px;border-bottom:1px solid #ddd;text-align:left;">所要時間</th>
-                                        <th style="padding:6px 10px;border-bottom:1px solid #ddd;text-align:left;">コスト目安</th>
+                                        <th style="padding:6px 10px;border-bottom:1px solid #ddd;text-align:left;">Haiku 4.5<br><span style="font-weight:normal;color:#666;">(¥2/件)</span></th>
+                                        <th style="padding:6px 10px;border-bottom:1px solid #ddd;text-align:left;">Sonnet 4.6<br><span style="font-weight:normal;color:#666;">(¥15/件)</span></th>
+                                        <th style="padding:6px 10px;border-bottom:1px solid #ddd;text-align:left;">Opus 4.7<br><span style="font-weight:normal;color:#666;">(¥80/件)</span></th>
                                         <th style="padding:6px 10px;border-bottom:1px solid #ddd;text-align:left;">実用性</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr><td style="padding:6px 10px;">5件</td><td style="padding:6px 10px;">3〜5分</td><td style="padding:6px 10px;">〜5円</td><td style="padding:6px 10px;color:#0a7a2f;">⭐⭐⭐⭐⭐ テスト最適</td></tr>
-                                    <tr style="background:#fafafa;"><td style="padding:6px 10px;">20件</td><td style="padding:6px 10px;">15〜20分</td><td style="padding:6px 10px;">〜20円</td><td style="padding:6px 10px;color:#0a7a2f;">⭐⭐⭐⭐ 日常運用◎</td></tr>
-                                    <tr><td style="padding:6px 10px;">50件</td><td style="padding:6px 10px;">40〜50分</td><td style="padding:6px 10px;">〜50円</td><td style="padding:6px 10px;color:#a06000;">⭐⭐⭐ 我慢できる</td></tr>
-                                    <tr style="background:#fafafa;"><td style="padding:6px 10px;">100件</td><td style="padding:6px 10px;">1.5〜2時間</td><td style="padding:6px 10px;">〜100円</td><td style="padding:6px 10px;color:#a06000;">⭐⭐ ブラウザ拘束辛い</td></tr>
-                                    <tr><td style="padding:6px 10px;"><strong>200件（最大）</strong></td><td style="padding:6px 10px;">3〜4時間</td><td style="padding:6px 10px;">〜200円</td><td style="padding:6px 10px;color:#c00;">⭐ 非推奨（分割推奨）</td></tr>
+                                    <tr><td style="padding:6px 10px;">5件</td><td style="padding:6px 10px;">3〜5分</td><td style="padding:6px 10px;">〜¥10</td><td style="padding:6px 10px;">〜¥75</td><td style="padding:6px 10px;">〜¥400</td><td style="padding:6px 10px;color:#0a7a2f;">⭐⭐⭐⭐⭐ テスト最適</td></tr>
+                                    <tr style="background:#fafafa;"><td style="padding:6px 10px;">20件</td><td style="padding:6px 10px;">15〜20分</td><td style="padding:6px 10px;">〜¥40</td><td style="padding:6px 10px;">〜¥300</td><td style="padding:6px 10px;">〜¥1,600</td><td style="padding:6px 10px;color:#0a7a2f;">⭐⭐⭐⭐ 日常運用◎</td></tr>
+                                    <tr><td style="padding:6px 10px;">50件</td><td style="padding:6px 10px;">40〜50分</td><td style="padding:6px 10px;">〜¥100</td><td style="padding:6px 10px;">〜¥750</td><td style="padding:6px 10px;">〜¥4,000</td><td style="padding:6px 10px;color:#a06000;">⭐⭐⭐ 我慢できる</td></tr>
+                                    <tr style="background:#fafafa;"><td style="padding:6px 10px;">100件</td><td style="padding:6px 10px;">1.5〜2時間</td><td style="padding:6px 10px;">〜¥200</td><td style="padding:6px 10px;">〜¥1,500</td><td style="padding:6px 10px;">〜¥8,000</td><td style="padding:6px 10px;color:#a06000;">⭐⭐ ブラウザ拘束辛い</td></tr>
+                                    <tr><td style="padding:6px 10px;"><strong>200件（最大）</strong></td><td style="padding:6px 10px;">3〜4時間</td><td style="padding:6px 10px;">〜¥400</td><td style="padding:6px 10px;">〜¥3,000</td><td style="padding:6px 10px;">〜¥16,000</td><td style="padding:6px 10px;color:#c00;">⭐ 非推奨（分割推奨）</td></tr>
                                 </tbody>
                             </table>
+                            <div style="padding:8px 12px;background:#eaf6ff;border-top:1px solid #bcd9f0;font-size:11px;color:#1a4a7a;line-height:1.6;">
+                                <strong>💡 コストを抑えたいときは</strong><br>
+                                ・モデルを <strong>Haiku 4.5</strong> に変更すると Sonnet の約 1/7（設定画面 → Claude モデル）<br>
+                                ・Haiku でも商品選定の精度は実用レベル。大量処理時の第一候補です<br>
+                                ・上記コストは保守的な上限値。実測は 50〜70% 程度に収まることが多いです
+                            </div>
                             <div style="padding:8px 12px;background:#fff8f0;border-top:1px solid #f0d8a0;font-size:11px;color:#8a5800;line-height:1.6;">
                                 <strong>⚠️ 大量実行時の注意</strong><br>
                                 ・ブラウザタブを閉じると残りは処理されません（JS ループ方式）<br>
