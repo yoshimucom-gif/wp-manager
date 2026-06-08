@@ -2520,7 +2520,7 @@ def content_similarity(a, b):
     return difflib.SequenceMatcher(None, left, right).ratio()
 
 
-SCORE_VERSION = 2
+SCORE_VERSION = 3
 
 
 def critical_html_tag_issues(html):
@@ -2551,6 +2551,94 @@ def visible_generation_artifact_count(html, text):
     return sum(len(re.findall(pattern, raw, flags=re.I)) + len(re.findall(pattern, visible, flags=re.I)) for pattern in patterns)
 
 
+def detect_heading_quality_issues(title, html):
+    """見出しの品質問題を検出し、 (issues_list, penalty_total, score_cap) を返す。
+
+    sanitize_generated_html で post-process しているのでここに到達することは
+    減るはずだが、何らかの理由で見出しが破綻したまま保存された記事を
+    確実に低スコアに落とすための網。
+
+    検出対象:
+    1. タイトル丸ごと / 長い substring が H2 or H3 に含まれる ← 強い問題
+    2. 1見出しに ｜ が3個以上 ← 過剰最適化
+    3. 同見出しに同じキーワードが2回以上 ← 重複
+    4. 記事冒頭がリード文ではなく即 <h2>（リード文ゼロ）← 構造破綻
+    5. リード文が極端に短い (50文字未満) ← 構造破綻
+    """
+    issues = []
+    penalty = 0
+    cap = None
+
+    if not title or not html:
+        return issues, penalty, cap
+
+    norm_title = str(title).strip()
+
+    h_pattern = re.compile(r'<(h[23])[^>]*>(.*?)</\1>', re.IGNORECASE | re.DOTALL)
+    headings = []
+    for m in h_pattern.finditer(html):
+        bare = re.sub(r'<[^>]+>', '', m.group(2)).strip()
+        if bare:
+            headings.append(bare)
+
+    # (1) タイトル丸ごと / 長い substring の検出
+    title_dup_count = 0
+    if len(norm_title) >= 6:
+        # 8文字以上の連続部分文字列を candidates にする
+        candidates = set()
+        for length in range(min(len(norm_title), 30), 7, -1):
+            for start in range(0, len(norm_title) - length + 1):
+                candidates.add(norm_title[start:start + length])
+        for h in headings:
+            if any(c in h for c in candidates):
+                title_dup_count += 1
+    if title_dup_count > 0:
+        penalty += min(40, title_dup_count * 12)
+        cap = min(cap, 40) if cap is not None else 40
+        issues.append(f'H2/H3 にタイトル丸ごとコピペ ({title_dup_count} 件) が残っています。SEO過剰最適化として大幅減点しました。')
+
+    # (2) 1見出しに ｜ が3個以上
+    sep_overload_count = sum(1 for h in headings if (h.count('｜') + h.count('|')) >= 3)
+    if sep_overload_count > 0:
+        penalty += min(20, sep_overload_count * 6)
+        cap = min(cap, 60) if cap is not None else 60
+        issues.append(f'見出しに「｜」を3個以上使ったものが {sep_overload_count} 件あります。読者には冗長です。')
+
+    # (3) 同見出し内の重複キーワード
+    dup_keyword_count = 0
+    for h in headings:
+        # 4文字以上の連続漢字 or カタカナ
+        tokens = re.findall(r'[一-龥]{4,}|[ァ-ヶー]{4,}', h)
+        if len(tokens) != len(set(tokens)):
+            dup_keyword_count += 1
+    if dup_keyword_count > 0:
+        penalty += min(15, dup_keyword_count * 5)
+        cap = min(cap, 65) if cap is not None else 65
+        issues.append(f'同一見出し内で同じキーワードが2回以上書かれている見出しが {dup_keyword_count} 件あります。')
+
+    # (4)(5) リード文の検出
+    # 最初の <h2> までに含まれる <p> の合計文字数を確認
+    first_h2_match = re.search(r'<h2\b', html, re.IGNORECASE)
+    if first_h2_match:
+        before_h2 = html[:first_h2_match.start()]
+        # この区間の <p> 内テキスト合計
+        lead_paras = re.findall(r'<p\b[^>]*>(.*?)</p>', before_h2, re.IGNORECASE | re.DOTALL)
+        lead_text = re.sub(r'<[^>]+>|\s+', '', ''.join(lead_paras))
+        if not lead_paras:
+            penalty += 15
+            cap = min(cap, 55) if cap is not None else 55
+            issues.append('記事冒頭にリード文がなく、いきなり<h2>から始まっています。読者は何の記事か判断できません。')
+        elif len(lead_text) < 50:
+            penalty += 8
+            cap = min(cap, 70) if cap is not None else 70
+            issues.append(f'リード文が短すぎます（{len(lead_text)}文字）。最低でも150〜300文字を目安にしてください。')
+        elif len(lead_text) < 150:
+            penalty += 3
+            issues.append(f'リード文がやや短めです（{len(lead_text)}文字）。読者の検討状況・記事の結論・分かることを補強すると改善できます。')
+
+    return issues, penalty, cap
+
+
 def scoring_caps_and_penalties(title, html, text, keywords=''):
     suggestions = []
     penalties = 0
@@ -2576,6 +2664,14 @@ def scoring_caps_and_penalties(title, html, text, keywords=''):
             penalties += 25
             suggestions.append(f'タイトルは{ranking_expected}選ですが、個別ランキング見出しが{ranked_count}件しかありません。')
         # 比較表は plugin の compare デザインで描画されるため、本文中のテーブル有無はスコア評価しない
+
+    # 見出し品質の検出（タイトルコピペ・｜乱用・キーワード重複・リード文不足）
+    heading_issues, heading_penalty, heading_cap = detect_heading_quality_issues(title, html)
+    if heading_issues:
+        penalties += heading_penalty
+        if heading_cap is not None:
+            caps.append(heading_cap)
+        suggestions.extend(heading_issues)
 
     return caps, penalties, suggestions
 
