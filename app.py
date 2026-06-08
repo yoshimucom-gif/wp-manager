@@ -208,6 +208,11 @@ try:
 except ValueError:
     QUALITY_GATE_MAX_POLISH = 2
 DEFAULT_ARTICLE_TARGET_CHARS = 3000
+
+# Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
+# ナビ下のバージョン表示で参照される。改修時はこの値を上げて
+# templates/index.html の改修履歴セクションにも履歴行を追加すること。
+APP_VERSION = '1.6.0'
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -4990,7 +4995,7 @@ def login_required(f):
 def index():
     # プラグインバージョン表記を index.html 側でハードコードしない（同期忘れ防止）。
     # PLUGIN_DOWNLOADS が唯一の Source of Truth。
-    return render_template('index.html', plugin_downloads=PLUGIN_DOWNLOADS)
+    return render_template('index.html', plugin_downloads=PLUGIN_DOWNLOADS, app_version=APP_VERSION)
 
 @app.route('/favicon.ico')
 def favicon():
@@ -8052,6 +8057,12 @@ def update_article_site(article_id):
 @login_required
 def api_storage_status():
     return jsonify(storage_status())
+
+
+@app.route('/api/version', methods=['GET'])
+def api_version():
+    """本体バージョン取得。ナビ表示や改修履歴ページから利用。"""
+    return jsonify({'version': APP_VERSION})
 
 @app.route('/api/data-snapshot', methods=['GET'])
 @login_required

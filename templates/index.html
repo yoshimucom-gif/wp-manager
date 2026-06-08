@@ -874,6 +874,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
       <span></span><span></span><span></span>
     </span>
     Affiros9
+    <span style="font-size:10px;color:var(--muted);font-weight:400;margin-left:6px;letter-spacing:0.5px" title="本体バージョン">v{{ app_version }}</span>
   </div>
   <nav class="nav">
     <!-- サイトスコープのメニュー（現在サイトが選択されている時のみ表示） -->
@@ -1804,27 +1805,121 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
       <div class="page" id="page-changelog">
         <div class="page-header">
           <div class="page-title">改修履歴</div>
-          <div class="page-subtitle">Affiros9 の更新ログ</div>
+          <div class="page-subtitle">Affiros9 本体の更新ログ（現在: <strong>v{{ app_version }}</strong>）</div>
         </div>
-        <div style="max-width:720px">
+        <div style="max-width:780px">
 
           <div class="settings-section">
-            <div class="section-header">// 2026-05-23</div>
+            <div class="section-header">// v1.6.0 (2026-06-08) — 一括生成の品質保証</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
-              <li><strong>ログイン認証を削除</strong> — シングルユーザー運用のため不要と判断。URLを知っていれば即アクセス可能に。</li>
-              <li><strong>広告マーカー挿入を完全保証（3層防御）</strong><br>
+              <li><strong>見出し品質ガードを全生成パスで常時走らせる</strong><br>
                 <span style="color:var(--muted);font-size:12px">
-                  ① 保存済み設定の <code>after_matome_h2</code> → <code>after_last_h2</code> 自動マイグレーション<br>
-                  ② brand DEFAULT に <code>after_last_h2</code> を追加（冒頭＋末尾の2点挿入）<br>
-                  ③ 全ルール失敗時の末尾強制挿入フォールバック<br>
-                  → WPプラグイン「マーカーが見つかりません」エラーを根絶
+                  「全 H2 にタイトル丸ごとコピペ」「｜の乱用（3個以上）」「同見出し内のキーワード重複」を
+                  <code>sanitize_generated_html</code> で機械的に除去。プロンプトに NG/OK 例を明示し
+                  few-shot bias を逆手に取る。<br>
+                  → 81点だった崩壊記事が新スコアで 12/D に正しく落ちる
                 </span>
               </li>
-              <li><strong>一括生成のタブ絞り込み</strong> — 商標タブで生成するとランキング記事を巻き込む問題を修正。</li>
-              <li><strong>対応履歴ボタンを縦並びに整理</strong> — 商標化を最下部に、開くボタンを青に変更。</li>
-              <li><strong>モデル別料金推計</strong> — Opus選択時も正しい単価で推計するように修正。</li>
-              <li><strong>セッション切れJSONエラー修正</strong> — API が HTML を返して "Unexpected token" になる問題を解消（→認証削除で不要に）。</li>
+              <li><strong>N選 に応じた目標文字数の自動スケール</strong><br>
+                <span style="color:var(--muted);font-size:12px">
+                  旧: 5選も20選も target=3000字 固定 → 件数の割に薄い記事を量産していた<br>
+                  新: 5選=3000字 / 10選=5500字 / 15選=8000字 / 20選=10500字 / 30選=14000字（上限）。
+                  Claude の max_tokens / 最低文字数 / スコア閾値も連動
+                </span>
+              </li>
+              <li><strong>見出し品質を採点に組み込み</strong> — タイトル丸ごとコピペ・｜過剰・キーワード重複・リード文不足を検出して大幅減点。SCORE_VERSION を 2 → 3 へ。</li>
+              <li><strong>WP PUSH 失敗を対応履歴で視認可能に</strong> — 403/WAF などで失敗した記事に
+                <code>last_publish_error</code> を保存し、対応履歴の状態セルに「⚠️ 前回PUSH失敗」サブラインを表示。「PUSH失敗のみ」フィルタも追加。
+              </li>
+              <li><strong>予約投稿を「記事ごとの schedule_date」方式に一本化</strong> — daily_cap / 開始日10:00 / 36分間隔の独自ロジックを廃止。CSV の <code>schedule_date</code> 列を WP の date フィールドに直接使用。</li>
+              <li><strong>商品挿入プラグインのデフォルトを Haiku に変更</strong>（コスト 1/7） — 既存ユーザーの Sonnet 設定も自動マイグレーションで Haiku 化（v1.9.12）。</li>
+              <li><strong>商品挿入の「押したら確実に挿入」確実性ガード</strong> — 挿入後マーカー残存検証・退避処理・残存件数の WP 管理画面警告バナー・バルク処理結果サマリ（v1.9.13）。</li>
+              <li><strong>商品挿入のコスト目安テーブル修正</strong> — Haiku/Sonnet/Opus 別 3列表に刷新、実額表示と一致（v1.9.10）。</li>
+              <li><strong>リライタ プラグインも見出しガード + N選スケール統合</strong>（v0.4.20）。</li>
+              <li><strong>「まとめ」H2 検出の根本修正</strong> — 「○○の選び方まとめ」のような区切り見出しを誤検出していた問題を、最後の本物 H2 を選ぶロジックで修正。リライタも v0.4.19 で同期。</li>
             </ul>
+          </div>
+
+          <div class="settings-section">
+            <div class="section-header">// v1.5.0 (2026-06-05) — マーカー挿入の信頼性</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>マーカー挿入の自己検証パイプライン</strong> — 生成・リライト直後に <code>validate_marker_insertion</code> を走らせ、ルール失敗／フォールバック使用／マーカー数を <code>marker_status</code> として記録。対応履歴の「マーカー」列で⚠️/❌が見える。</li>
+              <li><strong>マーカー挿入連鎖バグの根本修正</strong> — 本体・プラグインの両方で <code>find_last_h2_range</code> が matome 経由になっていた問題、ranking が <code>after_matome_h2</code> マイグレ対象外だった問題を修正。</li>
+              <li><strong>product-inserter v1.9.9</strong> — メニュー並び替えと旧デザイン3種非表示。</li>
+              <li><strong>product-inserter v1.9.8</strong> — has_marker フィルタが <code>_ai_pi_inserted</code> フラグで除外していた問題を修正。リライト後のマーカー再挿入が拾えるようになった。</li>
+              <li><strong>affiros-rewrite v0.4.16</strong> — リライト後に商品挿入プラグインの挿入フラグをクリアし、新マーカー検出を確実に。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
+            <div class="section-header">// v1.4.0 (2026-06-04) — UI整理・品質強化</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>記事CSS と quality_style_references を完全撤去</strong> — 使われていない設定項目を削除し UI を簡素化。</li>
+              <li><strong>API設定にデータリセット（危険ゾーン）追加</strong> — 「RESET」確認語で全データ削除。</li>
+              <li><strong>「タイトル定義」UI と関連ルートを完全撤去</strong>。</li>
+              <li><strong>「予約投稿 1日あたりの上限件数」設定を撤去</strong>（後の v1.6 で完全廃止）。</li>
+              <li><strong>トップページに「料金目安」「推奨ワークフロー・処理の仕組み」セクション追加</strong>。</li>
+              <li><strong>affiros-rewrite v0.4.15</strong> — リライト履歴（回数・最終日時）を表示。</li>
+              <li><strong>affiros-rewrite v0.4.14 / v0.4.13 / v0.4.12</strong> — ドロップダウンUI修正、除外フィルター追加、①②③H3の誤マーカー挿入を防止。</li>
+              <li><strong>product-inserter v1.9.7</strong> — 一括処理に件数別目安テーブルを表示。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
+            <div class="section-header">// v1.3.0 (2026-06-01) — インポート機能</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>インポートページ追加</strong> — CSV / Excel の一括取り込み画面。</li>
+              <li><strong>カテゴリー設定・タイトル案ナビを撤去</strong> — ワークフロー簡素化。</li>
+              <li><strong>インポート簡素化</strong> — site / content 列を削除、quality_id は article_type から自動判定。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
+            <div class="section-header">// v1.2.0 (2026-05-26) — リライト機能拡張</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>affiros-rewrite v0.4.11</strong> — リライト前に既存商品カード/マーカーを除去（Pre_Cleanup）。</li>
+              <li><strong>affiros-rewrite v0.4.10</strong> — リライト出力を Gutenberg ブロック化。</li>
+              <li><strong>バックグラウンドジョブ機能を撤回</strong> — v0.5.0 / v2.0.0 で Activate 中の Fatal Error を起こしたため、v0.4.9 / v1.9.6 に戻す。</li>
+              <li><strong>予約投稿割り当てモーダルが開かない問題を修正</strong>（5/27）。</li>
+              <li><strong>対応履歴のナビハイライトが効かない問題を修正</strong>（5/27）。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
+            <div class="section-header">// v1.1.0 (2026-05-25) — 大規模リファクタ</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>ナビ並び替え＋「記事作成」→「個別記事作成」リネーム</strong>。</li>
+              <li><strong>WPプラグインの自動更新対応</strong> — affiros-rewrite v0.4.8 / product-inserter v1.9.5。WP 管理画面の「プラグイン」から「今すぐ更新」可能に。</li>
+              <li><strong>自動更新キャッシュ TTL 短縮</strong>（6h → 30min）— rewrite v0.4.9 / inserter v1.9.6。</li>
+              <li><strong>データ消失三重対策</strong>（サーバーバックアップ・自動復元・手動復元UI）→ 起動エラーが出たため即 revert。</li>
+              <li><strong>affiros-rewrite v0.4.7</strong> — マーカーがデフォルトで挿入されるよう修正。</li>
+              <li><strong>affiros-rewrite v0.4.6</strong> — 広告挿入定義 UI 追加。</li>
+              <li><strong>カテゴリー設定（旧 KW計画）</strong> — テキストエリア一括入力に変更、スラッグを Claude で英語自動生成。</li>
+              <li><strong>kwPlanOnTextareaInput の正規表現が生の改行バイトで壊れていた問題を修正</strong> — JS が全停止する事故への対応。</li>
+              <li><strong>API障害時にもナビゲーションが動くよう init() を堅牢化</strong>。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
+            <div class="section-header">// v1.0.0 (2026-05-23) — 初期記録ポイント</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>ログイン認証を削除</strong> — シングルユーザー運用のため不要と判断。</li>
+              <li><strong>広告マーカー挿入を完全保証（3層防御）</strong> — 設定マイグレーション・brand 末尾追加挿入・全ルール失敗時の末尾フォールバック。</li>
+              <li><strong>一括生成のタブ絞り込み</strong> — 商標タブで生成するとランキング記事を巻き込む問題を修正。</li>
+              <li><strong>対応履歴ボタンを縦並びに整理</strong>。</li>
+              <li><strong>モデル別料金推計</strong> — Opus選択時も正しい単価で推計。</li>
+              <li><strong>セッション切れ JSONエラー修正</strong>。</li>
+            </ul>
+          </div>
+
+          <div style="margin-top:30px;padding:14px;background:rgba(98,160,255,0.08);border-left:3px solid var(--accent);border-radius:4px;font-size:12px;color:var(--muted);line-height:1.7">
+            <strong style="color:var(--accent)">📌 バージョニング方針</strong><br>
+            セマンティックバージョニング: MAJOR.MINOR.PATCH<br>
+            ・MAJOR：互換性のない大変更（データ構造変更等）<br>
+            ・MINOR：機能追加・大きな品質改善<br>
+            ・PATCH：バグ修正・微調整（履歴ページには載せない場合あり）<br>
+            <br>
+            プラグインのバージョン（affiros-rewrite / product-inserter / decoration）は本体とは独立した版管理で、各プラグインの管理画面・改修履歴で確認できます。
           </div>
 
         </div>
