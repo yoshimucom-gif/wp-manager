@@ -1139,10 +1139,6 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
               <div class="module-title">コラム記事</div>
               <div class="module-art">▤◔</div>
             </div>
-            <div class="module-tile" onclick="showPage('title-ideas')">
-              <div class="module-title">タイトル案</div>
-              <div class="module-art">T▣</div>
-            </div>
             <div class="module-tile" onclick="showPage('batch')">
               <div class="module-title">一括処理</div>
               <div class="module-art">▧⌁</div>
@@ -1808,6 +1804,15 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <div class="page-subtitle">Affiros9 本体の更新ログ（現在: <strong>v{{ app_version }}</strong>）</div>
         </div>
         <div style="max-width:780px">
+
+          <div class="settings-section">
+            <div class="section-header">// v1.7.9 (2026-06-09) — サイトトップの「タイトル案」モジュールタイルを撤去</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>サイトトップの「タイトル案」タイルを削除</strong> — CSV ベースの運用に切り替わったため、手動 KW 入力でタイトル案を生成するこの導線は不要になった。CSV に完成タイトルが入っている以上、ユーザーがクリックする機会がない。</li>
+              <li><strong>残したタイル</strong>: ランキング記事 / 商標記事 / コラム記事 / 一括処理 の4種類</li>
+              <li><strong>注</strong>: タイトル案のページ実装と <code>/api/title-ideas</code> は v1.3.0 で既に撤去済み。タイルだけ残っていた整理漏れを今回修正。</li>
+            </ul>
+          </div>
 
           <div class="settings-section">
             <div class="section-header">// v1.7.8 (2026-06-09) — 一括処理プログレスバーをサイトごとに切り分け</div>
