@@ -252,14 +252,20 @@ $rev_ts = strtotime($rev->post_modified);
         delete_post_meta($post_id, '_affiros_marker_status');
         delete_post_meta($post_id, '_affiros_marker_summary');
 
+        // before_date モードでは $revisions / $remaining_revisions を経由しないので、
+        // 未定義のまま count() に渡されると PHP 8 で Fatal が出る。
+        // 各変数を必ず array として安全に処理する。
+        $total_revisions_count = isset($revisions) && is_array($revisions) ? count($revisions) : 0;
+        $remaining_revisions_count = is_array($remaining_revisions) ? count($remaining_revisions) : 0;
+
         return [
             'success'           => true,
             'post_id'           => $post_id,
             'restored_revision' => $target->ID,
             'restored_to'       => mysql2date('Y-m-d H:i', $target->post_modified),
             'mode'              => $mode,
-            'total_revisions'   => count($revisions),
-            'remaining_revisions'  => count($remaining_revisions),
+            'total_revisions'   => $total_revisions_count,
+            'remaining_revisions'  => $remaining_revisions_count,
             'rewrite_count_after'  => $new_count,
             'can_restore_more'     => $new_count > 0,
         ];

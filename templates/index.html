@@ -1810,6 +1810,16 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.7 (2026-06-08) — 時期指定復元の PHP 8 Fatal を修正（before_dateモードで未定義変数を count）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>真因</strong>: <code>count(): Argument #1 ($value) must be of type Countable|array, null given</code>。<code>before_date</code> モードでは <code>$revisions</code> 変数を定義していなかったが、戻り値の組み立てで <code>count($revisions)</code> を呼んでいた。PHP 8 以降は null を count() に渡すと Fatal Error になる（PHP 7 は警告だけ）。</li>
+              <li><strong>修正</strong>: <code>isset($revisions) && is_array($revisions) ? count(...) : 0</code> のように防御的に書き換え。<code>$remaining_revisions</code> も同様に <code>is_array()</code> チェックを入れた。</li>
+              <li><strong>v1.7.6 の診断強化のおかげで一発で特定できた</strong>（PHP致命的エラーがそのまま JS に表示された）。</li>
+              <li><strong>リライタプラグイン v0.4.34 同期</strong>。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.6 (2026-06-08) — 復元処理の例外捕捉とエラー詳細表示で「通信エラー」の中身を可視化</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>状況</strong>: 時期指定復元で「成功 0 / 失敗 3 / 通信エラー」と出るが、原因がわからない状態だった。</li>
