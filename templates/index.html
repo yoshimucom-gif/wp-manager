@@ -1812,6 +1812,15 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.12 (2026-06-09) — CSVインポート完了メッセージがサイトをまたいで残る問題を修正</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>問題</strong>: サイトA で CSV インポートして「149件登録しました」と出たあと、サイトB に切り替えても同じメッセージが残ったまま表示される。インポート対象のサイトA と異なるサイトの操作画面に登録情報が見えて混乱する。</li>
+              <li><strong>修正</strong>: 共通ヘルパー <code>clearImportResultIfAny()</code> を追加。<code>switchSite()</code> および <code>goToDashboard()</code> でインポートの <code>#import-status</code> / <code>#import-result</code> / <code>#import-file</code> をクリア。</li>
+              <li><strong>挙動</strong>: サイト切替・ダッシュボード遷移時にインポート完了メッセージが消える。サイト固有の情報がサイトをまたいで残らない。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.11 (2026-06-09) — 一括処理テーブルのレイアウトを整理（横スクロール撤廃）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>問題</strong>: 一括処理ページのテーブルが <code>min-width:1180px</code> で固定されていて、画面が狭いと横スクロールが必要。さらに横スクロールバーが一番下まで行かないと操作できない状態だった。スペース配分も均等じゃなく、ステータス・記事種類列に無駄な余白があった。</li>
@@ -6303,6 +6312,7 @@ async function switchToSite(siteId) {
     localStorage.setItem('lastSiteId', siteId);
     renderSidebarSites();
     updateHomePageMode();
+    clearImportResultIfAny();
     // 切替後はそのサイトの作業ホームへ
     showPage('home');
     // 記事一覧を新フィルタで再ロード
@@ -6311,6 +6321,17 @@ async function switchToSite(siteId) {
   } catch (e) {
     toast('エラー: ' + e.message, 'error');
   }
+}
+
+// インポート完了メッセージはサイト固有なので、サイト切替時にクリア。
+// 残ったままだと他サイトの操作画面にも表示され続けて混乱する。
+function clearImportResultIfAny() {
+  const statusEl = document.getElementById('import-status');
+  const resultEl = document.getElementById('import-result');
+  if (statusEl) statusEl.textContent = '';
+  if (resultEl) resultEl.innerHTML = '';
+  const fileEl = document.getElementById('import-file');
+  if (fileEl) fileEl.value = '';
 }
 
 async function goToDashboard() {
@@ -6323,6 +6344,7 @@ async function goToDashboard() {
     currentSiteId = '';
     renderSidebarSites();
     updateHomePageMode();
+    clearImportResultIfAny();
     showPage('home');
     await loadSitesDashboard();
     // 全サイト集計に切り替えるため記事を再ロード
