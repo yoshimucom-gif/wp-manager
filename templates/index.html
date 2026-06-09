@@ -1224,14 +1224,14 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div class="toolbar">
           <button class="btn btn-primary" onclick="generateSelected()">⚡ 選択を再生成</button>
           <div class="split-btn">
-            <select id="articles-post-status" title="WP投稿時のステータス">
-              <option value="publish">公開投稿</option>
-              <option value="draft">下書き投稿</option>
+            <select id="articles-post-status" title="WP投稿の種類" onchange="updateWpPostButtonLabel()">
+              <option value="schedule">📅 予約投稿（schedule_date通り）</option>
+              <option value="publish">🚀 公開投稿（即時公開）</option>
+              <option value="draft">📝 下書き投稿</option>
             </select>
-            <button class="btn btn-success" onclick="publishSelected()">🚀 WP投稿</button>
+            <button class="btn btn-success" id="wp-post-btn" onclick="execWpPost()">📅 予約投稿実行</button>
           </div>
           <span id="publish-progress-label" style="font-size:12px;color:var(--accent);display:inline-block;min-width:80px"></span>
-          <button class="btn btn-secondary" onclick="openSchedulePublishModal()" title="選択記事を schedule_date 通りに WordPress に予約投稿として送信">📅 予約投稿実行</button>
           <button class="btn btn-danger" onclick="deleteSelected()">🗑 選択を削除</button>
           <button class="btn btn-secondary" onclick="rescoreArticles()" title="記事スコアを再計算">↯ スコア再計算</button>
         </div>
@@ -1817,6 +1817,25 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <div class="page-subtitle">Affiros9 本体の更新ログ（現在: <strong>v{{ app_version }}</strong>）</div>
         </div>
         <div style="max-width:780px">
+
+          <div class="settings-section">
+            <div class="section-header">// v1.7.15 (2026-06-09) — サイト列のHTML露出を修正＋WP投稿UIを統合（予約投稿をデフォルトに）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>一括処理テーブルの「サイト」列に <code>&lt;span styl…</code> が露出していた問題を修正</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>原因: <code>getSiteName()</code> が <code>&lt;span style="..."&gt;サイト名&lt;/span&gt;</code> という HTML を返す実装。テーブル側でそれを <code>esc()</code> でエスケープしていたため、HTMLタグが文字列として可視化されていた。</li>
+                  <li>修正: 素のテキストを返す <code>getSitePlainName()</code> を使い、セルの色は CSS で付与。HTML を返す <code>getSiteName()</code> 自体を削除（重複防止）。</li>
+                </ul>
+              </li>
+              <li><strong>対応履歴ページ: WP投稿UIを統合（予約投稿をメインに）</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>問題: 「公開投稿/下書き投稿 + WP投稿」ドロップダウンと「📅 予約投稿実行」ボタンが分離していて冗長。CSV インポート時点で schedule_date を入れるフロー上、本来は予約投稿がデフォルト。</li>
+                  <li>修正: 1つのドロップダウンに3モード統合（予約投稿 / 公開投稿 / 下書き投稿）、デフォルトは予約投稿。WP投稿ボタンが選択値に応じてラベル＆挙動を切替。予約投稿時はプレビューモーダル表示、公開/下書きはそのまま確認→送信。</li>
+                  <li>独立してた「📅 予約投稿実行」ボタンは削除。ツールバーがスッキリ。</li>
+                </ul>
+              </li>
+            </ul>
+          </div>
 
           <div class="settings-section">
             <div class="section-header">// v1.7.14 (2026-06-09) — 一括処理ページのデッドスペース解消（品質定義を横並びツールバーへ）</div>
@@ -2676,7 +2695,7 @@ function showPage(name, opts = {}) {
     updateArticleTypeUI();
   }
   if (!opts.skipLoad) {
-    if (pageName === 'articles') { loadArticles(); resumePublishJobIfRunning(); }
+    if (pageName === 'articles') { loadArticles(); resumePublishJobIfRunning(); updateWpPostButtonLabel(); }
     if (pageName === 'generate') { loadQualitySelects(); updateSiteSelects(); populateGenSelect(); }
     if (pageName === 'import') { /* インポートページは初期化不要 */ }
     if (pageName === 'batch') { batchSelectedIds = null; loadQualitySelects(); loadArticles(); loadLatestBatchJob(); }
@@ -3539,12 +3558,6 @@ function filterArticles() {
   renderArticles(filtered);
 }
 
-function getSiteName(site_id) {
-  if (!site_id) return '<span style="color:var(--muted);font-size:11px">—</span>';
-  const s = siteList.find(s => s.id === site_id);
-  return s ? `<span style="font-size:11px;color:var(--accent)">${esc(s.name)}</span>` : '<span style="color:var(--muted);font-size:11px">不明</span>';
-}
-
 function getSitePlainName(site_id) {
   if (!site_id) return '';
   const s = siteList.find(s => s.id === site_id);
@@ -3746,6 +3759,26 @@ function generateSelected() {
   }, 300);
 }
 
+// WP投稿ボタンのラベルを select の選択値に合わせて切替
+function updateWpPostButtonLabel() {
+  const btn = document.getElementById('wp-post-btn');
+  if (!btn) return;
+  const mode = document.getElementById('articles-post-status')?.value || 'schedule';
+  const labels = {
+    schedule: '📅 予約投稿実行',
+    publish:  '🚀 公開投稿',
+    draft:    '📝 下書き投稿',
+  };
+  btn.textContent = labels[mode] || '🚀 WP投稿';
+}
+
+// WP投稿の入口。select の選択モードで分岐する。
+function execWpPost() {
+  const mode = document.getElementById('articles-post-status')?.value || 'schedule';
+  if (mode === 'schedule') return openSchedulePublishModal();
+  return publishSelected();
+}
+
 async function publishSelected() {
   const ids = getSelectedIds();
   if (!ids.length) { toast('記事を選択してください', 'error'); return; }
@@ -3760,7 +3793,7 @@ async function publishSelected() {
   if (!confirm(`${eligible.length}件をWordPressに${label}投稿しますか?`)) return;
 
   // ボタンを一時無効化
-  const btn = document.querySelector('button[onclick="publishSelected()"]');
+  const btn = document.getElementById('wp-post-btn');
   if (btn) { btn.disabled = true; btn.textContent = '投稿中...'; }
 
   try {
@@ -3778,7 +3811,7 @@ async function publishSelected() {
     pollPublishJob(data.job_id, btn);
   } catch (e) {
     toast('WP投稿開始に失敗しました: ' + e.message, 'error');
-    if (btn) { btn.disabled = false; btn.textContent = '🚀 WP投稿'; }
+    if (btn) { btn.disabled = false; updateWpPostButtonLabel(); }
   }
 }
 
@@ -3787,15 +3820,15 @@ let _publishJobId = null; // 実行中ジョブID（ページ更新後の復元�
 function _setPublishProgress(done, total) {
   const el = document.getElementById('publish-progress-label');
   if (el) el.textContent = `WP投稿中 ${done}/${total}件...`;
-  const btn = document.querySelector('button[onclick="publishSelected()"]');
+  const btn = document.getElementById('wp-post-btn');
   if (btn && btn.disabled) btn.textContent = `投稿中 ${done}/${total}`;
 }
 
 function _clearPublishProgress() {
   const el = document.getElementById('publish-progress-label');
   if (el) el.textContent = '';
-  const btn = document.querySelector('button[onclick="publishSelected()"]');
-  if (btn) { btn.disabled = false; btn.textContent = '🚀 WP投稿'; }
+  const btn = document.getElementById('wp-post-btn');
+  if (btn) { btn.disabled = false; updateWpPostButtonLabel(); }
   _publishJobId = null;
 }
 
@@ -3850,7 +3883,7 @@ async function resumePublishJobIfRunning() {
     // 実行中ジョブが見つかったら自動でポーリング再開
     const done = (job.completed || 0) + (job.failed || 0);
     _setPublishProgress(done, job.total || 0);
-    const btn = document.querySelector('button[onclick="publishSelected()"]');
+    const btn = document.getElementById('wp-post-btn');
     if (btn) btn.disabled = true;
     toast(`WP投稿を継続中 (${done}/${job.total}件)`, 'info');
     pollPublishJob(job.id, btn);
@@ -5534,7 +5567,7 @@ function loadBatchArticles() {
       <td style="font-size:11px;color:var(--muted);white-space:nowrap" title="${esc(a.schedule_date || '')}">${a.schedule_date ? esc(a.schedule_date) : '—'}</td>
       <td><input type="text" class="form-control" value="${esc(a.slug || '')}" placeholder="自動" style="font-size:11px;height:26px;width:100%;box-sizing:border-box" onchange="saveBatchField('${a.id}', 'slug', this.value)"></td>
       <td style="font-size:11px">${scoreBadge(a)}</td>
-      <td style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(getSiteName(a.site_id))}">${esc(getSiteName(a.site_id))}</td>
+      <td style="font-size:11px;color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(getSitePlainName(a.site_id) || '')}">${esc(getSitePlainName(a.site_id) || '—')}</td>
     </tr>
   `;
   }).join('');
