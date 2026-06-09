@@ -212,7 +212,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.7'
+APP_VERSION = '1.7.8'
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -6961,8 +6961,26 @@ def score_articles():
 @app.route('/api/batch-jobs/latest', methods=['GET'])
 @login_required
 def get_latest_batch_job():
+    """最新のバッチジョブを返す。
+    クエリパラメタ ?site_id=xxx を渡すと、そのサイトに属する記事を含むジョブだけ
+    フィルタする。一括処理画面のプログレスバーがサイトをまたいで表示される問題を
+    防ぐため。
+    """
     jobs = load_batch_jobs()
-    return jsonify(jobs[0] if jobs else None)
+    if not jobs:
+        return jsonify(None)
+    site_id = (request.args.get('site_id') or '').strip()
+    if not site_id or site_id == 'all':
+        return jsonify(jobs[0])
+    # ジョブの article_ids から記事の site_id を逆引き
+    articles = load_articles()
+    article_site_map = {a['id']: str(a.get('site_id') or '') for a in articles}
+    for job in jobs:
+        ids = job.get('article_ids') or []
+        # ジョブ内の記事のいずれかが現在サイトに属するなら、そのジョブを返す
+        if any(article_site_map.get(aid) == site_id for aid in ids):
+            return jsonify(job)
+    return jsonify(None)
 
 
 @app.route('/api/batch-jobs/<job_id>', methods=['GET'])

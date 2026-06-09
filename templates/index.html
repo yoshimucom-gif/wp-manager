@@ -1810,6 +1810,21 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.8 (2026-06-09) — 一括処理プログレスバーをサイトごとに切り分け</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>問題</strong>: 一括処理ページのプログレスバーが現在サイトに関係なく「最新のジョブ」を表示し、別サイトで実行したジョブが残って見える。</li>
+              <li><strong>修正</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>/api/batch-jobs/latest</code> に <code>?site_id=xxx</code> クエリパラメタを追加</li>
+                  <li>ジョブの <code>article_ids</code> から記事の <code>site_id</code> を逆引きし、指定サイトに属する記事を含むジョブだけを返す</li>
+                  <li>フロントの <code>loadLatestBatchJob()</code> で <code>currentSiteId</code> を渡すように変更</li>
+                </ul>
+              </li>
+              <li><strong>影響</strong>: サイト切替時に別サイトのジョブが見えなくなり、現在サイトのジョブだけが表示される。「すべてのサイト」表示時は従来通り最新を表示。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.7 (2026-06-08) — 時期指定復元の PHP 8 Fatal を修正（before_dateモードで未定義変数を count）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>真因</strong>: <code>count(): Argument #1 ($value) must be of type Countable|array, null given</code>。<code>before_date</code> モードでは <code>$revisions</code> 変数を定義していなかったが、戻り値の組み立てで <code>count($revisions)</code> を呼んでいた。PHP 8 以降は null を count() に渡すと Fatal Error になる（PHP 7 は警告だけ）。</li>
@@ -5279,7 +5294,10 @@ async function forceTerminateBatchJob(jobId) {
 
 async function loadLatestBatchJob() {
   try {
-    const res = await fetch('/api/batch-jobs/latest');
+    // 現在サイトの site_id でフィルタしてジョブを取得
+    // → サイトをまたいでプログレスバーが表示される問題を防ぐ
+    const siteParam = currentSiteId ? `?site_id=${encodeURIComponent(currentSiteId)}` : '';
+    const res = await fetch(`/api/batch-jobs/latest${siteParam}`);
     if (!res.ok) return null;
     const job = await res.json();
     renderBatchJobStatus(job);
