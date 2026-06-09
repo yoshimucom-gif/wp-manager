@@ -162,6 +162,8 @@ add_action('wp_ajax_affiros_rewrite_restore_preview', function () {
  * リビジョン復元を1件実行
  * mode: 'one_step'（既定・1回分戻る）/ 'oldest'（すべてのリライトを取り消す）/
  *       'before_date'（指定日時より前で最新のリビジョンに戻す）
+ *
+ * 例外・致命的エラーも catch して JSON で返す（通信エラー扱いされないように）
  */
 add_action('wp_ajax_affiros_rewrite_restore_one', function () {
     check_ajax_referer('affiros_rewrite_nonce', 'nonce');
@@ -177,11 +179,32 @@ add_action('wp_ajax_affiros_rewrite_restore_one', function () {
         $mode = 'one_step';
     }
     $target_date = sanitize_text_field($_POST['target_date'] ?? '');
-    $result = Affiros_Rewrite_Revision_Restorer::restore_one($post_id, $mode, $target_date);
-    if (is_wp_error($result)) {
-        wp_send_json_error(['message' => $result->get_error_message()]);
+    @set_time_limit(60);
+
+    try {
+        $result = Affiros_Rewrite_Revision_Restorer::restore_one($post_id, $mode, $target_date);
+        if (is_wp_error($result)) {
+            wp_send_json_error([
+                'message'  => $result->get_error_message(),
+                'code'     => $result->get_error_code(),
+                'post_id'  => $post_id,
+            ]);
+        }
+        wp_send_json_success($result);
+    } catch (Exception $e) {
+        error_log('[affiros-rewrite] restore_one Exception post=' . $post_id . ' msg=' . $e->getMessage());
+        wp_send_json_error([
+            'message' => 'PHP例外: ' . $e->getMessage(),
+            'post_id' => $post_id,
+        ]);
+    } catch (Error $e) {
+        // PHP 7+ の致命的エラー（型違い、null メソッド呼出等）
+        error_log('[affiros-rewrite] restore_one FatalError post=' . $post_id . ' msg=' . $e->getMessage());
+        wp_send_json_error([
+            'message' => 'PHP致命的エラー: ' . $e->getMessage(),
+            'post_id' => $post_id,
+        ]);
     }
-    wp_send_json_success($result);
 });
 
 /**

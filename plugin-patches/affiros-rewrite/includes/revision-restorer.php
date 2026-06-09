@@ -206,12 +206,23 @@ $rev_ts = strtotime($rev->post_modified);
                 $target = $revisions[0]; // 先頭 = 直前
             }
         }
-        $restored = wp_restore_post_revision($target->ID);
+        // wp_restore_post_revision() は親投稿 ID（int）を返す。失敗は null/false/WP_Error。
+        // 標準ではユーザー権限チェックも行われるが、ajax-handler 側で manage_options を
+        // 確認済みなのでここで失敗する場合は別の理由（リビジョン破損・DB エラー等）。
+        $rev_id = isset($target->ID) ? (int)$target->ID : 0;
+        if ($rev_id <= 0) {
+            return new WP_Error('invalid_revision', '対象リビジョンの ID が取れません（rev_obj が壊れている可能性）');
+        }
+        $restored = wp_restore_post_revision($rev_id);
         if (is_wp_error($restored)) {
             return $restored;
         }
         if (!$restored) {
-            return new WP_Error('restore_failed', 'リビジョン復元に失敗しました');
+            error_log('[affiros-rewrite] wp_restore_post_revision returned falsy. post=' . $post_id . ' rev=' . $rev_id);
+            return new WP_Error('restore_failed', sprintf(
+                'リビジョン復元に失敗しました（rev_id=%d / post_id=%d）。WP の権限・リビジョン保存設定をご確認ください。',
+                $rev_id, $post_id
+            ));
         }
 
         // === リライト履歴メタの更新ロジック ===

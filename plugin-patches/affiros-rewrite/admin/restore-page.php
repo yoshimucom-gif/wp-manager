@@ -328,11 +328,22 @@ function affiros_rewrite_render_restore_page() {
                         }
                         $row.css('background', '#fde8e8').find('td:last').html('<span style="color:#c00">❌ ' + errMsg + '</span>');
                     }
-                }).fail(function(){
+                }).fail(function(jqXHR, textStatus){
                     ng++;
-                    if (errorSamples.length < 5 && !errorSamples.includes('通信エラー')) {
-                        errorSamples.push('通信エラー');
+                    let detail = '通信エラー';
+                    if (jqXHR && jqXHR.status) {
+                        detail = '通信エラー (HTTP ' + jqXHR.status;
+                        if (textStatus) detail += ': ' + textStatus;
+                        // レスポンス本文の先頭を抽出（PHP Fatal の場合は HTML が返ってくる）
+                        const body = (jqXHR.responseText || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+                        if (body.length > 0) detail += ' / ' + body.substring(0, 120);
+                        detail += ')';
                     }
+                    if (errorSamples.length < 5 && !errorSamples.includes(detail)) {
+                        errorSamples.push(detail);
+                    }
+                    const $row = $('tr[data-id="' + id + '"]');
+                    $row.css('background', '#fde8e8').find('td:last').html('<span style="color:#c00">❌ ' + detail.substring(0, 80) + '</span>');
                 }).always(function(){
                     done++;
                     $btn.text('実行中... ' + done + '/' + total);

@@ -1810,6 +1810,30 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.6 (2026-06-08) — 復元処理の例外捕捉とエラー詳細表示で「通信エラー」の中身を可視化</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>状況</strong>: 時期指定復元で「成功 0 / 失敗 3 / 通信エラー」と出るが、原因がわからない状態だった。</li>
+              <li><strong>修正</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>ajax-handler.php に try/catch（Exception / Error 両方）を追加。PHP の致命的エラーも JSON で返す</li>
+                  <li>各 ajax_restore_one に <code>set_time_limit(60)</code> を追加してタイムアウト対策</li>
+                  <li>restore-page.php の JS の <code>.fail</code> で HTTP ステータス・textStatus・レスポンス本文を表示</li>
+                  <li>revision-restorer.php で <code>$target->ID</code> の事前検証を追加、<code>wp_restore_post_revision()</code> の戻り値も error_log に記録</li>
+                </ul>
+              </li>
+              <li><strong>次回のエラー表示例</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>PHP致命的エラー: Call to a member function ...</code> → コード内の問題</li>
+                  <li><code>通信エラー (HTTP 500: Internal Server Error / Fatal Error: ...)</code> → サーバー側の Fatal</li>
+                  <li><code>通信エラー (HTTP 403)</code> → nonce 期限切れ or WAF ブロック</li>
+                  <li><code>通信エラー (HTTP 504)</code> → タイムアウト</li>
+                </ul>
+              </li>
+              <li><strong>リライタプラグイン v0.4.33 同期</strong>。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.5 (2026-06-08) — 時期指定復元のタイムゾーンバグ修正＋エラーサマリ表示</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>バグ修正: 時期指定復元が全件失敗していた問題</strong>:
