@@ -1810,6 +1810,26 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.5 (2026-06-08) — 時期指定復元のタイムゾーンバグ修正＋エラーサマリ表示</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>バグ修正: 時期指定復元が全件失敗していた問題</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>真因: <code>strtotime($rev->post_modified_gmt)</code> は UTC 値をローカルタイムとして誤解釈する</li>
+                  <li>結果: 基準日時とリビジョン時刻の比較がタイムゾーン分（最大9時間）ずれ、全件「指定日時より前のリビジョンが見つかりません」エラー</li>
+                  <li>修正: <code>$rev->post_modified</code>（サイトローカルタイム）に統一し、<code>date_query.column</code> も <code>post_modified</code> に変更、<code>gmdate()</code> → <code>date()</code> に変更してタイムゾーンを揃えた</li>
+                </ul>
+              </li>
+              <li><strong>UI 改善: 一括復元失敗時の代表理由表示</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>失敗が発生した場合、先頭3件のユニークなエラーメッセージをサマリに含める</li>
+                  <li>「成功 0 / 失敗 252」のような結果に対して、なぜ失敗したかが一目で分かる</li>
+                </ul>
+              </li>
+              <li><strong>リライタプラグイン v0.4.32 同期</strong>。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.4 (2026-06-08) — リビジョン復元に「指定日時より前に戻す（時期指定）」モード追加</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>時期指定復元モード追加</strong> — 「2025-12-31 まで戻したい」のようなニーズに対応。リライト履歴メタに依存しないため、履歴が消えてしまった記事も対象にできる。

@@ -104,7 +104,10 @@ class Affiros_Rewrite_Revision_Restorer {
 
         $pre = [];
         foreach ($all as $rev) {
-            $rev_ts = strtotime($rev->post_modified_gmt ?: $rev->post_modified);
+            // post_modified（サイトローカルタイム）を使う。
+// post_modified_gmt は UTC 値だが strtotime はローカルタイムとして解釈するため
+// target_date とタイムゾーンが揃わずミスマッチする。
+$rev_ts = strtotime($rev->post_modified);
             if ($rev_ts && $rev_ts < $rewrite_last_ts) {
                 $pre[] = $rev;
             }
@@ -173,7 +176,10 @@ class Affiros_Rewrite_Revision_Restorer {
             }
             $target = null;
             foreach ($all as $rev) {
-                $rev_ts = strtotime($rev->post_modified_gmt ?: $rev->post_modified);
+                // post_modified（サイトローカルタイム）を使う。
+// post_modified_gmt は UTC 値だが strtotime はローカルタイムとして解釈するため
+// target_date とタイムゾーンが揃わずミスマッチする。
+$rev_ts = strtotime($rev->post_modified);
                 if ($rev_ts && $rev_ts <= $target_ts) {
                     $target = $rev;
                     break; // DESC ソートなので最初に見つかったものが「指定日時以前の最新」
@@ -278,7 +284,8 @@ class Affiros_Rewrite_Revision_Restorer {
         if (empty($target_date)) return [];
         $target_ts = strtotime($target_date);
         if (!$target_ts) return [];
-        $cutoff = gmdate('Y-m-d H:i:s', $target_ts);
+        // サイトローカルタイムで揃える（restore_one の比較ロジックと整合性を取るため）
+        $cutoff = date('Y-m-d H:i:s', $target_ts);
 
         $args = [
             'post_type'      => 'post',
@@ -287,7 +294,7 @@ class Affiros_Rewrite_Revision_Restorer {
             'fields'         => 'ids',
             'date_query'     => [
                 [
-                    'column' => 'post_modified_gmt',
+                    'column' => 'post_modified',
                     'after'  => $cutoff,
                 ],
             ],
@@ -306,7 +313,10 @@ class Affiros_Rewrite_Revision_Restorer {
             if (!empty($revs)) {
                 // さらに「指定日時より前のリビジョン」があるか軽く確認
                 foreach ($revs as $rev) {
-                    $rev_ts = strtotime($rev->post_modified_gmt ?: $rev->post_modified);
+                    // post_modified（サイトローカルタイム）を使う。
+// post_modified_gmt は UTC 値だが strtotime はローカルタイムとして解釈するため
+// target_date とタイムゾーンが揃わずミスマッチする。
+$rev_ts = strtotime($rev->post_modified);
                     if ($rev_ts && $rev_ts <= $target_ts) {
                         $filtered[] = (int)$pid;
                         break;
@@ -320,7 +330,10 @@ class Affiros_Rewrite_Revision_Restorer {
                         'order'       => 'DESC',
                     ]);
                     foreach ($more as $rev) {
-                        $rev_ts = strtotime($rev->post_modified_gmt ?: $rev->post_modified);
+                        // post_modified（サイトローカルタイム）を使う。
+// post_modified_gmt は UTC 値だが strtotime はローカルタイムとして解釈するため
+// target_date とタイムゾーンが揃わずミスマッチする。
+$rev_ts = strtotime($rev->post_modified);
                         if ($rev_ts && $rev_ts <= $target_ts) {
                             $filtered[] = (int)$pid;
                             break;
@@ -358,7 +371,10 @@ class Affiros_Rewrite_Revision_Restorer {
                 'order'       => 'DESC',
             ]);
             foreach ($revs as $rev) {
-                $rev_ts = strtotime($rev->post_modified_gmt ?: $rev->post_modified);
+                // post_modified（サイトローカルタイム）を使う。
+// post_modified_gmt は UTC 値だが strtotime はローカルタイムとして解釈するため
+// target_date とタイムゾーンが揃わずミスマッチする。
+$rev_ts = strtotime($rev->post_modified);
                 if ($rev_ts && $rev_ts <= $target_ts) {
                     $candidate_rev = $rev;
                     break;

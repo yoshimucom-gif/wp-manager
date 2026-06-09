@@ -212,7 +212,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.4'
+APP_VERSION = '1.7.5'
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -5562,9 +5562,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.2.1',
     },
     'rewrite': {
-        'file': 'affiros-rewrite-0.4.31.zip',
+        'file': 'affiros-rewrite-0.4.32.zip',
         'name': 'Affiros リライター',
-        'version': '0.4.31',
+        'version': '0.4.32',
     },
     'categorizer': {
         'file': 'affiros-categorizer-0.1.0.zip',

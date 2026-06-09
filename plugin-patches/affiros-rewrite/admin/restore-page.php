@@ -90,7 +90,7 @@ function affiros_rewrite_render_restore_page() {
                 err: ['#c00', '#fde8e8'],
             };
             const [color, bg] = colors[type] || colors.info;
-            $s.show().css({color, background: bg}).text(text);
+            $s.show().css({color, background: bg, whiteSpace: 'pre-line'}).text(text);
         }
 
         function updateBulkCount() {
@@ -296,10 +296,15 @@ function affiros_rewrite_render_restore_page() {
             const mode = currentMode();
             const targetDate = currentTargetDate();
             let done = 0, ok = 0, ng = 0;
+            const errorSamples = [];
             $btn.prop('disabled', true).text('実行中... 0/' + total);
             const next = function() {
                 if (done >= total) {
-                    setStatus('一括復元完了 (' + modeLabel(mode) + '): 成功 ' + ok + ' / 失敗 ' + ng, ok && !ng ? 'ok' : 'warn');
+                    let msg = '一括復元完了 (' + modeLabel(mode) + '): 成功 ' + ok + ' / 失敗 ' + ng;
+                    if (ng > 0 && errorSamples.length) {
+                        msg += '\n失敗の代表理由（先頭3件）:\n  - ' + errorSamples.slice(0, 3).join('\n  - ');
+                    }
+                    setStatus(msg, ok && !ng ? 'ok' : 'warn');
                     $btn.prop('disabled', false).text(btnOrigText);
                     return;
                 }
@@ -317,10 +322,17 @@ function affiros_rewrite_render_restore_page() {
                         $row.css('background', '#e8f9ee').find('td:last').html('<span style="color:#0a7a2f">✅ 復元完了</span>');
                     } else {
                         ng++;
-                        $row.css('background', '#fde8e8').find('td:last').html('<span style="color:#c00">❌ ' + (resp.data?.message || '失敗') + '</span>');
+                        const errMsg = resp.data?.message || '失敗';
+                        if (errorSamples.length < 5 && !errorSamples.includes(errMsg)) {
+                            errorSamples.push(errMsg);
+                        }
+                        $row.css('background', '#fde8e8').find('td:last').html('<span style="color:#c00">❌ ' + errMsg + '</span>');
                     }
                 }).fail(function(){
                     ng++;
+                    if (errorSamples.length < 5 && !errorSamples.includes('通信エラー')) {
+                        errorSamples.push('通信エラー');
+                    }
                 }).always(function(){
                     done++;
                     $btn.text('実行中... ' + done + '/' + total);
