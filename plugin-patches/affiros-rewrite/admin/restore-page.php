@@ -25,7 +25,8 @@ function affiros_rewrite_render_restore_page() {
                 <li>WP のリビジョン保存が無効化されているサイト（<code>WP_POST_REVISIONS = false</code>）では復元できません</li>
                 <li><strong>復元モード</strong>:
                     「<strong>1回分戻す</strong>」= 最新リライトの直前に戻る（複数回リライトしている記事は段階的に戻る）／
-                    「<strong>最古まで戻す</strong>」= リライト履歴より前で最も古いリビジョンに戻る（複数回リライトの全部を一気に取り消す）</li>
+                    「<strong>最古まで戻す</strong>」= リライト履歴より前で最も古いリビジョンに戻る（複数回リライトの全部を一気に取り消す）／
+                    「<strong>指定日時より前</strong>」= 指定した日時以前で最新のリビジョンに戻す（リライト履歴メタに依存しないため、履歴が消えた記事や複数回リライトした記事に有効）</li>
             </ul>
         </div>
 
@@ -34,8 +35,15 @@ function affiros_rewrite_render_restore_page() {
                 <select id="affiros-restore-mode" style="margin-left:6px">
                     <option value="one_step" selected>1回分戻す（最新リライトの直前）</option>
                     <option value="oldest">最古まで戻す（リライトをすべて取り消す）</option>
+                    <option value="before_date">指定日時より前に戻す（時期指定）</option>
                 </select>
             </label>
+            <span id="affiros-restore-date-wrap" style="margin-left:14px;display:none">
+                <label><strong>基準日時:</strong>
+                    <input type="datetime-local" id="affiros-restore-target-date" style="margin-left:6px" value="2025-12-31T23:59">
+                </label>
+                <span style="color:#666;font-size:11px;margin-left:6px">（この日時以前で最新のリビジョンに戻します）</span>
+            </span>
         </p>
 
         <p>
@@ -95,12 +103,20 @@ function affiros_rewrite_render_restore_page() {
             page = page || 1;
             currentPage = page;
             setStatus('読み込み中...', 'info');
-            $.post(ajaxUrl, {
-                action: 'affiros_rewrite_restore_list',
+            const mode = currentMode();
+            const action = mode === 'before_date'
+                ? 'affiros_rewrite_restore_before_date_list'
+                : 'affiros_rewrite_restore_list';
+            const payload = {
+                action: action,
                 nonce: nonce,
                 page: page,
                 per_page: 20,
-            }).done(function(resp){
+            };
+            if (mode === 'before_date') {
+                payload.target_date = currentTargetDate();
+            }
+            $.post(ajaxUrl, payload).done(function(resp){
                 if (!resp.success) {
                     setStatus('エラー: ' + (resp.data?.message || '不明'), 'err');
                     return;
@@ -222,14 +238,37 @@ function affiros_rewrite_render_restore_page() {
         }
 
         function modeLabel(mode) {
-            return mode === 'oldest' ? '最古まで戻す（全リライト取り消し）' : '1回分戻す（最新リライト直前）';
+            if (mode === 'oldest') return '最古まで戻す（全リライト取り消し）';
+            if (mode === 'before_date') return '指定日時より前に戻す（時期指定）';
+            return '1回分戻す（最新リライト直前）';
         }
+
+        function currentTargetDate() {
+            const v = $('#affiros-restore-target-date').val();
+            if (!v) return '';
+            // "YYYY-MM-DDTHH:MM" → "YYYY-MM-DD HH:MM:00"
+            return v.replace('T', ' ') + ':00';
+        }
+
+        // モード切替で日時 input の表示・非表示と「全件復元」ボタンのラベル変更
+        $(document).on('change', '#affiros-restore-mode', function(){
+            const mode = $(this).val();
+            $('#affiros-restore-date-wrap').toggle(mode === 'before_date');
+            if (mode === 'before_date') {
+                $('#affiros-restore-all').text('🗂 指定日時より前のリビジョンに一括復元（全件）');
+                $('#affiros-restore-load').text('📋 指定日時より後に更新された記事を読み込む');
+            } else {
+                $('#affiros-restore-all').text('🗂 全リライト履歴を一括復元（全件）');
+                $('#affiros-restore-load').text('📋 リライト済み記事を読み込む');
+            }
+        });
 
         // ボタン: 個別復元
         $(document).on('click', '.affiros-restore-one', function(){
             const $btn = $(this);
             const id = $btn.closest('tr').data('id');
             const mode = currentMode();
+            const targetDate = currentTargetDate();
             if (!confirm('ID:' + id + ' を「' + modeLabel(mode) + '」で復元します。よろしいですか？')) return;
             $btn.prop('disabled', true).text('復元中...');
             $.post(ajaxUrl, {
@@ -237,6 +276,7 @@ function affiros_rewrite_render_restore_page() {
                 nonce: nonce,
                 post_id: id,
                 mode: mode,
+                target_date: targetDate,
             }).done(function(resp){
                 if (!resp.success) {
                     alert('復元失敗: ' + (resp.data?.message || '不明'));
@@ -254,6 +294,7 @@ function affiros_rewrite_render_restore_page() {
         function runBatchRestore(ids, $btn, btnOrigText) {
             const total = ids.length;
             const mode = currentMode();
+            const targetDate = currentTargetDate();
             let done = 0, ok = 0, ng = 0;
             $btn.prop('disabled', true).text('実行中... 0/' + total);
             const next = function() {
@@ -268,6 +309,7 @@ function affiros_rewrite_render_restore_page() {
                     nonce: nonce,
                     post_id: id,
                     mode: mode,
+                    target_date: targetDate,
                 }).done(function(resp){
                     const $row = $('tr[data-id="' + id + '"]');
                     if (resp.success) {
@@ -301,21 +343,26 @@ function affiros_rewrite_render_restore_page() {
         $('#affiros-restore-all').on('click', function(){
             const $btn = $(this);
             const mode = currentMode();
+            const origText = $btn.text();
+            const action = mode === 'before_date'
+                ? 'affiros_rewrite_restore_before_date_all_ids'
+                : 'affiros_rewrite_restore_all_ids';
+            const payload = { action: action, nonce: nonce };
+            if (mode === 'before_date') {
+                payload.target_date = currentTargetDate();
+            }
             $btn.prop('disabled', true).text('対象記事を取得中...');
-            $.post(ajaxUrl, {
-                action: 'affiros_rewrite_restore_all_ids',
-                nonce: nonce,
-            }).done(function(resp){
+            $.post(ajaxUrl, payload).done(function(resp){
                 if (!resp.success) {
                     alert('対象記事の取得に失敗: ' + (resp.data?.message || '不明'));
-                    $btn.prop('disabled', false).text('🗂 全リライト履歴を一括復元（全件）');
+                    $btn.prop('disabled', false).text(origText);
                     return;
                 }
                 const ids = resp.data.ids || [];
                 const total = ids.length;
                 if (!total) {
                     setStatus('リライト履歴がある記事はありません', 'info');
-                    $btn.prop('disabled', false).text('🗂 全リライト履歴を一括復元（全件）');
+                    $btn.prop('disabled', false).text(origText);
                     return;
                 }
                 const ok = confirm(
@@ -324,15 +371,15 @@ function affiros_rewrite_render_restore_page() {
                     + 'よろしいですか？'
                 );
                 if (!ok) {
-                    $btn.prop('disabled', false).text('🗂 全リライト履歴を一括復元（全件）');
+                    $btn.prop('disabled', false).text(origText);
                     return;
                 }
                 // 一覧テーブルを再読み込みしておく（処理中の進捗をテーブルでも表示するため）
                 loadList(1);
-                runBatchRestore(ids, $btn, '🗂 全リライト履歴を一括復元（全件）');
+                runBatchRestore(ids, $btn, origText);
             }).fail(function(){
                 alert('通信エラー');
-                $btn.prop('disabled', false).text('🗂 全リライト履歴を一括復元（全件）');
+                $btn.prop('disabled', false).text(origText);
             });
         });
     })(jQuery);

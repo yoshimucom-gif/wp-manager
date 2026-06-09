@@ -160,7 +160,8 @@ add_action('wp_ajax_affiros_rewrite_restore_preview', function () {
 
 /**
  * リビジョン復元を1件実行
- * mode: 'one_step'（既定・1回分戻る）/ 'oldest'（すべてのリライトを取り消す）
+ * mode: 'one_step'（既定・1回分戻る）/ 'oldest'（すべてのリライトを取り消す）/
+ *       'before_date'（指定日時より前で最新のリビジョンに戻す）
  */
 add_action('wp_ajax_affiros_rewrite_restore_one', function () {
     check_ajax_referer('affiros_rewrite_nonce', 'nonce');
@@ -172,10 +173,11 @@ add_action('wp_ajax_affiros_rewrite_restore_one', function () {
         wp_send_json_error(['message' => '記事IDが不正です']);
     }
     $mode = sanitize_text_field($_POST['mode'] ?? 'one_step');
-    if (!in_array($mode, ['one_step', 'oldest'], true)) {
+    if (!in_array($mode, ['one_step', 'oldest', 'before_date'], true)) {
         $mode = 'one_step';
     }
-    $result = Affiros_Rewrite_Revision_Restorer::restore_one($post_id, $mode);
+    $target_date = sanitize_text_field($_POST['target_date'] ?? '');
+    $result = Affiros_Rewrite_Revision_Restorer::restore_one($post_id, $mode, $target_date);
     if (is_wp_error($result)) {
         wp_send_json_error(['message' => $result->get_error_message()]);
     }
@@ -191,6 +193,45 @@ add_action('wp_ajax_affiros_rewrite_restore_all_ids', function () {
         wp_send_json_error(['message' => '権限がありません']);
     }
     $ids = Affiros_Rewrite_Revision_Restorer::list_all_rewritten_post_ids();
+    wp_send_json_success([
+        'ids'   => $ids,
+        'total' => count($ids),
+    ]);
+});
+
+/**
+ * before_date 用：指定日時より後に更新された投稿一覧を返す
+ */
+add_action('wp_ajax_affiros_rewrite_restore_before_date_list', function () {
+    check_ajax_referer('affiros_rewrite_nonce', 'nonce');
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(['message' => '権限がありません']);
+    }
+    $target_date = sanitize_text_field($_POST['target_date'] ?? '');
+    if (empty($target_date)) {
+        wp_send_json_error(['message' => '基準日時が指定されていません']);
+    }
+    $args = [
+        'page' => intval($_POST['page'] ?? 1),
+        'per_page' => intval($_POST['per_page'] ?? 20),
+    ];
+    $result = Affiros_Rewrite_Revision_Restorer::list_posts_for_before_date($target_date, $args);
+    wp_send_json_success($result);
+});
+
+/**
+ * before_date 用：対象記事の全 ID 一覧（全件復元用）
+ */
+add_action('wp_ajax_affiros_rewrite_restore_before_date_all_ids', function () {
+    check_ajax_referer('affiros_rewrite_nonce', 'nonce');
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(['message' => '権限がありません']);
+    }
+    $target_date = sanitize_text_field($_POST['target_date'] ?? '');
+    if (empty($target_date)) {
+        wp_send_json_error(['message' => '基準日時が指定されていません']);
+    }
+    $ids = Affiros_Rewrite_Revision_Restorer::list_posts_modified_after($target_date);
     wp_send_json_success([
         'ids'   => $ids,
         'total' => count($ids),

@@ -1810,6 +1810,29 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.4 (2026-06-08) — リビジョン復元に「指定日時より前に戻す（時期指定）」モード追加</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>時期指定復元モード追加</strong> — 「2025-12-31 まで戻したい」のようなニーズに対応。リライト履歴メタに依存しないため、履歴が消えてしまった記事も対象にできる。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>UI 上の「復元モード」セレクトに「指定日時より前に戻す（時期指定）」を追加</li>
+                  <li>選択すると <code>&lt;input type="datetime-local"&gt;</code> が表示され、基準日時を指定できる</li>
+                  <li>ボタンも「指定日時より後に更新された記事を読み込む」「指定日時より前のリビジョンに一括復元」に切替</li>
+                  <li>「リライト履歴がある記事」リスト相当の対象抽出も WP の post_modified ＋ 指定日時以前のリビジョン有無で行う</li>
+                </ul>
+              </li>
+              <li><strong>新規 AJAX エンドポイント</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>affiros_rewrite_restore_before_date_list</code>: 指定日時より後に更新された投稿一覧（プレビュー用）</li>
+                  <li><code>affiros_rewrite_restore_before_date_all_ids</code>: 同・全件 ID 取得</li>
+                  <li><code>affiros_rewrite_restore_one</code> に <code>mode=before_date</code> + <code>target_date</code> パラメタ追加</li>
+                </ul>
+              </li>
+              <li><strong>復元ロジック</strong>: WP の全リビジョン（最大100件）から指定日時以前で最新のものを選定 → <code>wp_restore_post_revision()</code> で復元 → リライト履歴メタを全削除（指定日時の状態に戻ったため）</li>
+              <li><strong>リライタプラグイン v0.4.31 同期</strong>。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.3 (2026-06-08) — 【緊急バグ修正】複数回リライト記事を複数回戻せるように</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>重大バグ修正</strong>: リライト2回した記事を1回しか戻せない／復元後リストから消える問題。
