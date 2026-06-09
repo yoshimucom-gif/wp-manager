@@ -585,33 +585,38 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
   font-weight: 600;
 }
 .batch-layout {
-  display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
-  gap: 20px;
-  align-items: start;
+  display: block;
 }
-.batch-side {
-  position: sticky;
-  top: 64px;
-  max-height: calc(100vh - 86px);
-  overflow-y: auto;
-  padding-right: 4px;
+.batch-toolbar {
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
 }
+.batch-toolbar .form-group { margin: 0; flex: 0 0 320px; min-width: 240px; }
+.batch-toolbar .form-group .form-label { margin-bottom: 4px; }
+.batch-toolbar .form-help { margin-top: 4px; font-size: 11px; }
 .batch-main {
   min-width: 0;
-  max-height: calc(100vh - 150px);
-  overflow-y: auto;
-  padding-right: 4px;
 }
 .batch-progress {
   border: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--bg);
   border-radius: 4px;
-  padding: 10px;
-  margin-top: 12px;
+  padding: 10px 12px;
   font-size: 12px;
+  flex: 1 1 320px;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
-.batch-progress .progress-bar { height: 6px; margin: 8px 0 6px; }
+.batch-progress .progress-bar { height: 6px; margin: 6px 0; }
 .batch-progress-meta { display:flex; justify-content:space-between; gap:10px; color:var(--muted); font-size:11px; }
 
 .title-ideas-layout {
@@ -850,9 +855,8 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
   .module-panel { grid-template-columns: repeat(3, 1fr); }
   .dashboard-kpis { grid-template-columns: repeat(2, 1fr); gap: 12px; }
   .dashboard-intel { grid-template-columns: 1fr; }
-  .batch-layout { grid-template-columns: 1fr; }
-  .batch-side { position: static; max-height: none; overflow: visible; }
-  .batch-main { max-height: none; overflow: visible; }
+  .batch-toolbar .form-group { flex: 1 1 100%; }
+  .batch-progress { flex: 1 1 100%; }
   .title-ideas-layout { grid-template-columns: 1fr; }
   .title-ideas-side { position: static; }
 }
@@ -1418,7 +1422,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <div class="page-subtitle">対応履歴の記事をまとめて生成・投稿</div>
         </div>
         <div class="batch-layout">
-          <div class="batch-side">
+          <div class="batch-toolbar">
             <div class="form-group">
               <label class="form-label">品質定義</label>
               <select id="batch-quality" class="form-control">
@@ -1426,7 +1430,6 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
               </select>
               <div class="form-help">空欄なら記事種類ごとに対応する品質定義を自動選択。固定したい時だけ選択。</div>
             </div>
-            <div id="batch-msg" style="margin-top:12px;font-size:12px;color:var(--muted)"></div>
             <div id="batch-progress" class="batch-progress" style="display:none">
               <div class="batch-progress-meta">
                 <span id="batch-progress-label">一括生成中</span>
@@ -1439,6 +1442,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
               </div>
             </div>
           </div>
+          <div id="batch-msg" style="margin:0 0 8px;font-size:12px;color:var(--muted)"></div>
           <div class="batch-main">
             <div style="position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0">
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -1813,6 +1817,22 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <div class="page-subtitle">Affiros9 本体の更新ログ（現在: <strong>v{{ app_version }}</strong>）</div>
         </div>
         <div style="max-width:780px">
+
+          <div class="settings-section">
+            <div class="section-header">// v1.7.14 (2026-06-09) — 一括処理ページのデッドスペース解消（品質定義を横並びツールバーへ）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>問題</strong>: 一括処理ページが「左カラム(300px) + 右カラム(テーブル)」の2カラムグリッドになっていて、左カラムは品質定義セレクトと進捗バーしかないのに縦に伸び続けていた。テーブル下までずっと空白が続いてデッドスペース化していた。</li>
+              <li><strong>修正</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>2カラムグリッド <code>.batch-layout</code> を撤廃 → 縦積みレイアウトに</li>
+                  <li>ページ上部に <code>.batch-toolbar</code> 横並びツールバーを新設。品質定義セレクト（320px）と進捗バー（残り幅伸縮）を1行に配置</li>
+                  <li>テーブルが画面横幅いっぱいに広がる → タイトル列が広く使える</li>
+                  <li><code>position:sticky</code> の左カラム max-height 制約を撤廃 → ページ全体スクロール（一覧と進捗バー両方が見られる挙動を維持）</li>
+                  <li>狭い画面（&lt;1100px）では品質定義と進捗バーが縦積みに自動切り替え</li>
+                </ul>
+              </li>
+            </ul>
+          </div>
 
           <div class="settings-section">
             <div class="section-header">// v1.7.13 (2026-06-09) — 投稿予定日（schedule_date）を一覧に表示＋ボタン名を整理</div>
