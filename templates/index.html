@@ -1810,6 +1810,29 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.3 (2026-06-08) — 【緊急バグ修正】複数回リライト記事を複数回戻せるように</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>重大バグ修正</strong>: リライト2回した記事を1回しか戻せない／復元後リストから消える問題。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>v1.7.2 までは復元成功時に <code>_affiros_rewrite_count / _last_at</code> メタを問答無用で削除していた</li>
+                  <li>結果として2回リライトした記事を1回戻したあと、メタが消えて「リライト済み記事」リストから外れ、2回目の復元ができなくなっていた</li>
+                </ul>
+              </li>
+              <li><strong>修正後の挙動</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>「1回分戻す」で復元すると、count を 1 減らして last_at を今戻した時刻に更新</li>
+                  <li>さらに古いリビジョンが残っていれば、リストに表示し続ける → もう1回押せる</li>
+                  <li>履歴を完全に消化したら（count=0 になったら）メタを削除してリストから消える</li>
+                  <li>「最古まで戻す」モードは1回でメタ全削除（仕様通り）</li>
+                </ul>
+              </li>
+              <li><strong>AJAX レスポンス強化</strong>: <code>rewrite_count_after</code> / <code>can_restore_more</code> / <code>remaining_revisions</code> を返すので、UI で「あと N 回戻せる」表示も可能に。</li>
+              <li><strong>既に履歴が消えてしまった記事への対処</strong>: v1.7.2 以前で履歴メタが消えた記事は、WordPress 管理画面の「リビジョン」機能（投稿編集画面右側「リビジョン」）から手動で復元できます。</li>
+              <li><strong>リライタプラグイン v0.4.30 同期</strong>。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.2 (2026-06-08) — リビジョン復元に「全件復元」「最古まで戻す」モード追加</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>「🗂 全リライト履歴を一括復元（全件）」ボタンを追加</strong> — ページネーション無視で全リライト履歴のある記事を一気に復元できる。200記事の全件ロールバックがボタン1つで完結。</li>

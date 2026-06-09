@@ -173,11 +173,33 @@ class Affiros_Rewrite_Revision_Restorer {
         if (!$restored) {
             return new WP_Error('restore_failed', 'リビジョン復元に失敗しました');
         }
-        // 関連メタをクリア（リライト履歴とマーカー検証）
-        delete_post_meta($post_id, '_affiros_rewrite_count');
-        delete_post_meta($post_id, '_affiros_rewrite_last_at');
+
+        // === リライト履歴メタの更新ロジック ===
+        // 単純にメタを削除すると、2回リライトした記事を1回戻しただけで
+        // 「リライト履歴がない」と判定されてしまい、2回目を戻せなくなる。
+        //
+        // - one_step モード: count を 1 減らす（残りリビジョンがあれば履歴維持）
+        //                    last_at を今戻したリビジョン時刻に更新
+        // - oldest モード:   リライトを全部取り消したので count=0 にクリア
+        // - 復元後にもう「リライト前」リビジョンが無い場合もクリア
+        $remaining_revisions = self::get_pre_rewrite_revisions($post_id, $target->post_modified);
+        $current_count = (int) get_post_meta($post_id, '_affiros_rewrite_count', true);
+
+        if ($mode === 'oldest' || empty($remaining_revisions) || $current_count <= 1) {
+            // 完全に履歴消化 → メタを削除（リストから消える）
+            delete_post_meta($post_id, '_affiros_rewrite_count');
+            delete_post_meta($post_id, '_affiros_rewrite_last_at');
+            $new_count = 0;
+        } else {
+            // 履歴が残る → count を 1 減らして last_at を更新（リストに残る）
+            $new_count = max(0, $current_count - 1);
+            update_post_meta($post_id, '_affiros_rewrite_count', $new_count);
+            update_post_meta($post_id, '_affiros_rewrite_last_at', $target->post_modified);
+        }
+        // マーカー検証メタは復元後の内容と整合しないので必ず削除
         delete_post_meta($post_id, '_affiros_marker_status');
         delete_post_meta($post_id, '_affiros_marker_summary');
+
         return [
             'success'           => true,
             'post_id'           => $post_id,
@@ -185,6 +207,9 @@ class Affiros_Rewrite_Revision_Restorer {
             'restored_to'       => mysql2date('Y-m-d H:i', $target->post_modified),
             'mode'              => $mode,
             'total_revisions'   => count($revisions),
+            'remaining_revisions'  => count($remaining_revisions),
+            'rewrite_count_after'  => $new_count,
+            'can_restore_more'     => $new_count > 0,
         ];
     }
 
