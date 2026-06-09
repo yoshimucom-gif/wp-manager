@@ -1227,7 +1227,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             <button class="btn btn-success" onclick="publishSelected()">🚀 WP投稿</button>
           </div>
           <span id="publish-progress-label" style="font-size:12px;color:var(--accent);display:inline-block;min-width:80px"></span>
-          <button class="btn btn-secondary" onclick="openSchedulePublishModal()" title="選択記事をWordPressの予約投稿として割り当て">📅 予約投稿割り当て</button>
+          <button class="btn btn-secondary" onclick="openSchedulePublishModal()" title="選択記事を schedule_date 通りに WordPress に予約投稿として送信">📅 予約投稿実行</button>
           <button class="btn btn-danger" onclick="deleteSelected()">🗑 選択を削除</button>
           <button class="btn btn-secondary" onclick="rescoreArticles()" title="記事スコアを再計算">↯ スコア再計算</button>
         </div>
@@ -1277,6 +1277,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
                 <th>スコア</th>
                 <th>ステータス</th>
                 <th>マーカー</th>
+                <th>予定日</th>
                 <th>生成日時</th>
                 <th>操作</th>
               </tr>
@@ -1460,8 +1461,9 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
                   <col style="width:36px">
                   <col style="width:80px">
                   <col><!-- タイトル: 残り全部 -->
-                  <col style="width:90px">
-                  <col style="width:170px">
+                  <col style="width:80px">
+                  <col style="width:110px">
+                  <col style="width:160px">
                   <col style="width:60px">
                   <col style="width:90px">
                 </colgroup>
@@ -1471,6 +1473,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
                     <th>ステータス</th>
                     <th>タイトル</th>
                     <th>種類</th>
+                    <th>予定日</th>
                     <th>スラッグ</th>
                     <th>スコア</th>
                     <th>サイト</th>
@@ -1810,6 +1813,26 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <div class="page-subtitle">Affiros9 本体の更新ログ（現在: <strong>v{{ app_version }}</strong>）</div>
         </div>
         <div style="max-width:780px">
+
+          <div class="settings-section">
+            <div class="section-header">// v1.7.13 (2026-06-09) — 投稿予定日（schedule_date）を一覧に表示＋ボタン名を整理</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>「予定日」列を追加</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>対応履歴テーブル: マーカー列の右 / 生成日時列の左 に追加</li>
+                  <li>一括処理テーブル: 種類列の右 / スラッグ列の左 に追加</li>
+                  <li>CSV インポート時の schedule_date を表示。空なら「—」表示</li>
+                </ul>
+              </li>
+              <li><strong>「📅 予約投稿割り当て」を「📅 予約投稿実行」にリネーム</strong>
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>v1.6.0 で schedule_date 方式に一本化されており、ボタンは「割り当て」ではなく schedule_date 通りに WP に予約投稿として送信する「実行」ボタン</li>
+                  <li>tooltip も「選択記事を schedule_date 通りに WordPress に予約投稿として送信」に更新</li>
+                </ul>
+              </li>
+              <li><strong>CSV インポート完了メッセージのワード合わせ</strong>: 「予約投稿割り当てで分散」→「予約投稿実行で schedule_date 通りに WP に送信」に更新。</li>
+            </ul>
+          </div>
 
           <div class="settings-section">
             <div class="section-header">// v1.7.12 (2026-06-09) — CSVインポート完了メッセージがサイトをまたいで残る問題を修正</div>
@@ -2838,7 +2861,7 @@ async function runImport() {
         <strong>${data.imported || 0} 件</strong> の記事を登録しました。<br>
         次のステップ：<a href="#" onclick="showPage('batch');return false;" style="color:var(--accent)">一括処理</a> で記事を選択して生成 →
         <a href="#" onclick="showPage('articles');return false;" style="color:var(--accent)">対応履歴</a> で結果確認 →
-        「予約投稿割り当て」で公開タイミングを分散
+        「予約投稿実行」で schedule_date 通りに WP に送信
       </div>
     `;
     fileEl.value = '';
@@ -3583,6 +3606,7 @@ function renderArticles(articles) {
       <td>${scoreBadge(a)}</td>
       <td>${statusBadge(a.status)}${statusDetail}${publishErrBadge}</td>
       <td>${markerStatusBadge(a)}</td>
+      <td style="color:var(--muted);font-size:11px;white-space:nowrap" title="${esc(a.schedule_date || '')}">${a.schedule_date ? esc(a.schedule_date) : '—'}</td>
       <td style="color:var(--muted);font-size:11px;white-space:nowrap">${a.generated_at ? fmtDate(a.generated_at) : '—'}</td>
       <td>
         <div style="display:flex;flex-direction:column;gap:3px;width:88px">
@@ -5487,6 +5511,7 @@ function loadBatchArticles() {
       <td style="font-size:11px">${statusBadge(a.status)}${a.processing_message ? `<div style="font-size:10px;color:var(--muted);margin-top:4px">${esc(a.processing_message)}</div>` : ''}</td>
       <td style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.title)}">${esc(a.title)}</td>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${esc(articleTypeLabel(a.article_type || 'ranking'))}</td>
+      <td style="font-size:11px;color:var(--muted);white-space:nowrap" title="${esc(a.schedule_date || '')}">${a.schedule_date ? esc(a.schedule_date) : '—'}</td>
       <td><input type="text" class="form-control" value="${esc(a.slug || '')}" placeholder="自動" style="font-size:11px;height:26px;width:100%;box-sizing:border-box" onchange="saveBatchField('${a.id}', 'slug', this.value)"></td>
       <td style="font-size:11px">${scoreBadge(a)}</td>
       <td style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(getSiteName(a.site_id))}">${esc(getSiteName(a.site_id))}</td>
