@@ -1806,6 +1806,14 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.10 (2026-06-09) — CSVインポート完了メッセージのワークフロー順序を修正</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>誤った案内</strong>: 「対応履歴を開く → 記事を選択 → 一括処理で生成」となっていたが、一括処理ページに pending 記事の選択 UI があるため、対応履歴を経由する必要がない。順序が逆。</li>
+              <li><strong>修正後</strong>: 「一括処理で記事を選択して生成 → 対応履歴で結果確認 → 予約投稿割り当てで公開タイミングを分散」</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.9 (2026-06-09) — サイトトップの「タイトル案」モジュールタイルを撤去</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>サイトトップの「タイトル案」タイルを削除</strong> — CSV ベースの運用に切り替わったため、手動 KW 入力でタイトル案を生成するこの導線は不要になった。CSV に完成タイトルが入っている以上、ユーザーがクリックする機会がない。</li>
@@ -2794,10 +2802,10 @@ async function runImport() {
     statusEl.textContent = `✅ ${data.imported || 0} 件を登録しました`;
     resultEl.innerHTML = `
       <div style="background:rgba(62,207,142,0.08);border-left:3px solid #3ecf8e;padding:10px 14px;border-radius:6px;font-size:13px;line-height:1.7">
-        <strong>${data.imported || 0} 件</strong> の記事を「対応履歴」に登録しました。<br>
-        次のステップ：<a href="#" onclick="showPage('articles');return false;" style="color:var(--accent)">対応履歴を開く</a> →
-        記事を選択 → <a href="#" onclick="showPage('batch');return false;" style="color:var(--accent)">一括処理</a> で生成 →
-        公開タイミングを「予約投稿割り当て」で分散
+        <strong>${data.imported || 0} 件</strong> の記事を登録しました。<br>
+        次のステップ：<a href="#" onclick="showPage('batch');return false;" style="color:var(--accent)">一括処理</a> で記事を選択して生成 →
+        <a href="#" onclick="showPage('articles');return false;" style="color:var(--accent)">対応履歴</a> で結果確認 →
+        「予約投稿割り当て」で公開タイミングを分散
       </div>
     `;
     fileEl.value = '';
