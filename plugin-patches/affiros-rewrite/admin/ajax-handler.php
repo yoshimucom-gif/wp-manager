@@ -160,6 +160,7 @@ add_action('wp_ajax_affiros_rewrite_restore_preview', function () {
 
 /**
  * リビジョン復元を1件実行
+ * mode: 'one_step'（既定・1回分戻る）/ 'oldest'（すべてのリライトを取り消す）
  */
 add_action('wp_ajax_affiros_rewrite_restore_one', function () {
     check_ajax_referer('affiros_rewrite_nonce', 'nonce');
@@ -170,9 +171,28 @@ add_action('wp_ajax_affiros_rewrite_restore_one', function () {
     if (!$post_id) {
         wp_send_json_error(['message' => '記事IDが不正です']);
     }
-    $result = Affiros_Rewrite_Revision_Restorer::restore_one($post_id);
+    $mode = sanitize_text_field($_POST['mode'] ?? 'one_step');
+    if (!in_array($mode, ['one_step', 'oldest'], true)) {
+        $mode = 'one_step';
+    }
+    $result = Affiros_Rewrite_Revision_Restorer::restore_one($post_id, $mode);
     if (is_wp_error($result)) {
         wp_send_json_error(['message' => $result->get_error_message()]);
     }
     wp_send_json_success($result);
+});
+
+/**
+ * リライト履歴がある全投稿の ID 一覧を返す（「全件復元」ボタン用）
+ */
+add_action('wp_ajax_affiros_rewrite_restore_all_ids', function () {
+    check_ajax_referer('affiros_rewrite_nonce', 'nonce');
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(['message' => '権限がありません']);
+    }
+    $ids = Affiros_Rewrite_Revision_Restorer::list_all_rewritten_post_ids();
+    wp_send_json_success([
+        'ids'   => $ids,
+        'total' => count($ids),
+    ]);
 });

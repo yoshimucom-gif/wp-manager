@@ -19,16 +19,29 @@ function affiros_rewrite_render_restore_page() {
         <div class="notice notice-warning" style="padding:12px 16px;margin:14px 0">
             <p style="margin:0 0 6px"><strong>⚠️ リビジョン復元の注意点</strong></p>
             <ul style="margin:0 0 0 18px;list-style:disc">
-                <li>WordPress 標準のリビジョン機能を使って「リライト直前」の状態に戻します</li>
-                <li><strong>リライト後に手動編集や商品挿入を行った変更は失われます</strong>（リライト直前の状態にリセットされるため）</li>
+                <li>WordPress 標準のリビジョン機能を使って「リライト前」の状態に戻します</li>
+                <li><strong>リライト後に手動編集や商品挿入を行った変更は失われます</strong>（リライト前の状態にリセットされるため）</li>
                 <li>復元は1件ごとに即時反映されます。元に戻したくない場合は実行前にリビジョンプレビューでご確認ください</li>
                 <li>WP のリビジョン保存が無効化されているサイト（<code>WP_POST_REVISIONS = false</code>）では復元できません</li>
+                <li><strong>復元モード</strong>:
+                    「<strong>1回分戻す</strong>」= 最新リライトの直前に戻る（複数回リライトしている記事は段階的に戻る）／
+                    「<strong>最古まで戻す</strong>」= リライト履歴より前で最も古いリビジョンに戻る（複数回リライトの全部を一気に取り消す）</li>
             </ul>
         </div>
 
         <p>
+            <label style="margin-right:14px"><strong>復元モード:</strong>
+                <select id="affiros-restore-mode" style="margin-left:6px">
+                    <option value="one_step" selected>1回分戻す（最新リライトの直前）</option>
+                    <option value="oldest">最古まで戻す（リライトをすべて取り消す）</option>
+                </select>
+            </label>
+        </p>
+
+        <p>
             <button type="button" class="button button-primary" id="affiros-restore-load">📋 リライト済み記事を読み込む</button>
             <button type="button" class="button button-secondary" id="affiros-restore-bulk" disabled style="margin-left:8px">⏮ 選択した記事をまとめて復元</button>
+            <button type="button" class="button button-danger" id="affiros-restore-all" style="margin-left:8px;background:#d63638;color:#fff;border-color:#d63638">🗂 全リライト履歴を一括復元（全件）</button>
             <span id="affiros-restore-bulk-count" style="margin-left:8px;color:#666"></span>
         </p>
 
@@ -204,16 +217,26 @@ function affiros_rewrite_render_restore_page() {
             });
         });
 
+        function currentMode() {
+            return $('#affiros-restore-mode').val() || 'one_step';
+        }
+
+        function modeLabel(mode) {
+            return mode === 'oldest' ? '最古まで戻す（全リライト取り消し）' : '1回分戻す（最新リライト直前）';
+        }
+
         // ボタン: 個別復元
         $(document).on('click', '.affiros-restore-one', function(){
             const $btn = $(this);
             const id = $btn.closest('tr').data('id');
-            if (!confirm('ID:' + id + ' をリライト直前の状態に戻します。よろしいですか？')) return;
+            const mode = currentMode();
+            if (!confirm('ID:' + id + ' を「' + modeLabel(mode) + '」で復元します。よろしいですか？')) return;
             $btn.prop('disabled', true).text('復元中...');
             $.post(ajaxUrl, {
                 action: 'affiros_rewrite_restore_one',
                 nonce: nonce,
                 post_id: id,
+                mode: mode,
             }).done(function(resp){
                 if (!resp.success) {
                     alert('復元失敗: ' + (resp.data?.message || '不明'));
@@ -227,18 +250,16 @@ function affiros_rewrite_render_restore_page() {
             });
         });
 
-        // ボタン: 一括復元
-        $('#affiros-restore-bulk').on('click', function(){
-            const ids = $('.affiros-restore-row:checked').map(function(){ return $(this).val(); }).get();
-            if (!ids.length) return;
-            if (!confirm(ids.length + ' 件の記事をリライト直前の状態に戻します。よろしいですか？')) return;
-            const $btn = $(this);
-            $btn.prop('disabled', true).text('実行中... 0/' + ids.length);
+        // 共通バッチ復元処理
+        function runBatchRestore(ids, $btn, btnOrigText) {
+            const total = ids.length;
+            const mode = currentMode();
             let done = 0, ok = 0, ng = 0;
+            $btn.prop('disabled', true).text('実行中... 0/' + total);
             const next = function() {
-                if (done >= ids.length) {
-                    setStatus('一括復元完了: 成功 ' + ok + ' / 失敗 ' + ng, ok && !ng ? 'ok' : 'warn');
-                    $btn.prop('disabled', false).text('⏮ 選択した記事をまとめて復元');
+                if (done >= total) {
+                    setStatus('一括復元完了 (' + modeLabel(mode) + '): 成功 ' + ok + ' / 失敗 ' + ng, ok && !ng ? 'ok' : 'warn');
+                    $btn.prop('disabled', false).text(btnOrigText);
                     return;
                 }
                 const id = ids[done];
@@ -246,6 +267,7 @@ function affiros_rewrite_render_restore_page() {
                     action: 'affiros_rewrite_restore_one',
                     nonce: nonce,
                     post_id: id,
+                    mode: mode,
                 }).done(function(resp){
                     const $row = $('tr[data-id="' + id + '"]');
                     if (resp.success) {
@@ -259,11 +281,59 @@ function affiros_rewrite_render_restore_page() {
                     ng++;
                 }).always(function(){
                     done++;
-                    $btn.text('実行中... ' + done + '/' + ids.length);
+                    $btn.text('実行中... ' + done + '/' + total);
                     setTimeout(next, 300); // WP DB 負荷軽減
                 });
             };
             next();
+        }
+
+        // ボタン: 選択した記事を一括復元
+        $('#affiros-restore-bulk').on('click', function(){
+            const ids = $('.affiros-restore-row:checked').map(function(){ return $(this).val(); }).get();
+            if (!ids.length) return;
+            const mode = currentMode();
+            if (!confirm(ids.length + ' 件の記事を「' + modeLabel(mode) + '」で復元します。よろしいですか？')) return;
+            runBatchRestore(ids, $(this), '⏮ 選択した記事をまとめて復元');
+        });
+
+        // ボタン: 全件復元
+        $('#affiros-restore-all').on('click', function(){
+            const $btn = $(this);
+            const mode = currentMode();
+            $btn.prop('disabled', true).text('対象記事を取得中...');
+            $.post(ajaxUrl, {
+                action: 'affiros_rewrite_restore_all_ids',
+                nonce: nonce,
+            }).done(function(resp){
+                if (!resp.success) {
+                    alert('対象記事の取得に失敗: ' + (resp.data?.message || '不明'));
+                    $btn.prop('disabled', false).text('🗂 全リライト履歴を一括復元（全件）');
+                    return;
+                }
+                const ids = resp.data.ids || [];
+                const total = ids.length;
+                if (!total) {
+                    setStatus('リライト履歴がある記事はありません', 'info');
+                    $btn.prop('disabled', false).text('🗂 全リライト履歴を一括復元（全件）');
+                    return;
+                }
+                const ok = confirm(
+                    total + ' 件のリライト履歴がある記事を全部「' + modeLabel(mode) + '」で復元します。\n\n'
+                    + '⚠️ この操作は取り消せません。リライト後の手動編集や商品挿入の変更も失われます。\n\n'
+                    + 'よろしいですか？'
+                );
+                if (!ok) {
+                    $btn.prop('disabled', false).text('🗂 全リライト履歴を一括復元（全件）');
+                    return;
+                }
+                // 一覧テーブルを再読み込みしておく（処理中の進捗をテーブルでも表示するため）
+                loadList(1);
+                runBatchRestore(ids, $btn, '🗂 全リライト履歴を一括復元（全件）');
+            }).fail(function(){
+                alert('通信エラー');
+                $btn.prop('disabled', false).text('🗂 全リライト履歴を一括復元（全件）');
+            });
         });
     })(jQuery);
     </script>

@@ -144,8 +144,12 @@ class Affiros_Rewrite_Revision_Restorer {
     /**
      * 1記事を「リライト直前」のリビジョンに復元する。
      * 関連メタ（リライト履歴・マーカー検証）もクリア。
+     *
+     * @param int $post_id
+     * @param string $mode 'one_step' = 直前のリビジョンに1回戻す（既定）
+     *                    'oldest' = リライト履歴より前で最も古いリビジョンに戻す
      */
-    public static function restore_one($post_id) {
+    public static function restore_one($post_id, $mode = 'one_step') {
         $rewrite_last = (string) get_post_meta($post_id, '_affiros_rewrite_last_at', true);
         if (!$rewrite_last) {
             return new WP_Error('no_rewrite_history', 'この投稿にはリライト履歴がありません');
@@ -154,7 +158,14 @@ class Affiros_Rewrite_Revision_Restorer {
         if (empty($revisions)) {
             return new WP_Error('no_revision', 'リライト直前のリビジョンが見つかりません');
         }
-        $target = $revisions[0];
+        // mode に応じてターゲットを選定:
+        //   one_step  : 最新の「リライト前」リビジョン = 1回分戻る
+        //   oldest    : 最古の「リライト前」リビジョン = すべてのリライトを取り消す
+        if ($mode === 'oldest') {
+            $target = end($revisions); // 末尾 = 最古
+        } else {
+            $target = $revisions[0]; // 先頭 = 直前
+        }
         $restored = wp_restore_post_revision($target->ID);
         if (is_wp_error($restored)) {
             return $restored;
@@ -172,7 +183,31 @@ class Affiros_Rewrite_Revision_Restorer {
             'post_id'           => $post_id,
             'restored_revision' => $target->ID,
             'restored_to'       => mysql2date('Y-m-d H:i', $target->post_modified),
+            'mode'              => $mode,
+            'total_revisions'   => count($revisions),
         ];
+    }
+
+    /**
+     * リライト履歴がある全ての投稿 ID を返す（ページネーションなし）。
+     * 「全件復元」ボタン用。
+     */
+    public static function list_all_rewritten_post_ids() {
+        $ids = get_posts([
+            'post_type'      => 'post',
+            'post_status'    => ['publish', 'draft', 'pending', 'future', 'private'],
+            'posts_per_page' => -1,
+            'fields'         => 'ids',
+            'meta_query'     => [
+                [
+                    'key'     => '_affiros_rewrite_count',
+                    'value'   => 0,
+                    'compare' => '>',
+                    'type'    => 'NUMERIC',
+                ],
+            ],
+        ]);
+        return is_array($ids) ? array_map('intval', $ids) : [];
     }
 
     /**

@@ -1810,6 +1810,27 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.2 (2026-06-08) — リビジョン復元に「全件復元」「最古まで戻す」モード追加</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>「🗂 全リライト履歴を一括復元（全件）」ボタンを追加</strong> — ページネーション無視で全リライト履歴のある記事を一気に復元できる。200記事の全件ロールバックがボタン1つで完結。</li>
+              <li><strong>復元モード選択を追加</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><strong>1回分戻す</strong>（既定）: 最新リライトの直前のリビジョンに戻る。複数回リライトしている記事は段階的に戻す</li>
+                  <li><strong>最古まで戻す</strong>: リライト履歴より前で最も古いリビジョンに戻る。複数回のリライトを一気に取り消す</li>
+                </ul>
+              </li>
+              <li><strong>復元ロジックのドキュメント明示</strong>: UI 上の警告バナーに「1回分戻すと最古まで戻すの違い」を明示。</li>
+              <li><strong>新規 AJAX エンドポイント</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>affiros_rewrite_restore_all_ids</code>: ページネーションなしで全件 ID 取得</li>
+                  <li><code>affiros_rewrite_restore_one</code> に <code>mode</code> パラメタ追加（one_step / oldest）</li>
+                </ul>
+              </li>
+              <li><strong>リライタプラグイン v0.4.29 同期</strong>。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.1 (2026-06-08) — Claudeのハルシネーション抑制＋ブランドミスマッチ検出</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: リライタの7選記事で 4-6位 の H3 商品名が候補リスト外（「エレコム」「山崎実業」「LIKENNY」等の架空ブランド）になり、商品挿入時に全く違う商品が貼られるミスマッチが発生していた。</li>
