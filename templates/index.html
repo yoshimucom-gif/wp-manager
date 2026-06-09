@@ -1454,17 +1454,23 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
                 <button type="button" class="batch-tab" data-type="column" onclick="setBatchTypeTab('column')">コラム</button>
               </div>
             </div>
-            <div id="batch-top-scroll" style="overflow-x:auto;overflow-y:hidden;height:14px;margin:8px 0 2px;background:var(--surface);border-radius:4px">
-              <div id="batch-top-scroll-inner" style="height:1px;width:1180px"></div>
-            </div>
-            <div id="batch-table-wrap" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;overflow:auto;">
-              <table style="width:100%;min-width:1180px">
+            <div id="batch-table-wrap" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;margin-top:8px">
+              <table style="width:100%;table-layout:fixed">
+                <colgroup>
+                  <col style="width:36px">
+                  <col style="width:80px">
+                  <col><!-- タイトル: 残り全部 -->
+                  <col style="width:90px">
+                  <col style="width:170px">
+                  <col style="width:60px">
+                  <col style="width:90px">
+                </colgroup>
                 <thead>
                   <tr>
                     <th><input type="checkbox" class="check-all" id="batch-check-all" onchange="toggleBatchAll(this)"></th>
                     <th>ステータス</th>
                     <th>タイトル</th>
-                    <th>記事種類</th>
+                    <th>種類</th>
                     <th>スラッグ</th>
                     <th>スコア</th>
                     <th>サイト</th>
@@ -1804,6 +1810,24 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <div class="page-subtitle">Affiros9 本体の更新ログ（現在: <strong>v{{ app_version }}</strong>）</div>
         </div>
         <div style="max-width:780px">
+
+          <div class="settings-section">
+            <div class="section-header">// v1.7.11 (2026-06-09) — 一括処理テーブルのレイアウトを整理（横スクロール撤廃）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>問題</strong>: 一括処理ページのテーブルが <code>min-width:1180px</code> で固定されていて、画面が狭いと横スクロールが必要。さらに横スクロールバーが一番下まで行かないと操作できない状態だった。スペース配分も均等じゃなく、ステータス・記事種類列に無駄な余白があった。</li>
+              <li><strong>修正</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>min-width:1180px</code> 撤廃 → 横スクロール不要に</li>
+                  <li><code>table-layout:fixed</code> + <code>&lt;colgroup&gt;</code> で各列に明示的な幅を指定:
+                    <br>　チェック 36px / ステータス 80px / タイトル 残り全部 / 種類 90px / スラッグ 170px / スコア 60px / サイト 90px</li>
+                  <li>タイトル・サイト名は overflow:hidden + ellipsis で省略表示、title 属性でフル表示</li>
+                  <li>スラッグ input を <code>width:100%</code> で列幅に追従</li>
+                  <li>「記事種類」を「種類」に短縮（列幅節約）</li>
+                  <li>上部のダミー横スクロールバー要素も撤去（不要に）</li>
+                </ul>
+              </li>
+            </ul>
+          </div>
 
           <div class="settings-section">
             <div class="section-header">// v1.7.10 (2026-06-09) — CSVインポート完了メッセージのワークフロー順序を修正</div>
@@ -5451,12 +5475,12 @@ function loadBatchArticles() {
     return `
     <tr>
       <td><input type="checkbox" class="check-row" value="${a.id}" ${shouldCheck ? 'checked' : ''} ${selectable ? '' : 'disabled'} onchange="toggleBatchRow('${a.id}', this.checked)"></td>
-      <td>${statusBadge(a.status)}${a.processing_message ? `<div style="font-size:10px;color:var(--muted);margin-top:4px">${esc(a.processing_message)}</div>` : ''}</td>
-      <td style="font-size:12px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.title)}</td>
+      <td style="font-size:11px">${statusBadge(a.status)}${a.processing_message ? `<div style="font-size:10px;color:var(--muted);margin-top:4px">${esc(a.processing_message)}</div>` : ''}</td>
+      <td style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.title)}">${esc(a.title)}</td>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap">${esc(articleTypeLabel(a.article_type || 'ranking'))}</td>
-      <td><input type="text" class="form-control" value="${esc(a.slug || '')}" placeholder="自動" style="font-size:11px;height:28px" onchange="saveBatchField('${a.id}', 'slug', this.value)"></td>
-      <td>${scoreBadge(a)}</td>
-      <td>${getSiteName(a.site_id)}</td>
+      <td><input type="text" class="form-control" value="${esc(a.slug || '')}" placeholder="自動" style="font-size:11px;height:26px;width:100%;box-sizing:border-box" onchange="saveBatchField('${a.id}', 'slug', this.value)"></td>
+      <td style="font-size:11px">${scoreBadge(a)}</td>
+      <td style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(getSiteName(a.site_id))}">${esc(getSiteName(a.site_id))}</td>
     </tr>
   `;
   }).join('');
