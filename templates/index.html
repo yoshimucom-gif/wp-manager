@@ -1819,6 +1819,22 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.16 (2026-06-09) — リライターの「元記事が長すぎます」誤判定を修正（rewrite v0.4.35）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>症状</strong>: 本文 8000 字程度の記事でも「元記事が長すぎます（50432文字 / 上限30000文字）」で一括リライトが全件失敗するケースがあった。</li>
+              <li><strong>原因</strong>: 長さ判定が「生HTMLのバイト数」を見ていた。<code>&lt;!-- wp:paragraph --&gt;</code> などの Gutenberg ブロックコメント・大量の inline style 付き <code>&lt;div&gt;</code>/<code>&lt;span&gt;</code> などのマークアップが本文の 5〜6 倍に膨らんで上限を超えていた。</li>
+              <li><strong>修正（rewrite プラグイン v0.4.35）</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>Pre_Cleanup</code> に Gutenberg ブロックコメントの除去を追加。Claude に渡す入力からも無駄なノイズが消える（プロンプト効率改善）。</li>
+                  <li><code>Rewrite_Engine</code> の <code>MAX_SOURCE_CHARS</code> 判定を「タグ・コメント除去後の本文文字数」で行うように変更。エラーメッセージも「本文 X文字」と明示。</li>
+                </ul>
+              </li>
+              <li><strong>効果</strong>: 装飾だらけの記事もリライト可能に。本来弾くべき「本文 3万字超」の長文記事はこれまで通り中断される。</li>
+              <li><strong>更新方法</strong>: プラグインページから <code>affiros-rewrite-0.4.35.zip</code> を再インストール。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.15 (2026-06-09) — サイト列のHTML露出を修正＋WP投稿UIを統合（予約投稿をデフォルトに）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>一括処理テーブルの「サイト」列に <code>&lt;span styl…</code> が露出していた問題を修正</strong>:

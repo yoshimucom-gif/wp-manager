@@ -34,12 +34,18 @@ class Affiros_Rewrite_Engine {
             $post['content'] = Affiros_Rewrite_Pre_Cleanup::clean($post['content']);
         }
 
-        // 元記事が長すぎる場合、末尾を失ったまま上書きしてしまうのを防ぐため中断する
-        $source_len = mb_strlen((string)$post['content']);
+        // 元記事が長すぎる場合、末尾を失ったまま上書きしてしまうのを防ぐため中断する。
+        // 判定はタグ・コメント除去後の「本文文字数」で行う。生HTMLバイト数で測ると
+        // 装飾の多い記事（大量の inline style や Gutenberg コメント）で誤判定する
+        // （本文 8000 字でも生HTMLが 5万字に膨らむケースがあった）。
+        $plain_for_limit = trim(strip_tags(
+            preg_replace('/<!--[\s\S]*?-->/', '', (string)$post['content'])
+        ));
+        $source_len = mb_strlen($plain_for_limit);
         if ($source_len > self::MAX_SOURCE_CHARS) {
             return new WP_Error(
                 'source_too_long',
-                "元記事が長すぎます（{$source_len}文字 / 上限" . self::MAX_SOURCE_CHARS . "文字）。記事を分割してから実行してください。"
+                "元記事が長すぎます（本文 {$source_len}文字 / 上限" . self::MAX_SOURCE_CHARS . "文字）。記事を分割してから実行してください。"
             );
         }
 

@@ -49,7 +49,13 @@ class Affiros_Rewrite_Pre_Cleanup {
         // 3) 未処理マーカーを除去（リライト後に新規で置くため）
         $html = preg_replace('/<!--\s*ai-product(?::[a-z]+(?::[a-z0-9]+)?)?\s*-->/i', '', $html);
 
-        // 4) 連続改行を整理
+        // 4) Gutenberg ブロック区切りコメントを除去
+        //    <!-- wp:paragraph --> <!-- /wp:paragraph --> 等。残しても Claude には
+        //    意味がない上、生HTML長を 5〜6 倍に膨らませて MAX_SOURCE_CHARS 判定を
+        //    狂わせる。出力側は gutenberg-converter.php が再生成する。
+        $html = preg_replace('/<!--\s*\/?wp:[a-zA-Z0-9\/\-]+(?:\s+\{[^}]*\})?\s*\/?-->/', '', $html);
+
+        // 5) 連続改行を整理
         $html = preg_replace("/(\r?\n){3,}/", "\n\n", $html);
 
         return trim((string)$html);
