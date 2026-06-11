@@ -260,3 +260,91 @@ add_action('wp_ajax_affiros_rewrite_restore_before_date_all_ids', function () {
         'total' => count($ids),
     ]);
 });
+
+/**
+ * テーブル修復: 全記事スキャン（ページング）
+ *   POST: offset, limit
+ *   返却: scanned (今回チェックした件数), found (壊れた記事の配列)
+ */
+add_action('wp_ajax_affiros_rewrite_scan_tables', function () {
+    check_ajax_referer('affiros_rewrite_nonce', 'nonce');
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error('権限がありません');
+    }
+    @set_time_limit(120);
+
+    $offset = max(0, intval($_POST['offset'] ?? 0));
+    $limit  = min(200, max(1, intval($_POST['limit'] ?? 100)));
+
+    $posts = get_posts([
+        'post_type'        => 'post',
+        'post_status'      => ['publish', 'draft', 'future', 'private'],
+        'numberposts'      => $limit,
+        'offset'           => $offset,
+        'orderby'          => 'ID',
+        'order'            => 'DESC',
+        'suppress_filters' => true,
+        'no_found_rows'    => true,
+    ]);
+
+    $found = [];
+    foreach ($posts as $p) {
+        $count = Affiros_Rewrite_Gutenberg::count_malformed_table_blocks((string)$p->post_content);
+        if ($count > 0) {
+            $found[] = [
+                'id'           => (int)$p->ID,
+                'title'        => (string)$p->post_title,
+                'broken_count' => (int)$count,
+            ];
+        }
+    }
+
+    wp_send_json_success([
+        'scanned' => count($posts),
+        'found'   => $found,
+    ]);
+});
+
+/**
+ * テーブル修復: 1記事修復
+ *   POST: post_id
+ */
+add_action('wp_ajax_affiros_rewrite_repair_tables', function () {
+    check_ajax_referer('affiros_rewrite_nonce', 'nonce');
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error('権限がありません');
+    }
+    @set_time_limit(60);
+
+    $post_id = intval($_POST['post_id'] ?? 0);
+    if (!$post_id) {
+        wp_send_json_error('post_id が不正です');
+    }
+    $post = get_post($post_id);
+    if (!$post) {
+        wp_send_json_error('記事が見つかりません');
+    }
+    $original = (string)$post->post_content;
+    $repaired = Affiros_Rewrite_Gutenberg::repair_table_blocks($original);
+    if ($repaired === $original) {
+        wp_send_json_success([
+            'message' => '修復不要（既に正常）',
+            'changed' => false,
+        ]);
+    }
+
+    // post_modified を更新せずに本文だけ書き換えたい場合は wp_insert_post に
+    // edit_date を渡せばよいが、ここではリビジョン作成と更新日時更新を
+    // そのまま許容する（=「いつ修復したか」を残す）。
+    $result = wp_update_post([
+        'ID'           => $post_id,
+        'post_content' => $repaired,
+    ], true);
+    if (is_wp_error($result)) {
+        wp_send_json_error($result->get_error_message());
+    }
+    wp_send_json_success([
+        'message' => '修復完了',
+        'changed' => true,
+    ]);
+});

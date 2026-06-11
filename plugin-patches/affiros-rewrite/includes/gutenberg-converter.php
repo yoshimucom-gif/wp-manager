@@ -169,7 +169,7 @@ class Affiros_Rewrite_Gutenberg {
      *     ただし colspan/rowspan/scope は Gutenberg が許容するので保持
      *   - colgroup / caption → そのまま保持（許容される）
      */
-    private static function normalize_table_for_gutenberg($html) {
+    public static function normalize_table_for_gutenberg($html) {
         if (!$html) return '';
         // 1) <table ...> → <table class="">
         $html = preg_replace('/<table\b[^>]*>/i', '<table class="">', $html);
@@ -227,5 +227,68 @@ class Affiros_Rewrite_Gutenberg {
         }
 
         return $html;
+    }
+
+    /**
+     * 投稿本文に含まれる wp:table ブロックのうち、Gutenberg バリデーションを
+     * 通らないものの数を返す（normalize 適用前後で差が出るブロック数）。
+     *
+     * @param string $content post_content 全文
+     * @return int 壊れたブロック数
+     */
+    public static function count_malformed_table_blocks($content) {
+        if (!$content || strpos($content, '<!-- wp:table') === false) return 0;
+        if (!preg_match_all(
+            '/<!--\s*wp:table[\s\S]*?-->\s*([\s\S]*?)\s*<!--\s*\/wp:table\s*-->/i',
+            $content,
+            $matches
+        )) {
+            return 0;
+        }
+        $count = 0;
+        foreach ($matches[1] as $block_inner) {
+            if (!preg_match('/<table\b[\s\S]*?<\/table>/i', $block_inner, $tm)) {
+                // wp:table の中に <table> が無い時点で壊れてる
+                $count++;
+                continue;
+            }
+            $original = $tm[0];
+            $normalized = self::normalize_table_for_gutenberg($original);
+            $has_figure = (bool)preg_match('/<figure\b[^>]*class="[^"]*wp-block-table[^"]*"[^>]*>[\s\S]*?<\/figure>/i', $block_inner);
+            if ($original !== $normalized || !$has_figure) {
+                $count++;
+            }
+        }
+        return $count;
+    }
+
+    /**
+     * 投稿本文の wp:table ブロックを Gutenberg 互換に修復する。
+     * 既に正常なブロックは触らない（idempotent）。
+     *
+     * @param string $content post_content 全文
+     * @return string 修復後の post_content
+     */
+    public static function repair_table_blocks($content) {
+        if (!$content || strpos($content, '<!-- wp:table') === false) return $content;
+        return preg_replace_callback(
+            '/<!--\s*wp:table[\s\S]*?-->\s*([\s\S]*?)\s*<!--\s*\/wp:table\s*-->/i',
+            function ($m) {
+                $block_inner = $m[1];
+                if (!preg_match('/<table\b[\s\S]*?<\/table>/i', $block_inner, $tm)) {
+                    // <table> が見つからない壊れたブロックは元のまま返す（消さない）
+                    return $m[0];
+                }
+                $original = $tm[0];
+                $normalized = self::normalize_table_for_gutenberg($original);
+                $has_figure = (bool)preg_match('/<figure\b[^>]*class="[^"]*wp-block-table[^"]*"[^>]*>[\s\S]*?<\/figure>/i', $block_inner);
+                if ($original === $normalized && $has_figure) {
+                    // 既に正常 → 触らない
+                    return $m[0];
+                }
+                return "<!-- wp:table -->\n<figure class=\"wp-block-table\">{$normalized}</figure>\n<!-- /wp:table -->";
+            },
+            $content
+        );
     }
 }

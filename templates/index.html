@@ -1819,6 +1819,21 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.18 (2026-06-09) — リライター: 壊れた既存記事のテーブルブロックを一括修復するページを追加（rewrite v0.4.37）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: v1.7.17 (rewrite v0.4.36) で「これから生成する記事」は壊れなくなったが、それ以前にリライト済みの大量の記事は壊れたまま残っていた。1件ずつ手動で修復するのは現実的でない。</li>
+              <li><strong>追加</strong>: WP 管理画面に「Affiros リライト → 🔧 テーブル修復」メニューを新設。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>全件スキャンで post（publish/draft/future/private）を 100 件単位でチェック。</li>
+                  <li>壊れた <code>wp:table</code> ブロックを含む記事のみをリスト表示。</li>
+                  <li>全件一括修復 or 個別修復で <code>wp_update_post()</code> 経由で本文置換。リビジョンが自動作成されるので元に戻せる。</li>
+                </ul>
+              </li>
+              <li><strong>運用</strong>: 各サイトでプラグインを v0.4.37 にアップデート → 「🔧 テーブル修復」→ 全件スキャン → 全件一括修復、で完了。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.17 (2026-06-09) — リライターの比較テーブル消失バグを修正（rewrite v0.4.36）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>症状</strong>: リライト後の記事を WP 編集画面で開くと、比較テーブルが「このブロックには、想定されていないか無効なコンテンツが含まれています」と赤エラー表示。「復旧を試みる」を押すとブロックごと消失し、H2 と H2 の間が空になって連続H2状態になる。</li>
