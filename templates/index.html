@@ -1819,6 +1819,22 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.17 (2026-06-09) — リライターの比較テーブル消失バグを修正（rewrite v0.4.36）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>症状</strong>: リライト後の記事を WP 編集画面で開くと、比較テーブルが「このブロックには、想定されていないか無効なコンテンツが含まれています」と赤エラー表示。「復旧を試みる」を押すとブロックごと消失し、H2 と H2 の間が空になって連続H2状態になる。</li>
+              <li><strong>原因</strong>: <code>wp:table</code> ブロックは HTML スキーマが厳格（<code>&lt;figure class="wp-block-table"&gt;</code> ラップ + <code>&lt;tbody&gt;</code> 必須 + 属性制限あり）だが、Claude が返す <code>&lt;table border="1" style="..."&gt;&lt;tr&gt;…&lt;/tr&gt;&lt;/table&gt;</code> のような HTML をそのまま `&lt;figure&gt;` でラップしていたため、validation 失敗 → 「復旧を試みる」でコンテンツごと消えていた。</li>
+              <li><strong>修正（rewrite v0.4.36）</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>Gutenberg::normalize_table_for_gutenberg()</code> を新規追加。<code>&lt;table&gt;</code> 出力を Gutenberg 互換に正規化。</li>
+                  <li><code>&lt;table&gt;</code>/<code>&lt;tr&gt;</code>/<code>&lt;thead&gt;</code>/<code>&lt;tbody&gt;</code> の不要属性を全剥がし、<code>&lt;td&gt;</code>/<code>&lt;th&gt;</code> は <code>colspan</code>/<code>rowspan</code>/<code>scope</code> のみ保持。</li>
+                  <li><code>&lt;thead&gt;</code>/<code>&lt;tbody&gt;</code> の外にある裸 <code>&lt;tr&gt;</code> を自動で <code>&lt;tbody&gt;</code> ラップ。</li>
+                </ul>
+              </li>
+              <li><strong>注意</strong>: 既に作成済みの壊れたテーブルブロックは、再リライトすると正常に置き換わる。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.16 (2026-06-09) — リライターの「元記事が長すぎます」誤判定を修正（rewrite v0.4.35）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>症状</strong>: 本文 8000 字程度の記事でも「元記事が長すぎます（50432文字 / 上限30000文字）」で一括リライトが全件失敗するケースがあった。</li>

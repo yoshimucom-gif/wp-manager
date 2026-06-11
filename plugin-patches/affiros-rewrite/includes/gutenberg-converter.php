@@ -122,11 +122,14 @@ class Affiros_Rewrite_Gutenberg {
             case 'ol':
                 return "<!-- wp:list {\"ordered\":true} -->\n{$element}\n<!-- /wp:list -->";
             case 'table':
-                // WP標準は figure ラップ。既に figure 内にあれば二重ラップしない
-                if (preg_match('/^<table/i', $element)) {
-                    return "<!-- wp:table -->\n<figure class=\"wp-block-table\">{$element}</figure>\n<!-- /wp:table -->";
-                }
-                return "<!-- wp:table -->\n{$element}\n<!-- /wp:table -->";
+                // WP の table block は HTML スキーマが厳格。
+                // - <figure class="wp-block-table"> でラップ必須
+                // - <tr> は <thead> または <tbody> の直下である必要がある
+                // - table / tr / td / th の inline style / class / border 等は許容されない
+                // これを満たさないと「想定されていないコンテンツ」エラーになり、
+                // 「復旧を試みる」を押すとブロックごと消えて連続H2状態になる。
+                $normalized = self::normalize_table_for_gutenberg($element);
+                return "<!-- wp:table -->\n<figure class=\"wp-block-table\">{$normalized}</figure>\n<!-- /wp:table -->";
             case 'figure':
                 return "<!-- wp:image -->\n{$element}\n<!-- /wp:image -->";
             case 'blockquote':
@@ -147,5 +150,82 @@ class Affiros_Rewrite_Gutenberg {
             return $text;
         }
         return "<!-- wp:paragraph -->\n<p>" . $text . "</p>\n<!-- /wp:paragraph -->";
+    }
+
+    /**
+     * Claude が返す <table>...</table> を Gutenberg の table block が
+     * 受け付ける形に正規化する。
+     *
+     * Gutenberg が許容する構造:
+     *   <table class="">
+     *     <thead><tr><th>..</th></tr></thead>   ← 任意
+     *     <tbody><tr><td>..</td></tr></tbody>   ← 必須
+     *   </table>
+     *
+     * よくある不適合（実装で吸収する）:
+     *   - <table style="..."> や class つき → 属性を全部剥がす
+     *   - <tr> が <thead>/<tbody> の外に直書き → <tbody> でラップ
+     *   - <td style="..."> / <th colspan="2"> → style/class/border等は剥がす
+     *     ただし colspan/rowspan/scope は Gutenberg が許容するので保持
+     *   - colgroup / caption → そのまま保持（許容される）
+     */
+    private static function normalize_table_for_gutenberg($html) {
+        if (!$html) return '';
+        // 1) <table ...> → <table class="">
+        $html = preg_replace('/<table\b[^>]*>/i', '<table class="">', $html);
+        // 2) <thead ...> / <tbody ...> / <tfoot ...> / <tr ...> → 属性剥がし
+        $html = preg_replace('/<(thead|tbody|tfoot|tr)\b[^>]*>/i', '<$1>', $html);
+        // 3) <td ...> / <th ...> は colspan/rowspan/scope だけ残す
+        $html = preg_replace_callback(
+            '/<(td|th)\b([^>]*)>/i',
+            function ($m) {
+                $tag = strtolower($m[1]);
+                $attrs = $m[2];
+                $keep = [];
+                if (preg_match('/\bcolspan\s*=\s*"(\d+)"/i', $attrs, $cm)) {
+                    $keep[] = 'colspan="' . intval($cm[1]) . '"';
+                }
+                if (preg_match('/\browspan\s*=\s*"(\d+)"/i', $attrs, $rm)) {
+                    $keep[] = 'rowspan="' . intval($rm[1]) . '"';
+                }
+                if (preg_match('/\bscope\s*=\s*"(row|col|rowgroup|colgroup)"/i', $attrs, $sm)) {
+                    $keep[] = 'scope="' . $sm[1] . '"';
+                }
+                return '<' . $tag . ($keep ? ' ' . implode(' ', $keep) : '') . '>';
+            },
+            $html
+        );
+
+        // 4) <thead>/<tbody>/<tfoot> の外側にある <tr> を <tbody> で囲む。
+        //    Claude がたまに <table><tr>...</tr></table> を出すケースを救済する。
+        if (!preg_match('/<(?:thead|tbody|tfoot)\b/i', $html)) {
+            // どのグループにも入ってない → 全部の <tr> を <tbody> でくくる
+            $html = preg_replace(
+                '/<table\b([^>]*)>([\s\S]*?)<\/table>/i',
+                '<table$1><tbody>$2</tbody></table>',
+                $html,
+                1
+            );
+        } else {
+            // thead だけあって tbody が無い場合などに、thead 後の生 tr を tbody でくくる
+            $html = preg_replace_callback(
+                '/<\/thead>([\s\S]*?)<\/table>/i',
+                function ($m) {
+                    $rest = $m[1];
+                    // 既に tbody/tfoot が入ってれば触らない
+                    if (preg_match('/<(?:tbody|tfoot)\b/i', $rest)) {
+                        return '</thead>' . $rest . '</table>';
+                    }
+                    // 生 tr が残ってれば tbody でくくる
+                    if (preg_match('/<tr\b/i', $rest)) {
+                        return '</thead><tbody>' . trim($rest) . '</tbody></table>';
+                    }
+                    return '</thead>' . $rest . '</table>';
+                },
+                $html
+            );
+        }
+
+        return $html;
     }
 }
