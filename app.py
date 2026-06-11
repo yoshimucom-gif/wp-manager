@@ -212,7 +212,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.18'
+APP_VERSION = '1.7.19'
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -5562,9 +5562,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.2.1',
     },
     'rewrite': {
-        'file': 'affiros-rewrite-0.4.37.zip',
+        'file': 'affiros-rewrite-0.4.38.zip',
         'name': 'Affiros リライター',
-        'version': '0.4.37',
+        'version': '0.4.38',
     },
     'categorizer': {
         'file': 'affiros-categorizer-0.1.0.zip',
@@ -8294,6 +8294,19 @@ def _run_sched_publish_worker(job_id, targets):
         sched_dt = _parse_schedule_date(raw_sched)
         if sched_dt is None:
             err = f'予約日の形式が不正です: {raw_sched}'
+            _SCHED_PUBLISH_JOBS[job_id]['error'] += 1
+            _SCHED_PUBLISH_JOBS[job_id]['errors'].append(
+                {'title': article.get('title', ''), 'error': err})
+            _record_sched_error(err)
+            _SCHED_PUBLISH_JOBS[job_id]['completed'] += 1
+            continue
+
+        # 過去日付ガード:
+        # WP REST API は status=future + 過去の date を渡すと即時公開してしまう。
+        # CSV の打ち間違い 1 件が意図せぬ即時公開につながるので、5 分以上過去
+        # （実行までのラグを許容）の予約は明示エラーで止める。
+        if sched_dt < datetime.now() - timedelta(minutes=5):
+            err = f'予約日が過去です（{raw_sched}）。即時公開を防ぐため停止しました。CSV の日付を見直してください。'
             _SCHED_PUBLISH_JOBS[job_id]['error'] += 1
             _SCHED_PUBLISH_JOBS[job_id]['errors'].append(
                 {'title': article.get('title', ''), 'error': err})

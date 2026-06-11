@@ -343,6 +343,10 @@ add_action('wp_ajax_affiros_rewrite_repair_tables', function () {
     if (is_wp_error($result)) {
         wp_send_json_error($result->get_error_message());
     }
+    // 修復後は admin notice のキャッシュをクリアして即時反映
+    if (function_exists('affiros_rewrite_clear_broken_tables_cache')) {
+        affiros_rewrite_clear_broken_tables_cache();
+    }
     wp_send_json_success([
         'message' => '修復完了',
         'changed' => true,

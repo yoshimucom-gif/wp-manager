@@ -1819,6 +1819,30 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.19 (2026-06-09) — 本番一括投入前の事故防止 3 点（過去日付ガード／画像保持／復旧誤操作の警告）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>① 過去日付の schedule_date が即時公開される罠を塞いだ（本体）</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>/api/schedule-publish</code> は <code>status=future</code> を送るだけで日付チェックしていなかった。WP は過去日付 + future を渡すと即時公開する仕様のため、CSV の打ち間違い1件が意図せぬ即時公開につながる危険があった。</li>
+                  <li>修正: バックエンドで「5分以上過去の予約日」を明示エラーで停止。モーダルプレビューにも「⛔ 予約日が過去」セクションを追加してリスト表示。</li>
+                </ul>
+              </li>
+              <li><strong>② リライト時の画像消失を防止（rewrite v0.4.38）</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>プロンプトの「使ってよいタグリスト」に <code>&lt;img&gt;</code> が含まれていなかったため Claude が画像を落とすケースがあった。</li>
+                  <li>修正: <code>&lt;figure&gt;</code>/裸 <code>&lt;img&gt;</code> を <code>&lt;!--AFFIROS_MEDIA_N--&gt;</code> プレースホルダーに置換して Claude へ送り、応答後に元のメディアに戻すプレースホルダー方式に変更。Claude が落としたものは記事末尾に救済挿入。プロンプトにも明示ルールを追加して二重防御。</li>
+                </ul>
+              </li>
+              <li><strong>③ 「復旧を試みる」誤操作を防ぐ警告バナーを追加（rewrite v0.4.38）</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>WP 管理画面の Affiros リライター系ページに、直近100件をサンプルチェックして「壊れた wp:table が N 件あります。『復旧を試みる』は絶対に押さないでください」という赤枠バナーを表示。修復ページへのリンク付き。</li>
+                  <li>スキャン結果は 1 時間キャッシュ。修復が走るとキャッシュ即クリア。</li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.18 (2026-06-09) — リライター: 壊れた既存記事のテーブルブロックを一括修復するページを追加（rewrite v0.4.37）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: v1.7.17 (rewrite v0.4.36) で「これから生成する記事」は壊れなくなったが、それ以前にリライト済みの大量の記事は壊れたまま残っていた。1件ずつ手動で修復するのは現実的でない。</li>
@@ -4041,21 +4065,44 @@ function openSchedulePublishModal() {
   const withDate = articles.filter(a => String(a.schedule_date || '').trim());
   const withoutDate = articles.filter(a => !String(a.schedule_date || '').trim());
 
+  // 過去日付（5分以上前）を判別。WP は status=future + 過去 date で即時公開して
+  // しまうので、ここで警告を出して送信前に気付かせる。
+  const nowMs = Date.now();
+  const isPastDate = (s) => {
+    const raw = String(s || '').trim();
+    if (!raw) return false;
+    const norm = raw.replace(/\//g, '-').replace('T', ' ');
+    // YYYY-MM-DD のみなら 10:00 補完（バックエンドと挙動を合わせる）
+    const padded = /^\d{4}-\d{2}-\d{2}$/.test(norm) ? norm + ' 10:00' : norm;
+    const t = Date.parse(padded);
+    if (Number.isNaN(t)) return false;
+    return t < nowMs - 5 * 60 * 1000;
+  };
+  const pastDate = withDate.filter(a => isPastDate(a.schedule_date));
+  const futureDate = withDate.filter(a => !isPastDate(a.schedule_date));
+
   const summaryEl = document.getElementById('schedule-publish-summary');
   summaryEl.innerHTML =
     `選択: <strong>${articles.length}</strong> 件 / `
-    + `予約日設定済み: <strong style="color:#16a34a">${withDate.length}</strong> 件 / `
+    + `予約日 OK: <strong style="color:#16a34a">${futureDate.length}</strong> 件 / `
+    + (pastDate.length ? `過去日付: <strong style="color:#dc2626">${pastDate.length}</strong> 件 / ` : '')
     + `未設定: <strong style="color:#dc2626">${withoutDate.length}</strong> 件`;
 
   // プレビュー: schedule_date 順にソート
-  const sorted = [...withDate].sort((a, b) =>
+  const sorted = [...futureDate].sort((a, b) =>
     String(a.schedule_date).localeCompare(String(b.schedule_date)));
 
   let preview = '';
   if (sorted.length) {
-    preview += '<div style="font-weight:600;margin-bottom:6px;color:var(--fg)">📅 予約投稿スケジュール</div>';
+    preview += '<div style="font-weight:600;margin-bottom:6px;color:var(--fg)">📅 予約投稿スケジュール（送信対象）</div>';
     sorted.forEach(a => {
       preview += `<div><code>${_schedEscapeHtml(a.schedule_date)}</code> — ${_schedEscapeHtml(a.title)}</div>`;
+    });
+  }
+  if (pastDate.length) {
+    preview += '<div style="font-weight:600;margin-top:10px;color:#dc2626">⛔ 予約日が過去（送信されません - 即時公開を防ぐためスキップ）</div>';
+    pastDate.forEach(a => {
+      preview += `<div style="color:#dc2626"><code>${_schedEscapeHtml(a.schedule_date)}</code> — ${_schedEscapeHtml(a.title)}</div>`;
     });
   }
   if (withoutDate.length) {

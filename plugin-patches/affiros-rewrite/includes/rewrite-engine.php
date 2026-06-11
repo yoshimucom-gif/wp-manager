@@ -107,6 +107,14 @@ class Affiros_Rewrite_Engine {
             }
         }
 
+        // === メディア保持: 画像をプレースホルダーに置換してから Claude へ ===
+        // Claude にプロンプトで「画像を保持」と書いても落とすケースがあるため、
+        // 物理的に <figure>/<img> を HTML コメントに置換して送り、応答に含まれた
+        // コメントを元のメディアに戻す。プロンプト指示と二重防御。
+        // 取りこぼされたメディアは末尾に救済挿入することで「画像消失」を防ぐ。
+        $media_placeholders = [];
+        $post['content'] = self::extract_media_to_placeholders($post['content'], $media_placeholders);
+
         $prompt = self::build_prompt($post, $merged, $product_candidates);
 
         // 目標文字数に応じて出力上限を決める（固定だと長文指定で途中切れする）
@@ -138,6 +146,10 @@ class Affiros_Rewrite_Engine {
         }
         $content = $parsed['content'];
         $new_title = $parsed['title'] ?: $post['title'];
+
+        // === メディア復元: プレースホルダーを元の <figure>/<img> に戻す ===
+        // Claude が落とした画像は末尾に救済挿入される。
+        $content = self::restore_media_from_placeholders($content, $media_placeholders);
 
         // === 見出し品質ガード（後処理） ===
         // タイトル丸ごとコピペ・｜の乱用・キーワード重複・孤立助詞を機械的に整える。
@@ -186,6 +198,83 @@ class Affiros_Rewrite_Engine {
             'marker_validation' => $marker_validation,
             'product_candidates_count' => count($product_candidates),
         ];
+    }
+
+    /**
+     * 元記事HTMLから <figure>...</figure> と裸の <img> を抽出して
+     * `<!--AFFIROS_MEDIA_N-->` というコメントプレースホルダーに置換する。
+     *
+     * Claude にはプロンプトで「HTMLコメントは原文の位置に残す」と指示しているため、
+     * このプレースホルダーは出力にもそのまま含まれる想定。
+     * 万一 Claude が落とした場合は restore_media_from_placeholders() で末尾に救済挿入。
+     *
+     * @param string $html 入力HTML
+     * @param array  $placeholders [index => 元のメディアHTML] が格納される
+     * @return string プレースホルダー置換後のHTML
+     */
+    private static function extract_media_to_placeholders($html, array &$placeholders) {
+        if (!$html) return $html;
+        $counter = 0;
+
+        // 1) <figure>...</figure> ブロック（中の <img> や <figcaption> もまとめて抽出）
+        //    後で図表系の <figure> が出ても拾えるよう class 制限はしない。
+        $html = preg_replace_callback(
+            '/<figure\b[^>]*>[\s\S]*?<\/figure>/i',
+            function ($m) use (&$placeholders, &$counter) {
+                $key = $counter++;
+                $placeholders[$key] = $m[0];
+                return '<!--AFFIROS_MEDIA_' . $key . '-->';
+            },
+            $html
+        );
+
+        // 2) figure に包まれていない裸の <img>
+        $html = preg_replace_callback(
+            '/<img\b[^>]*\/?>/i',
+            function ($m) use (&$placeholders, &$counter) {
+                $key = $counter++;
+                $placeholders[$key] = $m[0];
+                return '<!--AFFIROS_MEDIA_' . $key . '-->';
+            },
+            $html
+        );
+
+        return $html;
+    }
+
+    /**
+     * Claude 出力中の `<!--AFFIROS_MEDIA_N-->` プレースホルダーを
+     * 元の <figure>/<img> HTML に戻す。
+     *
+     * Claude が出力に含めなかった（=落とした）プレースホルダーがあれば、
+     * 対応する元メディアを記事末尾にまとめて救済挿入する。これにより
+     * 「リライトで画像が全部消えた」事故を防ぐ。
+     *
+     * @param string $html  Claude が返した本文HTML
+     * @param array  $placeholders extract_media_to_placeholders() で作られた配列
+     * @return string メディア復元後のHTML
+     */
+    private static function restore_media_from_placeholders($html, array $placeholders) {
+        if (empty($placeholders)) return $html;
+
+        $missing = [];
+        foreach ($placeholders as $key => $media_html) {
+            $marker = '<!--AFFIROS_MEDIA_' . $key . '-->';
+            if (strpos($html, $marker) !== false) {
+                $html = str_replace($marker, $media_html, $html);
+            } else {
+                $missing[] = $media_html;
+            }
+        }
+
+        if (!empty($missing)) {
+            $html .= "\n\n<!-- affiros-rewrite: Claudeが出力に含めなかった画像を末尾に復元しました -->\n";
+            foreach ($missing as $media_html) {
+                $html .= $media_html . "\n";
+            }
+        }
+
+        return $html;
     }
 
     /**
@@ -470,6 +559,16 @@ HEADING;
 - WordPress本文として使えるHTML形式で出力する（h2, h3, p, ul, ol, strong, em, span class="marker" など）
 - <!--more--> などのHTMLコメントは原文の位置に残す（ただし商品カードマーカーは含めない）
 - WordPressショートコード（[xxx]）はそのまま残す
+
+【メディアの保持（重要・必ず守ること）】
+- 元記事の <figure> ブロックは中の <img> ごと、内容と src/alt 属性を一切変えずに、原文と
+  同じ前後関係（直前の段落の後／直後の段落の前）に出力する
+- 元記事の <img>（figure に包まれていない裸の img も）は src/alt/width/height/class を一切
+  改変せず原文の位置に出力する
+- 元記事の <a href="..."> リンクは href を改変せず、リンクテキストだけ自然に整える
+- 画像・リンクを削除したり、別の画像で置き換えたり、alt テキストを「画像1」のような汎用語に
+  置き換えてはならない。元の値をそのまま使う
+- 画像が記事内に N 枚あれば、出力にも N 枚すべて存在しなければならない
 
 {$heading_rules}
 {$type_section}

@@ -12,6 +12,71 @@
 
 if (!defined('ABSPATH')) exit;
 
+/**
+ * 直近100件の post をサンプルチェックして、壊れた wp:table を含む記事数を返す。
+ * 結果は 1 時間キャッシュ（修復後はキャッシュをクリアする）。
+ */
+function affiros_rewrite_quick_count_broken_tables() {
+    $cached = get_transient('affiros_rewrite_broken_tables_quick');
+    if ($cached !== false) return intval($cached);
+
+    $posts = get_posts([
+        'post_type'        => 'post',
+        'post_status'      => ['publish', 'draft', 'future', 'private'],
+        'numberposts'      => 100,
+        'orderby'          => 'modified',
+        'order'            => 'DESC',
+        'suppress_filters' => true,
+        'no_found_rows'    => true,
+    ]);
+    $broken = 0;
+    foreach ($posts as $p) {
+        if (Affiros_Rewrite_Gutenberg::count_malformed_table_blocks((string)$p->post_content) > 0) {
+            $broken++;
+        }
+    }
+    set_transient('affiros_rewrite_broken_tables_quick', $broken, HOUR_IN_SECONDS);
+    return $broken;
+}
+
+/**
+ * 修復後に呼ばれて quick count キャッシュをクリアする。
+ * 修復 AJAX の wp_ajax_affiros_rewrite_repair_tables 内から呼び出される。
+ */
+function affiros_rewrite_clear_broken_tables_cache() {
+    delete_transient('affiros_rewrite_broken_tables_quick');
+}
+
+/**
+ * リライター系の管理ページに「壊れたテーブルがあるよ」と警告を出す。
+ * 「復旧を試みる」を押す前に修復ページへ誘導するのが目的。
+ */
+add_action('admin_notices', function () {
+    $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+    if (!$screen) return;
+    // Affiros リライターの管理ページにいるときだけ表示（他ページに毎回出すと邪魔）
+    if (strpos((string)$screen->id, 'affiros-rewrite') === false) return;
+    // 修復ページ自体には出さない（重複表示防止）
+    if (strpos((string)$screen->id, 'affiros-rewrite-table-repair') !== false) return;
+
+    $broken = affiros_rewrite_quick_count_broken_tables();
+    if ($broken <= 0) return;
+
+    $repair_url = admin_url('admin.php?page=affiros-rewrite-table-repair');
+    ?>
+    <div class="notice notice-warning" style="border-left-color:#dc2626">
+        <p style="font-size:13px;line-height:1.7">
+            <strong>⚠️ 壊れたテーブルブロックが見つかりました（直近100件中 <?php echo intval($broken); ?>件）</strong><br>
+            これらの記事を編集画面で開くと「想定されていないコンテンツ」エラーが出ます。
+            <strong style="color:#dc2626">「復旧を試みる」ボタンは絶対に押さないでください</strong>
+            （押すとブロックが消えて中身が失われます）。
+            <br>
+            <a href="<?php echo esc_url($repair_url); ?>" class="button button-primary" style="margin-top:6px">🔧 テーブル修復ページを開く</a>
+        </p>
+    </div>
+    <?php
+});
+
 function affiros_rewrite_render_table_repair_page() {
     ?>
     <div class="wrap">
