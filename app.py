@@ -212,7 +212,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.21'
+APP_VERSION = '1.7.22'
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -6704,6 +6704,10 @@ def get_sites_dashboard():
             reverse=True
         )
         last_published_at = recent_published[0].get('published_at') if recent_published else None
+        # サイドバーの「生成中 N/M」表示用にバッチ進捗を集計
+        # （同時に複数バッチが走っているケースは合算する）
+        batch_completed = sum(int(j.get('completed', 0)) for j in active_jobs)
+        batch_total = sum(int(j.get('total', 0)) for j in active_jobs)
         result.append({
             'id': sid,
             'name': site.get('name') or site.get('wp_url') or '(無名サイト)',
@@ -6718,6 +6722,8 @@ def get_sites_dashboard():
                 'error': sum(1 for a in site_articles if a.get('status') == 'error'),
             },
             'active_batch_count': len(active_jobs),
+            'batch_completed': batch_completed,
+            'batch_total': batch_total,
             'last_published_at': last_published_at,
         })
     return jsonify({

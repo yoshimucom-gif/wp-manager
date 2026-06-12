@@ -1819,6 +1819,19 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.22 (2026-06-09) — サイドバーの「生成中 N」を「生成中 完了/総数」表示に変更</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>問題</strong>: サイドバーのサイト行に「生成中 1」のような表示が出ていたが、これは <code>active_batch_count</code>（ジョブ数）で、実運用ではほぼ常に 1 のため進捗が読めなかった。</li>
+              <li><strong>修正</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>バックエンド: <code>/api/dashboard/sites</code> レスポンスに <code>batch_completed</code> / <code>batch_total</code> を追加（同時に複数バッチがある場合は合算）。</li>
+                  <li>フロント: サイドバーバッジを <code>生成中 12/300</code> 形式に変更。tooltip も「実行中 12/300件完了」と明示。</li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.21 (2026-06-09) — 手動マーカーがブロック種別違いで検知されない問題を修正（inserter v1.9.16）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>症状</strong>: WP 編集画面で手動でマーカー <code>&lt;!--ai-product:ranking:8--&gt;</code> を入れたあとインサーターを実行すると「記事本文に &lt;!--ai-product--&gt; マーカーが見つかりません」エラーになる。</li>
@@ -6349,7 +6362,15 @@ function renderSidebarSites() {
   container.innerHTML = sitesDashboardData.map(site => {
     const isActive = String(site.id) === currentSiteId;
     const batchBadge = site.active_batch_count > 0
-      ? `<span class="site-card__batch-badge" title="記事生成バッチが${site.active_batch_count}件 実行中">生成中 ${site.active_batch_count}</span>`
+      ? (() => {
+          const done  = Number(site.batch_completed || 0);
+          const total = Number(site.batch_total || 0);
+          const label = total > 0 ? `生成中 ${done}/${total}` : '生成中';
+          const tip = total > 0
+            ? `記事生成バッチ実行中 ${done}/${total}件完了`
+            : '記事生成バッチ実行中';
+          return `<span class="site-card__batch-badge" title="${tip}">${label}</span>`;
+        })()
       : '';
     const icon = siteFaviconHtml(site.wp_url);
     return `
