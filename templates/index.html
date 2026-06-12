@@ -1819,6 +1819,15 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.20 (2026-06-09) — 比較商品カード(compare)の罫線崩れを修正（inserter v1.9.15）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>症状</strong>: テーマ側に <code>table td { border: 0 !important; padding: 12px 16px !important; }</code> のような全 table を強制上書きする CSS があると、比較カード（<code>.aipi-compare</code>）の罫線・パディングが崩れる。</li>
+              <li><strong>修正（inserter v1.9.15）</strong>: <code>.aipi-compare .aipi-compare__table</code> 配下のスタイルを高い特異度＋<code>!important</code> で武装。テーマ側 CSS による上書きを物理的に防ぐ。記事中の通常の <code>&lt;table&gt;</code>（比較表など）には影響しない。</li>
+              <li><strong>更新方法</strong>: プラグインページから <code>affiros-product-inserter-1.9.15.zip</code> を再インストール。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.19 (2026-06-09) — 本番一括投入前の事故防止 3 点（過去日付ガード／画像保持／復旧誤操作の警告）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>① 過去日付の schedule_date が即時公開される罠を塞いだ（本体）</strong>:

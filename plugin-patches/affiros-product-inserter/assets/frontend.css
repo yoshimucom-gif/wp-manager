@@ -318,24 +318,45 @@
     vertical-align: middle;
 }
 .aipi-compare__scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-.aipi-compare__table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 12px;
-    min-width: 580px;
+
+/* テーマ側に `table td { border: 0 !important; padding: 12px 16px !important; }` のような
+   全 table を強制上書きする CSS があると比較カードの罫線・パディングが崩れる。
+   高い特異度＋!important で確実に勝つよう全プロパティを宣言する。 */
+.aipi-compare .aipi-compare__table,
+.aipi-compare .aipi-compare__table tbody,
+.aipi-compare .aipi-compare__table thead,
+.aipi-compare .aipi-compare__table tfoot,
+.aipi-compare .aipi-compare__table tr {
+    border: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
 }
-.aipi-compare__table th,
-.aipi-compare__table td {
-    border: 1px solid #ececec;
-    padding: 10px 8px;
-    text-align: center;
-    vertical-align: middle;
+.aipi-compare .aipi-compare__table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 12px !important;
+    min-width: 580px !important;
+    margin: 0 !important;
 }
-.aipi-compare__table thead th {
-    background: #f8f9fa;
-    color: #555;
-    font-weight: 700;
-    font-size: 11px;
+.aipi-compare .aipi-compare__table th,
+.aipi-compare .aipi-compare__table td {
+    border: 1px solid #ececec !important;
+    padding: 10px 8px !important;
+    text-align: center !important;
+    vertical-align: middle !important;
+    background: #fff !important;
+    box-shadow: none !important;
+}
+.aipi-compare .aipi-compare__table thead th {
+    background: #f8f9fa !important;
+    color: #555 !important;
+    font-weight: 700 !important;
+    font-size: 11px !important;
+}
+/* テーマ側の「最初の行に border-top を付ける」を打ち消し */
+.aipi-compare .aipi-compare__table tr:first-child td,
+.aipi-compare .aipi-compare__table tr:first-child th {
+    border-top: 1px solid #ececec !important;
 }
 .aipi-compare__rank-badge {
     display: inline-block;
