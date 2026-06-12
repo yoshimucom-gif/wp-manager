@@ -1819,6 +1819,21 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.23 (2026-06-09) — 「ブラウザ側バックアップの容量が不足」エラーを抑制（永続ディスク利用時は何もしない）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>症状</strong>: 600件級の記事が貯まると「ブラウザ側バックアップの容量が不足しています」赤トーストが出続ける。</li>
+              <li><strong>原因</strong>: フロントが全 articles の JSON を localStorage（〜5MB上限）に詰め込もうとして QuotaExceededError。永続ディスクが効いていればこのバックアップ自体が不要なのに毎回試行していた。</li>
+              <li><strong>修正</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>writeDataSnapshotBackup()</code> は <code>storage.persistent === true</code> のとき即 return（無駄な書き込みを止める）。</li>
+                  <li>非永続環境で容量超過した場合は「軽量版」（article.content / generation_log / batch_generation_log を抜いた骨格のみ）で再試行。骨格が残っていれば最低限の復元はできる。</li>
+                  <li>両方失敗したときだけ赤トーストを出す。</li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.22 (2026-06-09) — サイドバーの「生成中 N」を「生成中 完了/総数」表示に変更</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>問題</strong>: サイドバーのサイト行に「生成中 1」のような表示が出ていたが、これは <code>active_batch_count</code>（ジョブ数）で、実運用ではほぼ常に 1 のため進捗が読めなかった。</li>
@@ -2920,11 +2935,39 @@ function readDataSnapshotBackup() {
 
 function writeDataSnapshotBackup(snapshot) {
   if (!snapshotHasUserData(snapshot)) return;
+  // 永続ディスクが効いていればサーバー側に必ず残るため、ブラウザバックアップは不要。
+  // 600件級の記事を全部 localStorage に詰めようとして容量オーバーで失敗していた問題対策。
+  if (snapshot && snapshot.storage && snapshot.storage.persistent) {
+    return;
+  }
+  const payload = {...snapshot, backed_up_at: new Date().toISOString()};
   try {
-    localStorage.setItem(DATA_SNAPSHOT_KEY, JSON.stringify({...snapshot, backed_up_at: new Date().toISOString()}));
+    localStorage.setItem(DATA_SNAPSHOT_KEY, JSON.stringify(payload));
+    return;
   } catch (e) {
-    console.warn('data snapshot backup failed', e);
-    toast('ブラウザ側バックアップの容量が不足しています。生成記事が多い場合は永続ディスク設定を確認してください。', 'error');
+    // 容量超過 → 「軽量版」（記事本文・生成ログ・トークン使用情報を落とした骨格のみ）で再試行
+    try {
+      const lite = {
+        ...payload,
+        articles: Array.isArray(payload.articles)
+          ? payload.articles.map(a => {
+              const slim = {...a};
+              delete slim.content;
+              delete slim.generation_log;
+              delete slim.last_generation_usage;
+              delete slim.batch_generation_log;
+              return slim;
+            })
+          : payload.articles,
+        backup_mode: 'lite',
+      };
+      localStorage.setItem(DATA_SNAPSHOT_KEY, JSON.stringify(lite));
+      console.info('data snapshot backup saved in lite mode (article content omitted)');
+      return;
+    } catch (e2) {
+      console.warn('data snapshot backup failed (even lite)', e2);
+      toast('ブラウザ側バックアップの容量が不足しています。生成記事が多い場合は永続ディスク設定を確認してください。', 'error');
+    }
   }
 }
 
