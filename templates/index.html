@@ -1819,6 +1819,24 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.21 (2026-06-09) — 手動マーカーがブロック種別違いで検知されない問題を修正（inserter v1.9.16）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>症状</strong>: WP 編集画面で手動でマーカー <code>&lt;!--ai-product:ranking:8--&gt;</code> を入れたあとインサーターを実行すると「記事本文に &lt;!--ai-product--&gt; マーカーが見つかりません」エラーになる。</li>
+              <li><strong>原因</strong>: Gutenberg はブロック種別で HTML エンティティ化の挙動が違う。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>カスタムHTML → そのまま保存 ✅</li>
+                  <li>段落 → <code>&amp;lt;!--ai-product…--&amp;gt;</code> にエスケープ ❌</li>
+                  <li>コード → <code>&lt;pre&gt;&lt;code&gt;&amp;lt;!--…--&amp;gt;&lt;/code&gt;&lt;/pre&gt;</code> ❌</li>
+                  <li>整形済み → <code>&lt;pre&gt;&amp;lt;!--…--&amp;gt;&lt;/pre&gt;</code> ❌</li>
+                </ul>
+                regex がエスケープ後の文字列を拾えない。
+              </li>
+              <li><strong>修正（inserter v1.9.16）</strong>: <code>rescue_escaped_markers()</code> を追加。挿入処理の入口で、上記4パターン（+ <code>&lt;p&gt;&amp;lt;…--&amp;gt;&lt;/p&gt;</code>）を検出して元の <code>&lt;!--ai-product…--&gt;</code> に復元。ブロック種別を間違えてもマーカーが検知される。</li>
+              <li><strong>更新方法</strong>: プラグインページから <code>affiros-product-inserter-1.9.16.zip</code> を再インストール。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.20 (2026-06-09) — 比較商品カード(compare)の罫線崩れを修正（inserter v1.9.15）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>症状</strong>: テーマ側に <code>table td { border: 0 !important; padding: 12px 16px !important; }</code> のような全 table を強制上書きする CSS があると、比較カード（<code>.aipi-compare</code>）の罫線・パディングが崩れる。</li>

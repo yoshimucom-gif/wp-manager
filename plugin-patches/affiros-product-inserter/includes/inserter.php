@@ -39,7 +39,10 @@ class AI_PI_Inserter {
         // ⚠️ 例外: Affiros9 が再投稿した場合、post_content が新しいマーカー入りコンテンツに
         // 上書きされる。この時バックアップ（マーカーなし旧版）を優先すると誤ってエラーになる。
         // post_content にマーカーが存在する場合は「新規投稿扱い」として post_content を使う。
-        $marker_pattern_quick = '/<!--\s*ai-product/i';
+        // 通常マーカー（<!--ai-product…）に加えて、Gutenberg の段落/コードブロックで
+        // エンティティ化された &lt;!--ai-product… 形式も「マーカー有り」と見なす。
+        // rescue_escaped_markers() で後段に渡る前に通常形へ復元される。
+        $marker_pattern_quick = '/(?:<|&lt;)!--\s*ai-product/i';
         $backup_content = get_post_meta($post_id, '_ai_pi_backup', true);
         $already_inserted = !empty(get_post_meta($post_id, '_ai_pi_inserted', true));
         $current_has_markers = (bool) preg_match($marker_pattern_quick, $post->post_content);
@@ -57,6 +60,13 @@ class AI_PI_Inserter {
             }
             $original_content = $post->post_content;
         }
+
+        // === マーカー救済: エンティティ化された <!--ai-product...--> を復元 ===
+        // ユーザーが「カスタムHTML」以外のブロック（段落 / コード / 整形済みテキスト）に
+        // マーカーを書いた場合、Gutenberg が < / > を &lt; / &gt; に変換して保存するため
+        // 後段の regex に引っかからず「マーカーが見つかりません」になる。
+        // ブロック種別を選び間違えても拾えるよう、保守的に救済する。
+        $original_content = self::rescue_escaped_markers($original_content);
 
         try {
             if ($mode === 'marker') {
@@ -658,6 +668,72 @@ class AI_PI_Inserter {
             'brand_mismatch_count' => $brand_mismatch_count,
             'brand_mismatch_details' => $mismatch_details,
         ];
+    }
+
+    /**
+     * 「カスタムHTML」以外のブロックにマーカーを書かれた場合の救済。
+     *
+     * Gutenberg のブロック別の保存挙動:
+     *   - カスタムHTML  → <!--ai-product:ranking:8--> がそのまま保存される ✅
+     *   - 段落          → <p>&lt;!--ai-product:ranking:8--&gt;</p> ❌
+     *   - コード        → <pre class="wp-block-code"><code>&lt;!--ai-product:ranking:8--&gt;</code></pre> ❌
+     *   - 整形済みテキスト → <pre>&lt;!--ai-product:ranking:8--&gt;</pre> ❌
+     *
+     * 上記のいずれも regex `<!--ai-product...-->` に引っかからず
+     * 「マーカーが見つかりません」エラーになる。
+     *
+     * この関数は保存されたコンテンツから上記4パターンを検出して、いずれの場合も
+     * 元の <!--ai-product...--> マーカーに復元する（包んでいた wp:code 等は除去）。
+     */
+    private static function rescue_escaped_markers($content) {
+        if (!$content) return $content;
+
+        // 1) <!-- wp:code --> ... <pre><code>&lt;!--ai-product...--&gt;</code></pre> ... <!-- /wp:code -->
+        //    wp:code ブロック丸ごとを「ただのマーカー」に置換
+        $content = preg_replace_callback(
+            '/<!--\s*wp:code\s*-->\s*<pre[^>]*>\s*<code[^>]*>\s*(&lt;!--\s*ai-product[\s\S]*?--&gt;)\s*<\/code>\s*<\/pre>\s*<!--\s*\/wp:code\s*-->/i',
+            function ($m) { return html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5); },
+            $content
+        );
+
+        // 2) <!-- wp:preformatted --> ... <pre>&lt;!--ai-product...--&gt;</pre> ... <!-- /wp:preformatted -->
+        $content = preg_replace_callback(
+            '/<!--\s*wp:preformatted\s*-->\s*<pre[^>]*>\s*(&lt;!--\s*ai-product[\s\S]*?--&gt;)\s*<\/pre>\s*<!--\s*\/wp:preformatted\s*-->/i',
+            function ($m) { return html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5); },
+            $content
+        );
+
+        // 3) <pre><code>&lt;!--ai-product...--&gt;</code></pre> （wp:code ラッパー無し）
+        $content = preg_replace_callback(
+            '/<pre[^>]*>\s*<code[^>]*>\s*(&lt;!--\s*ai-product[\s\S]*?--&gt;)\s*<\/code>\s*<\/pre>/i',
+            function ($m) { return html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5); },
+            $content
+        );
+
+        // 4) <code>&lt;!--ai-product...--&gt;</code> （インライン code）
+        $content = preg_replace_callback(
+            '/<code[^>]*>\s*(&lt;!--\s*ai-product[\s\S]*?--&gt;)\s*<\/code>/i',
+            function ($m) { return html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5); },
+            $content
+        );
+
+        // 5) <p>&lt;!--ai-product...--&gt;</p> (段落ブロック内)
+        //    <p> ごと「ただのマーカー」に置換（HTML コメントなので段落不要）
+        $content = preg_replace_callback(
+            '/<p[^>]*>\s*(&lt;!--\s*ai-product[\s\S]*?--&gt;)\s*<\/p>/i',
+            function ($m) { return html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5); },
+            $content
+        );
+
+        // 6) 残った素の &lt;!--ai-product...--&gt; を最終的にデコード
+        //    （上記でカバーできない奇形ケースの保険）
+        $content = preg_replace_callback(
+            '/&lt;!--\s*ai-product[\s\S]*?--&gt;/i',
+            function ($m) { return html_entity_decode($m[0], ENT_QUOTES | ENT_HTML5); },
+            $content
+        );
+
+        return $content;
     }
 
     /**
