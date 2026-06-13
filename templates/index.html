@@ -1223,6 +1223,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
 
         <div class="toolbar">
           <button class="btn btn-primary" onclick="generateSelected()">⚡ 選択を再生成</button>
+          <button class="btn btn-secondary" onclick="selectByScoreThreshold()" title="スコアが閾値未満の記事（現在の絞り込み結果の中から）をまとめてチェック。スコア未計測の記事は対象外。">📉 低スコア選択</button>
           <div class="split-btn">
             <select id="articles-post-status" title="WP投稿の種類" onchange="updateWpPostButtonLabel()">
               <option value="schedule">📅 予約投稿（schedule_date通り）</option>
@@ -1278,7 +1279,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
                 <th>種類</th>
                 <th>タイトル</th>
                 <th>キーワード</th>
-                <th>スコア</th>
+                <th title="記事の品質スコア（0〜100）&#10;A=85+ / B=70+ / C=55+ / D=&lt;55&#10;&#10;配点内訳:&#10;・文字数 25pt（N選に応じてスケール）&#10;・タイトル長 12pt（24〜42字が満点）&#10;・キーワード 16pt（タイトル10/本文6）&#10;・H2見出し 12pt（4個で満点）&#10;・H3見出し 6pt&#10;・リスト/表 9pt&#10;・画像 4pt / リンク 5pt&#10;・CTA語句 5pt&#10;・段落の読みやすさ 6pt&#10;＋品質違反でペナルティ&#10;＋構造異常でキャップ">スコア ⓘ</th>
                 <th>ステータス</th>
                 <th>マーカー</th>
                 <th>予定日</th>
@@ -1817,6 +1818,21 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <div class="page-subtitle">Affiros9 本体の更新ログ（現在: <strong>v{{ app_version }}</strong>）</div>
         </div>
         <div style="max-width:780px">
+
+          <div class="settings-section">
+            <div class="section-header">// v1.7.25 (2026-06-09) — 低スコア記事の一括選択ボタン＋スコア配点のツールチップ追加</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>追加</strong>: 対応履歴ツールバーに「📉 低スコア選択」ボタン。クリック → 閾値を入力（デフォ80）→ 現在表示中の記事のうちスコア未満の行をまとめてチェック。既選択は維持して追加選択する仕様。</li>
+              <li><strong>除外</strong>: スコア未計測（null/未生成）の記事は対象外。誤爆防止のため明示的に除外。</li>
+              <li><strong>使い方</strong>: 「📉 低スコア選択」→ 「80」入力 → 「⚡ 選択を再生成」で低品質記事をまとめて再生成。</li>
+              <li><strong>ツールチップ</strong>: スコア列ヘッダーに ⓘ を付与してホバーで配点内訳を表示。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>満点 100。A=85+ / B=70+ / C=55+ / D=&lt;55</li>
+                  <li>配点: 文字数 25 / タイトル長 12 / キーワード 16 / H2 12 / H3 6 / リスト・表 9 / 画像 4 / リンク 5 / CTA 5 / 段落 6 ＋品質ペナルティ・キャップ</li>
+                </ul>
+              </li>
+            </ul>
+          </div>
 
           <div class="settings-section">
             <div class="section-header">// v1.7.24 (2026-06-09) — サイドバーアイコンを「WP接続済みなら緑●、未接続なら非表示」に変更</div>
@@ -3886,6 +3902,52 @@ function toggleAll(cb) {
 
 function getSelectedIds() {
   return [...document.querySelectorAll('#articles-body .check-row:checked')].map(c => c.value);
+}
+
+// 現在テーブルに見えている行のうち、スコアが閾値未満の記事をまとめてチェック。
+// 既存の選択は維持して追加選択する（既選択 + 低スコアの和集合）。
+// スコア未計測の記事は対象外（誤爆防止）。
+function selectByScoreThreshold() {
+  const raw = prompt(
+    'このスコア未満の記事を選択します（既存選択に追加）。\n例: 80 と入力 → スコア < 80 の記事を全部チェック。\n\nスコア未計測の記事は対象外（再計算は「↯ スコア再計算」で）。',
+    '80'
+  );
+  if (raw === null) return;
+  const threshold = parseInt(raw, 10);
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 100) {
+    toast('0〜100 の数値を入力してください', 'error');
+    return;
+  }
+  const rows = document.querySelectorAll('#articles-body tr');
+  let added = 0;
+  let alreadySelected = 0;
+  rows.forEach(row => {
+    const cb = row.querySelector('.check-row');
+    if (!cb || cb.disabled) return;
+    const id = cb.value;
+    const article = allArticles.find(a => a.id === id);
+    if (!article) return;
+    const score = article.seo_score;
+    if (score === null || score === undefined || score === '') return; // 未計測は除外
+    const numScore = Number(score);
+    if (!Number.isFinite(numScore)) return;
+    if (numScore < threshold) {
+      if (cb.checked) {
+        alreadySelected++;
+      } else {
+        cb.checked = true;
+        added++;
+      }
+    }
+  });
+  const total = added + alreadySelected;
+  if (total === 0) {
+    toast(`スコア < ${threshold} の記事は現在の表示範囲にありません`, 'info');
+  } else if (added === 0) {
+    toast(`スコア < ${threshold} の記事 ${total} 件は既に選択済みでした`, 'info');
+  } else {
+    toast(`スコア < ${threshold} の記事 ${added} 件を追加選択しました（合計 ${total} 件該当）`, 'success');
+  }
 }
 
 async function rescoreArticles() {
