@@ -1819,6 +1819,22 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.24 (2026-06-09) — サイドバーアイコンを「WP接続済みなら緑●、未接続なら非表示」に変更</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>変更</strong>: サイドバーのサイトアイコンを favicon（Google S2 サービス経由）から「WP REST 疎通ステータス」に置き換え。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>接続OK → 緑色の <code>●</code> 表示（tooltip「WordPress 接続OK」）</li>
+                  <li>未接続 / URL 未設定 / ping 失敗 → アイコン非表示</li>
+                </ul>
+              </li>
+              <li><strong>疎通判定</strong>: バックエンド <code>_check_wp_connection()</code> が <code>GET {wp_url}/wp-json/</code> をタイムアウト 3 秒で叩き、200/401/403 を「サーバー生存」と判定。500系・DNS失敗・タイムアウトはNG。</li>
+              <li><strong>キャッシュ</strong>: プロセス内 dict で 10 分キャッシュ。サイドバーが頻繁に再描画されても WP に負荷をかけない。</li>
+              <li><strong>レスポンス</strong>: <code>/api/dashboard/sites</code> 各サイトに <code>wp_connected: bool</code> を追加。</li>
+              <li><strong>削除</strong>: <code>siteFaviconHtml()</code>（Google S2 favicon サービス依存）を撤去。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.23 (2026-06-09) — 「ブラウザ側バックアップの容量が不足」エラーを抑制（永続ディスク利用時は何もしない）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>症状</strong>: 600件級の記事が貯まると「ブラウザ側バックアップの容量が不足しています」赤トーストが出続ける。</li>
@@ -6415,7 +6431,7 @@ function renderSidebarSites() {
           return `<span class="site-card__batch-badge" title="${tip}">${label}</span>`;
         })()
       : '';
-    const icon = siteFaviconHtml(site.wp_url);
+    const icon = siteConnectionIconHtml(site);
     return `
       <a class="sidebar-link ${isActive ? 'active' : ''}" onclick="switchToSite('${esc(site.id)}')" title="${esc(site.wp_url)}">
         ${icon}
@@ -6427,19 +6443,13 @@ function renderSidebarSites() {
   }).join('');
 }
 
-// サイトの WP URL から favicon を取る。Google の S2 サービスを使うのでホストが
-// 自前で favicon を吐いていなくても表示される。取得失敗時は家アイコンにフォールバック。
-function siteFaviconHtml(wpUrl) {
-  if (!wpUrl) return '<span>🏠</span>';
-  let host = '';
-  try {
-    host = new URL(wpUrl).hostname;
-  } catch (_) {
-    return '<span>🏠</span>';
-  }
-  if (!host) return '<span>🏠</span>';
-  const src = `https://www.google.com/s2/favicons?sz=32&domain=${encodeURIComponent(host)}`;
-  return `<img src="${esc(src)}" alt="" width="16" height="16" style="vertical-align:middle;border-radius:3px;flex-shrink:0" onerror="this.outerHTML='<span>🏠</span>'">`;
+// WP REST に疎通しているサイトだけ緑チェックを出す。
+// 未接続 / URL 未設定 / ping 失敗のサイトはアイコン非表示（空文字を返す）。
+// 疎通判定はバックエンドの _check_wp_connection() が GET {wp_url}/wp-json/ で行い、
+// 結果は dashboard API の wp_connected フラグとして返ってくる。
+function siteConnectionIconHtml(site) {
+  if (!site || !site.wp_connected) return '';
+  return '<span title="WordPress 接続OK" style="color:#16a34a;font-size:14px;line-height:1;flex-shrink:0;width:16px;text-align:center" aria-label="WP接続OK">●</span>';
 }
 
 function updateHomePageMode() {

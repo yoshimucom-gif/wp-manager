@@ -212,7 +212,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.23'
+APP_VERSION = '1.7.24'
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -6670,6 +6670,46 @@ def recover_stale_batch_jobs(jobs, articles):
     return changed
 
 
+# WP 疎通チェックの結果をプロセス内キャッシュ（site_id → {checked_at, connected}）
+# 600 秒（10 分）でリフレッシュ。サイドバーは頻繁に再描画されるが毎回 WP に
+# 当てると遅いし負荷もかかる。
+_WP_PING_CACHE = {}
+_WP_PING_CACHE_TTL = 600
+
+
+def _check_wp_connection(wp_url):
+    """WP REST が応答するかを軽量に判定。
+
+    判定: GET {wp_url}/wp-json/ がタイムアウト 3 秒以内に 200/401/403 を返せば
+    「サーバーは生きてる」とみなす（401/403 は認証が必要なだけで疎通自体は OK）。
+    URL 未設定／DNS 失敗／タイムアウト／500 系は false。
+    """
+    if not wp_url:
+        return False
+    url = wp_url.rstrip('/') + '/wp-json/'
+    try:
+        resp = requests.get(
+            url,
+            timeout=3,
+            headers=WP_REQUEST_HEADERS,
+            allow_redirects=True,
+        )
+        return resp.status_code in (200, 401, 403)
+    except Exception:
+        return False
+
+
+def _get_wp_connection_status(site_id, wp_url):
+    """キャッシュ付きで WP 疎通状態を返す。"""
+    now_ts = time.time()
+    cached = _WP_PING_CACHE.get(site_id)
+    if cached and (now_ts - cached.get('checked_at', 0)) < _WP_PING_CACHE_TTL:
+        return cached.get('connected', False)
+    connected = _check_wp_connection(wp_url)
+    _WP_PING_CACHE[site_id] = {'checked_at': now_ts, 'connected': connected}
+    return connected
+
+
 @app.route('/api/dashboard/sites', methods=['GET'])
 @login_required
 @with_data_lock
@@ -6708,10 +6748,12 @@ def get_sites_dashboard():
         # （同時に複数バッチが走っているケースは合算する）
         batch_completed = sum(int(j.get('completed', 0)) for j in active_jobs)
         batch_total = sum(int(j.get('total', 0)) for j in active_jobs)
+        wp_url = site.get('wp_url') or ''
+        wp_connected = _get_wp_connection_status(sid, wp_url) if wp_url else False
         result.append({
             'id': sid,
             'name': site.get('name') or site.get('wp_url') or '(無名サイト)',
-            'wp_url': site.get('wp_url') or '',
+            'wp_url': wp_url,
             'sheet_url': site.get('sheet_url') or '',
             'counts': {
                 'total': len(site_articles),
@@ -6724,6 +6766,7 @@ def get_sites_dashboard():
             'active_batch_count': len(active_jobs),
             'batch_completed': batch_completed,
             'batch_total': batch_total,
+            'wp_connected': wp_connected,
             'last_published_at': last_published_at,
         })
     return jsonify({
