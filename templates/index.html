@@ -1820,6 +1820,15 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.26 (2026-06-09) — 「選択を再生成」のページ遷移バグを修正（対応履歴に留まる）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>症状</strong>: 対応履歴で「📉 低スコア選択 → ⚡ 選択を再生成」を押すと、一括処理ページに飛ばされて「対象記事 0件」が表示され、結局なにも起動しないように見えた。</li>
+              <li><strong>原因</strong>: <code>generateSelected()</code> が <code>showPage('batch')</code> でページ遷移していたが、一括処理ページは <code>status=pending/queued/generating/error</code> しか表示しない。低スコア記事の多くは <code>status=generated</code> のため除外されて 0件に見えていた。</li>
+              <li><strong>修正</strong>: ページ遷移をやめて、対応履歴ページから直接 <code>/api/batch-generate</code> に投げる方式に変更。確認ダイアログ → 送信 → トーストで結果通知 → 対応履歴を再読み込み。進捗は一括処理ページの進捗バーで確認できる旨を明示。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.25 (2026-06-09) — 低スコア記事の一括選択ボタン＋スコア配点のツールチップ追加</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>追加</strong>: 対応履歴ツールバーに「📉 低スコア選択」ボタン。クリック → 閾値を入力（デフォ80）→ 現在表示中の記事のうちスコア未満の行をまとめてチェック。既選択は維持して追加選択する仕様。</li>
@@ -3979,16 +3988,34 @@ async function deleteBatchSelected() {
   await loadArticles();
 }
 
-function generateSelected() {
+async function generateSelected() {
   const ids = getSelectedIds();
   if (!ids.length) { toast('記事を選択してください', 'error'); return; }
-  showPage('batch');
-  setTimeout(() => {
-    ids.forEach(id => {
-      const cb = document.querySelector(`#batch-body input[value="${id}"]`);
-      if (cb) cb.checked = true;
+  // 対応履歴ページから直接バックグラウンド再生成を起動する。
+  // 旧版は showPage('batch') で一括処理ページへ飛ばしていたが、
+  // 一括処理ページは status=pending/queued/generating/error のみ表示するため、
+  // 低スコア記事（多くは status=generated）が「対象0件」に見える事故が起きていた。
+  if (!confirm(`${ids.length}件を再生成しますか？\n\nバックグラウンドで処理します。進捗は「一括処理」ページの進捗バーで確認できます。`)) return;
+  const btn = document.querySelector('button[onclick="generateSelected()"]');
+  if (btn) { btn.disabled = true; btn.textContent = '送信中...'; }
+  try {
+    const res = await fetch('/api/batch-generate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({article_ids: ids}),
     });
-  }, 300);
+    const data = await res.json();
+    if (!res.ok) {
+      toast(data.error || '再生成の開始に失敗しました', 'error');
+      return;
+    }
+    toast(`${ids.length}件の再生成をバックグラウンドで開始しました`, 'success');
+    await loadArticles();
+  } catch (e) {
+    toast('再生成の開始に失敗しました: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ 選択を再生成'; }
+  }
 }
 
 // WP投稿ボタンのラベルを select の選択値に合わせて切替
