@@ -619,6 +619,12 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
 .batch-progress .progress-bar { height: 6px; margin: 6px 0; }
 .batch-progress-meta { display:flex; justify-content:space-between; gap:10px; color:var(--muted); font-size:11px; }
 
+/* 対応履歴ページのインライン再生成バッジ用のドット点滅 */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
 .title-ideas-layout {
   display: grid;
   grid-template-columns: 340px minmax(0, 1fr);
@@ -1223,7 +1229,10 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
 
         <div class="toolbar">
           <button class="btn btn-primary" onclick="generateSelected()">⚡ 選択を再生成</button>
-          <button class="btn btn-secondary" onclick="selectByScoreThreshold()" title="スコアが閾値未満の記事（現在の絞り込み結果の中から）をまとめてチェック。スコア未計測の記事は対象外。">📉 低スコア選択</button>
+          <span id="regen-progress-label" style="font-size:12px;color:var(--accent);display:none;align-items:center;gap:6px"></span>
+          <button class="btn btn-secondary" onclick="selectByScoreThreshold('low')" title="スコアが閾値未満の記事をまとめてチェック。再生成→『🗓️ 予定日振り直し』のフローに使う">📉 低スコア選択</button>
+          <button class="btn btn-secondary" onclick="selectByScoreThreshold('high')" title="スコアが閾値以上の記事をまとめてチェック。そのまま『📅 予約投稿実行』に流す">📈 高スコア選択</button>
+          <button class="btn btn-secondary" onclick="bulkRescheduleSelected()" title="選択記事の予定日を「明日から1日 N 件」で振り直す。published/scheduled な記事はスキップ">🗓️ 予定日振り直し</button>
           <div class="split-btn">
             <select id="articles-post-status" title="WP投稿の種類" onchange="updateWpPostButtonLabel()">
               <option value="schedule">📅 予約投稿（schedule_date通り）</option>
@@ -1818,6 +1827,52 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <div class="page-subtitle">Affiros9 本体の更新ログ（現在: <strong>v{{ app_version }}</strong>）</div>
         </div>
         <div style="max-width:780px">
+
+          <div class="settings-section">
+            <div class="section-header">// product-inserter v1.9.17 (2026-06-09) — 公開時の自動商品挿入機能</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: 予約投稿が自動公開されたあと、毎日手動で「商品挿入を実行」ボタンを押す運用が面倒。</li>
+              <li><strong>追加</strong>: 公開と同時に商品カードを自動挿入する機能を追加。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>WP の <code>transition_post_status</code> フックで future→publish / draft→publish を検出</li>
+                  <li>マーカー入り（<code>&lt;!--ai-product:...--&gt;</code>）かつ未挿入の場合、WP Cron で N 分後（デフォルト 5 分）に非同期実行</li>
+                  <li>手動の「商品挿入を実行」ボタンと<strong>完全に同じ <code>AI_PI_Inserter::run()</code> を呼ぶ</strong>ので品質は変わらない</li>
+                  <li>失敗時はマーカー残置 + post_meta <code>_ai_pi_auto_insert_last_error</code> にエラー記録（既存挙動と同じ）</li>
+                  <li>プラグイン無効化時は予約された cron event を全て掃除</li>
+                </ul>
+              </li>
+              <li><strong>有効化</strong>: WP管理画面 → AIプロダクトインサーター → 設定 → 「🤖 自動挿入」セクションで ON/OFF と遅延（0〜60分）を設定。</li>
+              <li><strong>更新方法</strong>: プラグインページから <code>affiros-product-inserter-1.9.17.zip</code> を再インストール。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
+            <div class="section-header">// v1.7.27 (2026-06-09) — 品質仕分け運用の3点セット（高スコア選択／予定日振り直し／再生成インライン進捗）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: CSV インポート時点で予定日が確定しているため、低品質記事を直してからまとめてプッシュするフローが取りにくかった。「80点以上だけプッシュ／80点未満は再生成して日程振り直し」を1〜2クリックで回せるようにする。</li>
+              <li><strong>📈 高スコア選択ボタン追加</strong>: 「📉 低スコア選択」と対の機能。閾値以上の記事をまとめてチェック → そのまま 📅 予約投稿実行 に流せる。</li>
+              <li><strong>🗓️ 予定日振り直しボタン追加</strong>: 選択記事の <code>schedule_date</code> を「明日から1日 N 件」で再配分。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>新規 API: <code>POST /api/articles/bulk-schedule</code></li>
+                  <li>開始日は明日（過去日付による即時公開を防止）</li>
+                  <li>時刻配分: 1件=10:00 / 2件=10/15時 / 3件=10/13/16時 / 4件以降=9〜18時を均等割</li>
+                  <li>published / scheduled な記事は誤上書き防止のため自動スキップ</li>
+                </ul>
+              </li>
+              <li><strong>⚡ 選択を再生成のインライン進捗バッジ</strong>: 「⚡ 選択を再生成」ボタン右に「<code>● 再生成中 5/15 (33%)</code>」のような進捗を 5 秒ポーリングで表示。完了時は「✓ 再生成完了: 成功 14件 / 失敗 1件」と緑表示（15秒で自動消去）。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>サイドバーの「生成中 N/M」と同じデータソース（<code>/api/batch-jobs/latest?site_id=...</code>）を使用</li>
+                  <li>ページ遷移しても <code>resumeRegenProgressIfRunning()</code> で対応履歴に戻れば自動再開</li>
+                </ul>
+              </li>
+              <li><strong>運用フロー</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>良い記事を送信: 📈 高スコア選択 → 📅 予約投稿実行</li>
+                  <li>悪い記事を直して送り直し: 📉 低スコア選択 → 🗓️ 予定日振り直し → ⚡ 選択を再生成 → 完了後に 📅 予約投稿実行</li>
+                </ul>
+              </li>
+            </ul>
+          </div>
 
           <div class="settings-section">
             <div class="section-header">// v1.7.26 (2026-06-09) — 「選択を再生成」のページ遷移バグを修正（対応履歴に留まる）</div>
@@ -2862,7 +2917,7 @@ function showPage(name, opts = {}) {
     updateArticleTypeUI();
   }
   if (!opts.skipLoad) {
-    if (pageName === 'articles') { loadArticles(); resumePublishJobIfRunning(); updateWpPostButtonLabel(); }
+    if (pageName === 'articles') { loadArticles(); resumePublishJobIfRunning(); resumeRegenProgressIfRunning(); updateWpPostButtonLabel(); }
     if (pageName === 'generate') { loadQualitySelects(); updateSiteSelects(); populateGenSelect(); }
     if (pageName === 'import') { /* インポートページは初期化不要 */ }
     if (pageName === 'batch') { batchSelectedIds = null; loadQualitySelects(); loadArticles(); loadLatestBatchJob(); }
@@ -3913,12 +3968,15 @@ function getSelectedIds() {
   return [...document.querySelectorAll('#articles-body .check-row:checked')].map(c => c.value);
 }
 
-// 現在テーブルに見えている行のうち、スコアが閾値未満の記事をまとめてチェック。
-// 既存の選択は維持して追加選択する（既選択 + 低スコアの和集合）。
-// スコア未計測の記事は対象外（誤爆防止）。
-function selectByScoreThreshold() {
+// 現在テーブルに見えている行のうち、スコアが閾値より低い／高い記事をまとめてチェック。
+// direction: 'low' = スコア < 閾値 / 'high' = スコア >= 閾値
+// 既存の選択は維持して追加選択する（和集合）。スコア未計測の記事は対象外（誤爆防止）。
+function selectByScoreThreshold(direction = 'low') {
+  const isLow = direction === 'low';
+  const verb = isLow ? '未満' : '以上';
+  const compare = isLow ? '<' : '>=';
   const raw = prompt(
-    'このスコア未満の記事を選択します（既存選択に追加）。\n例: 80 と入力 → スコア < 80 の記事を全部チェック。\n\nスコア未計測の記事は対象外（再計算は「↯ スコア再計算」で）。',
+    `スコア ${verb} の記事を選択します（既存選択に追加）。\n例: 80 → スコア ${compare} 80 の記事を全部チェック。\n\nスコア未計測の記事は対象外（再計算は「↯ スコア再計算」で）。`,
     '80'
   );
   if (raw === null) return;
@@ -3940,7 +3998,8 @@ function selectByScoreThreshold() {
     if (score === null || score === undefined || score === '') return; // 未計測は除外
     const numScore = Number(score);
     if (!Number.isFinite(numScore)) return;
-    if (numScore < threshold) {
+    const match = isLow ? (numScore < threshold) : (numScore >= threshold);
+    if (match) {
       if (cb.checked) {
         alreadySelected++;
       } else {
@@ -3951,11 +4010,50 @@ function selectByScoreThreshold() {
   });
   const total = added + alreadySelected;
   if (total === 0) {
-    toast(`スコア < ${threshold} の記事は現在の表示範囲にありません`, 'info');
+    toast(`スコア ${compare} ${threshold} の記事は現在の表示範囲にありません`, 'info');
   } else if (added === 0) {
-    toast(`スコア < ${threshold} の記事 ${total} 件は既に選択済みでした`, 'info');
+    toast(`スコア ${compare} ${threshold} の記事 ${total} 件は既に選択済みでした`, 'info');
   } else {
-    toast(`スコア < ${threshold} の記事 ${added} 件を追加選択しました（合計 ${total} 件該当）`, 'success');
+    toast(`スコア ${compare} ${threshold} の記事 ${added} 件を追加選択しました（合計 ${total} 件該当）`, 'success');
+  }
+}
+
+// 選択記事の予定日を「明日から1日 N 件」で振り直す。
+// 既に published / scheduled な記事はサーバー側でスキップされる。
+async function bulkRescheduleSelected() {
+  const ids = getSelectedIds();
+  if (!ids.length) { toast('記事を選択してください', 'error'); return; }
+  const perDayRaw = prompt(`${ids.length}件の予定日を「明日から」振り直します。\n\n1日あたり何件まで配分しますか？（1〜20）`, '3');
+  if (perDayRaw === null) return;
+  const perDay = parseInt(perDayRaw, 10);
+  if (!Number.isFinite(perDay) || perDay < 1 || perDay > 20) {
+    toast('1〜20 の数値を入力してください', 'error');
+    return;
+  }
+  // 予定範囲をプレビュー
+  const daysNeeded = Math.ceil(ids.length / perDay);
+  const start = new Date();
+  start.setDate(start.getDate() + 1);
+  const end = new Date(start);
+  end.setDate(start.getDate() + daysNeeded - 1);
+  const fmt = (d) => `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+  if (!confirm(`${ids.length}件を ${fmt(start)} 〜 ${fmt(end)}（1日${perDay}件まで）に振り分けます。\nすでに公開済み・予約済みの記事はスキップされます。よろしいですか？`)) return;
+  try {
+    const res = await fetch('/api/articles/bulk-schedule', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({article_ids: ids, per_day: perDay}),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      toast(data.error || '予定日振り直しに失敗しました', 'error');
+      return;
+    }
+    const skipMsg = data.skipped_published ? ` / スキップ ${data.skipped_published}件（公開・予約済み）` : '';
+    toast(`${data.updated}件の予定日を振り直しました（${data.first_date} 〜 ${data.last_date}）${skipMsg}`, 'success');
+    await loadArticles();
+  } catch (e) {
+    toast('予定日振り直しに失敗しました: ' + e.message, 'error');
   }
 }
 
@@ -3991,11 +4089,7 @@ async function deleteBatchSelected() {
 async function generateSelected() {
   const ids = getSelectedIds();
   if (!ids.length) { toast('記事を選択してください', 'error'); return; }
-  // 対応履歴ページから直接バックグラウンド再生成を起動する。
-  // 旧版は showPage('batch') で一括処理ページへ飛ばしていたが、
-  // 一括処理ページは status=pending/queued/generating/error のみ表示するため、
-  // 低スコア記事（多くは status=generated）が「対象0件」に見える事故が起きていた。
-  if (!confirm(`${ids.length}件を再生成しますか？\n\nバックグラウンドで処理します。進捗は「一括処理」ページの進捗バーで確認できます。`)) return;
+  if (!confirm(`${ids.length}件を再生成しますか？\n\nバックグラウンドで処理します。進捗は「⚡ 選択を再生成」ボタン横と一括処理ページで確認できます。`)) return;
   const btn = document.querySelector('button[onclick="generateSelected()"]');
   if (btn) { btn.disabled = true; btn.textContent = '送信中...'; }
   try {
@@ -4010,11 +4104,104 @@ async function generateSelected() {
       return;
     }
     toast(`${ids.length}件の再生成をバックグラウンドで開始しました`, 'success');
+    // 対応履歴ページ上にインライン進捗を表示開始
+    startRegenProgressPolling(data.job_id);
     await loadArticles();
   } catch (e) {
     toast('再生成の開始に失敗しました: ' + e.message, 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '⚡ 選択を再生成'; }
+  }
+}
+
+// 対応履歴ページ上のインライン再生成進捗バッジ。
+// 「⚡ 選択を再生成」ボタンの右に「↻ 再生成中: 5/15件 完了」のような文字列で表示。
+// /api/batch-jobs/latest（現在サイトでフィルタ）を 5 秒ポーリングし、
+// ジョブ完了・キャンセル・エラー時に停止する。
+let _regenPollTimer = null;
+let _regenWatchedJobId = null;
+
+function _renderRegenProgressLabel(job) {
+  const el = document.getElementById('regen-progress-label');
+  if (!el) return;
+  if (!job || !['queued', 'running'].includes(job.status)) {
+    el.style.display = 'none';
+    el.textContent = '';
+    return;
+  }
+  const done = (job.completed || 0) + (job.failed || 0);
+  const total = job.total || 0;
+  const percent = total ? Math.floor((done / total) * 100) : 0;
+  const failMsg = job.failed ? ` / 失敗 ${job.failed}件` : '';
+  const retryMsg = job.retried ? ` / 自動リトライ ${job.retried}回` : '';
+  el.style.display = 'inline-flex';
+  el.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 1.2s infinite"></span>再生成中 ${done}/${total} (${percent}%)${failMsg}${retryMsg}`;
+}
+
+function _renderRegenCompletedLabel(job) {
+  const el = document.getElementById('regen-progress-label');
+  if (!el) return;
+  if (!job) {
+    el.style.display = 'none';
+    el.textContent = '';
+    return;
+  }
+  const total = job.total || 0;
+  const ok = job.completed || 0;
+  const fail = job.failed || 0;
+  el.style.display = 'inline-flex';
+  el.style.color = fail ? 'var(--warning)' : 'var(--success)';
+  el.innerHTML = `✓ 再生成完了: 成功 ${ok}件${fail ? ` / 失敗 ${fail}件` : ''}（合計 ${total}件）`;
+  setTimeout(() => {
+    el.style.display = 'none';
+    el.textContent = '';
+    el.style.color = 'var(--accent)';
+  }, 15000);
+}
+
+async function _fetchRegenJob() {
+  try {
+    if (_regenWatchedJobId) {
+      const res = await fetch(`/api/batch-jobs/${encodeURIComponent(_regenWatchedJobId)}`);
+      if (res.ok) return await res.json();
+    }
+    const siteParam = currentSiteId ? `?site_id=${encodeURIComponent(currentSiteId)}` : '';
+    const res = await fetch(`/api/batch-jobs/latest${siteParam}`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (_) { return null; }
+}
+
+function startRegenProgressPolling(jobId = null) {
+  _regenWatchedJobId = jobId || _regenWatchedJobId;
+  if (_regenPollTimer) clearInterval(_regenPollTimer);
+  const tick = async () => {
+    const job = await _fetchRegenJob();
+    if (!job) {
+      _renderRegenProgressLabel(null);
+      return;
+    }
+    if (['queued', 'running'].includes(job.status)) {
+      _renderRegenProgressLabel(job);
+    } else {
+      // 完了/失敗/キャンセル時は最終状態を表示してポーリング停止
+      _renderRegenCompletedLabel(job);
+      clearInterval(_regenPollTimer);
+      _regenPollTimer = null;
+      _regenWatchedJobId = null;
+      // 記事一覧をリフレッシュして最新の状態（status / score）を反映
+      await loadArticles();
+    }
+  };
+  tick(); // 即時実行
+  _regenPollTimer = setInterval(tick, 5000);
+}
+
+// 対応履歴ページに入った時点で、現在サイトに実行中のジョブがあれば自動でポーリング再開
+async function resumeRegenProgressIfRunning() {
+  const job = await _fetchRegenJob();
+  if (job && ['queued', 'running'].includes(job.status)) {
+    startRegenProgressPolling(job.id);
   }
 }
 

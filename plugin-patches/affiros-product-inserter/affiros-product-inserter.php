@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros プロダクトインサーター
  * Description: AIが記事内容を解析し、Amazon・楽天市場の最適な商品アフィリエイトカードを自動挿入するプラグイン
- * Version: 1.9.16
+ * Version: 1.9.17
  * Author: AI Product Inserter
  * License: GPL v2 or later
  * Text Domain: ai-product-inserter
@@ -34,7 +34,7 @@ if (defined('AI_PI_VERSION')) {
     return;
 }
 
-define('AI_PI_VERSION', '1.9.16');
+define('AI_PI_VERSION', '1.9.17');
 define('AI_PI_PATH', plugin_dir_path(__FILE__));
 define('AI_PI_URL', plugin_dir_url(__FILE__));
 
@@ -118,6 +118,7 @@ require_once AI_PI_PATH . 'includes/rakuten-api.php';
 require_once AI_PI_PATH . 'includes/product-selector.php';
 require_once AI_PI_PATH . 'includes/card-renderer.php';
 require_once AI_PI_PATH . 'includes/inserter.php';
+require_once AI_PI_PATH . 'includes/auto-insert.php';
 require_once AI_PI_PATH . 'includes/post-meta.php';
 require_once AI_PI_PATH . 'admin/settings.php';
 require_once AI_PI_PATH . 'admin/meta-box.php';
@@ -202,6 +203,10 @@ function ai_pi_activate() {
 register_deactivation_hook(__FILE__, 'ai_pi_deactivate');
 function ai_pi_deactivate() {
     wp_clear_scheduled_hook('ai_pi_daily_refresh');
+    // 自動挿入用に予約された single cron event を全部掃除
+    if (function_exists('ai_pi_clear_auto_insert_crons')) {
+        ai_pi_clear_auto_insert_crons();
+    }
 }
 
 /**

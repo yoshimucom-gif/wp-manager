@@ -212,7 +212,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.26'
+APP_VERSION = '1.7.27'
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -5552,9 +5552,9 @@ def favicon():
 PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugin-downloads')
 PLUGIN_DOWNLOADS = {
     'product-inserter': {
-        'file': 'affiros-product-inserter-1.9.16.zip',
+        'file': 'affiros-product-inserter-1.9.17.zip',
         'name': 'Affiros プロダクトインサーター',
-        'version': '1.9.16',
+        'version': '1.9.17',
     },
     'decoration': {
         'file': 'affiros-decoration-1.2.1.zip',
@@ -6964,6 +6964,89 @@ def bulk_delete():
     articles = [a for a in load_articles() if a['id'] not in ids]
     save_articles(articles)
     return jsonify({'success': True})
+
+
+@app.route('/api/articles/bulk-schedule', methods=['POST'])
+@login_required
+@with_data_lock
+def bulk_schedule_articles():
+    """選択記事の schedule_date を「明日から1日 N 件」で振り直す。
+
+    要件:
+    - 開始日: 既定で「明日」（過去日付による即時公開を防ぐ）
+    - per_day: 1日あたりの件数（既定 3）
+    - 時刻配分: 1件=10:00 / 2件=10:00,15:00 / 3件=10:00,13:00,16:00 / 4件以降=均等割
+    - 既に published / scheduled な記事はスキップ（誤上書き防止）
+    - 受け取った article_ids の並び順をそのまま振り分け順とする
+    """
+    data = request.get_json(silent=True) or {}
+    article_ids = list(dict.fromkeys(data.get('article_ids') or []))
+    per_day = max(1, min(20, int(data.get('per_day') or 3)))
+    start_date_str = (data.get('start_date') or '').strip()
+
+    if not article_ids:
+        return jsonify({'error': '対象記事を指定してください'}), 400
+
+    # 開始日: 明示指定があればそれ、なければ「明日」
+    if start_date_str:
+        try:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({'error': '開始日の形式が不正です（YYYY-MM-DD）'}), 400
+    else:
+        start_date = (datetime.now() + timedelta(days=1)).date()
+
+    # 時刻スロット
+    if per_day == 1:
+        hour_slots = [10]
+    elif per_day == 2:
+        hour_slots = [10, 15]
+    elif per_day == 3:
+        hour_slots = [10, 13, 16]
+    else:
+        # 4件以降は 9:00〜18:00 を per_day 等分
+        start_h, end_h = 9, 18
+        step = (end_h - start_h) / per_day
+        hour_slots = [int(round(start_h + step * i)) for i in range(per_day)]
+
+    articles = load_articles()
+    article_lookup = {a['id']: a for a in articles}
+    # スキップ対象（誤上書き防止）
+    skip_statuses = ('published', 'scheduled')
+
+    updates = []
+    skipped_published = 0
+    not_found = 0
+    for aid in article_ids:
+        a = article_lookup.get(aid)
+        if not a:
+            not_found += 1
+            continue
+        if a.get('status') in skip_statuses:
+            skipped_published += 1
+            continue
+        updates.append(a)
+
+    # 振り分け
+    for idx, a in enumerate(updates):
+        day_offset = idx // per_day
+        slot = idx % per_day
+        hour = hour_slots[slot]
+        date_obj = start_date + timedelta(days=day_offset)
+        scheduled = datetime(date_obj.year, date_obj.month, date_obj.day, hour, 0, 0)
+        a['schedule_date'] = scheduled.strftime('%Y-%m-%d %H:%M:%S')
+        a['updated_at'] = now_iso()
+
+    save_articles(articles)
+    return jsonify({
+        'success': True,
+        'updated': len(updates),
+        'skipped_published': skipped_published,
+        'not_found': not_found,
+        'first_date': updates[0].get('schedule_date', '') if updates else '',
+        'last_date': updates[-1].get('schedule_date', '') if updates else '',
+        'per_day': per_day,
+    })
 
 
 @app.route('/api/articles/reset-all', methods=['POST'])

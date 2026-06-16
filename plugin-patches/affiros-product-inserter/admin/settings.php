@@ -39,6 +39,10 @@ function ai_pi_sanitize_settings($input) {
     $output['candidates_per_keyword'] = max(5, min(30, intval($input['candidates_per_keyword'] ?? ($existing['candidates_per_keyword'] ?? 10))));
     $output['enable_24h_refresh']     = ($input['enable_24h_refresh'] ?? ($existing['enable_24h_refresh'] ?? 'no')) === 'yes' ? 'yes' : 'no';
 
+    // 自動挿入（v1.9.17〜）
+    $output['auto_insert_enabled']         = ($input['auto_insert_enabled'] ?? ($existing['auto_insert_enabled'] ?? 'no')) === 'yes' ? 'yes' : 'no';
+    $output['auto_insert_delay_minutes']   = max(0, min(60, intval($input['auto_insert_delay_minutes'] ?? ($existing['auto_insert_delay_minutes'] ?? 5))));
+
     // 内部固定（UIから消したが値は持っておく）
     $output['default_insert_mode']  = 'marker';
     $output['default_card_design']  = $existing['default_card_design']  ?? 'vertical';
@@ -141,6 +145,34 @@ function ai_pi_render_settings_page() {
                     <td>
                         <label><input type="checkbox" name="ai_pi_settings[enable_24h_refresh]" value="yes" <?php checked($settings['enable_24h_refresh'] ?? '', 'yes'); ?>> 24時間経過した商品データに期限切れフラグを立てる</label>
                         <p class="description">⚠️ Amazon PA-APIの規約：取得から24時間以内に表示する必要があります</p>
+                    </td>
+                </tr>
+            </table>
+
+            <h2>🤖 自動挿入</h2>
+            <table class="form-table">
+                <tr>
+                    <th>自動挿入を有効化</th>
+                    <td>
+                        <label><input type="checkbox" name="ai_pi_settings[auto_insert_enabled]" value="yes" <?php checked($settings['auto_insert_enabled'] ?? '', 'yes'); ?>> 公開された記事に自動で商品カードを挿入する</label>
+                        <p class="description">
+                            予約投稿が公開された瞬間（または手動公開時）に、マーカー入りの記事へ自動で挿入されます。<br>
+                            手動の「商品挿入を実行」ボタンと<strong>完全に同じロジック</strong>で動くので、品質は変わりません。<br>
+                            <strong>対象</strong>: マーカー入り（<code>&lt;!--ai-product:...--&gt;</code>）かつ未挿入の post タイプ記事。<br>
+                            <strong>失敗時</strong>: マーカーは残置されます（手動で再実行可）。post_meta <code>_ai_pi_auto_insert_last_error</code> にエラー内容を記録。
+                        </p>
+                    </td>
+                </tr>
+                <tr>
+                    <th>遅延実行（分）</th>
+                    <td>
+                        <input type="number" name="ai_pi_settings[auto_insert_delay_minutes]" value="<?php echo esc_attr($settings['auto_insert_delay_minutes'] ?? 5); ?>" min="0" max="60" style="width:80px;"> 分後に実行
+                        <p class="description">
+                            公開アクション自体をブロックしないため、WP Cron 経由で N 分後に非同期実行します。<br>
+                            <strong>0</strong>: 即時実行（公開処理が 5〜30秒遅延します）<br>
+                            <strong>5</strong>（推奨）: 5分後に挿入<br>
+                            ※ WP Cron はサイトへのアクセスで発火するため、低トラフィックなサイトでは遅延がさらに伸びることがあります。
+                        </p>
                     </td>
                 </tr>
             </table>
