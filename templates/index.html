@@ -1858,6 +1858,14 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.31 (2026-06-09) — 予約投稿モーダルに直近エラー3件をインライン表示</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>問題</strong>: 予約投稿で「成功 0 / エラー N」と出ても、どの記事がどんな理由で失敗したか分からず、F12 Console を見ないと診断できなかった。</li>
+              <li><strong>修正</strong>: モーダルのプレビュー欄に直近のエラー3件を「タイトル: エラー文」形式で常時表示。実行中も完了時も診断できる。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.30 / dup-cleaner v1.0.0 (2026-06-09) — 重複投稿クリーンアップを独立した単機能プラグインとして分離</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: v1.7.29 で重複削除をリライタープラグインに同梱したが、リライターは KAGUASHI 専用であり、他サイトに「重複削除のためだけにリライターを入れる」運用が現実的でなかった。</li>
@@ -4671,7 +4679,20 @@ async function execSchedulePublish() {
         try {
           const jr = await fetch(`/api/schedule-publish/jobs/${_schedPublishJobId}`);
           const job = await jr.json();
-          preview.textContent = `送信中... ${job.completed}/${total} 件（成功: ${job.success}  エラー: ${job.error}）${job.cancelled ? ' [キャンセル中]' : ''}`;
+          // 進捗表示 + 直近エラーを最大3件モーダル内に表示（診断しやすく）
+          let html = `送信中... ${job.completed}/${total} 件（成功: ${job.success}  エラー: ${job.error}）${job.cancelled ? ' [キャンセル中]' : ''}`;
+          if (job.errors && job.errors.length) {
+            const recent = job.errors.slice(-3);
+            html += '<div style="margin-top:8px;font-size:11px;color:var(--danger);line-height:1.5;background:rgba(239,98,98,0.08);border:1px solid var(--danger);border-radius:4px;padding:8px">';
+            html += '<strong>直近のエラー:</strong><br>';
+            recent.forEach(e => {
+              const title = (e.title || '(無題)').slice(0, 40);
+              const errMsg = (e.error || '').slice(0, 200);
+              html += `・${_schedEscapeHtml(title)}: ${_schedEscapeHtml(errMsg)}<br>`;
+            });
+            html += '</div>';
+          }
+          preview.innerHTML = html;
           if (['done', 'cancelled'].includes(job.status)) {
             clearInterval(_schedPublishTimer);
             _schedPublishTimer = null;
