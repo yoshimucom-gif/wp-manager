@@ -29,6 +29,8 @@ SPECS = [
      'affiros-rewrite', 'affiros-rewrite-0.4.39.zip'),
     (os.path.join(ROOT, 'affiros-categorizer'),
      'affiros-categorizer', 'affiros-categorizer-0.1.0.zip'),
+    (os.path.join(ROOT, 'affiros-dup-cleaner'),
+     'affiros-dup-cleaner', 'affiros-dup-cleaner-1.0.0.zip'),
 ]
 
 

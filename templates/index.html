@@ -1817,6 +1817,35 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             </a>
           </div>
 
+          <!-- ❺ 重複投稿クリーンアップ -->
+          <div class="settings-section" style="margin:0">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <div style="font-size:22px">🧹</div>
+              <div style="flex:1">
+                <div style="font-weight:700;font-size:14px">❺ Affiros 重複投稿クリーンアップ</div>
+                <div style="font-size:11px;color:var(--muted)">同タイトルで重複投稿された記事の検出・削除（単機能）</div>
+              </div>
+              <div style="font-size:11px;background:rgba(102,210,255,0.18);color:#66d2ff;padding:2px 8px;border-radius:10px">v{{ plugin_downloads['dup-cleaner'].version }}</div>
+            </div>
+            <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:10px">
+              Affiros9 本体 v1.7.27 以前の予約投稿バグ（重複送信）で WP に
+              作られてしまった重複記事を片付けるための<strong>単機能ツール</strong>。
+              スキャン → プレビュー → 削除、だけ。リライター・インサーターと完全に独立。
+              <strong>普段は不要、片付け時だけ入れて使ったら削除して OK</strong>。
+            </div>
+            <div style="font-size:11px;color:var(--muted);background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:6px;margin-bottom:8px">
+              <div>📂 配布物: <code>{{ plugin_downloads['dup-cleaner'].file }}</code></div>
+              <div>🔧 設定: WP管理画面 → ツール → 🧹 重複投稿クリーンアップ</div>
+              <div>📝 必要キー: なし（API不要）</div>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:12px">
+              主要機能: post_title でグルーピング / 最古1件を保持 / 残りをゴミ箱送り（または永久削除）/ 個別 or 一括削除
+            </div>
+            <a href="/download/plugin/dup-cleaner" class="btn btn-primary" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;text-decoration:none">
+              ⬇ ダウンロード（v{{ plugin_downloads['dup-cleaner'].version }}）
+            </a>
+          </div>
+
         </div>
       </div>
 
@@ -1827,6 +1856,23 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <div class="page-subtitle">Affiros9 本体の更新ログ（現在: <strong>v{{ app_version }}</strong>）</div>
         </div>
         <div style="max-width:780px">
+
+          <div class="settings-section">
+            <div class="section-header">// v1.7.30 / dup-cleaner v1.0.0 (2026-06-09) — 重複投稿クリーンアップを独立した単機能プラグインとして分離</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: v1.7.29 で重複削除をリライタープラグインに同梱したが、リライターは KAGUASHI 専用であり、他サイトに「重複削除のためだけにリライターを入れる」運用が現実的でなかった。</li>
+              <li><strong>修正</strong>: 重複投稿クリーンアップを独立した単機能プラグイン <code>affiros-dup-cleaner</code> に分離。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>単機能（スキャン → プレビュー → 削除）。設定なし・他機能なし</li>
+                  <li>WP管理画面の「ツール」配下にメニュー（リライター・インサーターと混じらないように）</li>
+                  <li>必要キーなし（API 不要、DB だけ見る）</li>
+                  <li>片付け終わったらプラグインごと削除して OK</li>
+                </ul>
+              </li>
+              <li><strong>リライターの v0.4.39（重複削除同梱版）はそのまま</strong>: 既に KAGUASHI に入れている環境で重ねて使う必要はない（リライターから使ってもよい / 独立版を使ってもよい）。新規サイトには独立版だけ入れる。</li>
+              <li><strong>運用</strong>: プラグインページから <code>affiros-dup-cleaner-1.0.0.zip</code> ダウンロード → 各サイトにインストール → WP管理画面 → ツール → 🧹 重複投稿クリーンアップ。</li>
+            </ul>
+          </div>
 
           <div class="settings-section">
             <div class="section-header">// v1.7.29 / rewrite v0.4.39 (2026-06-09) — WP に作られた重複投稿を一括クリーンアップするツールを追加</div>
