@@ -306,6 +306,89 @@ add_action('wp_ajax_affiros_rewrite_scan_tables', function () {
 });
 
 /**
+ * 重複投稿スキャン: post_title でグルーピング、複数あれば最古を保持・残りを削除候補とする
+ */
+add_action('wp_ajax_affiros_rewrite_dup_scan', function () {
+    check_ajax_referer('affiros_rewrite_nonce', 'nonce');
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error('権限がありません');
+    }
+    @set_time_limit(120);
+
+    global $wpdb;
+    // 対象: post タイプ、ゴミ箱・自動下書き以外
+    $rows = $wpdb->get_results(
+        "SELECT ID, post_title, post_date, post_status
+         FROM {$wpdb->posts}
+         WHERE post_type = 'post'
+           AND post_status NOT IN ('trash', 'auto-draft', 'inherit')
+           AND TRIM(post_title) <> ''
+         ORDER BY ID ASC",
+        ARRAY_A
+    );
+
+    $groups = [];
+    foreach ($rows as $r) {
+        $title = trim($r['post_title']);
+        if (!isset($groups[$title])) {
+            $groups[$title] = [];
+        }
+        $groups[$title][] = [
+            'id'       => intval($r['ID']),
+            'date'     => $r['post_date'],
+            'status'   => $r['post_status'],
+            'edit_url' => admin_url('post.php?action=edit&post=' . intval($r['ID'])),
+        ];
+    }
+
+    $result = [];
+    foreach ($groups as $title => $posts) {
+        if (count($posts) < 2) continue;
+        // ID 昇順なので先頭が最古
+        $keep = array_shift($posts);
+        $result[] = [
+            'title'      => $title,
+            'keep'       => $keep,
+            'duplicates' => $posts,
+        ];
+    }
+
+    wp_send_json_success([
+        'scanned' => count($rows),
+        'groups'  => $result,
+    ]);
+});
+
+/**
+ * 重複投稿削除: 1件削除（permanent=1 なら永久削除、それ以外はゴミ箱送り）
+ */
+add_action('wp_ajax_affiros_rewrite_dup_delete', function () {
+    check_ajax_referer('affiros_rewrite_nonce', 'nonce');
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error('権限がありません');
+    }
+    @set_time_limit(60);
+
+    $post_id = intval($_POST['post_id'] ?? 0);
+    $permanent = !empty($_POST['permanent']);
+    if (!$post_id) wp_send_json_error('post_id が不正です');
+    $post = get_post($post_id);
+    if (!$post) wp_send_json_error('記事が見つかりません');
+    if ($post->post_type !== 'post') wp_send_json_error('post タイプ以外は削除しません');
+
+    if ($permanent) {
+        $result = wp_delete_post($post_id, true);
+    } else {
+        $result = wp_trash_post($post_id);
+    }
+    if (!$result) {
+        wp_send_json_error('削除に失敗しました');
+    }
+    wp_send_json_success(['message' => $permanent ? '永久削除しました' : 'ゴミ箱に送りました']);
+});
+
+
+/**
  * テーブル修復: 1記事修復
  *   POST: post_id
  */

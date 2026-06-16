@@ -1829,6 +1829,22 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.29 / rewrite v0.4.39 (2026-06-09) — WP に作られた重複投稿を一括クリーンアップするツールを追加</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: v1.7.28 で本体の重複送信バグは塞いだが、それ以前に WP に作られてしまった重複投稿は手動削除が必要だった（数百件規模）。</li>
+              <li><strong>追加（リライタープラグイン v0.4.39）</strong>: WP 管理画面に「Affiros リライト → 📦 重複投稿削除」メニューを新設。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>「重複スキャン」で post_title でグルーピング → 同タイトル複数件のグループを抽出</li>
+                  <li>各グループの<strong>最古の1件を保持</strong>、残りを削除候補として表示</li>
+                  <li>個別削除 or 「全重複を削除」一括ボタン</li>
+                  <li>既定はゴミ箱送り（復元可能）、永久削除モードはチェックボックスで明示</li>
+                </ul>
+              </li>
+              <li><strong>運用</strong>: 各サイトでプラグインを v0.4.39 にアップデート → 📦 重複投稿削除 → 重複スキャン → 全重複を削除。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.28 (2026-06-09) — 予約投稿の重複送信・キャンセル不能・サイト跨ぎ表示の3点を緊急修正</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>症状</strong>: 「📈 高スコア選択」で 80点以上を選んで「📅 予約投稿実行」したら、既にプッシュ済みの記事も送信されて WP に同じ記事が何度も追加。キャンセルボタンが効かず止められず、別サイトに切り替えても旧サイトの進捗モーダルが残って混乱。</li>

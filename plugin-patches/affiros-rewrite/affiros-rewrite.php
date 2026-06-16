@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros リライター
  * Description: WordPress記事をClaude APIでリライトする。WP_Queryで内部処理するためホスティングWAFの影響を受けない（403回避）。
- * Version: 0.4.38
+ * Version: 0.4.39
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-rewrite
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('AFFIROS_REWRITE_VERSION', '0.4.38');
+define('AFFIROS_REWRITE_VERSION', '0.4.39');
 define('AFFIROS_REWRITE_PATH', plugin_dir_path(__FILE__));
 define('AFFIROS_REWRITE_URL', plugin_dir_url(__FILE__));
 
@@ -35,6 +35,7 @@ require_once AFFIROS_REWRITE_PATH . 'admin/settings-page.php';
 require_once AFFIROS_REWRITE_PATH . 'admin/rewrite-page.php';
 require_once AFFIROS_REWRITE_PATH . 'admin/restore-page.php';
 require_once AFFIROS_REWRITE_PATH . 'admin/table-repair-page.php';
+require_once AFFIROS_REWRITE_PATH . 'admin/duplicate-cleanup-page.php';
 require_once AFFIROS_REWRITE_PATH . 'admin/ajax-handler.php';
 
 /**
@@ -139,6 +140,14 @@ add_action('admin_menu', function () {
         'manage_options',
         'affiros-rewrite-table-repair',
         'affiros_rewrite_render_table_repair_page'
+    );
+    add_submenu_page(
+        'affiros-rewrite',
+        '重複投稿クリーンアップ',
+        '📦 重複投稿削除',
+        'manage_options',
+        'affiros-rewrite-dup-cleanup',
+        'affiros_rewrite_render_duplicate_cleanup_page'
     );
     add_submenu_page(
         'affiros-rewrite',
