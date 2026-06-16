@@ -154,6 +154,11 @@ def describe_wp_request_error(e):
       - WordPress 自身のJSONエラー → {"code":"rest_...","message":"..."}
       - WAF / SiteGuard / セキュリティプラグイン → HTMLのブロックページ
     これを拾って原因切り分けできるメッセージにする。
+
+    重要: rest_cannot_create / rest_cannot_edit / rest_forbidden 系は
+    「ユーザー権限不足」「アプリケーションパスワード誤り」両方で出る
+    （誤った認証は WP 内では匿名として扱われ、結果的に権限不足扱いになる）。
+    片方だけ診断するとユーザーが誤った場所を直してハマるので、両方を併記する。
     """
     import re as _re
     resp = getattr(e, 'response', None)
@@ -164,17 +169,33 @@ def describe_wp_request_error(e):
     try:
         data = resp.json()
         if isinstance(data, dict) and (data.get('message') or data.get('code')):
-            return f"HTTP {status}: {data.get('message') or ''}（code: {data.get('code') or '-'}）"
+            code = (data.get('code') or '').strip() or '-'
+            message = data.get('message') or ''
+            hint = ''
+            # rest_cannot_* 系は WP の解釈では権限エラーだが、実際は認証情報
+            # ミスでも出る（誤った認証ヘッダーは WP 内で匿名扱いされ「権限なし」になる）
+            if code in ('rest_cannot_create', 'rest_cannot_edit', 'rest_cannot_publish',
+                         'rest_cannot_delete', 'rest_forbidden', 'rest_user_invalid_id'):
+                hint = ' ／ 原因候補: ①アプリケーションパスワードが間違ってる（コピペ時の半角スペース欠落・末尾改行に注意） ②WPユーザーのロールが管理者/編集者になってない'
+            elif code == 'rest_no_route':
+                hint = ' ／ REST API が無効化されてる or URL末尾の /wp-json/ パスが通ってない可能性'
+            elif code in ('rest_authentication_required', 'rest_not_logged_in'):
+                hint = ' ／ 認証ヘッダーが無効。アプリケーションパスワードを再確認'
+            elif status == 401:
+                hint = ' ／ アプリケーションパスワードが間違ってる可能性が最も高い'
+            elif status == 403:
+                hint = ' ／ ユーザーロール不足 or セキュリティプラグイン/WAF によるブロック'
+            return f"HTTP {status}: {message}（code: {code}）{hint}"
     except Exception:
         pass
     # JSONでない（WAF等のHTMLブロックページ）→ タグを除いて短く添える
     snippet = _re.sub(r'<[^>]+>', ' ', resp.text or '')
-    snippet = _re.sub(r'\s+', ' ', snippet).strip()[:300]
+    snippet = _re.sub(r'\s+', ' ', snippet).strip()[:500]
     hint = ''
     if status == 401:
-        hint = ' ／ アプリケーションパスワードが誤っている可能性'
+        hint = ' ／ アプリケーションパスワードが間違ってる可能性'
     elif status == 403:
-        hint = ' ／ 認証情報の誤り or セキュリティプラグイン・WAFによるブロックの可能性'
+        hint = ' ／ HTML応答 = WPに到達してない。ホスティング側 WAF or セキュリティプラグインによるブロックの可能性（ConoHa WINGの「海外アクセス制限」/ SiteGuard等）'
     return f"HTTP {status}: {snippet or 'Forbidden'}{hint}"
 try:
     CLAUDE_ARTICLE_CONTINUATION_MAX_ROUNDS = int(os.environ.get('CLAUDE_ARTICLE_CONTINUATION_MAX_ROUNDS', '4'))
@@ -212,7 +233,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.31'
+APP_VERSION = '1.7.32'
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155

@@ -1858,6 +1858,22 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.32 (2026-06-09) — エラー診断ヒントを強化（rest_cannot_create で両原因を併記）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>問題</strong>: WPの <code>rest_cannot_create</code> エラーは「権限不足」と表示されるが、実際は<strong>アプリケーションパスワード間違い</strong>でも出る（誤った認証は WP 内で匿名扱い→「権限なし」と返る仕様）。片方しか書いてないとユーザーが誤った場所を直してハマる事故が発生した。</li>
+              <li><strong>修正</strong>: <code>describe_wp_request_error()</code> を改善:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>rest_cannot_create / rest_cannot_edit / rest_cannot_publish / rest_forbidden</code> 系は「①アプリケーションパスワード ②ユーザーロール」両方を疑うよう併記</li>
+                  <li><code>rest_no_route</code> → REST API無効化の可能性</li>
+                  <li><code>rest_authentication_required</code> → 認証ヘッダー無効</li>
+                  <li>HTML応答の 403 → ホスティング側 WAF の可能性（ConoHa WING の海外アクセス制限 / SiteGuard 等を具体名で）</li>
+                </ul>
+              </li>
+              <li><strong>UI</strong>: モーダルのエラー表示を 200文字 → 800文字に拡張し、診断ヒント全文を見せる。長い場合はスクロール可。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.31 (2026-06-09) — 予約投稿モーダルに直近エラー3件をインライン表示</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>問題</strong>: 予約投稿で「成功 0 / エラー N」と出ても、どの記事がどんな理由で失敗したか分からず、F12 Console を見ないと診断できなかった。</li>
@@ -4683,12 +4699,14 @@ async function execSchedulePublish() {
           let html = `送信中... ${job.completed}/${total} 件（成功: ${job.success}  エラー: ${job.error}）${job.cancelled ? ' [キャンセル中]' : ''}`;
           if (job.errors && job.errors.length) {
             const recent = job.errors.slice(-3);
-            html += '<div style="margin-top:8px;font-size:11px;color:var(--danger);line-height:1.5;background:rgba(239,98,98,0.08);border:1px solid var(--danger);border-radius:4px;padding:8px">';
+            html += '<div style="margin-top:8px;font-size:11px;color:var(--danger);line-height:1.5;background:rgba(239,98,98,0.08);border:1px solid var(--danger);border-radius:4px;padding:8px;max-height:240px;overflow-y:auto">';
             html += '<strong>直近のエラー:</strong><br>';
             recent.forEach(e => {
               const title = (e.title || '(無題)').slice(0, 40);
-              const errMsg = (e.error || '').slice(0, 200);
-              html += `・${_schedEscapeHtml(title)}: ${_schedEscapeHtml(errMsg)}<br>`;
+              // エラー文は途切れず最後まで見せる。診断ヒント (／ 以降) も含めて
+              // 全部表示しないと原因特定できないケースがある。
+              const errMsg = (e.error || '').slice(0, 800);
+              html += `・<strong>${_schedEscapeHtml(title)}</strong>: ${_schedEscapeHtml(errMsg)}<br>`;
             });
             html += '</div>';
           }
