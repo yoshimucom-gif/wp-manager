@@ -1829,6 +1829,34 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.28 (2026-06-09) — 予約投稿の重複送信・キャンセル不能・サイト跨ぎ表示の3点を緊急修正</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>症状</strong>: 「📈 高スコア選択」で 80点以上を選んで「📅 予約投稿実行」したら、既にプッシュ済みの記事も送信されて WP に同じ記事が何度も追加。キャンセルボタンが効かず止められず、別サイトに切り替えても旧サイトの進捗モーダルが残って混乱。</li>
+              <li><strong>① 重複投稿ガード</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>バックエンド <code>/api/schedule-publish</code> で <code>wp_post_id</code> ありの記事と <code>status=published/scheduled</code> の記事を対象から除外（root fix）</li>
+                  <li>フロント <code>execSchedulePublish()</code> でも同様に事前フィルタしてプレビューに「N件は既に公開／予約済みのためスキップ」と明示</li>
+                  <li>「📈 高スコア選択」も既プッシュ記事をスキップ（再送リスク自体を作らない）</li>
+                </ul>
+              </li>
+              <li><strong>② キャンセル機能</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>新規 <code>POST /api/schedule-publish/jobs/&lt;id&gt;/cancel</code> エンドポイント</li>
+                  <li>ワーカーが各記事の冒頭で <code>cancelled</code> フラグを見て次の送信を打ち切る</li>
+                  <li>モーダルの「キャンセル」ボタンが実際に上記APIを叩くように修正（旧版は単にモーダル閉じるだけだった）</li>
+                  <li>送信中の1件は完了するが、待機中の残りはスキップされる</li>
+                </ul>
+              </li>
+              <li><strong>③ サイト跨ぎ進捗表示の解消</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>closeSchedulePublishModal()</code> がポーリングタイマーと jobId を必ずクリアするように</li>
+                  <li><code>switchToSite()</code> で予約投稿モーダルを強制クローズ（旧サイトの送信進捗が新サイトに残らない）</li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// product-inserter v1.9.17 (2026-06-09) — 公開時の自動商品挿入機能</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: 予約投稿が自動公開されたあと、毎日手動で「商品挿入を実行」ボタンを押す運用が面倒。</li>
@@ -2761,7 +2789,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
       予約日が未設定の記事はエラー扱いとなり送信されません（記事編集画面で設定してください）。
     </div>
     <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeSchedulePublishModal()">キャンセル</button>
+      <button class="btn btn-secondary" onclick="cancelSchedPublishJob()">キャンセル</button>
       <button class="btn btn-primary" id="sched-exec-btn" onclick="execSchedulePublish()">📅 予約投稿を実行</button>
     </div>
   </div>
@@ -3988,6 +4016,7 @@ function selectByScoreThreshold(direction = 'low') {
   const rows = document.querySelectorAll('#articles-body tr');
   let added = 0;
   let alreadySelected = 0;
+  let skippedPublished = 0;
   rows.forEach(row => {
     const cb = row.querySelector('.check-row');
     if (!cb || cb.disabled) return;
@@ -3999,22 +4028,32 @@ function selectByScoreThreshold(direction = 'low') {
     const numScore = Number(score);
     if (!Number.isFinite(numScore)) return;
     const match = isLow ? (numScore < threshold) : (numScore >= threshold);
-    if (match) {
-      if (cb.checked) {
-        alreadySelected++;
-      } else {
-        cb.checked = true;
-        added++;
-      }
+    if (!match) return;
+    // 高スコア選択（プッシュ目的）の時は、既に公開／予約済みの記事を除外
+    // → 同じ記事を再プッシュして WP に重複投稿される事故を防止
+    if (!isLow && (article.wp_post_id || ['published', 'scheduled'].includes(article.status))) {
+      skippedPublished++;
+      return;
+    }
+    if (cb.checked) {
+      alreadySelected++;
+    } else {
+      cb.checked = true;
+      added++;
     }
   });
   const total = added + alreadySelected;
+  const skipMsg = skippedPublished ? `（既に公開／予約済み ${skippedPublished} 件は対象外）` : '';
   if (total === 0) {
-    toast(`スコア ${compare} ${threshold} の記事は現在の表示範囲にありません`, 'info');
+    if (skippedPublished) {
+      toast(`スコア ${compare} ${threshold} の該当記事 ${skippedPublished} 件は全て公開／予約済みのためスキップしました`, 'info');
+    } else {
+      toast(`スコア ${compare} ${threshold} の記事は現在の表示範囲にありません`, 'info');
+    }
   } else if (added === 0) {
-    toast(`スコア ${compare} ${threshold} の記事 ${total} 件は既に選択済みでした`, 'info');
+    toast(`スコア ${compare} ${threshold} の記事 ${total} 件は既に選択済みでした ${skipMsg}`, 'info');
   } else {
-    toast(`スコア ${compare} ${threshold} の記事 ${added} 件を追加選択しました（合計 ${total} 件該当）`, 'success');
+    toast(`スコア ${compare} ${threshold} の記事 ${added} 件を追加選択しました（合計 ${total} 件該当）${skipMsg}`, 'success');
   }
 }
 
@@ -4497,7 +4536,19 @@ function openSchedulePublishModal() {
 function closeSchedulePublishModal() {
   document.getElementById('schedule-publish-modal').classList.remove('open');
   _scheduleTargetIds = [];
+  // ポーリングが残ってると別サイトで「他サイトの進捗」が見える事故になるので必ず停止
+  if (_schedPublishTimer) {
+    clearInterval(_schedPublishTimer);
+    _schedPublishTimer = null;
+  }
+  _schedPublishJobId = null;
+  // 残ったプレビュー文言もクリア（次回開いた時に古い件数が一瞬残らないように）
+  const preview = document.getElementById('sched-preview');
+  if (preview) preview.textContent = '';
 }
+
+let _schedPublishJobId = null;
+let _schedPublishTimer = null;
 
 async function execSchedulePublish() {
   const count = _scheduleTargetIds.length;
@@ -4514,7 +4565,23 @@ async function execSchedulePublish() {
     return;
   }
 
-  const msg = `${count} 件をWPに送信します（うち予約日設定済み: ${withDate} 件）。\n`
+  // 重複投稿ガード（フロント側）: wp_post_id 持ち or status=published/scheduled を除外して件数表示
+  const eligible = _scheduleTargetIds.filter(id => {
+    const a = allArticles.find(x => x.id === id);
+    if (!a) return false;
+    if (a.wp_post_id) return false;
+    if (['published', 'scheduled'].includes(a.status)) return false;
+    return true;
+  });
+  const skippedAlready = _scheduleTargetIds.length - eligible.length;
+
+  if (!eligible.length) {
+    toast('送信可能な記事がありません（全件すでに公開／予約済み）', 'error');
+    return;
+  }
+
+  const skipMsg = skippedAlready ? `\n（うち ${skippedAlready} 件は既に公開／予約済みのため送信されません）` : '';
+  const msg = `${eligible.length} 件をWPに送信します（うち予約日設定済み: ${withDate} 件）。${skipMsg}\n`
     + `各記事の schedule_date 日時で WP が自動公開します。よろしいですか？`;
   if (!confirm(msg)) return;
 
@@ -4528,32 +4595,35 @@ async function execSchedulePublish() {
     const res = await fetch('/api/schedule-publish', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ article_ids: _scheduleTargetIds }),
+      body: JSON.stringify({ article_ids: eligible }),
     });
     const data = await res.json();
     if (!res.ok || data.error) { toast(data.error || '開始失敗', 'error'); return; }
 
-    const jobId = data.job_id;
+    _schedPublishJobId = data.job_id;
     const total = data.total;
 
     // ポーリングで進捗表示
     await new Promise((resolve) => {
-      const timer = setInterval(async () => {
+      _schedPublishTimer = setInterval(async () => {
         try {
-          const jr = await fetch(`/api/schedule-publish/jobs/${jobId}`);
+          const jr = await fetch(`/api/schedule-publish/jobs/${_schedPublishJobId}`);
           const job = await jr.json();
-          preview.textContent = `送信中... ${job.completed}/${total} 件（成功: ${job.success}  エラー: ${job.error}）`;
-          if (job.status === 'done') {
-            clearInterval(timer);
+          preview.textContent = `送信中... ${job.completed}/${total} 件（成功: ${job.success}  エラー: ${job.error}）${job.cancelled ? ' [キャンセル中]' : ''}`;
+          if (['done', 'cancelled'].includes(job.status)) {
+            clearInterval(_schedPublishTimer);
+            _schedPublishTimer = null;
             resolve(job);
-            const level = job.error > 0 ? 'warning' : 'success';
-            toast(`予約投稿完了: 成功 ${job.success} 件 / エラー ${job.error} 件`, level);
+            const level = job.error > 0 || job.status === 'cancelled' ? 'warning' : 'success';
+            const label = job.status === 'cancelled' ? '予約投稿キャンセル' : '予約投稿完了';
+            toast(`${label}: 成功 ${job.success} 件 / エラー ${job.error} 件`, level);
             if (job.errors?.length) console.warn('予約投稿エラー詳細:', job.errors);
             closeSchedulePublishModal();
             await loadArticles();
           }
         } catch (e) {
-          clearInterval(timer);
+          clearInterval(_schedPublishTimer);
+          _schedPublishTimer = null;
           toast('進捗確認エラー: ' + e.message, 'error');
           resolve();
         }
@@ -4564,6 +4634,23 @@ async function execSchedulePublish() {
   } finally {
     btn.disabled = false;
     btn.textContent = '📅 予約投稿を実行';
+    _schedPublishJobId = null;
+  }
+}
+
+// 実行中の予約投稿ジョブをキャンセル。実行中の1件は送信が完了するが、
+// 待機中の残りはスキップされる（既に WP に送ったものは取り消せない）。
+async function cancelSchedPublishJob() {
+  if (!_schedPublishJobId) {
+    // ジョブが無ければ単にモーダルを閉じる
+    closeSchedulePublishModal();
+    return;
+  }
+  try {
+    await fetch(`/api/schedule-publish/jobs/${_schedPublishJobId}/cancel`, { method: 'POST' });
+    toast('キャンセル要求を送信しました（実行中の1件は送信完了します）', 'info');
+  } catch (e) {
+    toast('キャンセル失敗: ' + e.message, 'error');
   }
 }
 
@@ -6862,6 +6949,10 @@ async function switchToSite(siteId) {
     renderSidebarSites();
     updateHomePageMode();
     clearImportResultIfAny();
+    // 他サイトの予約投稿モーダル・ポーリングを強制クローズ。
+    // ユーザーがサイト切替したら旧サイトの送信進捗は別画面で見るべきで、
+    // 新サイトのページに古い進捗が映ったままになるのを防ぐ。
+    closeSchedulePublishModal();
     // 切替後はそのサイトの作業ホームへ
     showPage('home');
     // 記事一覧を新フィルタで再ロード

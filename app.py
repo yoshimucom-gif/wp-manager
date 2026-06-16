@@ -212,7 +212,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.27'
+APP_VERSION = '1.7.28'
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -8403,6 +8403,11 @@ def _run_sched_publish_worker(job_id, targets):
         settings = load_settings()
 
     for article in targets:
+        # キャンセルチェック（毎記事の冒頭で確認）
+        if _SCHED_PUBLISH_JOBS.get(job_id, {}).get('cancelled'):
+            _SCHED_PUBLISH_JOBS[job_id]['status'] = 'cancelled'
+            return
+
         def _record_sched_error(err_text):
             """schedule-publish の失敗を articles.json に記録（対応履歴の⚠️表示用）。"""
             with _DATA_LOCK:
@@ -8521,6 +8526,11 @@ def schedule_publish():
 
     各記事の `schedule_date` を WP の公開日時として使う。アプリ側で
     一括の開始日・1日上限・時刻を持つロジックは廃止した。
+
+    重複投稿ガード:
+      既に WP 側にポスト済み（wp_post_id あり）もしくは
+      status が published / scheduled の記事は対象から除外する。
+      ユーザーが高スコア選択でうっかり全部選んでもダブルポストしない。
     """
     data = request.get_json(silent=True) or {}
     article_ids = data.get('article_ids') or []
@@ -8528,10 +8538,23 @@ def schedule_publish():
     with _DATA_LOCK:
         articles = load_articles()
     article_lookup = {a['id']: a for a in articles}
-    targets = [article_lookup[i] for i in article_ids
-               if i in article_lookup and article_lookup[i].get('content')]
+    skip_statuses = ('published', 'scheduled')
+    targets = []
+    skipped_already_published = 0
+    for i in article_ids:
+        a = article_lookup.get(i)
+        if not a or not a.get('content'):
+            continue
+        # 重複投稿ガード: wp_post_id があるか、status=published/scheduled は除外
+        if a.get('wp_post_id') or a.get('status') in skip_statuses:
+            skipped_already_published += 1
+            continue
+        targets.append(a)
     if not targets:
-        return jsonify({'error': '生成済み本文のある記事を選択してください'}), 400
+        return jsonify({
+            'error': '送信可能な記事がありません（既に公開／予約済みの記事は除外されました）',
+            'skipped_already_published': skipped_already_published,
+        }), 400
 
     job_id = str(uuid.uuid4())
     _SCHED_PUBLISH_JOBS[job_id] = {
@@ -8541,6 +8564,8 @@ def schedule_publish():
         'success': 0,
         'error': 0,
         'errors': [],
+        'cancelled': False,
+        'skipped_already_published': skipped_already_published,
     }
     threading.Thread(
         target=_run_sched_publish_worker,
@@ -8548,7 +8573,12 @@ def schedule_publish():
         daemon=True,
     ).start()
 
-    return jsonify({'success': True, 'job_id': job_id, 'total': len(targets)})
+    return jsonify({
+        'success': True,
+        'job_id': job_id,
+        'total': len(targets),
+        'skipped_already_published': skipped_already_published,
+    })
 
 
 @app.route('/api/schedule-publish/jobs/<job_id>', methods=['GET'])
@@ -8558,6 +8588,20 @@ def get_sched_publish_job(job_id):
     if not job:
         return jsonify({'error': 'ジョブが見つかりません'}), 404
     return jsonify(job)
+
+
+@app.route('/api/schedule-publish/jobs/<job_id>/cancel', methods=['POST'])
+@login_required
+def cancel_sched_publish_job(job_id):
+    """実行中の予約投稿ジョブをキャンセル。ワーカーがイテレーション毎に
+    cancelled フラグを見て次の記事の処理を打ち切る。送信済みは取り消せない。"""
+    job = _SCHED_PUBLISH_JOBS.get(job_id)
+    if not job:
+        return jsonify({'error': 'ジョブが見つかりません'}), 404
+    if job.get('status') == 'done':
+        return jsonify({'success': True, 'already_done': True})
+    job['cancelled'] = True
+    return jsonify({'success': True})
 
 @app.route('/api/seo-news', methods=['GET'])
 @login_required
