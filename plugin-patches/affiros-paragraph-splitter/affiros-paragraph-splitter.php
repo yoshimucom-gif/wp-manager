@@ -105,6 +105,8 @@ function affiros_psplit_process_content($content, $settings = null) {
     // 3.5) 見出しっぽい段落を h4 (or h3) に昇格
     if (($settings['promote_headings'] ?? 'yes') === 'yes') {
         $work = affiros_psplit_promote_paragraph_headings($work, $settings);
+        // <li> も同じパターンで昇格させる（リストから切り出して見出し化）
+        $work = affiros_psplit_promote_list_item_headings($work, $settings);
     }
 
     // 4) H2/H3 前後の余白（空段落）
@@ -331,6 +333,118 @@ function affiros_psplit_promote_paragraph_headings($html, $settings) {
     );
 }
 
+/**
+ * <ul>/<ol> 内の <li> で見出しパターンにマッチするものを h4 (or h3) に昇格する。
+ * 昇格した <li> はリストから切り出され、残りの <li> は同種のリストとして維持。
+ *
+ * 例:
+ *   <ul>
+ *     <li>ポイント1：xxx</li>
+ *     <li>普通の項目</li>
+ *     <li>ポイント2：yyy</li>
+ *   </ul>
+ *   →
+ *   <h4>ポイント1：xxx</h4>
+ *   <ul><li>普通の項目</li></ul>
+ *   <h4>ポイント2：yyy</h4>
+ *
+ * 全 <li> がマッチした場合はリスト自体が消えて全部見出しに。
+ */
+function affiros_psplit_promote_list_item_headings($html, $settings) {
+    $max_chars = max(20, min(200, intval($settings['heading_max_chars'] ?? 60)));
+    $level = in_array($settings['heading_level'] ?? '4', ['2', '3', '4', '5'], true)
+        ? $settings['heading_level']
+        : '4';
+    $patterns_raw = $settings['heading_patterns'] ?? '';
+    $patterns = array_filter(array_map('trim', preg_split('/\r?\n/', $patterns_raw)));
+    if (empty($patterns)) return $html;
+
+    $regex_list = [];
+    foreach ($patterns as $p) {
+        if (strpos($p, '^') !== 0) $p = '^\s*' . $p;
+        $regex_list[] = '/' . str_replace('/', '\/', $p) . '/u';
+    }
+
+    return preg_replace_callback(
+        '/(?:<!--\s*wp:list[^>]*-->\s*)?<(ul|ol)\b([^>]*)>([\s\S]*?)<\/\1>(?:\s*<!--\s*\/wp:list\s*-->)?/i',
+        function ($m) use ($max_chars, $level, $regex_list) {
+            $list_tag = $m[1];
+            $list_attr = $m[2];
+            $list_inner = $m[3];
+
+            // 各 <li> を順番に取り出す（ネストは雑に対応 — 通常記事ではネストは少ない）
+            if (!preg_match_all('/<li\b[^>]*>([\s\S]*?)<\/li>/i', $list_inner, $li_matches, PREG_OFFSET_CAPTURE)) {
+                return $m[0];
+            }
+
+            // 連続する非昇格 li と「昇格 li」の交互列を作る
+            $segments = []; // each: ['type' => 'list'|'heading', 'content' => string]
+            $current_list_items = [];
+            $any_promoted = false;
+
+            foreach ($li_matches[0] as $idx => $li_full) {
+                $li_html = $li_full[0];
+                $li_inner = $li_matches[1][$idx][0];
+
+                // 子に block 要素含む li は昇格対象外
+                if (preg_match('/<(img|table|ul|ol|h[1-6]|div|figure|iframe|hr|blockquote)\b/i', $li_inner)) {
+                    $current_list_items[] = $li_html;
+                    continue;
+                }
+                $plain = trim(preg_replace('/<[^>]+>/u', '', $li_inner));
+                if ($plain === '' || mb_strlen($plain) > $max_chars) {
+                    $current_list_items[] = $li_html;
+                    continue;
+                }
+                if (preg_match('/[。.!?！？]\s*$/u', $plain)) {
+                    $current_list_items[] = $li_html;
+                    continue;
+                }
+                $matched = false;
+                foreach ($regex_list as $rx) {
+                    if (preg_match($rx, $plain)) { $matched = true; break; }
+                }
+                if (!$matched) {
+                    $current_list_items[] = $li_html;
+                    continue;
+                }
+
+                // 昇格対象: 直前までの list_items を flush して heading を挿入
+                if (!empty($current_list_items)) {
+                    $segments[] = ['type' => 'list', 'content' => implode('', $current_list_items)];
+                    $current_list_items = [];
+                }
+                $segments[] = ['type' => 'heading', 'content' => trim($li_inner)];
+                $any_promoted = true;
+            }
+            if (!empty($current_list_items)) {
+                $segments[] = ['type' => 'list', 'content' => implode('', $current_list_items)];
+            }
+
+            // 昇格対象が1つも無ければ元のリストに何も変えずに戻す
+            if (!$any_promoted) return $m[0];
+
+            // 再構築
+            $level_attr = $level === '2' ? '' : ' {"level":' . intval($level) . '}';
+            $list_block_attr = ($list_tag === 'ol') ? ' {"ordered":true}' : '';
+            $out = '';
+            foreach ($segments as $seg) {
+                if ($seg['type'] === 'heading') {
+                    $out .= "\n<!-- wp:heading{$level_attr} -->\n"
+                          . "<h{$level} class=\"wp-block-heading\">" . $seg['content'] . "</h{$level}>\n"
+                          . "<!-- /wp:heading -->\n";
+                } else {
+                    $out .= "\n<!-- wp:list{$list_block_attr} -->\n"
+                          . "<{$list_tag}{$list_attr}>" . $seg['content'] . "</{$list_tag}>\n"
+                          . "<!-- /wp:list -->\n";
+                }
+            }
+            return $out;
+        },
+        $html
+    );
+}
+
 function affiros_psplit_add_heading_spacing($html) {
     // H2/H3 ブロックの直前に空 <p> が無ければ入れる
     return preg_replace_callback(
@@ -390,6 +504,18 @@ function affiros_psplit_stats($html, $settings = null) {
             if (preg_match('/[。.!?！？]\s*$/u', $plain)) continue;
             foreach ($regex_list as $rx) {
                 if (preg_match($rx, $plain)) { $heading_candidates++; break; }
+            }
+        }
+        // <li> も昇格候補としてカウント
+        if (preg_match_all('/<li\b[^>]*>([\s\S]*?)<\/li>/i', $html, $li_m)) {
+            foreach ($li_m[1] as $inner) {
+                if (preg_match('/<(img|table|ul|ol|h[1-6]|div|figure|iframe|hr|blockquote)\b/i', $inner)) continue;
+                $plain = trim(preg_replace('/<[^>]+>/u', '', $inner));
+                if ($plain === '' || mb_strlen($plain) > $max_chars) continue;
+                if (preg_match('/[。.!?！？]\s*$/u', $plain)) continue;
+                foreach ($regex_list as $rx) {
+                    if (preg_match($rx, $plain)) { $heading_candidates++; break; }
+                }
             }
         }
     }
