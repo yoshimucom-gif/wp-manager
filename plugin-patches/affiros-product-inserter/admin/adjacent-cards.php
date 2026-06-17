@@ -77,8 +77,11 @@ function ai_pi_render_adjacent_cards_page() {
 
     <script>
     (function ($) {
-        const ajaxUrl = (window.aiPI && aiPI.ajaxUrl) || ajaxurl;
-        const nonce   = (window.aiPI && aiPI.nonce) || '';
+        // aiPI は wp_enqueue_script('...', true) でフッターに出力されるため、
+        // 本インライン script が実行される時点ではまだ未定義のことがある。
+        // 値を IIFE 開始時ではなく、AJAX呼び出し時に都度 window から読む。
+        function ajaxUrl() { return (window.aiPI && aiPI.ajaxUrl) || (typeof ajaxurl !== 'undefined' ? ajaxurl : '/wp-admin/admin-ajax.php'); }
+        function nonce()   { return (window.aiPI && aiPI.nonce) || ''; }
         let scannedPosts = [];
 
         $('#aipi-adj-scan-btn').on('click', scan);
@@ -90,9 +93,9 @@ function ai_pi_render_adjacent_cards_page() {
             $('#aipi-adj-tbody').empty();
             $('#aipi-adj-scan-status').text('スキャン中...');
             try {
-                const res = await $.post(ajaxUrl, {
+                const res = await $.post(ajaxUrl(), {
                     action: 'ai_pi_scan_adjacent_cards',
-                    nonce: nonce,
+                    nonce: nonce(),
                 });
                 if (!res || !res.success) {
                     alert('スキャン失敗: ' + (res && res.data ? res.data : ''));
@@ -141,9 +144,9 @@ function ai_pi_render_adjacent_cards_page() {
             const fixBtn = row ? row.find('.aipi-fix-one') : null;
             if (fixBtn && fixBtn.length) fixBtn.prop('disabled', true).text('修正中...');
             try {
-                const res = await $.post(ajaxUrl, {
+                const res = await $.post(ajaxUrl(), {
                     action: 'ai_pi_fix_adjacent_cards',
-                    nonce: nonce,
+                    nonce: nonce(),
                     post_id: postId,
                 });
                 if (!res || !res.success) {
