@@ -30,6 +30,8 @@ function affiros_psplit_default_settings() {
         'heading_level'        => '4',    // 昇格先のレベル (3 or 4)
         'heading_patterns'     => "ポイント\\d+[：:.]\nステップ\\d+[：:.]\n第\\d+[章節項段話回]\nFAQ\\d*[：:.]\nQ\\d+[：:.]\n質問\\d+[：:.]\n注意点\\d+[：:.]\n手順\\d+[：:.]\n方法\\d+[：:.]\n^【[^】]{2,30}】",
         'heading_max_chars'    => 60,     // 段落が何文字以下なら見出し候補にするか
+        'split_strong_label_list' => 'yes',  // <li><strong>ラベル</strong>：内容 を見出し+段落に分割
+        'split_min_content_chars' => 25,     // 説明文がこの文字数を超えるときだけ分割対象
         'target_statuses'      => 'publish,future,draft',
     ];
 }
@@ -102,11 +104,17 @@ function affiros_psplit_process_content($content, $settings = null) {
         $work
     );
 
-    // 3.5) 見出しっぽい段落を h4 (or h3) に昇格
+    // 3.5) 見出しっぽい段落・<li> を見出しに昇格
     if (($settings['promote_headings'] ?? 'yes') === 'yes') {
         $work = affiros_psplit_promote_paragraph_headings($work, $settings);
-        // <li> も同じパターンで昇格させる（リストから切り出して見出し化）
+        // <li> 全体が「ポイントN：」等の短いパターンならまるごと見出し化
         $work = affiros_psplit_promote_list_item_headings($work, $settings);
+    }
+
+    // 3.7) <li> 内の「<strong>ラベル</strong>：長い説明文」を 見出し + 段落 に分割
+    //      親見出しレベルを検出して、その +1 を子見出しレベルに使う（context-aware）
+    if (($settings['split_strong_label_list'] ?? 'yes') === 'yes') {
+        $work = affiros_psplit_split_strong_label_list($work, $settings);
     }
 
     // 4) H2/H3 前後の余白（空段落）
@@ -445,6 +453,161 @@ function affiros_psplit_promote_list_item_headings($html, $settings) {
     );
 }
 
+/**
+ * <li> 内が「<strong>ラベル</strong>：長い説明文」の構造になっているとき、
+ * 各 <li> を「ラベル → 見出し / 説明文 → 段落」に分割して、リストをほどく。
+ *
+ * 見出しレベルは context-aware: そのリストより手前にある最後の h2-h6 を「親」と
+ * みなし、親レベル + 1 を子見出しレベルに使う。親が h3 なら子は h4。
+ *
+ * 例:
+ *   <h3>素材の種類</h3>
+ *   <ul>
+ *     <li><strong>ターポリン</strong>：厚みがあり耐久性・防水性が高い。重量はやや増えます...</li>
+ *     <li><strong>ナイロン</strong>：軽量で扱いやすい。バックパック型やタウンユース...</li>
+ *   </ul>
+ *   →
+ *   <h3>素材の種類</h3>
+ *   <h4>ターポリン</h4>
+ *   <p>厚みがあり耐久性・防水性が高い。重量はやや増えます...</p>
+ *   <h4>ナイロン</h4>
+ *   <p>軽量で扱いやすい。バックパック型やタウンユース...</p>
+ *
+ * パターンに一致しない <li> はそのままリストに残す（混在対応）。
+ */
+function affiros_psplit_split_strong_label_list($html, $settings) {
+    if (!$html) return $html;
+    $min_content = max(10, intval($settings['split_min_content_chars'] ?? 25));
+
+    // 全 h タグの位置とレベルを記録（親見出しレベル特定用）
+    preg_match_all('/<h([1-6])\b[^>]*>/i', $html, $h_matches, PREG_OFFSET_CAPTURE);
+    $heading_positions = [];
+    foreach ($h_matches[0] as $i => $m) {
+        $heading_positions[] = ['pos' => $m[1], 'level' => intval($h_matches[1][$i][0])];
+    }
+
+    // 全 <ul>/<ol> の位置を取得（wp:list コメントも含めて1ブロック）
+    $list_pattern = '/(?:<!--\s*wp:list[^>]*-->\s*)?<(ul|ol)\b([^>]*)>([\s\S]*?)<\/\1>(?:\s*<!--\s*\/wp:list\s*-->)?/i';
+    if (!preg_match_all($list_pattern, $html, $list_matches, PREG_OFFSET_CAPTURE)) {
+        return $html;
+    }
+
+    // 置換は末尾から（オフセットを保持するため）
+    $replacements = [];
+    for ($i = 0; $i < count($list_matches[0]); $i++) {
+        $list_full = $list_matches[0][$i][0];
+        $list_pos  = $list_matches[0][$i][1];
+        $list_tag  = $list_matches[1][$i][0];
+        $list_attr = $list_matches[2][$i][0];
+        $list_inner = $list_matches[3][$i][0];
+
+        // 親見出しレベルを特定（このリストの直前にある最後の h タグ）
+        $parent_level = 2;
+        foreach ($heading_positions as $h) {
+            if ($h['pos'] < $list_pos) {
+                $parent_level = $h['level'];
+            } else {
+                break;
+            }
+        }
+        $child_level = min(6, $parent_level + 1);
+
+        $result = affiros_psplit_process_strong_list_inner(
+            $list_inner, $list_tag, $list_attr, $child_level, $min_content
+        );
+        if ($result === null) continue;
+
+        $replacements[] = [
+            'start'       => $list_pos,
+            'end'         => $list_pos + strlen($list_full),
+            'replacement' => $result,
+        ];
+    }
+
+    // 末尾から置換
+    usort($replacements, function ($a, $b) { return $b['start'] - $a['start']; });
+    foreach ($replacements as $r) {
+        $html = substr($html, 0, $r['start']) . $r['replacement'] . substr($html, $r['end']);
+    }
+    return $html;
+}
+
+/**
+ * リスト1つの中身を処理して、strong+コロンのある <li> を 見出し+段落 に分割する。
+ * パターン無し <li> はそのまま現リストに残す。
+ *
+ * @return string|null 変換結果。何も変換しなかった場合は null（呼び元はスキップ）
+ */
+function affiros_psplit_process_strong_list_inner($list_inner, $list_tag, $list_attr, $child_level, $min_content) {
+    if (!preg_match_all('/<li\b([^>]*)>([\s\S]*?)<\/li>/i', $list_inner, $li_matches)) return null;
+
+    // <strong>ラベル</strong>：内容 のパターン
+    // - <strong>～</strong> の中身は短いラベル
+    // - 直後に全角／半角コロン
+    // - その後に長い内容（min_content 文字超）
+    $strong_pattern = '/^\s*<strong[^>]*>([^<]+?)<\/strong>\s*[：:]\s*([\s\S]+)$/iu';
+
+    $segments = []; // ['type' => 'list'|'heading', ...]
+    $current_items = [];
+    $any_converted = false;
+
+    foreach ($li_matches[2] as $idx => $li_inner) {
+        $li_attr = $li_matches[1][$idx];
+        $matched = false;
+
+        if (preg_match($strong_pattern, $li_inner, $sm)) {
+            $label = trim(strip_tags($sm[1]));
+            $content_html = trim($sm[2]);
+            $content_plain = trim(preg_replace('/<[^>]+>/u', '', $content_html));
+
+            if ($label !== '' && mb_strlen($content_plain) > $min_content) {
+                // 変換対象 → 直前までの list_items を flush
+                if (!empty($current_items)) {
+                    $segments[] = ['type' => 'list', 'items' => $current_items];
+                    $current_items = [];
+                }
+                $segments[] = ['type' => 'split', 'label' => $label, 'content' => $content_html];
+                $any_converted = true;
+                $matched = true;
+            }
+        }
+
+        if (!$matched) {
+            $current_items[] = ['attr' => $li_attr, 'inner' => $li_inner];
+        }
+    }
+
+    if (!empty($current_items)) {
+        $segments[] = ['type' => 'list', 'items' => $current_items];
+    }
+
+    if (!$any_converted) return null;
+
+    // 再構築
+    $level_attr = $child_level === 2 ? '' : ' {"level":' . $child_level . '}';
+    $list_block_attr = ($list_tag === 'ol') ? ' {"ordered":true}' : '';
+    $out = '';
+    foreach ($segments as $seg) {
+        if ($seg['type'] === 'split') {
+            $out .= "\n<!-- wp:heading{$level_attr} -->\n"
+                  . "<h{$child_level} class=\"wp-block-heading\">" . $seg['label'] . "</h{$child_level}>\n"
+                  . "<!-- /wp:heading -->\n"
+                  . "<!-- wp:paragraph -->\n"
+                  . "<p>" . $seg['content'] . "</p>\n"
+                  . "<!-- /wp:paragraph -->\n";
+        } else {
+            $items_html = '';
+            foreach ($seg['items'] as $item) {
+                $items_html .= '<li' . $item['attr'] . '>' . $item['inner'] . '</li>';
+            }
+            $out .= "\n<!-- wp:list{$list_block_attr} -->\n"
+                  . "<{$list_tag}{$list_attr}>" . $items_html . "</{$list_tag}>\n"
+                  . "<!-- /wp:list -->\n";
+        }
+    }
+    return $out;
+}
+
 function affiros_psplit_add_heading_spacing($html) {
     // H2/H3 ブロックの直前に空 <p> が無ければ入れる
     return preg_replace_callback(
@@ -588,11 +751,13 @@ function affiros_psplit_sanitize($input) {
     $output['add_heading_spacing']   = ($input['add_heading_spacing'] ?? 'yes') === 'yes' ? 'yes' : 'no';
     $output['add_media_spacing']     = ($input['add_media_spacing'] ?? 'yes') === 'yes' ? 'yes' : 'no';
     $output['normalize_punctuation'] = ($input['normalize_punctuation'] ?? 'yes') === 'yes' ? 'yes' : 'no';
-    $output['promote_headings']      = ($input['promote_headings'] ?? 'yes') === 'yes' ? 'yes' : 'no';
-    $output['heading_level']         = in_array($input['heading_level'] ?? '4', ['2', '3', '4', '5'], true) ? $input['heading_level'] : '4';
-    $output['heading_patterns']      = sanitize_textarea_field($input['heading_patterns'] ?? '');
-    $output['heading_max_chars']     = max(20, min(200, intval($input['heading_max_chars'] ?? 60)));
-    $output['target_statuses']       = sanitize_text_field($input['target_statuses'] ?? 'publish,future,draft');
+    $output['promote_headings']        = ($input['promote_headings'] ?? 'yes') === 'yes' ? 'yes' : 'no';
+    $output['heading_level']           = in_array($input['heading_level'] ?? '4', ['2', '3', '4', '5'], true) ? $input['heading_level'] : '4';
+    $output['heading_patterns']        = sanitize_textarea_field($input['heading_patterns'] ?? '');
+    $output['heading_max_chars']       = max(20, min(200, intval($input['heading_max_chars'] ?? 60)));
+    $output['split_strong_label_list'] = ($input['split_strong_label_list'] ?? 'yes') === 'yes' ? 'yes' : 'no';
+    $output['split_min_content_chars'] = max(10, min(500, intval($input['split_min_content_chars'] ?? 25)));
+    $output['target_statuses']         = sanitize_text_field($input['target_statuses'] ?? 'publish,future,draft');
     return $output;
 }
 
@@ -694,6 +859,23 @@ function affiros_psplit_render_page() {
                     <td>
                         <textarea name="<?php echo AFFIROS_PSPLIT_OPTION_KEY; ?>[heading_patterns]" rows="10" style="width:480px;font-family:monospace"><?php echo esc_textarea($settings['heading_patterns'] ?? ''); ?></textarea>
                         <p class="description">1行1パターン。各パターンに一致する段落を見出しに昇格。<code>\\d+</code> で数字、<code>[：:]</code> で全角/半角コロン。`^` 始まりでなければ自動で行頭マッチを付与。<br>例: <code>ポイント\\d+[：:]</code> → 「ポイント3：形状と...」にマッチ。<br>判定: パターンマッチ AND 文字数閾値以下 AND 末尾「。」なし。</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th>strong+コロンの &lt;li&gt; を見出し+段落に分割</th>
+                    <td>
+                        <label><input type="checkbox" name="<?php echo AFFIROS_PSPLIT_OPTION_KEY; ?>[split_strong_label_list]" value="yes" <?php checked($settings['split_strong_label_list'] ?? 'yes', 'yes'); ?>> 各 <code>&lt;li&gt;&lt;strong&gt;ラベル&lt;/strong&gt;：長い説明文&lt;/li&gt;</code> を「見出し + 段落」に分解</label>
+                        <p class="description">
+                            読みづらい「太字ラベル＋コロン＋長文」のリスト形式を、ラベルを見出し（親見出しレベル+1）に格上げして、説明文を段落にする。<br>
+                            例: <code>&lt;h3&gt;素材&lt;/h3&gt;</code> 配下のリストなら <code>&lt;h4&gt;</code> に昇格、<code>&lt;h2&gt;</code> 配下なら <code>&lt;h3&gt;</code> に昇格。
+                        </p>
+                    </td>
+                </tr>
+                <tr>
+                    <th>分割対象とする説明文の最小文字数</th>
+                    <td>
+                        <input type="number" name="<?php echo AFFIROS_PSPLIT_OPTION_KEY; ?>[split_min_content_chars]" value="<?php echo esc_attr($settings['split_min_content_chars'] ?? 25); ?>" min="10" max="500" style="width:80px"> 字超
+                        <p class="description">コロン直後の説明文がこの文字数を超える時だけ分割対象。既定 25 字。短い「<code>長所：軽い</code>」みたいなのは触らない。</p>
                     </td>
                 </tr>
                 <tr>
