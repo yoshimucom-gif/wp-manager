@@ -24,15 +24,15 @@ SPECS = [
     (os.path.join(ROOT, 'affiros-product-inserter'),
      'affiros-product-inserter', 'affiros-product-inserter-1.9.19.zip'),
     (os.path.join(ROOT, 'affiros-decoration'),
-     'affiros-decoration', 'affiros-decoration-1.2.1.zip'),
+     'affiros-decoration', 'affiros-decoration-1.2.2.zip'),
     (os.path.join(ROOT, 'affiros-rewrite'),
      'affiros-rewrite', 'affiros-rewrite-0.4.39.zip'),
     (os.path.join(ROOT, 'affiros-categorizer'),
-     'affiros-categorizer', 'affiros-categorizer-0.1.0.zip'),
+     'affiros-categorizer', 'affiros-categorizer-0.1.1.zip'),
     (os.path.join(ROOT, 'affiros-dup-cleaner'),
-     'affiros-dup-cleaner', 'affiros-dup-cleaner-1.0.0.zip'),
+     'affiros-dup-cleaner', 'affiros-dup-cleaner-1.0.1.zip'),
     (os.path.join(ROOT, 'affiros-paragraph-splitter'),
-     'affiros-paragraph-splitter', 'affiros-paragraph-splitter-1.1.0.zip'),
+     'affiros-paragraph-splitter', 'affiros-paragraph-splitter-1.1.1.zip'),
 ]
 
 

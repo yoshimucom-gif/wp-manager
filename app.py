@@ -233,7 +233,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.36'
+APP_VERSION = '1.7.37'
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -5578,9 +5578,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.9.19',
     },
     'decoration': {
-        'file': 'affiros-decoration-1.2.1.zip',
+        'file': 'affiros-decoration-1.2.2.zip',
         'name': 'Affiros デコレーター',
-        'version': '1.2.1',
+        'version': '1.2.2',
     },
     'rewrite': {
         'file': 'affiros-rewrite-0.4.39.zip',
@@ -5588,19 +5588,19 @@ PLUGIN_DOWNLOADS = {
         'version': '0.4.39',
     },
     'categorizer': {
-        'file': 'affiros-categorizer-0.1.0.zip',
+        'file': 'affiros-categorizer-0.1.1.zip',
         'name': 'Affiros カテゴライザー',
-        'version': '0.1.0',
+        'version': '0.1.1',
     },
     'dup-cleaner': {
-        'file': 'affiros-dup-cleaner-1.0.0.zip',
+        'file': 'affiros-dup-cleaner-1.0.1.zip',
         'name': 'Affiros 重複投稿クリーンアップ',
-        'version': '1.0.0',
+        'version': '1.0.1',
     },
     'paragraph-splitter': {
-        'file': 'affiros-paragraph-splitter-1.1.0.zip',
+        'file': 'affiros-paragraph-splitter-1.1.1.zip',
         'name': 'Affiros 段落整形',
-        'version': '1.1.0',
+        'version': '1.1.1',
     },
 }
 
@@ -5634,6 +5634,34 @@ PLUGIN_UPDATE_META = {
     },
     'product-inserter': {
         'plugin_basename': 'affiros-product-inserter/affiros-product-inserter.php',
+        'tested':   '6.6',
+        'requires': '5.8',
+        'requires_php': '7.4',
+        'author':   'Affiros',
+    },
+    'decoration': {
+        'plugin_basename': 'affiros-decoration/affiros-decoration.php',
+        'tested':   '6.6',
+        'requires': '5.8',
+        'requires_php': '7.4',
+        'author':   'Affiros',
+    },
+    'categorizer': {
+        'plugin_basename': 'affiros-categorizer/affiros-categorizer.php',
+        'tested':   '6.6',
+        'requires': '5.8',
+        'requires_php': '7.4',
+        'author':   'Affiros',
+    },
+    'dup-cleaner': {
+        'plugin_basename': 'affiros-dup-cleaner/affiros-dup-cleaner.php',
+        'tested':   '6.6',
+        'requires': '5.8',
+        'requires_php': '7.4',
+        'author':   'Affiros',
+    },
+    'paragraph-splitter': {
+        'plugin_basename': 'affiros-paragraph-splitter/affiros-paragraph-splitter.php',
         'tested':   '6.6',
         'requires': '5.8',
         'requires_php': '7.4',

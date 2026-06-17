@@ -2,15 +2,22 @@
 /**
  * Plugin Name: Affiros 段落整形
  * Description: 長すぎる段落を機械的に分割して読みやすくする単機能ツール。句点・接続詞・最大文字数で強制改行。Affiros9で生成した記事の段落が密になりがちな問題への確実な対策。リライター・インサーター・デコレーターと完全に独立。
- * Version: 1.1.0
+ * Version: 1.1.1
  * Author: Affiros
  * License: GPL v2 or later
  */
 
 if (!defined('ABSPATH')) exit;
 
-define('AFFIROS_PSPLIT_VERSION', '1.1.0');
+define('AFFIROS_PSPLIT_VERSION', '1.1.1');
 define('AFFIROS_PSPLIT_OPTION_KEY', 'affiros_psplit_settings');
+
+// 自動更新通知（Affiros9 サーバーから定期チェック）
+require_once __DIR__ . '/includes/plugin-updater.php';
+add_action('init', function () {
+    $host = defined('AFFIROS_UPDATE_HOST') ? AFFIROS_UPDATE_HOST : 'https://wp-manager.onrender.com';
+    new Affiros_Plugin_Updater(__FILE__, rtrim($host, '/') . '/api/plugin-update/paragraph-splitter');
+});
 
 // =============================================================================
 // 設定

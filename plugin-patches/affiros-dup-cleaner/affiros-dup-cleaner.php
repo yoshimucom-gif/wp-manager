@@ -2,14 +2,21 @@
 /**
  * Plugin Name: Affiros 重複投稿クリーンアップ
  * Description: 同タイトルで複数回投稿された記事を検出し、最古の1件を残して残りを削除する単機能ツール。Affiros9 v1.7.27 以前の予約投稿バグで発生した重複の片付け用。リライター・インサーターと独立。
- * Version: 1.0.0
+ * Version: 1.0.1
  * Author: Affiros
  * License: GPL v2 or later
  */
 
 if (!defined('ABSPATH')) exit;
 
-define('AFFIROS_DUP_CLEANER_VERSION', '1.0.0');
+define('AFFIROS_DUP_CLEANER_VERSION', '1.0.1');
+
+// 自動更新通知（Affiros9 サーバーから定期チェック）
+require_once __DIR__ . '/includes/plugin-updater.php';
+add_action('init', function () {
+    $host = defined('AFFIROS_UPDATE_HOST') ? AFFIROS_UPDATE_HOST : 'https://wp-manager.onrender.com';
+    new Affiros_Plugin_Updater(__FILE__, rtrim($host, '/') . '/api/plugin-update/dup-cleaner');
+});
 
 /**
  * メニュー登録: 「ツール」配下に置く（リライター/インサーターと混じらないよう独立トップではなく Tools 配下）

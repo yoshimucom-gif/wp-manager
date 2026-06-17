@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros デコレーター
  * Description: Claude APIでAI生成記事をDBPテーマのGutenbergブロックで自動装飾するプラグイン
- * Version: 1.2.1
+ * Version: 1.2.2
  * Author: AI Decoration
  * License: GPL v2 or later
  * Text Domain: ai-decoration
@@ -31,7 +31,7 @@ if (defined('AI_DECO_VERSION')) {
     return;
 }
 
-define('AI_DECO_VERSION', '1.2.1');
+define('AI_DECO_VERSION', '1.2.2');
 define('AI_DECO_PATH', plugin_dir_path(__FILE__));
 define('AI_DECO_URL', plugin_dir_url(__FILE__));
 
@@ -39,10 +39,17 @@ require_once AI_DECO_PATH . 'includes/claude-api.php';
 require_once AI_DECO_PATH . 'includes/validator.php';
 require_once AI_DECO_PATH . 'includes/decorator.php';
 require_once AI_DECO_PATH . 'includes/post-meta.php';
+require_once AI_DECO_PATH . 'includes/plugin-updater.php';
 require_once AI_DECO_PATH . 'admin/settings.php';
 require_once AI_DECO_PATH . 'admin/meta-box.php';
 require_once AI_DECO_PATH . 'admin/bulk-process.php';
 require_once AI_DECO_PATH . 'admin/ajax-handler.php';
+
+// Affiros9 サーバーをアップデートサーバーとして登録（自動更新通知）
+add_action('init', function () {
+    $host = defined('AFFIROS_UPDATE_HOST') ? AFFIROS_UPDATE_HOST : 'https://wp-manager.onrender.com';
+    new Affiros_Plugin_Updater(__FILE__, rtrim($host, '/') . '/api/plugin-update/decoration');
+});
 
 /**
  * 使用可能なモデル一覧（品質ラベル・目安単価込み）
