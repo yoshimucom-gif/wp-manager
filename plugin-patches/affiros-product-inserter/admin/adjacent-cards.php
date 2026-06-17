@@ -17,18 +17,20 @@ function ai_pi_render_adjacent_cards_page() {
     if (!current_user_can('manage_options')) return;
     ?>
     <div class="wrap">
-        <h1>🔍 連続カード検出</h1>
+        <h1>🔍 連続カード検出（比較表 / ランキング）</h1>
         <p style="font-size:13px;line-height:1.7">
-            商品カード（比較表・ランキング・縦置き）が記事内で<strong>連続して2つ以上配置されている記事</strong>を抽出します。<br>
+            <strong>比較表（compare）／ランキング型（ranking）の「大きいカード」が連続している記事</strong>を抽出します。<br>
             Affiros9 の広告挿入位置バグで「冒頭 + 末尾」で配置したつもりが両方冒頭に
-            固まってしまった記事の特定に使います。
+            固まってしまった記事を特定する用途です。
         </p>
 
         <div style="background:#fffbeb;border:1px solid #fbbf24;padding:12px;margin:16px 0;border-radius:4px">
             <strong>⚠️ 判定基準</strong>
             <ul style="margin:6px 0 0 20px;line-height:1.7;font-size:13px">
-                <li><strong>連続</strong>: カード（<code>&lt;div class="aipi-*"&gt;</code>）の終了直後に、間に H2/H3/通常段落 をはさまずに別のカードが配置されている状態</li>
-                <li>空 <code>&lt;p&gt;&lt;/p&gt;</code>、<code>&lt;br&gt;</code>、wp ブロックコメント、改行のみが間にある場合は「連続」扱い</li>
+                <li><strong>検出対象</strong>: 連続するカードのうち、<strong>1枚以上が比較表 / ランキング / proscons / mini</strong> の「heavy カード」</li>
+                <li><strong>除外</strong>: vertical（縦置き1商品）同士の連続は読者誘導用の意図的な配置として<strong>触らない</strong></li>
+                <li><strong>連続</strong>: カードの終了直後に、間に H2/H3/通常段落 をはさまずに別のカードが配置されている状態</li>
+                <li>空 <code>&lt;p&gt;&lt;/p&gt;</code>、wp ブロックコメント、改行のみが間にある場合は「連続」扱い</li>
                 <li>本物のテキストが間に1段落でもあれば「正常配置」</li>
             </ul>
         </div>
@@ -223,37 +225,54 @@ add_action('wp_ajax_ai_pi_scan_adjacent_cards', function () {
 });
 
 /**
- * 記事内の商品カード配置を解析して連続箇所を返す。
+ * 検出対象とする「大きいカード」種類。
+ * vertical（縦置き1商品）は読者誘導用に意図的に連続させるので除外する。
+ * compare（比較表）/ ranking（ランキング型）は1枚に複数商品入る大きいカードで、
+ * 連続させる意図はまず無いので「連続=配置バグ」と判定する。
+ */
+const AI_PI_HEAVY_DESIGNS = ['compare', 'ranking', 'proscons', 'mini'];
+
+/**
+ * 記事内の商品カード配置を解析して、heavy デザイン（compare/ranking等）が
+ * 連続している箇所を返す。
+ *
+ * 重要: vertical-vertical の連続はユーザーの意図通り（読者誘導の縦置き×2 等）
+ * のため、検出対象から除外する。「heavy → heavy」「heavy → vertical」
+ * 「vertical → heavy」のいずれかに該当する連続だけを「バグ」と判定する。
  *
  * Returns:
- *   adjacent_count: int 連続発生回数
+ *   adjacent_count: int 連続発生回数（vertical-vertical は除外）
  *   designs:        string[] 連続している箇所のカード種類リスト（例: ["compare → compare"]）
  */
 function ai_pi_find_adjacent_cards($content) {
     if (!$content) return ['adjacent_count' => 0, 'designs' => []];
 
-    // aipi-* div を含む wp:html ブロックを順番に抜き出す（位置情報付き）
     $pattern = '/<!--\s*wp:html\s*-->\s*<div\s+class="(aipi-[a-z]+)[^"]*"[\s\S]*?<\/div>\s*<!--\s*\/wp:html\s*-->/i';
     if (!preg_match_all($pattern, $content, $matches, PREG_OFFSET_CAPTURE)) {
         return ['adjacent_count' => 0, 'designs' => []];
     }
 
-    $blocks = []; // [start, end, design]
+    $blocks = [];
     for ($i = 0; $i < count($matches[0]); $i++) {
         $start = $matches[0][$i][1];
         $end   = $start + strlen($matches[0][$i][0]);
-        $design_raw = $matches[1][$i][0]; // aipi-compare / aipi-ranking / aipi-vertical 等
-        $design = preg_replace('/^aipi-/', '', $design_raw);
+        $design = preg_replace('/^aipi-/', '', $matches[1][$i][0]);
         $blocks[] = ['start' => $start, 'end' => $end, 'design' => $design];
     }
-
     if (count($blocks) < 2) return ['adjacent_count' => 0, 'designs' => []];
 
     $adjacent_pairs = [];
     for ($i = 0; $i < count($blocks) - 1; $i++) {
+        $a = $blocks[$i]['design'];
+        $b = $blocks[$i + 1]['design'];
+        // vertical-vertical はユーザー意図通り（読者誘導の縦置き連続）→ スキップ
+        $a_heavy = in_array($a, AI_PI_HEAVY_DESIGNS, true);
+        $b_heavy = in_array($b, AI_PI_HEAVY_DESIGNS, true);
+        if (!$a_heavy && !$b_heavy) continue;
+
         $between = substr($content, $blocks[$i]['end'], $blocks[$i + 1]['start'] - $blocks[$i]['end']);
         if (ai_pi_is_empty_between($between)) {
-            $adjacent_pairs[] = $blocks[$i]['design'] . ' → ' . $blocks[$i + 1]['design'];
+            $adjacent_pairs[] = $a . ' → ' . $b;
         }
     }
     return [
@@ -318,17 +337,20 @@ function ai_pi_remove_adjacent_cards($content) {
     }
     if (count($blocks) < 2) return ['content' => $content, 'removed_count' => 0];
 
-    // 連続グループを検出: グループの2枚目以降を削除対象にする
-    $to_remove = []; // 削除する block index リスト
-    $group_start_idx = 0; // 各グループの最初の block index
+    // 連続グループのうち「heavy デザイン（compare/ranking等）が絡む連続」だけを
+    // バグとみなし、2枚目以降を削除候補にする。
+    // vertical-vertical は意図通りの配置なのでスキップ（削除しない）。
+    $to_remove = [];
     for ($i = 0; $i < count($blocks) - 1; $i++) {
+        $a = $blocks[$i]['design'];
+        $b = $blocks[$i + 1]['design'];
+        $a_heavy = in_array($a, AI_PI_HEAVY_DESIGNS, true);
+        $b_heavy = in_array($b, AI_PI_HEAVY_DESIGNS, true);
+        if (!$a_heavy && !$b_heavy) continue; // vertical 同士は触らない
+
         $between = substr($content, $blocks[$i]['end'], $blocks[$i + 1]['start'] - $blocks[$i]['end']);
         if (ai_pi_is_empty_between($between)) {
-            // i と i+1 は連続 → i+1 を削除候補に
             $to_remove[] = $i + 1;
-        } else {
-            // 連続終わり
-            $group_start_idx = $i + 1;
         }
     }
     if (empty($to_remove)) return ['content' => $content, 'removed_count' => 0];
