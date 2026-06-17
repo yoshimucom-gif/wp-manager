@@ -33,6 +33,16 @@ function ai_pi_render_adjacent_cards_page() {
             </ul>
         </div>
 
+        <div style="background:#eff6ff;border:1px solid #60a5fa;padding:12px;margin:16px 0;border-radius:4px">
+            <strong>🛠 自動修正の仕組み</strong>
+            <ul style="margin:6px 0 0 20px;line-height:1.7;font-size:13px">
+                <li>連続した2枚のうち <strong>2枚目を削除</strong>（1枚目を保持）</li>
+                <li>修正前にリビジョンが自動保存されるので、編集画面の「リビジョン」から元に戻せる</li>
+                <li>連続が3枚以上ある場合は、2枚目以降をすべて削除（1枚目だけ残る）</li>
+                <li>記事内の正常な配置のカード（間にコンテンツあり）には触らない</li>
+            </ul>
+        </div>
+
         <div style="margin:20px 0">
             <button type="button" id="aipi-adj-scan-btn" class="button button-primary">🔍 全記事スキャン</button>
             <span id="aipi-adj-scan-status" style="margin-left:12px;color:#666;font-size:13px"></span>
@@ -42,6 +52,11 @@ function ai_pi_render_adjacent_cards_page() {
             <h2 style="margin-bottom:8px">🚨 連続カードを含む記事</h2>
             <p id="aipi-adj-summary" style="margin:4px 0 12px"></p>
 
+            <div style="margin:0 0 12px">
+                <button type="button" id="aipi-adj-fix-all-btn" class="button button-primary">🛠 全件 自動修正（2枚目以降を削除）</button>
+                <span id="aipi-adj-fix-status" style="margin-left:12px;font-size:13px"></span>
+            </div>
+
             <table class="wp-list-table widefat striped">
                 <thead>
                     <tr>
@@ -50,7 +65,7 @@ function ai_pi_render_adjacent_cards_page() {
                         <th style="width:100px">連続箇所</th>
                         <th style="width:160px">カード種類</th>
                         <th style="width:80px">ステータス</th>
-                        <th style="width:80px">編集</th>
+                        <th style="width:160px">アクション</th>
                     </tr>
                 </thead>
                 <tbody id="aipi-adj-tbody"></tbody>
@@ -62,8 +77,10 @@ function ai_pi_render_adjacent_cards_page() {
     (function ($) {
         const ajaxUrl = (window.aiPI && aiPI.ajaxUrl) || ajaxurl;
         const nonce   = (window.aiPI && aiPI.nonce) || '';
+        let scannedPosts = [];
 
         $('#aipi-adj-scan-btn').on('click', scan);
+        $('#aipi-adj-fix-all-btn').on('click', fixAll);
 
         async function scan() {
             $('#aipi-adj-scan-btn').prop('disabled', true);
@@ -79,13 +96,13 @@ function ai_pi_render_adjacent_cards_page() {
                     alert('スキャン失敗: ' + (res && res.data ? res.data : ''));
                     return;
                 }
-                const posts = res.data.posts || [];
+                scannedPosts = res.data.posts || [];
                 $('#aipi-adj-scan-status').text(
-                    `完了: ${res.data.scanned}件チェック / 連続カードあり ${posts.length}件`
+                    `完了: ${res.data.scanned}件チェック / 連続カードあり ${scannedPosts.length}件`
                 );
-                $('#aipi-adj-summary').text(`${posts.length} 件の記事で商品カードが連続配置されています`);
-                render(posts);
-                if (posts.length) $('#aipi-adj-result').show();
+                $('#aipi-adj-summary').text(`${scannedPosts.length} 件の記事で商品カードが連続配置されています`);
+                render(scannedPosts);
+                if (scannedPosts.length) $('#aipi-adj-result').show();
             } catch (e) {
                 alert('通信エラー: ' + (e.responseText || e.statusText));
             } finally {
@@ -98,16 +115,65 @@ function ai_pi_render_adjacent_cards_page() {
             posts.forEach(p => {
                 const editUrl = `${location.origin}/wp-admin/post.php?post=${p.id}&action=edit`;
                 tbody.append(`
-                    <tr>
+                    <tr data-id="${p.id}">
                         <td>${p.id}</td>
                         <td><a href="${editUrl}" target="_blank">${esc(p.title)}</a></td>
                         <td style="text-align:center;color:#dc2626;font-weight:600">${p.adjacent_count}</td>
                         <td><code style="font-size:11px">${esc(p.designs.join(' + '))}</code></td>
                         <td>${esc(p.status)}</td>
-                        <td><a href="${editUrl}" target="_blank" class="button button-small">編集</a></td>
+                        <td>
+                            <button type="button" class="button button-primary button-small aipi-fix-one" data-id="${p.id}">🛠 修正</button>
+                            <a href="${editUrl}" target="_blank" class="button button-small">編集</a>
+                        </td>
                     </tr>
                 `);
             });
+            tbody.find('.aipi-fix-one').on('click', function () {
+                const id = $(this).data('id');
+                if (!confirm(`#${id} の連続カード（2枚目以降）を削除します。\nリビジョンが自動保存されるので元に戻せます。よろしいですか？`)) return;
+                fixOne(id, $(this).closest('tr'));
+            });
+        }
+
+        async function fixOne(postId, row) {
+            const fixBtn = row ? row.find('.aipi-fix-one') : null;
+            if (fixBtn && fixBtn.length) fixBtn.prop('disabled', true).text('修正中...');
+            try {
+                const res = await $.post(ajaxUrl, {
+                    action: 'ai_pi_fix_adjacent_cards',
+                    nonce: nonce,
+                    post_id: postId,
+                });
+                if (!res || !res.success) {
+                    alert('修正失敗 #' + postId + ': ' + (res && res.data ? res.data : ''));
+                    if (fixBtn && fixBtn.length) fixBtn.prop('disabled', false).text('🛠 修正');
+                    return false;
+                }
+                if (row && row.length) {
+                    row.css('background-color', '#dcfce7');
+                    row.find('td:eq(5)').html(`<span style="color:#16a34a;font-weight:600">✓ 修正済（${res.data.removed_count}枚削除）</span>`);
+                }
+                return true;
+            } catch (e) {
+                alert('通信エラー #' + postId + ': ' + (e.responseText || e.statusText));
+                if (fixBtn && fixBtn.length) fixBtn.prop('disabled', false).text('🛠 修正');
+                return false;
+            }
+        }
+
+        async function fixAll() {
+            if (!scannedPosts.length) { alert('対象なし'); return; }
+            if (!confirm(`${scannedPosts.length} 件の記事の連続カード（2枚目以降）を一括削除します。\n各記事でリビジョンが自動保存されるので元に戻せます。\n\n実行しますか？`)) return;
+            $('#aipi-adj-fix-all-btn').prop('disabled', true);
+            let done = 0, failed = 0;
+            for (const p of scannedPosts) {
+                $('#aipi-adj-fix-status').text(`修正中... ${done + failed}/${scannedPosts.length}件`);
+                const row = $(`tr[data-id="${p.id}"]`);
+                const ok = await fixOne(p.id, row.length ? row : null);
+                if (ok) done++; else failed++;
+            }
+            $('#aipi-adj-fix-status').text(`完了: 成功 ${done}件 / 失敗 ${failed}件`);
+            $('#aipi-adj-fix-all-btn').prop('disabled', false);
         }
 
         function esc(s) {
@@ -193,6 +259,103 @@ function ai_pi_find_adjacent_cards($content) {
     return [
         'adjacent_count' => count($adjacent_pairs),
         'designs'        => array_values(array_unique($adjacent_pairs)),
+    ];
+}
+
+/**
+ * AJAX: 連続カードを修正（2枚目以降を削除）
+ */
+add_action('wp_ajax_ai_pi_fix_adjacent_cards', function () {
+    check_ajax_referer('ai_pi_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error('権限がありません');
+    @set_time_limit(60);
+
+    $post_id = intval($_POST['post_id'] ?? 0);
+    if (!$post_id) wp_send_json_error('post_id 不正');
+
+    $post = get_post($post_id);
+    if (!$post) wp_send_json_error('記事が見つかりません');
+
+    $result = ai_pi_remove_adjacent_cards($post->post_content);
+    if ($result['removed_count'] <= 0) {
+        wp_send_json_success(['removed_count' => 0, 'message' => '連続カードなし']);
+    }
+
+    $update = wp_update_post([
+        'ID'           => $post_id,
+        'post_content' => $result['content'],
+    ], true);
+    if (is_wp_error($update)) wp_send_json_error($update->get_error_message());
+
+    wp_send_json_success([
+        'removed_count' => $result['removed_count'],
+        'message'       => $result['removed_count'] . '枚削除しました',
+    ]);
+});
+
+/**
+ * 記事内の連続カードのうち、2枚目以降を物理削除する。
+ *
+ * Returns: [content => string, removed_count => int]
+ */
+function ai_pi_remove_adjacent_cards($content) {
+    if (!$content) return ['content' => $content, 'removed_count' => 0];
+
+    $pattern = '/<!--\s*wp:html\s*-->\s*<div\s+class="(aipi-[a-z]+)[^"]*"[\s\S]*?<\/div>\s*<!--\s*\/wp:html\s*-->/i';
+    if (!preg_match_all($pattern, $content, $matches, PREG_OFFSET_CAPTURE)) {
+        return ['content' => $content, 'removed_count' => 0];
+    }
+
+    $blocks = [];
+    for ($i = 0; $i < count($matches[0]); $i++) {
+        $start = $matches[0][$i][1];
+        $end   = $start + strlen($matches[0][$i][0]);
+        $blocks[] = [
+            'start'  => $start,
+            'end'    => $end,
+            'design' => preg_replace('/^aipi-/', '', $matches[1][$i][0]),
+        ];
+    }
+    if (count($blocks) < 2) return ['content' => $content, 'removed_count' => 0];
+
+    // 連続グループを検出: グループの2枚目以降を削除対象にする
+    $to_remove = []; // 削除する block index リスト
+    $group_start_idx = 0; // 各グループの最初の block index
+    for ($i = 0; $i < count($blocks) - 1; $i++) {
+        $between = substr($content, $blocks[$i]['end'], $blocks[$i + 1]['start'] - $blocks[$i]['end']);
+        if (ai_pi_is_empty_between($between)) {
+            // i と i+1 は連続 → i+1 を削除候補に
+            $to_remove[] = $i + 1;
+        } else {
+            // 連続終わり
+            $group_start_idx = $i + 1;
+        }
+    }
+    if (empty($to_remove)) return ['content' => $content, 'removed_count' => 0];
+
+    // 削除する範囲を後ろから処理（位置がズレないよう）
+    // 削除範囲は「ブロック開始」から「次のブロック開始の直前」までではなく、
+    // ブロックそのものとその直前の空白だけにする（直前のブロックは保持）
+    $to_remove_unique = array_values(array_unique($to_remove));
+    rsort($to_remove_unique);
+    $new_content = $content;
+    foreach ($to_remove_unique as $idx) {
+        $bstart = $blocks[$idx]['start'];
+        $bend   = $blocks[$idx]['end'];
+        // 直前の空白行・改行を巻き取って消す（連続が解消するように）
+        while ($bstart > 0 && in_array(substr($new_content, $bstart - 1, 1), [" ", "\t", "\n", "\r"], true)) {
+            $bstart--;
+        }
+        // 直後の余分な改行も1つ巻き取る
+        if (substr($new_content, $bend, 1) === "\n") {
+            $bend++;
+        }
+        $new_content = substr($new_content, 0, $bstart) . substr($new_content, $bend);
+    }
+
+    return [
+        'content'       => $new_content,
+        'removed_count' => count($to_remove_unique),
     ];
 }
 
