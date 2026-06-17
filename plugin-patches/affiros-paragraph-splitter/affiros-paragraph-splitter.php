@@ -1,0 +1,783 @@
+<?php
+/**
+ * Plugin Name: Affiros 段落整形
+ * Description: 長すぎる段落を機械的に分割して読みやすくする単機能ツール。句点・接続詞・最大文字数で強制改行。Affiros9で生成した記事の段落が密になりがちな問題への確実な対策。リライター・インサーター・デコレーターと完全に独立。
+ * Version: 1.0.0
+ * Author: Affiros
+ * License: GPL v2 or later
+ */
+
+if (!defined('ABSPATH')) exit;
+
+define('AFFIROS_PSPLIT_VERSION', '1.0.0');
+define('AFFIROS_PSPLIT_OPTION_KEY', 'affiros_psplit_settings');
+
+// =============================================================================
+// 設定
+// =============================================================================
+
+function affiros_psplit_default_settings() {
+    return [
+        'min_paragraph_chars'  => 200,
+        'min_sentence_chars'   => 60,
+        'force_split_chars'    => 300,  // この文字数を超えたら読点でも分割
+        'connectors'           => "また、\nただし、\nさらに、\n一方、\nつまり、\nなお、\nちなみに、\nそして、\nしかし、\nしたがって、\nこのように、\n特に、\n例えば、\n実際、\nもちろん、",
+        'auto_on_save'         => 'no',   // 保存時 hook
+        'add_heading_spacing'  => 'yes',  // H2/H3 前後の空段落
+        'add_media_spacing'    => 'yes',  // 画像・表の前後の空段落
+        'normalize_punctuation'=> 'yes',  // 「。。」→「。」
+        'target_statuses'      => 'publish,future,draft',
+    ];
+}
+
+function affiros_psplit_get_settings() {
+    $saved = get_option(AFFIROS_PSPLIT_OPTION_KEY, []);
+    return array_merge(affiros_psplit_default_settings(), is_array($saved) ? $saved : []);
+}
+
+// =============================================================================
+// 整形ロジック（コア）
+// =============================================================================
+
+/**
+ * post_content を段落整形する。
+ *
+ * 流れ:
+ *   1. 句読点の正規化（「。。」→「。」など）
+ *   2. 各 <p>...</p> を見て、長すぎるなら分割
+ *   3. H2/H3 や画像の前後に空段落を入れて視覚的余白を確保
+ *   4. 全 <p> を <!-- wp:paragraph --> ブロックでラップして返す
+ */
+function affiros_psplit_process_content($content, $settings = null) {
+    if ($settings === null) $settings = affiros_psplit_get_settings();
+    if (!$content || trim($content) === '') return $content;
+
+    // 1) 一旦 wp:paragraph コメントを剥がす（再ラップは最後にする）
+    $work = preg_replace('/<!--\s*\/?wp:paragraph[^>]*-->\s*/i', '', $content);
+
+    // 2) 句読点の正規化
+    if (($settings['normalize_punctuation'] ?? 'yes') === 'yes') {
+        $work = affiros_psplit_normalize_punctuation($work);
+    }
+
+    // 3) 各 <p>...</p> を整形
+    $min_p = max(80, intval($settings['min_paragraph_chars'] ?? 200));
+    $min_s = max(20, intval($settings['min_sentence_chars'] ?? 60));
+    $force = max(120, intval($settings['force_split_chars'] ?? 300));
+    $connectors = affiros_psplit_parse_connectors($settings['connectors'] ?? '');
+
+    $work = preg_replace_callback(
+        '/<p\b([^>]*)>([\s\S]*?)<\/p>/i',
+        function ($m) use ($min_p, $min_s, $force, $connectors) {
+            $attr = $m[1];
+            $inner = $m[2];
+
+            // 画像・表・リスト・div を含む <p> はスキップ
+            if (preg_match('/<(img|table|ul|ol|div|figure|iframe|hr|blockquote)\b/i', $inner)) {
+                return $m[0];
+            }
+            $plain = trim(preg_replace('/<[^>]+>/u', '', $inner));
+            $plain_len = mb_strlen($plain);
+            if ($plain_len <= $min_p) {
+                // 短いのでそのまま
+                return '<p' . $attr . '>' . trim($inner) . '</p>';
+            }
+
+            $segments = affiros_psplit_split_inner($inner, $min_s, $force, $connectors);
+            if (count($segments) < 2) {
+                return '<p' . $attr . '>' . trim($inner) . '</p>';
+            }
+            $out = '';
+            foreach ($segments as $seg) {
+                $seg = trim($seg);
+                if ($seg === '') continue;
+                $out .= '<p' . $attr . '>' . $seg . '</p>';
+            }
+            return $out ?: $m[0];
+        },
+        $work
+    );
+
+    // 4) H2/H3 前後の余白（空段落）
+    if (($settings['add_heading_spacing'] ?? 'yes') === 'yes') {
+        $work = affiros_psplit_add_heading_spacing($work);
+    }
+
+    // 5) 画像・表前後の余白
+    if (($settings['add_media_spacing'] ?? 'yes') === 'yes') {
+        $work = affiros_psplit_add_media_spacing($work);
+    }
+
+    // 6) 連続空段落・改行の正規化
+    $work = preg_replace('/(<p[^>]*>(?:\s|&nbsp;)*<\/p>\s*){2,}/i', "<p></p>\n", $work);
+    $work = preg_replace("/(\r?\n){3,}/", "\n\n", $work);
+
+    // 7) 全 <p> を wp:paragraph ブロックでラップ
+    $work = preg_replace_callback(
+        '/<p\b([^>]*)>([\s\S]*?)<\/p>/i',
+        function ($m) {
+            return "<!-- wp:paragraph -->\n<p" . $m[1] . '>' . $m[2] . "</p>\n<!-- /wp:paragraph -->";
+        },
+        $work
+    );
+
+    return $work;
+}
+
+/**
+ * <p> の内側 HTML を「句点」「接続詞」で分割する。
+ * 各セグメントは min_s 文字以上になるよう蓄積してから区切る。
+ */
+function affiros_psplit_split_inner($inner_html, $min_sentence, $force_split_chars, $connectors) {
+    // まず inner を「句点」位置で分割（タグの中身は分割対象外にするため、
+    // タグはプレースホルダーに置換して plain text 上で位置を確定し、戻す）
+    $tags = [];
+    $plain_template = preg_replace_callback(
+        '/<[^>]+>/u',
+        function ($m) use (&$tags) {
+            $tags[] = $m[0];
+            return "\x02TAG" . (count($tags) - 1) . "\x03";
+        },
+        $inner_html
+    );
+
+    // 句点で分割（。！？の直後で切る）
+    $pieces = preg_split('/(?<=[。！？\?\!])/u', $plain_template);
+    if (!$pieces) return [$inner_html];
+
+    // 接続詞の直前でも分割
+    if (!empty($connectors)) {
+        $expanded = [];
+        foreach ($pieces as $piece) {
+            // 各接続詞の前で更に細かく分割（最初の出現で1回だけ）
+            $sub = [$piece];
+            foreach ($connectors as $conn) {
+                $new_sub = [];
+                foreach ($sub as $p) {
+                    // 「。」直後とくっついてる接続詞は二重分割になるのでスキップ判定:
+                    // 「。また、」の場合、既に上で分割済みなのでスルー
+                    $pos = mb_strpos($p, $conn);
+                    if ($pos === false || $pos === 0) {
+                        $new_sub[] = $p;
+                        continue;
+                    }
+                    // 「接続詞の前」が十分長い場合のみ分割
+                    $before = mb_substr($p, 0, $pos);
+                    $before_plain = preg_replace('/\x02TAG\d+\x03/u', '', $before);
+                    if (mb_strlen(trim($before_plain)) >= 30) {
+                        $new_sub[] = $before;
+                        $new_sub[] = mb_substr($p, $pos);
+                    } else {
+                        $new_sub[] = $p;
+                    }
+                }
+                $sub = $new_sub;
+            }
+            foreach ($sub as $s) {
+                if ($s !== '') $expanded[] = $s;
+            }
+        }
+        $pieces = $expanded;
+    }
+
+    // セグメントを蓄積（min_sentence 字未満は前にくっつける）
+    $segments = [];
+    $buf = '';
+    foreach ($pieces as $piece) {
+        $buf .= $piece;
+        $buf_plain = preg_replace('/\x02TAG\d+\x03/u', '', $buf);
+        if (mb_strlen(trim($buf_plain)) >= $min_sentence) {
+            $segments[] = $buf;
+            $buf = '';
+        }
+    }
+    if ($buf !== '') {
+        if (!empty($segments)) {
+            $segments[count($segments) - 1] .= $buf; // 末尾断片は前に結合
+        } else {
+            $segments[] = $buf;
+        }
+    }
+
+    // force_split: それでもまだ長すぎる段落は読点で強制分割
+    $final = [];
+    foreach ($segments as $seg) {
+        $seg_plain = preg_replace('/\x02TAG\d+\x03/u', '', $seg);
+        if (mb_strlen(trim($seg_plain)) <= $force_split_chars) {
+            $final[] = $seg;
+            continue;
+        }
+        // 読点「、」で強制分割（min_sentence字以上のセグメントを目指す）
+        $sub_pieces = preg_split('/(?<=、)/u', $seg);
+        $sub_buf = '';
+        foreach ($sub_pieces as $sp) {
+            $sub_buf .= $sp;
+            $sb_plain = preg_replace('/\x02TAG\d+\x03/u', '', $sub_buf);
+            if (mb_strlen(trim($sb_plain)) >= $min_sentence) {
+                $final[] = $sub_buf;
+                $sub_buf = '';
+            }
+        }
+        if ($sub_buf !== '') {
+            if (!empty($final)) {
+                $final[count($final) - 1] .= $sub_buf;
+            } else {
+                $final[] = $sub_buf;
+            }
+        }
+    }
+
+    // タグプレースホルダーを実タグに戻す
+    foreach ($final as &$seg) {
+        $seg = preg_replace_callback(
+            '/\x02TAG(\d+)\x03/u',
+            function ($m) use ($tags) {
+                return $tags[intval($m[1])] ?? '';
+            },
+            $seg
+        );
+    }
+    unset($seg);
+
+    return $final;
+}
+
+function affiros_psplit_normalize_punctuation($html) {
+    // 「。。」「？？」「！！」連続 → 1つに（文末の感嘆連続は無視するため4回以上のみ正規化）
+    $html = preg_replace('/。{2,}/u', '。', $html);
+    $html = preg_replace('/、{2,}/u', '、', $html);
+    // 段落末の全角・半角スペース除去
+    $html = preg_replace('/[ \t　]+(?=<\/p>)/u', '', $html);
+    return $html;
+}
+
+function affiros_psplit_parse_connectors($raw) {
+    $list = preg_split('/[\r\n,，]+/u', (string)$raw);
+    $out = [];
+    foreach ($list as $c) {
+        $c = trim($c);
+        if ($c !== '') $out[] = $c;
+    }
+    return $out;
+}
+
+function affiros_psplit_add_heading_spacing($html) {
+    // H2/H3 ブロックの直前に空 <p> が無ければ入れる
+    return preg_replace_callback(
+        '/(?<!<p><\/p>\s)(<!--\s*wp:heading\s*-->)/i',
+        function ($m) {
+            return "<!-- wp:paragraph -->\n<p></p>\n<!-- /wp:paragraph -->\n\n" . $m[1];
+        },
+        $html
+    );
+}
+
+function affiros_psplit_add_media_spacing($html) {
+    // <figure> や <table> ブロックの前後に空 <p> 段落を入れる（簡易版）
+    $html = preg_replace_callback(
+        '/(<!--\s*wp:(?:image|table|gallery)[^>]*-->)/i',
+        function ($m) {
+            return "<!-- wp:paragraph -->\n<p></p>\n<!-- /wp:paragraph -->\n\n" . $m[1];
+        },
+        $html
+    );
+    return $html;
+}
+
+/**
+ * before/after の plain-text 段落分布を返す（プレビュー用に簡易統計）
+ */
+function affiros_psplit_stats($html) {
+    if (!preg_match_all('/<p\b[^>]*>([\s\S]*?)<\/p>/i', $html, $m)) {
+        return ['count' => 0, 'avg' => 0, 'max' => 0, 'over_200' => 0];
+    }
+    $lens = [];
+    foreach ($m[1] as $inner) {
+        $plain = trim(preg_replace('/<[^>]+>/u', '', $inner));
+        if ($plain === '') continue;
+        $lens[] = mb_strlen($plain);
+    }
+    if (empty($lens)) {
+        return ['count' => 0, 'avg' => 0, 'max' => 0, 'over_200' => 0];
+    }
+    return [
+        'count'    => count($lens),
+        'avg'      => intval(array_sum($lens) / count($lens)),
+        'max'      => max($lens),
+        'over_200' => count(array_filter($lens, function ($l) { return $l > 200; })),
+    ];
+}
+
+// =============================================================================
+// 保存時 hook（オプション）
+// =============================================================================
+
+add_action('save_post_post', 'affiros_psplit_on_save', 20, 3);
+function affiros_psplit_on_save($post_id, $post, $update) {
+    if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) return;
+    if (wp_is_post_revision($post_id) || wp_is_post_autosave($post_id)) return;
+
+    $settings = affiros_psplit_get_settings();
+    if (($settings['auto_on_save'] ?? 'no') !== 'yes') return;
+
+    $allowed = explode(',', $settings['target_statuses'] ?? 'publish,future,draft');
+    if (!in_array($post->post_status, $allowed, true)) return;
+
+    // 再帰防止フラグ
+    if (get_transient('affiros_psplit_skip_' . $post_id)) return;
+
+    $new_content = affiros_psplit_process_content($post->post_content, $settings);
+    if ($new_content !== $post->post_content) {
+        set_transient('affiros_psplit_skip_' . $post_id, 1, 30);
+        remove_action('save_post_post', 'affiros_psplit_on_save', 20);
+        wp_update_post(['ID' => $post_id, 'post_content' => $new_content]);
+        add_action('save_post_post', 'affiros_psplit_on_save', 20, 3);
+        delete_transient('affiros_psplit_skip_' . $post_id);
+    }
+}
+
+// =============================================================================
+// 管理画面: メニュー登録
+// =============================================================================
+
+add_action('admin_menu', function () {
+    add_management_page(
+        '段落整形ツール',
+        '📝 段落整形',
+        'manage_options',
+        'affiros-psplit',
+        'affiros_psplit_render_page'
+    );
+});
+
+add_action('admin_init', function () {
+    register_setting('affiros_psplit_group', AFFIROS_PSPLIT_OPTION_KEY, [
+        'sanitize_callback' => 'affiros_psplit_sanitize',
+    ]);
+});
+
+function affiros_psplit_sanitize($input) {
+    $existing = get_option(AFFIROS_PSPLIT_OPTION_KEY, []);
+    $output = is_array($existing) ? $existing : [];
+    $output['min_paragraph_chars']   = max(80, min(1000, intval($input['min_paragraph_chars'] ?? 200)));
+    $output['min_sentence_chars']    = max(20, min(500, intval($input['min_sentence_chars'] ?? 60)));
+    $output['force_split_chars']     = max(120, min(2000, intval($input['force_split_chars'] ?? 300)));
+    $output['connectors']            = sanitize_textarea_field($input['connectors'] ?? '');
+    $output['auto_on_save']          = ($input['auto_on_save'] ?? 'no') === 'yes' ? 'yes' : 'no';
+    $output['add_heading_spacing']   = ($input['add_heading_spacing'] ?? 'yes') === 'yes' ? 'yes' : 'no';
+    $output['add_media_spacing']     = ($input['add_media_spacing'] ?? 'yes') === 'yes' ? 'yes' : 'no';
+    $output['normalize_punctuation'] = ($input['normalize_punctuation'] ?? 'yes') === 'yes' ? 'yes' : 'no';
+    $output['target_statuses']       = sanitize_text_field($input['target_statuses'] ?? 'publish,future,draft');
+    return $output;
+}
+
+add_action('admin_enqueue_scripts', function ($hook) {
+    if ($hook !== 'tools_page_affiros-psplit') return;
+    wp_localize_script('jquery', 'AffirosPsplit', [
+        'ajaxUrl' => admin_url('admin-ajax.php'),
+        'nonce'   => wp_create_nonce('affiros_psplit_nonce'),
+    ]);
+});
+
+// =============================================================================
+// 管理画面: メインページ
+// =============================================================================
+
+function affiros_psplit_render_page() {
+    if (!current_user_can('manage_options')) return;
+    $settings = affiros_psplit_get_settings();
+    $defaults = affiros_psplit_default_settings();
+    ?>
+    <div class="wrap">
+        <h1>📝 Affiros 段落整形</h1>
+        <p style="font-size:13px;line-height:1.7">
+            長すぎる段落を句点・接続詞・最大文字数で機械的に分割し、視覚的に読みやすくします。<br>
+            画像・表・リストを含む段落は壊さないようスキップ。WP リビジョンが自動保存されるので<strong>適用後でも元に戻せます</strong>。
+        </p>
+
+        <h2>① 設定</h2>
+        <form method="post" action="options.php">
+            <?php settings_fields('affiros_psplit_group'); ?>
+            <table class="form-table">
+                <tr>
+                    <th>段落の最小文字数（分割対象判定）</th>
+                    <td>
+                        <input type="number" name="<?php echo AFFIROS_PSPLIT_OPTION_KEY; ?>[min_paragraph_chars]" value="<?php echo esc_attr($settings['min_paragraph_chars']); ?>" min="80" max="1000" style="width:80px"> 字以上を「長い」と判定して分割対象に
+                        <p class="description">既定 200。これ未満の段落は触らない。</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th>1文の最小文字数（分割粒度）</th>
+                    <td>
+                        <input type="number" name="<?php echo AFFIROS_PSPLIT_OPTION_KEY; ?>[min_sentence_chars]" value="<?php echo esc_attr($settings['min_sentence_chars']); ?>" min="20" max="500" style="width:80px"> 字以上で1段落を区切る
+                        <p class="description">既定 60。これ未満は前の文に結合する。細切れになりすぎないよう守る値。</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th>強制分割しきい値</th>
+                    <td>
+                        <input type="number" name="<?php echo AFFIROS_PSPLIT_OPTION_KEY; ?>[force_split_chars]" value="<?php echo esc_attr($settings['force_split_chars']); ?>" min="120" max="2000" style="width:80px"> 字超は読点でも強制分割
+                        <p class="description">既定 300。句点も接続詞も無い超長文を救う最終手段。</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th>接続詞リスト（前で改行）</th>
+                    <td>
+                        <textarea name="<?php echo AFFIROS_PSPLIT_OPTION_KEY; ?>[connectors]" rows="8" style="width:400px;font-family:monospace"><?php echo esc_textarea($settings['connectors']); ?></textarea>
+                        <p class="description">1行1個。これらの直前で改行する。読点までセットで書く（例: <code>また、</code>）。</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th>句読点の正規化</th>
+                    <td><label><input type="checkbox" name="<?php echo AFFIROS_PSPLIT_OPTION_KEY; ?>[normalize_punctuation]" value="yes" <?php checked($settings['normalize_punctuation'], 'yes'); ?>> 「。。」→「。」のような連続句読点を正規化</label></td>
+                </tr>
+                <tr>
+                    <th>見出し前後の余白</th>
+                    <td><label><input type="checkbox" name="<?php echo AFFIROS_PSPLIT_OPTION_KEY; ?>[add_heading_spacing]" value="yes" <?php checked($settings['add_heading_spacing'], 'yes'); ?>> H2/H3 の直前に空段落を入れて視覚的余白を確保</label></td>
+                </tr>
+                <tr>
+                    <th>画像・表前後の余白</th>
+                    <td><label><input type="checkbox" name="<?php echo AFFIROS_PSPLIT_OPTION_KEY; ?>[add_media_spacing]" value="yes" <?php checked($settings['add_media_spacing'], 'yes'); ?>> 画像・表・ギャラリーの前に空段落を入れる</label></td>
+                </tr>
+                <tr>
+                    <th>保存時に自動整形（hook）</th>
+                    <td>
+                        <label><input type="checkbox" name="<?php echo AFFIROS_PSPLIT_OPTION_KEY; ?>[auto_on_save]" value="yes" <?php checked($settings['auto_on_save'], 'yes'); ?>> 投稿保存時に自動で整形する</label>
+                        <p class="description">⚠️ ONにすると今後の保存全てに効くので、まず手動一括で挙動確認してからONを推奨。</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th>対象ステータス</th>
+                    <td>
+                        <input type="text" name="<?php echo AFFIROS_PSPLIT_OPTION_KEY; ?>[target_statuses]" value="<?php echo esc_attr($settings['target_statuses']); ?>" style="width:280px">
+                        <p class="description">既定 <code>publish,future,draft</code>。カンマ区切り。</p>
+                    </td>
+                </tr>
+            </table>
+            <?php submit_button('設定を保存'); ?>
+        </form>
+
+        <hr style="margin:32px 0">
+
+        <h2>② 一括整形</h2>
+        <p style="font-size:13px;line-height:1.7">
+            既存の全記事をスキャンし、整形対象（200字超の段落を含む記事）をリスト表示。
+            プレビューで before/after を確認してから個別 or 一括で適用できます。
+        </p>
+
+        <div style="margin:16px 0">
+            <button type="button" id="aps-scan-btn" class="button button-primary">🔍 全記事スキャン</button>
+            <span id="aps-scan-status" style="margin-left:12px;color:#666;font-size:13px"></span>
+        </div>
+
+        <div id="aps-result" style="display:none">
+            <div style="margin:0 0 12px">
+                <button type="button" id="aps-apply-all-btn" class="button button-primary">✨ 全件に適用</button>
+                <span id="aps-apply-status" style="margin-left:12px;font-size:13px"></span>
+            </div>
+            <table class="wp-list-table widefat striped">
+                <thead>
+                    <tr>
+                        <th style="width:60px">ID</th>
+                        <th>タイトル</th>
+                        <th style="width:100px">段落数</th>
+                        <th style="width:100px">最大字数</th>
+                        <th style="width:120px">200字超の段落</th>
+                        <th style="width:220px">アクション</th>
+                    </tr>
+                </thead>
+                <tbody id="aps-result-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+    (function ($) {
+        const ajaxUrl = (window.AffirosPsplit && AffirosPsplit.ajaxUrl) || ajaxurl;
+        const nonce   = (window.AffirosPsplit && AffirosPsplit.nonce) || '';
+        let posts = [];
+
+        $('#aps-scan-btn').on('click', scan);
+        $('#aps-apply-all-btn').on('click', applyAll);
+
+        async function scan() {
+            $('#aps-scan-btn').prop('disabled', true);
+            $('#aps-result').hide();
+            $('#aps-result-tbody').empty();
+            $('#aps-scan-status').text('スキャン中...');
+            try {
+                const res = await $.post(ajaxUrl, {
+                    action: 'affiros_psplit_scan',
+                    nonce: nonce,
+                });
+                if (!res || !res.success) {
+                    alert('スキャン失敗: ' + (res && res.data ? res.data : ''));
+                    return;
+                }
+                posts = res.data.posts || [];
+                $('#aps-scan-status').text(`スキャン完了: ${res.data.scanned}件チェック / 整形対象 ${posts.length}件`);
+                render();
+                if (posts.length) $('#aps-result').show();
+            } catch (e) {
+                alert('通信エラー: ' + (e.responseText || e.statusText));
+            } finally {
+                $('#aps-scan-btn').prop('disabled', false);
+            }
+        }
+
+        function render() {
+            const tbody = $('#aps-result-tbody').empty();
+            posts.forEach(p => {
+                const editUrl = `${location.origin}/wp-admin/post.php?post=${p.id}&action=edit`;
+                tbody.append(`
+                    <tr data-id="${p.id}">
+                        <td>${p.id}</td>
+                        <td><a href="${editUrl}" target="_blank">${esc(p.title)}</a></td>
+                        <td>${p.count}</td>
+                        <td>${p.max}字</td>
+                        <td style="color:${p.over_200 > 0 ? '#dc2626' : '#6b7280'};font-weight:600">${p.over_200}件</td>
+                        <td>
+                            <button type="button" class="button button-small aps-preview" data-id="${p.id}">👁 プレビュー</button>
+                            <button type="button" class="button button-primary button-small aps-apply" data-id="${p.id}">✨ 適用</button>
+                        </td>
+                    </tr>
+                `);
+            });
+            tbody.find('.aps-apply').on('click', function () {
+                const id = $(this).data('id');
+                applyOne(id, $(this));
+            });
+            tbody.find('.aps-preview').on('click', function () {
+                const id = $(this).data('id');
+                previewOne(id);
+            });
+        }
+
+        async function previewOne(id) {
+            try {
+                const res = await $.post(ajaxUrl, {
+                    action: 'affiros_psplit_preview',
+                    nonce: nonce,
+                    post_id: id,
+                });
+                if (!res || !res.success) { alert('失敗'); return; }
+                const w = window.open('', '_blank', 'width=1100,height=800');
+                w.document.write(`
+                    <html><head><title>プレビュー #${id}</title>
+                    <style>body{font-family:sans-serif;font-size:14px;line-height:1.8;padding:20px;}
+                    .grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+                    .col h2{margin-top:0;font-size:14px;background:#eee;padding:8px}
+                    .col{border:1px solid #ddd;padding:12px;overflow:auto;max-height:90vh}
+                    .col.after{background:#f0fdf4}
+                    p{margin:0 0 14px;padding:6px;background:#fff;border-left:2px solid #d1d5db}
+                    .col.after p{border-left-color:#16a34a}
+                    </style></head><body>
+                    <h1>段落整形プレビュー #${id}</h1>
+                    <div class="grid">
+                        <div class="col"><h2>Before</h2>${res.data.before_html}</div>
+                        <div class="col after"><h2>After</h2>${res.data.after_html}</div>
+                    </div>
+                    </body></html>
+                `);
+                w.document.close();
+            } catch (e) {
+                alert('通信エラー: ' + (e.responseText || ''));
+            }
+        }
+
+        async function applyOne(id, btn) {
+            if (btn) btn.prop('disabled', true).text('適用中...');
+            try {
+                const res = await $.post(ajaxUrl, {
+                    action: 'affiros_psplit_apply',
+                    nonce: nonce,
+                    post_id: id,
+                });
+                if (res && res.success) {
+                    if (btn) {
+                        btn.replaceWith('<span style="color:#16a34a;font-weight:600">✓ 適用済</span>');
+                    }
+                    return true;
+                }
+                alert('適用失敗: ' + (res && res.data ? res.data : ''));
+            } catch (e) {
+                alert('通信エラー: ' + (e.responseText || ''));
+            } finally {
+                if (btn && btn.prop) btn.prop('disabled', false);
+            }
+            return false;
+        }
+
+        async function applyAll() {
+            if (!posts.length) { alert('対象がありません'); return; }
+            if (!confirm(`${posts.length} 件に整形を適用します。リビジョンが自動保存されるので元に戻せます。よろしいですか？`)) return;
+            $('#aps-apply-all-btn').prop('disabled', true);
+            let done = 0, failed = 0;
+            for (const p of posts) {
+                $('#aps-apply-status').text(`適用中... ${done + failed}/${posts.length}件`);
+                const btn = $(`tr[data-id="${p.id}"] .aps-apply`);
+                const ok = await applyOne(p.id, btn.length ? btn : null);
+                if (ok) done++; else failed++;
+            }
+            $('#aps-apply-status').text(`完了: 成功 ${done}件 / 失敗 ${failed}件`);
+            $('#aps-apply-all-btn').prop('disabled', false);
+        }
+
+        function esc(s) {
+            return String(s == null ? '' : s).replace(/[<>&"]/g, c =>
+                ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])
+            );
+        }
+    })(jQuery);
+    </script>
+    <?php
+}
+
+// =============================================================================
+// AJAX
+// =============================================================================
+
+add_action('wp_ajax_affiros_psplit_scan', function () {
+    check_ajax_referer('affiros_psplit_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error('権限がありません');
+    @set_time_limit(120);
+
+    $settings = affiros_psplit_get_settings();
+    $statuses = array_filter(array_map('trim', explode(',', $settings['target_statuses'] ?? 'publish,future,draft')));
+    if (empty($statuses)) $statuses = ['publish', 'future', 'draft'];
+
+    global $wpdb;
+    $placeholders = implode(',', array_fill(0, count($statuses), '%s'));
+    $query = $wpdb->prepare(
+        "SELECT ID, post_title, post_content FROM {$wpdb->posts}
+         WHERE post_type = 'post' AND post_status IN ($placeholders) ORDER BY ID DESC",
+        ...$statuses
+    );
+    $rows = $wpdb->get_results($query);
+
+    $targets = [];
+    foreach ($rows as $r) {
+        $stats = affiros_psplit_stats($r->post_content);
+        if ($stats['over_200'] <= 0) continue;
+        $targets[] = [
+            'id'       => (int)$r->ID,
+            'title'    => $r->post_title,
+            'count'    => $stats['count'],
+            'max'      => $stats['max'],
+            'over_200' => $stats['over_200'],
+        ];
+    }
+    wp_send_json_success([
+        'scanned' => count($rows),
+        'posts'   => $targets,
+    ]);
+});
+
+add_action('wp_ajax_affiros_psplit_preview', function () {
+    check_ajax_referer('affiros_psplit_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error('権限がありません');
+
+    $post_id = intval($_POST['post_id'] ?? 0);
+    if (!$post_id) wp_send_json_error('post_id 不正');
+    $post = get_post($post_id);
+    if (!$post) wp_send_json_error('記事が見つかりません');
+
+    // before: 簡易レンダリング用に wp ブロックコメントを剥がして <p> だけにする
+    $before = preg_replace('/<!--\s*\/?wp:[^>]*-->\s*/i', '', $post->post_content);
+    $after_raw = affiros_psplit_process_content($post->post_content);
+    $after = preg_replace('/<!--\s*\/?wp:[^>]*-->\s*/i', '', $after_raw);
+
+    wp_send_json_success([
+        'before_html' => $before,
+        'after_html'  => $after,
+    ]);
+});
+
+add_action('wp_ajax_affiros_psplit_apply', function () {
+    check_ajax_referer('affiros_psplit_nonce', 'nonce');
+    if (!current_user_can('manage_options')) wp_send_json_error('権限がありません');
+    @set_time_limit(60);
+
+    $post_id = intval($_POST['post_id'] ?? 0);
+    if (!$post_id) wp_send_json_error('post_id 不正');
+    $post = get_post($post_id);
+    if (!$post) wp_send_json_error('記事が見つかりません');
+
+    $new = affiros_psplit_process_content($post->post_content);
+    if ($new === $post->post_content) {
+        wp_send_json_success(['changed' => false, 'message' => '変更なし']);
+    }
+
+    set_transient('affiros_psplit_skip_' . $post_id, 1, 30);
+    $result = wp_update_post(['ID' => $post_id, 'post_content' => $new], true);
+    delete_transient('affiros_psplit_skip_' . $post_id);
+    if (is_wp_error($result)) wp_send_json_error($result->get_error_message());
+    wp_send_json_success(['changed' => true]);
+});
+
+// =============================================================================
+// 編集画面メタボックス（個別記事の即整形）
+// =============================================================================
+
+add_action('add_meta_boxes', function () {
+    add_meta_box(
+        'affiros-psplit-metabox',
+        '📝 段落整形',
+        'affiros_psplit_render_metabox',
+        'post',
+        'side',
+        'default'
+    );
+});
+
+function affiros_psplit_render_metabox($post) {
+    $stats = affiros_psplit_stats($post->post_content);
+    ?>
+    <div style="font-size:12px;line-height:1.7">
+        <div>段落数: <strong><?php echo intval($stats['count']); ?></strong></div>
+        <div>最大字数: <strong><?php echo intval($stats['max']); ?>字</strong></div>
+        <div>200字超: <strong style="color:<?php echo $stats['over_200'] > 0 ? '#dc2626' : '#16a34a'; ?>"><?php echo intval($stats['over_200']); ?>件</strong></div>
+    </div>
+    <hr style="margin:10px 0">
+    <button type="button" class="button button-primary" id="aps-mb-apply" data-id="<?php echo intval($post->ID); ?>" style="width:100%">✨ この記事を整形</button>
+    <div id="aps-mb-status" style="margin-top:8px;font-size:12px"></div>
+    <script>
+    jQuery(function ($) {
+        $('#aps-mb-apply').on('click', async function () {
+            const btn = $(this);
+            const id = btn.data('id');
+            if (!confirm('この記事を段落整形します。リビジョンが自動保存されます。実行しますか？')) return;
+            btn.prop('disabled', true).text('適用中...');
+            try {
+                const res = await $.post(
+                    (window.AffirosPsplit && AffirosPsplit.ajaxUrl) || ajaxurl,
+                    {
+                        action: 'affiros_psplit_apply',
+                        nonce: (window.AffirosPsplit && AffirosPsplit.nonce) || '',
+                        post_id: id,
+                    }
+                );
+                if (res && res.success) {
+                    $('#aps-mb-status').html('<span style="color:#16a34a;font-weight:600">✓ 整形しました。ページを再読み込みして確認してください</span>');
+                } else {
+                    $('#aps-mb-status').html('<span style="color:#dc2626">失敗: ' + (res.data || '') + '</span>');
+                }
+            } catch (e) {
+                $('#aps-mb-status').html('<span style="color:#dc2626">通信エラー</span>');
+            } finally {
+                btn.prop('disabled', false).text('✨ この記事を整形');
+            }
+        });
+    });
+    </script>
+    <?php
+}
+
+// メタボックス画面でも nonce を渡せるよう admin_enqueue_scripts を post.php にも反応させる
+add_action('admin_enqueue_scripts', function ($hook) {
+    if (!in_array($hook, ['post.php', 'post-new.php'], true)) return;
+    wp_localize_script('jquery', 'AffirosPsplit', [
+        'ajaxUrl' => admin_url('admin-ajax.php'),
+        'nonce'   => wp_create_nonce('affiros_psplit_nonce'),
+    ]);
+});
