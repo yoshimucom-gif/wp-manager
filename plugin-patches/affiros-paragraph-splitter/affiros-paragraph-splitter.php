@@ -2,14 +2,14 @@
 /**
  * Plugin Name: Affiros 段落整形
  * Description: 長すぎる段落を機械的に分割して読みやすくする単機能ツール。句点・接続詞・最大文字数で強制改行。Affiros9で生成した記事の段落が密になりがちな問題への確実な対策。リライター・インサーター・デコレーターと完全に独立。
- * Version: 1.0.0
+ * Version: 1.1.0
  * Author: Affiros
  * License: GPL v2 or later
  */
 
 if (!defined('ABSPATH')) exit;
 
-define('AFFIROS_PSPLIT_VERSION', '1.0.0');
+define('AFFIROS_PSPLIT_VERSION', '1.1.0');
 define('AFFIROS_PSPLIT_OPTION_KEY', 'affiros_psplit_settings');
 
 // =============================================================================
@@ -26,6 +26,10 @@ function affiros_psplit_default_settings() {
         'add_heading_spacing'  => 'yes',  // H2/H3 前後の空段落
         'add_media_spacing'    => 'yes',  // 画像・表の前後の空段落
         'normalize_punctuation'=> 'yes',  // 「。。」→「。」
+        'promote_headings'     => 'yes',  // 見出しっぽい段落を h4 に昇格
+        'heading_level'        => '4',    // 昇格先のレベル (3 or 4)
+        'heading_patterns'     => "ポイント\\d+[：:.]\nステップ\\d+[：:.]\n第\\d+[章節項段話回]\nFAQ\\d*[：:.]\nQ\\d+[：:.]\n質問\\d+[：:.]\n注意点\\d+[：:.]\n手順\\d+[：:.]\n方法\\d+[：:.]\n^【[^】]{2,30}】",
+        'heading_max_chars'    => 60,     // 段落が何文字以下なら見出し候補にするか
         'target_statuses'      => 'publish,future,draft',
     ];
 }
@@ -97,6 +101,11 @@ function affiros_psplit_process_content($content, $settings = null) {
         },
         $work
     );
+
+    // 3.5) 見出しっぽい段落を h4 (or h3) に昇格
+    if (($settings['promote_headings'] ?? 'yes') === 'yes') {
+        $work = affiros_psplit_promote_paragraph_headings($work, $settings);
+    }
 
     // 4) H2/H3 前後の余白（空段落）
     if (($settings['add_heading_spacing'] ?? 'yes') === 'yes') {
@@ -261,6 +270,67 @@ function affiros_psplit_parse_connectors($raw) {
     return $out;
 }
 
+/**
+ * 「ポイントN：xxx」「ステップN：xxx」「【xxx】yyy」のような
+ * 見出しっぽい段落を h4 (or h3) に昇格する。
+ *
+ * 判定条件（すべて満たすときだけ昇格）:
+ *   - 段落が画像・リスト・他見出しを含まない
+ *   - 段落の plain text が heading_max_chars 以下
+ *   - 段落が見出しパターン（正規表現）にマッチ
+ *   - 段落末尾に句点「。」が無い（文ではなく見出し）
+ *
+ * 既存 h2-h6 は触らない。<a>/<strong> 等のインラインタグは保持。
+ */
+function affiros_psplit_promote_paragraph_headings($html, $settings) {
+    $max_chars = max(20, min(200, intval($settings['heading_max_chars'] ?? 60)));
+    $level = in_array($settings['heading_level'] ?? '4', ['2', '3', '4', '5'], true)
+        ? $settings['heading_level']
+        : '4';
+    $patterns_raw = $settings['heading_patterns'] ?? '';
+    $patterns = array_filter(array_map('trim', preg_split('/\r?\n/', $patterns_raw)));
+    if (empty($patterns)) return $html;
+
+    // 各パターンを正規表現に変換（`^` 始まりでなければ自動付与）
+    $regex_list = [];
+    foreach ($patterns as $p) {
+        if (strpos($p, '^') !== 0) {
+            $p = '^\s*' . $p;
+        }
+        $regex_list[] = '/' . str_replace('/', '\/', $p) . '/u';
+    }
+
+    return preg_replace_callback(
+        '/<p\b([^>]*)>([\s\S]*?)<\/p>/i',
+        function ($m) use ($max_chars, $level, $regex_list) {
+            $inner = $m[2];
+            // 画像・表・リスト・他見出しを含む段落はスキップ
+            if (preg_match('/<(img|table|ul|ol|h[1-6]|div|figure|iframe|hr|blockquote)\b/i', $inner)) {
+                return $m[0];
+            }
+            $plain = trim(preg_replace('/<[^>]+>/u', '', $inner));
+            if ($plain === '') return $m[0];
+            if (mb_strlen($plain) > $max_chars) return $m[0];
+            // 末尾「。」がある = 文章扱い、見出しじゃない
+            if (preg_match('/[。.!?！？]\s*$/u', $plain)) return $m[0];
+
+            // パターンマッチング
+            $matched = false;
+            foreach ($regex_list as $rx) {
+                if (preg_match($rx, $plain)) { $matched = true; break; }
+            }
+            if (!$matched) return $m[0];
+
+            // h タグに置換（インラインタグ保持）
+            $level_attr = $level === '2' ? '' : ' {"level":' . intval($level) . '}';
+            return "<!-- wp:heading{$level_attr} -->\n"
+                 . "<h{$level} class=\"wp-block-heading\">" . trim($inner) . "</h{$level}>\n"
+                 . "<!-- /wp:heading -->";
+        },
+        $html
+    );
+}
+
 function affiros_psplit_add_heading_spacing($html) {
     // H2/H3 ブロックの直前に空 <p> が無ければ入れる
     return preg_replace_callback(
@@ -286,10 +356,11 @@ function affiros_psplit_add_media_spacing($html) {
 
 /**
  * before/after の plain-text 段落分布を返す（プレビュー用に簡易統計）
+ * 昇格候補（見出しっぽい段落）の数も返す。
  */
-function affiros_psplit_stats($html) {
+function affiros_psplit_stats($html, $settings = null) {
     if (!preg_match_all('/<p\b[^>]*>([\s\S]*?)<\/p>/i', $html, $m)) {
-        return ['count' => 0, 'avg' => 0, 'max' => 0, 'over_200' => 0];
+        return ['count' => 0, 'avg' => 0, 'max' => 0, 'over_200' => 0, 'heading_candidates' => 0];
     }
     $lens = [];
     foreach ($m[1] as $inner) {
@@ -298,13 +369,37 @@ function affiros_psplit_stats($html) {
         $lens[] = mb_strlen($plain);
     }
     if (empty($lens)) {
-        return ['count' => 0, 'avg' => 0, 'max' => 0, 'over_200' => 0];
+        return ['count' => 0, 'avg' => 0, 'max' => 0, 'over_200' => 0, 'heading_candidates' => 0];
     }
+
+    // 見出し昇格候補のカウント
+    $heading_candidates = 0;
+    if ($settings === null) $settings = affiros_psplit_get_settings();
+    if (($settings['promote_headings'] ?? 'yes') === 'yes') {
+        $max_chars = intval($settings['heading_max_chars'] ?? 60);
+        $patterns = array_filter(array_map('trim', preg_split('/\r?\n/', $settings['heading_patterns'] ?? '')));
+        $regex_list = [];
+        foreach ($patterns as $p) {
+            if (strpos($p, '^') !== 0) $p = '^\s*' . $p;
+            $regex_list[] = '/' . str_replace('/', '\/', $p) . '/u';
+        }
+        foreach ($m[1] as $inner) {
+            if (preg_match('/<(img|table|ul|ol|h[1-6]|div|figure|iframe|hr|blockquote)\b/i', $inner)) continue;
+            $plain = trim(preg_replace('/<[^>]+>/u', '', $inner));
+            if ($plain === '' || mb_strlen($plain) > $max_chars) continue;
+            if (preg_match('/[。.!?！？]\s*$/u', $plain)) continue;
+            foreach ($regex_list as $rx) {
+                if (preg_match($rx, $plain)) { $heading_candidates++; break; }
+            }
+        }
+    }
+
     return [
-        'count'    => count($lens),
-        'avg'      => intval(array_sum($lens) / count($lens)),
-        'max'      => max($lens),
-        'over_200' => count(array_filter($lens, function ($l) { return $l > 200; })),
+        'count'              => count($lens),
+        'avg'                => intval(array_sum($lens) / count($lens)),
+        'max'                => max($lens),
+        'over_200'           => count(array_filter($lens, function ($l) { return $l > 200; })),
+        'heading_candidates' => $heading_candidates,
     ];
 }
 
@@ -367,6 +462,10 @@ function affiros_psplit_sanitize($input) {
     $output['add_heading_spacing']   = ($input['add_heading_spacing'] ?? 'yes') === 'yes' ? 'yes' : 'no';
     $output['add_media_spacing']     = ($input['add_media_spacing'] ?? 'yes') === 'yes' ? 'yes' : 'no';
     $output['normalize_punctuation'] = ($input['normalize_punctuation'] ?? 'yes') === 'yes' ? 'yes' : 'no';
+    $output['promote_headings']      = ($input['promote_headings'] ?? 'yes') === 'yes' ? 'yes' : 'no';
+    $output['heading_level']         = in_array($input['heading_level'] ?? '4', ['2', '3', '4', '5'], true) ? $input['heading_level'] : '4';
+    $output['heading_patterns']      = sanitize_textarea_field($input['heading_patterns'] ?? '');
+    $output['heading_max_chars']     = max(20, min(200, intval($input['heading_max_chars'] ?? 60)));
     $output['target_statuses']       = sanitize_text_field($input['target_statuses'] ?? 'publish,future,draft');
     return $output;
 }
@@ -440,6 +539,38 @@ function affiros_psplit_render_page() {
                     <td><label><input type="checkbox" name="<?php echo AFFIROS_PSPLIT_OPTION_KEY; ?>[add_media_spacing]" value="yes" <?php checked($settings['add_media_spacing'], 'yes'); ?>> 画像・表・ギャラリーの前に空段落を入れる</label></td>
                 </tr>
                 <tr>
+                    <th>見出しっぽい段落を昇格</th>
+                    <td>
+                        <label><input type="checkbox" name="<?php echo AFFIROS_PSPLIT_OPTION_KEY; ?>[promote_headings]" value="yes" <?php checked($settings['promote_headings'] ?? 'yes', 'yes'); ?>> 「ポイント3：xxx」「ステップ1：xxx」「【xxx】yyy」等を見出しに変換</label>
+                        <p class="description">単に太字や囲みボックスで表示されてる「ポイントN」「ステップN」などを正しい h タグにします。</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th>昇格先の見出しレベル</th>
+                    <td>
+                        <select name="<?php echo AFFIROS_PSPLIT_OPTION_KEY; ?>[heading_level]">
+                            <option value="3" <?php selected($settings['heading_level'] ?? '4', '3'); ?>>H3</option>
+                            <option value="4" <?php selected($settings['heading_level'] ?? '4', '4'); ?>>H4（推奨）</option>
+                            <option value="5" <?php selected($settings['heading_level'] ?? '4', '5'); ?>>H5</option>
+                        </select>
+                        <p class="description">H2 配下のサブ見出しとして使うので H4 推奨。</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th>段落の最大文字数（見出し候補判定）</th>
+                    <td>
+                        <input type="number" name="<?php echo AFFIROS_PSPLIT_OPTION_KEY; ?>[heading_max_chars]" value="<?php echo esc_attr($settings['heading_max_chars'] ?? 60); ?>" min="20" max="200" style="width:80px"> 字以下
+                        <p class="description">この文字数を超える段落は「文章」として昇格対象外。既定 60。</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th>見出しパターン（正規表現）</th>
+                    <td>
+                        <textarea name="<?php echo AFFIROS_PSPLIT_OPTION_KEY; ?>[heading_patterns]" rows="10" style="width:480px;font-family:monospace"><?php echo esc_textarea($settings['heading_patterns'] ?? ''); ?></textarea>
+                        <p class="description">1行1パターン。各パターンに一致する段落を見出しに昇格。<code>\\d+</code> で数字、<code>[：:]</code> で全角/半角コロン。`^` 始まりでなければ自動で行頭マッチを付与。<br>例: <code>ポイント\\d+[：:]</code> → 「ポイント3：形状と...」にマッチ。<br>判定: パターンマッチ AND 文字数閾値以下 AND 末尾「。」なし。</p>
+                    </td>
+                </tr>
+                <tr>
                     <th>保存時に自動整形（hook）</th>
                     <td>
                         <label><input type="checkbox" name="<?php echo AFFIROS_PSPLIT_OPTION_KEY; ?>[auto_on_save]" value="yes" <?php checked($settings['auto_on_save'], 'yes'); ?>> 投稿保存時に自動で整形する</label>
@@ -480,9 +611,10 @@ function affiros_psplit_render_page() {
                     <tr>
                         <th style="width:60px">ID</th>
                         <th>タイトル</th>
-                        <th style="width:100px">段落数</th>
-                        <th style="width:100px">最大字数</th>
-                        <th style="width:120px">200字超の段落</th>
+                        <th style="width:90px">段落数</th>
+                        <th style="width:90px">最大字数</th>
+                        <th style="width:120px">200字超</th>
+                        <th style="width:140px">見出し昇格候補</th>
                         <th style="width:220px">アクション</th>
                     </tr>
                 </thead>
@@ -529,6 +661,7 @@ function affiros_psplit_render_page() {
             const tbody = $('#aps-result-tbody').empty();
             posts.forEach(p => {
                 const editUrl = `${location.origin}/wp-admin/post.php?post=${p.id}&action=edit`;
+                const hc = p.heading_candidates || 0;
                 tbody.append(`
                     <tr data-id="${p.id}">
                         <td>${p.id}</td>
@@ -536,6 +669,7 @@ function affiros_psplit_render_page() {
                         <td>${p.count}</td>
                         <td>${p.max}字</td>
                         <td style="color:${p.over_200 > 0 ? '#dc2626' : '#6b7280'};font-weight:600">${p.over_200}件</td>
+                        <td style="color:${hc > 0 ? '#d97706' : '#6b7280'};font-weight:600">${hc}件</td>
                         <td>
                             <button type="button" class="button button-small aps-preview" data-id="${p.id}">👁 プレビュー</button>
                             <button type="button" class="button button-primary button-small aps-apply" data-id="${p.id}">✨ 適用</button>
@@ -657,14 +791,16 @@ add_action('wp_ajax_affiros_psplit_scan', function () {
 
     $targets = [];
     foreach ($rows as $r) {
-        $stats = affiros_psplit_stats($r->post_content);
-        if ($stats['over_200'] <= 0) continue;
+        $stats = affiros_psplit_stats($r->post_content, $settings);
+        // 「長段落あり」または「見出し昇格候補あり」のどちらかで対象に
+        if ($stats['over_200'] <= 0 && ($stats['heading_candidates'] ?? 0) <= 0) continue;
         $targets[] = [
-            'id'       => (int)$r->ID,
-            'title'    => $r->post_title,
-            'count'    => $stats['count'],
-            'max'      => $stats['max'],
-            'over_200' => $stats['over_200'],
+            'id'                 => (int)$r->ID,
+            'title'              => $r->post_title,
+            'count'              => $stats['count'],
+            'max'                => $stats['max'],
+            'over_200'           => $stats['over_200'],
+            'heading_candidates' => $stats['heading_candidates'] ?? 0,
         ];
     }
     wp_send_json_success([
@@ -732,11 +868,13 @@ add_action('add_meta_boxes', function () {
 
 function affiros_psplit_render_metabox($post) {
     $stats = affiros_psplit_stats($post->post_content);
+    $hc = $stats['heading_candidates'] ?? 0;
     ?>
     <div style="font-size:12px;line-height:1.7">
         <div>段落数: <strong><?php echo intval($stats['count']); ?></strong></div>
         <div>最大字数: <strong><?php echo intval($stats['max']); ?>字</strong></div>
         <div>200字超: <strong style="color:<?php echo $stats['over_200'] > 0 ? '#dc2626' : '#16a34a'; ?>"><?php echo intval($stats['over_200']); ?>件</strong></div>
+        <div>見出し昇格候補: <strong style="color:<?php echo $hc > 0 ? '#d97706' : '#16a34a'; ?>"><?php echo intval($hc); ?>件</strong></div>
     </div>
     <hr style="margin:10px 0">
     <button type="button" class="button button-primary" id="aps-mb-apply" data-id="<?php echo intval($post->ID); ?>" style="width:100%">✨ この記事を整形</button>

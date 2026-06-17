@@ -233,7 +233,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.34'
+APP_VERSION = '1.7.35'
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -5598,9 +5598,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.0.0',
     },
     'paragraph-splitter': {
-        'file': 'affiros-paragraph-splitter-1.0.0.zip',
+        'file': 'affiros-paragraph-splitter-1.1.0.zip',
         'name': 'Affiros 段落整形',
-        'version': '1.0.0',
+        'version': '1.1.0',
     },
 }
 
