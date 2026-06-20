@@ -236,39 +236,77 @@ add_action('wp_ajax_ai_pi_scan_adjacent_cards', function () {
 const AI_PI_HEAVY_DESIGNS = ['compare', 'ranking', 'proscons', 'mini'];
 
 /**
+ * 商品カード（aipi-* で始まる div）の位置を、ネスト対応で正しく検出する。
+ *
+ * カードHTML は <div class="aipi-compare"><div class="aipi-compare__inner">...</div></div>
+ * のような入れ子構造のため、非greedy regex だと最初の </div> で切れて誤検出する。
+ * 開閉タグを数えて正しい終端を見つける。
+ *
+ * Returns: [['start' => int, 'end' => int, 'design' => string], ...]
+ */
+function ai_pi_find_card_blocks($content) {
+    $blocks = [];
+    if (!$content) return $blocks;
+    $offset = 0;
+    $len = strlen($content);
+    $max_iter = 500; // 暴走防止
+    while ($max_iter-- > 0) {
+        if (!preg_match('/<div\s+class="(aipi-[a-z]+)[^"]*"/i', $content, $m, PREG_OFFSET_CAPTURE, $offset)) {
+            break;
+        }
+        $start  = $m[0][1];
+        $design = preg_replace('/^aipi-/', '', $m[1][0]);
+        // 開始 <div ...> の終わりを探す
+        $tag_end = strpos($content, '>', $start);
+        if ($tag_end === false) break;
+        $pos = $tag_end + 1;
+        $depth = 1;
+        $end = $len;
+        $guard = 5000;
+        while ($depth > 0 && $pos < $len && $guard-- > 0) {
+            $next_open = stripos($content, '<div', $pos);
+            $next_close = stripos($content, '</div>', $pos);
+            if ($next_close === false) break;
+            if ($next_open !== false && $next_open < $next_close) {
+                $depth++;
+                $pos = $next_open + 4;
+            } else {
+                $depth--;
+                if ($depth === 0) {
+                    $end = $next_close + 6;
+                    break;
+                }
+                $pos = $next_close + 6;
+            }
+        }
+        $blocks[] = ['start' => $start, 'end' => $end, 'design' => $design];
+        $offset = $end;
+    }
+    return $blocks;
+}
+
+/**
  * 記事内の商品カード配置を解析して、heavy デザイン（compare/ranking等）が
  * 連続している箇所を返す。
  *
- * 重要: vertical-vertical の連続はユーザーの意図通り（読者誘導の縦置き×2 等）
- * のため、検出対象から除外する。「heavy → heavy」「heavy → vertical」
- * 「vertical → heavy」のいずれかに該当する連続だけを「バグ」と判定する。
+ * vertical-vertical の連続はユーザーの意図通り → 除外。
+ * 「heavy → heavy」「heavy → vertical」「vertical → heavy」のいずれかに
+ * 該当する連続だけを「バグ」と判定する。
  *
  * Returns:
- *   adjacent_count: int 連続発生回数（vertical-vertical は除外）
- *   designs:        string[] 連続している箇所のカード種類リスト（例: ["compare → compare"]）
+ *   adjacent_count: int 連続発生回数
+ *   designs:        string[] 連続箇所のカード種類リスト
  */
 function ai_pi_find_adjacent_cards($content) {
     if (!$content) return ['adjacent_count' => 0, 'designs' => []];
 
-    $pattern = '/<!--\s*wp:html\s*-->\s*<div\s+class="(aipi-[a-z]+)[^"]*"[\s\S]*?<\/div>\s*<!--\s*\/wp:html\s*-->/i';
-    if (!preg_match_all($pattern, $content, $matches, PREG_OFFSET_CAPTURE)) {
-        return ['adjacent_count' => 0, 'designs' => []];
-    }
-
-    $blocks = [];
-    for ($i = 0; $i < count($matches[0]); $i++) {
-        $start = $matches[0][$i][1];
-        $end   = $start + strlen($matches[0][$i][0]);
-        $design = preg_replace('/^aipi-/', '', $matches[1][$i][0]);
-        $blocks[] = ['start' => $start, 'end' => $end, 'design' => $design];
-    }
+    $blocks = ai_pi_find_card_blocks($content);
     if (count($blocks) < 2) return ['adjacent_count' => 0, 'designs' => []];
 
     $adjacent_pairs = [];
     for ($i = 0; $i < count($blocks) - 1; $i++) {
         $a = $blocks[$i]['design'];
         $b = $blocks[$i + 1]['design'];
-        // vertical-vertical はユーザー意図通り（読者誘導の縦置き連続）→ スキップ
         $a_heavy = in_array($a, AI_PI_HEAVY_DESIGNS, true);
         $b_heavy = in_array($b, AI_PI_HEAVY_DESIGNS, true);
         if (!$a_heavy && !$b_heavy) continue;
@@ -323,21 +361,8 @@ add_action('wp_ajax_ai_pi_fix_adjacent_cards', function () {
 function ai_pi_remove_adjacent_cards($content) {
     if (!$content) return ['content' => $content, 'removed_count' => 0];
 
-    $pattern = '/<!--\s*wp:html\s*-->\s*<div\s+class="(aipi-[a-z]+)[^"]*"[\s\S]*?<\/div>\s*<!--\s*\/wp:html\s*-->/i';
-    if (!preg_match_all($pattern, $content, $matches, PREG_OFFSET_CAPTURE)) {
-        return ['content' => $content, 'removed_count' => 0];
-    }
-
-    $blocks = [];
-    for ($i = 0; $i < count($matches[0]); $i++) {
-        $start = $matches[0][$i][1];
-        $end   = $start + strlen($matches[0][$i][0]);
-        $blocks[] = [
-            'start'  => $start,
-            'end'    => $end,
-            'design' => preg_replace('/^aipi-/', '', $matches[1][$i][0]),
-        ];
-    }
+    // ネスト対応のカードブロック検出
+    $blocks = ai_pi_find_card_blocks($content);
     if (count($blocks) < 2) return ['content' => $content, 'removed_count' => 0];
 
     // 連続グループのうち「heavy デザイン（compare/ranking等）が絡む連続」だけを
@@ -367,13 +392,26 @@ function ai_pi_remove_adjacent_cards($content) {
     foreach ($to_remove_unique as $idx) {
         $bstart = $blocks[$idx]['start'];
         $bend   = $blocks[$idx]['end'];
-        // 直前の空白行・改行を巻き取って消す（連続が解消するように）
+        // 直前の空白行・改行・wp:html 開始コメントを巻き取って消す
         while ($bstart > 0 && in_array(substr($new_content, $bstart - 1, 1), [" ", "\t", "\n", "\r"], true)) {
             $bstart--;
+        }
+        // 直前に <!-- wp:html --> があれば一緒に削除（カードを包んでた wp:html ブロック）
+        if (preg_match('/<!--\s*wp:html\s*-->\s*$/i', substr($new_content, 0, $bstart), $wm)) {
+            $bstart -= strlen($wm[0]);
         }
         // 直後の余分な改行も1つ巻き取る
         if (substr($new_content, $bend, 1) === "\n") {
             $bend++;
+        }
+        // 直後に <!-- /wp:html --> があれば一緒に削除
+        if (preg_match('/^\s*<!--\s*\/wp:html\s*-->/i', substr($new_content, $bend), $wm)) {
+            $bend += strlen($wm[0]);
+        }
+        // 巻き取り後の直前空白を再度処理
+        while ($bend < strlen($new_content) && in_array(substr($new_content, $bend, 1), [" ", "\t", "\n", "\r"], true)) {
+            $bend++;
+            break; // 1文字だけ
         }
         $new_content = substr($new_content, 0, $bstart) . substr($new_content, $bend);
     }
