@@ -233,7 +233,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.42'
+APP_VERSION = '1.7.43'
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -4731,9 +4731,52 @@ def insert_card_markers(html, article_type='ranking', patterns=None, title=None)
         else:
             stats['rules_failed'].append(pos)
 
-    # 後ろから挿入してインデックスずれを防ぐ
-    insertions.sort(key=lambda x: x[0], reverse=True)
+    # ── 隣接マーカーガード ─────────────────────────────────────────────
+    # before_first_h2 と after_last_h2 が同じ H2 を指すような構造（記事に
+    # H2 が1つしかない等）だと、複数マーカーが実質的に隣接配置される。
+    # 結果: WP上で「compare:3 × 2 が連続表示」のような重複事故に。
+    # 挿入予定位置を昇順に並べて、間に実質本文（プレーンテキスト）が
+    # MIN_GAP_CHARS 未満しかないペアは2個目を捨てる。
+    #
+    # 注意: ranking H3 の repeat 挿入は意図的に隣接配置するため、
+    # marker 文字列が同じ／挿入元ルール idx が after_each_h3_rank だった
+    # ものはガード対象外にする。
+    MIN_GAP_CHARS = 80
+    insertions.sort(key=lambda x: x[0])
+    deduped = []
+    h3_rank_marker_set = set()  # after_each_h3_rank の marker テキストを記録
+    for r in rules:
+        if r.get('position') == 'after_each_h3_rank':
+            h3_rank_marker_set.add(_build_marker(
+                r.get('design', 'vertical'),
+                r.get('count'),
+                brand=is_brand,
+            ))
+    skipped_adjacent = 0
     for ins_pos, marker_text in insertions:
+        if deduped:
+            prev_pos, prev_marker = deduped[-1]
+            # after_each_h3_rank の連続マーカー（同 marker_text 同士）は許容
+            if marker_text.strip() in h3_rank_marker_set and prev_marker.strip() in h3_rank_marker_set:
+                deduped.append((ins_pos, marker_text))
+                continue
+            segment = text[prev_pos:ins_pos]
+            plain = re.sub(r'<[^>]+>', '', segment)
+            plain = re.sub(r'<!--[\s\S]*?-->', '', plain)
+            plain_len = len(plain.strip())
+            if plain_len < MIN_GAP_CHARS:
+                # 2 つ目以降は捨てる
+                skipped_adjacent += 1
+                continue
+        deduped.append((ins_pos, marker_text))
+    if skipped_adjacent:
+        stats['marker_count'] -= skipped_adjacent
+        stats['skipped_adjacent'] = skipped_adjacent
+        print(f'[MARKER] adjacency guard: dropped {skipped_adjacent} near-adjacent marker(s)', flush=True)
+
+    # 後ろから挿入してインデックスずれを防ぐ
+    deduped.sort(key=lambda x: x[0], reverse=True)
+    for ins_pos, marker_text in deduped:
         text = text[:ins_pos] + marker_text + text[ins_pos:]
 
     # ── 絶対フォールバック ─────────────────────────────────────────────────
