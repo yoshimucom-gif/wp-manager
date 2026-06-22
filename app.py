@@ -233,7 +233,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.38'
+APP_VERSION = '1.7.39'
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -4401,7 +4401,7 @@ AD_INSERTION_ALLOWED_POSITIONS = (
     'after_last_h2',
     'bottom',
 )
-AD_INSERTION_ALLOWED_DESIGNS = ('vertical', 'ranking', 'compare')
+AD_INSERTION_ALLOWED_DESIGNS = ('vertical', 'ranking', 'compare', 'proscons', 'mini')
 AD_INSERTION_ALLOWED_TYPES = ('ranking', 'brand', 'column')
 
 
@@ -4510,7 +4510,7 @@ def _build_marker(design='vertical', count=None, brand=False):
     """
     if not design or design == 'default':
         return '<!--ai-product-->'
-    if design in ('ranking', 'compare') and count:
+    if design in ('ranking', 'compare', 'proscons', 'mini') and count:
         return f'<!--ai-product:{design}:{int(count)}-->'
     if brand:
         return f'<!--ai-product:{design}:brand-->'

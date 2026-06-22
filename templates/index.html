@@ -1544,7 +1544,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             ・最初のH2の直前 / 直後<br>
             ・各「N位」H3の直後（ランキング記事用：第1位／第2位… の各H3後ろにカード挿入）<br>
             ・まとめH2の直前 / 直後（「まとめ」「結論」等を含むH2）<br>
-            <strong>デザイン</strong>: <code>vertical</code>=縦置きカード（画像大）／<code>ranking</code>=ランキングカード（複数商品を1ブロック、件数指定可）
+            <strong>デザイン</strong>: <code>vertical</code>=縦置きカード（画像大・1商品）／<code>ranking</code>=ランキングカード（複数商品を1ブロック、件数指定可）／<code>compare</code>=比較表カード（件数指定可）／<code>proscons</code>=メリデメカード（件数指定可）／<code>mini</code>=ミニカード（件数指定可）
           </div>
 
           <div style="display:flex;gap:10px;margin-top:20px">
@@ -6385,7 +6385,9 @@ const AD_POSITION_LABELS = {
   'after_last_h2':      '最後のH2の直後（確定）',
   'bottom':             '記事末尾',
 };
-const AD_DESIGN_LABELS = { 'vertical': '縦置きカード', 'ranking': 'ランキングカード', 'compare': '比較表カード' };
+const AD_DESIGN_LABELS = { 'vertical': '縦置きカード', 'ranking': 'ランキングカード', 'compare': '比較表カード', 'proscons': 'メリデメカード', 'mini': 'ミニカード' };
+// 件数指定が必要なデザイン（縦置き以外は全部 count あり）
+const AD_DESIGNS_WITH_COUNT = ['ranking', 'compare', 'proscons', 'mini'];
 
 function renderAdRules(articleType) {
   const container = document.getElementById('ad-rules-' + articleType);
@@ -6402,7 +6404,7 @@ function renderAdRules(articleType) {
     const designOpts = Object.entries(AD_DESIGN_LABELS).map(([v, l]) =>
       `<option value="${v}" ${r.design === v ? 'selected' : ''}>${esc(l)}</option>`
     ).join('');
-    const showCount = r.design === 'ranking' || r.design === 'compare';
+    const showCount = AD_DESIGNS_WITH_COUNT.includes(r.design);
     const showRepeat = r.design === 'vertical';
     return `
       <div class="ad-rule-row" style="display:grid;grid-template-columns:2fr 1.4fr 1fr 1fr auto;gap:8px;align-items:center;margin-bottom:6px;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:4px">
