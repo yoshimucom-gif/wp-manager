@@ -1407,7 +1407,8 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             <div style="font-size:12px;line-height:1.9;color:var(--muted)">
               <div><code>title</code> — タイトル <span style="color:#ef6262">（必須）</span></div>
               <div><code>keywords</code> — SEOキーワード（カンマ区切り可）</div>
-              <div><code>category</code> — WP側のカテゴリ名</div>
+              <div><code>category</code> — WP側のカテゴリ名（複数はカンマ区切り）</div>
+              <div><code>tags</code> — WP側のタグ名（複数はカンマ区切り）<span style="color:var(--muted)">／無ければ作成される</span></div>
               <div><code>slug</code> — URL末尾（英数ハイフン推奨）</div>
               <div><code>article_type</code> — <code>ranking</code> / <code>brand</code> / <code>column</code></div>
               <div><code>ad_keywords</code> — 商品検索用キーワード</div>
@@ -1419,7 +1420,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
               ・<strong>投稿先サイト</strong> ＝ 現在選択中のサイト<br>
               ・<strong>品質定義</strong> ＝ <code>article_type</code> に対応するプリセット
               （ranking → ランキング品質、brand → 商標品質、column → コラム品質）<br><br>
-              ヘッダー行は<strong>「タイトル」「キーワード」「カテゴリ」「スラッグ」「記事種類」</strong> 等の日本語でも認識します。
+              ヘッダー行は<strong>「タイトル」「キーワード」「カテゴリ」「タグ」「スラッグ」「記事種類」</strong> 等の日本語でも認識します。
             </div>
           </div>
         </div>
@@ -2887,6 +2888,10 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
     <div class="form-group">
       <label class="form-label">カテゴリー</label>
       <input type="text" id="modal-category" class="form-control" placeholder="カテゴリー名（任意・複数はカンマ区切り）">
+    </div>
+    <div class="form-group">
+      <label class="form-label">タグ</label>
+      <input type="text" id="modal-tags" class="form-control" placeholder="タグ名（任意・複数はカンマ区切り。WP側に無ければ自動作成）">
     </div>
     <div class="form-group">
       <label class="form-label">スラッグ</label>
@@ -4852,6 +4857,7 @@ async function openArticleModal(id) {
   document.getElementById('modal-keywords').value = article.keywords;
   document.getElementById('modal-article-type').value = article.article_type || 'ranking';
   document.getElementById('modal-category').value = article.category || '';
+  document.getElementById('modal-tags').value = article.tags || '';
   document.getElementById('modal-slug').value = article.slug || '';
   document.getElementById('modal-content').value = article.content || '';
   updateSiteSelects();
@@ -4875,6 +4881,7 @@ async function saveArticleModal() {
         keywords: document.getElementById('modal-keywords').value,
         article_type: document.getElementById('modal-article-type').value,
         category: document.getElementById('modal-category').value,
+        tags: document.getElementById('modal-tags').value,
         slug: document.getElementById('modal-slug').value,
         content: document.getElementById('modal-content').value,
       })

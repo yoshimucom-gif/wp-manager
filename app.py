@@ -233,7 +233,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.40'
+APP_VERSION = '1.7.41'
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -5534,6 +5534,45 @@ def resolve_wp_category_ids(wp_url, wp_user, wp_password, category_value):
     return ids
 
 
+def resolve_wp_tag_ids(wp_url, wp_user, wp_password, tag_value):
+    """WP REST 経由でタグを ID 解決。無ければ作成して ID を返す。
+
+    カンマ/全角コンマ/スラッシュ/縦棒区切りで複数指定可。
+    値が数値なら ID とみなしてそのまま使う。
+    """
+    ids = []
+    for tag in split_categories(tag_value):  # split_categories は汎用区切り処理なので流用
+        if tag.isdigit():
+            ids.append(int(tag))
+            continue
+        try:
+            search = requests.get(
+                f"{wp_url}/wp-json/wp/v2/tags",
+                auth=(wp_user, wp_password),
+                params={'search': tag, 'per_page': 100},
+                headers=WP_REQUEST_HEADERS,
+                timeout=15
+            )
+            search.raise_for_status()
+            tags = search.json()
+            found = next((t for t in tags if t.get('name') == tag), None)
+            if found:
+                ids.append(found['id'])
+                continue
+            created = requests.post(
+                f"{wp_url}/wp-json/wp/v2/tags",
+                auth=(wp_user, wp_password),
+                json={'name': tag},
+                headers=WP_REQUEST_HEADERS,
+                timeout=15
+            )
+            created.raise_for_status()
+            ids.append(created.json()['id'])
+        except Exception:
+            continue
+    return ids
+
+
 def save_settings(settings):
     save_doc('settings', settings)
 
@@ -6900,7 +6939,7 @@ def update_article(article_id):
         if a['id'] == article_id:
             for key in [
                 'title', 'keywords', 'content', 'article_type', 'ad_keywords',
-                'category', 'priority', 'memo', 'schedule_date', 'quality_id',
+                'category', 'tags', 'priority', 'memo', 'schedule_date', 'quality_id',
                 'scheduled_at', 'site_id',
                 'parent_article_id', 'source_product_name'
             ]:
@@ -7288,6 +7327,7 @@ def import_excel():
         'title': {'title', 'タイトル', '記事タイトル', '記事名'},
         'keywords': {'keyword', 'keywords', 'キーワード', 'seoキーワード', '検索キーワード'},
         'category': {'category', 'categories', 'カテゴリ', 'カテゴリー', 'wpカテゴリー', '投稿カテゴリー'},
+        'tags': {'tag', 'tags', 'タグ', '投稿タグ', 'wpタグ'},
         'slug': {'slug', 'スラッグ', 'urlスラッグ', '投稿スラッグ', 'post_name'},
         'article_type': {'type', 'article_type', '記事種類', '記事種別', '種類', '種別'},
         'site': {'site', 'サイト', '投稿先', '投稿先サイト', 'site_id', 'サイトid'},
@@ -7362,6 +7402,7 @@ def import_excel():
             'title': title,
             'keywords': keywords,
             'category': cell(row, 'category'),
+            'tags': cell(row, 'tags'),
             'slug': normalize_slug(cell(row, 'slug')),
             'article_type': article_type,
             'ad_keywords': ad_keywords,
@@ -7944,6 +7985,9 @@ def update_wordpress_post_from_article(article, settings):
     category_ids = resolve_wp_category_ids(wp_url, wp_user, wp_password, article.get('category', ''))
     if category_ids:
         post_payload['categories'] = category_ids
+    tag_ids = resolve_wp_tag_ids(wp_url, wp_user, wp_password, article.get('tags', ''))
+    if tag_ids:
+        post_payload['tags'] = tag_ids
 
     response = requests.post(
         f"{wp_url}/wp-json/wp/v2/posts/{article['wp_post_id']}",
@@ -8021,6 +8065,9 @@ def publish_article(article_id):
     category_ids = resolve_wp_category_ids(wp_url, wp_user, wp_password, article.get('category', ''))
     if category_ids:
         post_payload['categories'] = category_ids
+    tag_ids = resolve_wp_tag_ids(wp_url, wp_user, wp_password, article.get('tags', ''))
+    if tag_ids:
+        post_payload['tags'] = tag_ids
 
     try:
         response = requests.post(
@@ -8234,9 +8281,10 @@ def batch_publish():
         save_publish_jobs(pjobs)
 
     def worker():
-        # カテゴリーIDキャッシュ: (wp_url, category) → [id]
-        # 同一サイト×同一カテゴリーのWP呼び出しを1回に抑える
+        # カテゴリー / タグ ID キャッシュ: (wp_url, value) → [id]
+        # 同一サイト×同一値のWP呼び出しを1回に抑える
         cat_cache = {}
+        tag_cache = {}
 
         # 結果バッファ: {article_id: (wp_post_id, wp_link, published_at)} or None=失敗
         result_buf = {}
@@ -8276,6 +8324,15 @@ def batch_publish():
             cat_ids = cat_cache[cache_key]
             if cat_ids:
                 payload['categories'] = cat_ids
+
+            tag_key = (wp_url, article.get('tags', ''))
+            if tag_key not in tag_cache:
+                tag_cache[tag_key] = resolve_wp_tag_ids(
+                    wp_url, wp_user, wp_pass, article.get('tags', '')
+                )
+            t_ids = tag_cache[tag_key]
+            if t_ids:
+                payload['tags'] = t_ids
 
             try:
                 resp = requests.post(
@@ -8534,6 +8591,9 @@ def _run_sched_publish_worker(job_id, targets):
         category_ids = resolve_wp_category_ids(wp_url, wp_user, wp_password, article.get('category', ''))
         if category_ids:
             post_payload['categories'] = category_ids
+        tag_ids = resolve_wp_tag_ids(wp_url, wp_user, wp_password, article.get('tags', ''))
+        if tag_ids:
+            post_payload['tags'] = tag_ids
 
         try:
             resp = requests.post(
