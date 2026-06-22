@@ -3331,10 +3331,10 @@ async function runImport() {
 }
 
 function downloadImportTemplate() {
-  const header = 'title,keywords,category,slug,article_type,ad_keywords,schedule_date,memo';
-  const sample1 = '"防水ボディバッグおすすめ15選｜雨でも安心の人気モデル比較","防水 ボディバッグ おすすめ","ファッション小物","waterproof-bodybag-ranking","ranking","防水 ボディバッグ","",""';
-  const sample2 = '"防水バッグの選び方完全ガイド｜耐水圧と用途別の見極め方","防水バッグ 選び方","ファッション小物","how-to-choose-waterproof-bag","column","防水バッグ","",""';
-  const sample3 = '"○○ブランド防水バッグの口コミ｜メリット・デメリットを解説","○○ブランド 口コミ","ファッション小物","brand-name-review","brand","○○ブランド 防水バッグ","",""';
+  const header = 'title,keywords,category,tags,slug,article_type,ad_keywords,schedule_date,memo';
+  const sample1 = '"防水ボディバッグおすすめ15選｜雨でも安心の人気モデル比較","防水 ボディバッグ おすすめ","ファッション小物","おすすめ","waterproof-bodybag-ranking","ranking","防水 ボディバッグ","",""';
+  const sample2 = '"防水バッグの選び方完全ガイド｜耐水圧と用途別の見極め方","防水バッグ 選び方","ファッション小物","","how-to-choose-waterproof-bag","column","防水バッグ","",""';
+  const sample3 = '"○○ブランド防水バッグの口コミ｜メリット・デメリットを解説","○○ブランド 口コミ","ファッション小物","おすすめ,人気","brand-name-review","brand","○○ブランド 防水バッグ","",""';
   const csv = '﻿' + [header, sample1, sample2, sample3].join('\n');  // BOM for Excel UTF-8
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
