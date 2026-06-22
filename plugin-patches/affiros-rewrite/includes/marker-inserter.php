@@ -167,13 +167,13 @@ class Affiros_Rewrite_Marker_Inserter {
 
     /**
      * プラグイン用マーカー文字列を組み立てる。本体 _build_marker の移植。
-     * count が指定される設計: compare / ranking / proscons / mini
+     * count が指定される設計: compare / ranking
      */
     private static function build_marker($design = 'vertical', $count = null) {
         if (!$design || $design === 'default') {
             return '<!--ai-product-->';
         }
-        $count_designs = ['compare', 'ranking', 'proscons', 'mini'];
+        $count_designs = ['compare', 'ranking'];
         if (in_array($design, $count_designs, true) && $count) {
             return '<!--ai-product:' . $design . ':' . intval($count) . '-->';
         }

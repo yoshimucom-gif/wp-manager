@@ -49,7 +49,7 @@ add_action('admin_post_affiros_rewrite_save_settings', function () {
     // 広告挿入定義
     $valid_positions = ['after_each_h3_rank', 'before_first_h2', 'after_first_h2',
                         'before_matome_h2', 'after_matome_h2', 'after_last_h2', 'top', 'bottom'];
-    $valid_designs   = ['vertical', 'compare', 'ranking', 'proscons', 'mini'];
+    $valid_designs   = ['vertical', 'compare', 'ranking'];
     $ad_patterns = [];
     foreach (['ranking', 'column', 'brand'] as $atype) {
         $rules = [];
@@ -226,10 +226,8 @@ function affiros_rewrite_render_settings_page() {
                 'vertical' => '縦置きカード',
                 'compare'  => '比較表カード',
                 'ranking'  => 'ランキングカード',
-                'proscons' => 'メリデメカード',
-                'mini'     => 'ミニカード',
             ];
-            $count_designs  = ['compare', 'ranking', 'proscons', 'mini'];
+            $count_designs  = ['compare', 'ranking'];
             $repeat_designs = ['vertical'];
             ?>
             <div id="affiros-ad-patterns" style="margin-bottom:20px;">
