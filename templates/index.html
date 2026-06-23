@@ -1458,6 +1458,10 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             <div style="position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0">
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 <label class="form-label" style="margin:0;flex:1">対象記事 (<span id="batch-count">0</span>件)</label>
+                <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted)" title="今回の一括生成で処理する最大件数。コスト管理用。空欄なら無制限。">
+                  上限:
+                  <input type="number" id="batch-limit" min="1" max="500" placeholder="無制限" value="" style="width:70px;height:28px;font-size:12px;padding:2px 6px">
+                </label>
                 <button class="btn btn-primary btn-sm" onclick="startBatchGenerate()">⚡ 一括生成開始 (<span id="batch-selected-count">0</span>件選択中)</button>
                 <button class="btn btn-secondary btn-sm" onclick="loadBatchArticles()">↻ 状態更新</button>
                 <button class="btn btn-danger btn-sm" onclick="deleteBatchSelected()">🗑 選択を削除</button>
@@ -6355,8 +6359,29 @@ function getBatchSelectedIds() {
 }
 
 async function startBatchGenerate() {
-  const ids = getBatchSelectedIds();
+  let ids = getBatchSelectedIds();
   if (!ids.length) { toast('記事を選択してください', 'error'); return; }
+
+  // 上限指定（コスト管理用）。空欄なら無制限。
+  const limitInput = document.getElementById('batch-limit');
+  const limitRaw = (limitInput?.value || '').trim();
+  const limit = limitRaw ? Math.max(1, Math.min(500, parseInt(limitRaw, 10) || 0)) : 0;
+  const totalSelected = ids.length;
+  let willProcess = ids;
+  if (limit > 0 && totalSelected > limit) {
+    willProcess = ids.slice(0, limit);
+  }
+  const processCount = willProcess.length;
+
+  // 予算目安（Sonnet 4.6 1記事 約8円で概算。N選やリトライで上下する）
+  const estCostJpy = Math.round(processCount * 8);
+  const skipMsg = (limit > 0 && totalSelected > limit)
+    ? `\n選択 ${totalSelected} 件のうち、最初の ${processCount} 件のみ処理します（${totalSelected - processCount} 件は未処理のまま残ります）。`
+    : '';
+  const confirmMsg = `${processCount} 件を一括生成します。\n予算目安: 約 ¥${estCostJpy.toLocaleString()}（Sonnet 4.6, 1記事 ~¥8）${skipMsg}\n\n続行しますか？`;
+  if (!confirm(confirmMsg)) return;
+
+  ids = willProcess;
   setArticlesLocalStatus(ids, 'generating', '一括生成中です。完了後に点数を更新します。');
   const qualityId = document.getElementById('batch-quality').value;
   const articleType = currentBatchTypeTab || currentArticleType;
