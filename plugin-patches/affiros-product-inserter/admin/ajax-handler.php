@@ -81,7 +81,7 @@ function ai_pi_ajax_count_targets() {
     $args = [
         'categories' => $_POST['categories'] ?? [],
         'tags' => $_POST['tags'] ?? [],
-        'insertion_filter' => sanitize_text_field($_POST['filter'] ?? 'uninserted'),
+        'insertion_filter' => sanitize_text_field($_POST['filter'] ?? 'has_marker'),
     ];
     $limit = intval($_POST['limit'] ?? 5);
 

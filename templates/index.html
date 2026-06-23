@@ -1891,6 +1891,21 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.46 / inserter v1.9.21 (2026-06-23) — 一括処理画面の不要選択肢を削除</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>削除した選択肢</strong>: インサータープラグインの一括処理画面から「未挿入の記事すべて」と「全件（挿入済みも再処理）」を削除（使われない上、誤って選ぶと全記事への再API課金が走る危険があった）。</li>
+              <li><strong>残した選択肢（3つ）</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><strong>マーカー含む未処理記事</strong> — 通常運用（デフォルト）</li>
+                  <li>⚠️ <strong>マーカー残存</strong> — 前回挿入で失敗が残った記事だけリトライ（事故リカバリ）</li>
+                  <li>⚠️ <strong>24時間経過の記事</strong> — Amazon PA-API の価格表示24h制限対応</li>
+                </ul>
+              </li>
+              <li><strong>裏側</strong>: <code>post-meta.php</code> の switch から不要な case (<code>uninserted</code> / <code>inserted</code>) も削除して保守性向上。ajax の default を <code>uninserted</code> → <code>has_marker</code> に修正（安全側）。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.45 (2026-06-23) — マーカー挿入の全リスクを徹底排除（300件一括生成の品質保証）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: 300件一括生成前の最終品質チェックで、マーカー挿入パイプラインに残っていた4種のリスクを<strong>同時に</strong>潰した。</li>

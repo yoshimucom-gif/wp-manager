@@ -104,19 +104,6 @@ class AI_PI_Post_Meta {
                     // 過去に処理した記事をリライト等でマーカーが再導入されたケースを
                     // 検知できない問題があった。よって meta 制約は付けない。
                     break;
-                case 'uninserted':
-                    $meta_query[] = [
-                        'key' => '_ai_pi_inserted',
-                        'compare' => 'NOT EXISTS',
-                    ];
-                    break;
-                case 'inserted':
-                    $meta_query[] = [
-                        'key' => '_ai_pi_inserted',
-                        'value' => '1',
-                        'compare' => '=',
-                    ];
-                    break;
                 case 'expired':
                     $meta_query[] = [
                         'key' => '_ai_pi_expired',
