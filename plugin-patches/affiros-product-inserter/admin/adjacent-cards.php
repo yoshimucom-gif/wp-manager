@@ -28,8 +28,8 @@ function ai_pi_render_adjacent_cards_page() {
         <div style="background:#fffbeb;border:1px solid #fbbf24;padding:12px;margin:16px 0;border-radius:4px">
             <strong>⚠️ 判定基準</strong>
             <ul style="margin:6px 0 0 20px;line-height:1.7;font-size:13px">
-                <li><strong>検出対象</strong>: 連続するブロックのうち、<strong>1枚以上が比較表 / ランキング / proscons / mini</strong> の「heavy カード」または「未処理マーカー」</li>
-                <li><strong>検出する形式</strong>: 挿入処理済み <code>&lt;div class="aipi-..."&gt;</code> カード／未処理 <code>&lt;!--ai-product:compare:3--&gt;</code> マーカー（両方混在もOK）</li>
+                <li><strong>検出対象</strong>: 連続するブロックのうち、<strong>1枚以上が比較表（compare）またはランキング型（ranking）</strong> の「heavy カード」または「未処理マーカー」</li>
+                <li><strong>検出する形式</strong>: 挿入処理済み <code>&lt;div class="aipi-compare"&gt;</code> / <code>&lt;div class="aipi-ranking"&gt;</code> カード／未処理 <code>&lt;!--ai-product:compare:3--&gt;</code> / <code>&lt;!--ai-product:ranking:3--&gt;</code> マーカー（両方混在もOK）</li>
                 <li><strong>除外</strong>: vertical（縦置き1商品）同士の連続は読者誘導用の意図的な配置として<strong>触らない</strong>／<code>:brand</code> サフィックス付きマーカーも除外（商品深掘り構造で意図配置）</li>
                 <li><strong>連続</strong>: ブロックの終了直後に、間に H2/H3/通常段落 をはさまずに別のブロックが配置されている状態</li>
                 <li>空 <code>&lt;p&gt;&lt;/p&gt;</code>、wp ブロックコメント、改行のみが間にある場合は「連続」扱い</li>
@@ -255,8 +255,11 @@ add_action('wp_ajax_ai_pi_scan_adjacent_cards', function () {
  * vertical（縦置き1商品）は読者誘導用に意図的に連続させるので除外する。
  * compare（比較表）/ ranking（ランキング型）は1枚に複数商品入る大きいカードで、
  * 連続させる意図はまず無いので「連続=配置バグ」と判定する。
+ *
+ * proscons / mini / score は現行の生成ロジックで出力されないため除外。
+ * 過去に存在した設計だが現在は使用しない（v1.7.48 で確認）。
  */
-const AI_PI_HEAVY_DESIGNS = ['compare', 'ranking', 'proscons', 'mini'];
+const AI_PI_HEAVY_DESIGNS = ['compare', 'ranking'];
 
 /**
  * 商品カード（aipi-* で始まる div）と未処理マーカー（<!--ai-product:...-->）の
@@ -289,7 +292,7 @@ function ai_pi_find_card_blocks($content) {
     // という重大バグがあった。
     //
     // 新版: <div ...> 全部スキャン → 属性中の全 aipi-XXX クラスを抽出 →
-    //   - aipi-card--{design}     → design 名を抽出（vertical/mini/proscons/score）
+    //   - aipi-card--vertical → vertical（mini/proscons/score は現行未使用なので無視）
     //   - aipi-compare / aipi-ranking → そのまま
     //   - その他（__子要素クラス等）は無視
     $offset = 0;
@@ -301,13 +304,15 @@ function ai_pi_find_card_blocks($content) {
         $attrs = $m[1][0];
         $tag_end_pos = $tag_start + strlen($m[0][0]);
 
+        // 現行で生成されるカードは vertical / compare / ranking の3種のみ。
+        // proscons / mini / score は出力されないので検出対象から除外。
         $design = null;
         if (preg_match_all('/(?<![a-z0-9_-])(aipi-[a-z][a-z0-9_-]*)/i', $attrs, $cm)) {
             foreach ($cm[1] as $cls) {
                 $cls = strtolower($cls);
-                // aipi-card--vertical / aipi-card--mini / aipi-card--proscons / aipi-card--score
-                if (preg_match('/^aipi-card--([a-z]+)$/', $cls, $mc)) {
-                    $design = $mc[1];
+                // aipi-card--vertical（aipi-card--mini/proscons/score は現行未使用なので無視）
+                if ($cls === 'aipi-card--vertical') {
+                    $design = 'vertical';
                     break;
                 }
                 // aipi-compare / aipi-ranking はそのまま

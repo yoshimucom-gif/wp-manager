@@ -1891,6 +1891,20 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.49 / inserter v1.9.24 (2026-06-23) — 連続検出を現行使用design (compare/ranking/vertical) のみに絞る</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>整理</strong>: 現行の生成ロジックで proscons / mini / score は出力されないため、連続検出の対象から削除。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>AI_PI_HEAVY_DESIGNS</code>: <code>['compare', 'ranking', 'proscons', 'mini']</code> → <code>['compare', 'ranking']</code></li>
+                  <li>カード検出も <code>aipi-card--vertical</code> のみ拾うように絞り込み（mini/proscons/score の class は無視）</li>
+                  <li>UI 説明文も「比較表 / ランキング」だけに整理</li>
+                </ul>
+              </li>
+              <li><strong>効果</strong>: ノイズ削減。実態と一致しないラベルが結果に出ない。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.48 / inserter v1.9.23 (2026-06-23) — 連続カード検出の致命バグ修正（vertical/mini/proscons/scoreが全て"card"に潰れて検出不能だった）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>重大バグ</strong>: 連続カード検出ページが「389件中0件」を返す原因を特定。実テンプレートではカードのクラスが <code>aipi-card aipi-card--vertical</code> / <code>aipi-card aipi-card--mini</code> / <code>aipi-card aipi-card--proscons</code> / <code>aipi-card aipi-card--score</code> のような構造になっており、旧版の正規表現 <code>aipi-[a-z]+</code> が<strong>最初の <code>aipi-card</code> しか拾えず</strong>、design が全部 <code>card</code> に潰れていた。結果:
