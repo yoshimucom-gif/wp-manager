@@ -1891,6 +1891,29 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.48 / inserter v1.9.23 (2026-06-23) — 連続カード検出の致命バグ修正（vertical/mini/proscons/scoreが全て"card"に潰れて検出不能だった）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>重大バグ</strong>: 連続カード検出ページが「389件中0件」を返す原因を特定。実テンプレートではカードのクラスが <code>aipi-card aipi-card--vertical</code> / <code>aipi-card aipi-card--mini</code> / <code>aipi-card aipi-card--proscons</code> / <code>aipi-card aipi-card--score</code> のような構造になっており、旧版の正規表現 <code>aipi-[a-z]+</code> が<strong>最初の <code>aipi-card</code> しか拾えず</strong>、design が全部 <code>card</code> に潰れていた。結果:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><strong>proscons / mini の連続は完全に見逃し</strong>（heavy判定の対象外に化ける）</li>
+                  <li>vertical も「card」扱いで設計判定が崩れる</li>
+                  <li>属性順違い（<code>&lt;div data-x="y" class="..."&gt;</code>）や前空白でも regex がマッチせず検出不能</li>
+                </ul>
+              </li>
+              <li><strong>修正</strong>: <code>ai_pi_find_card_blocks()</code> を全面書き直し。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>全 <code>&lt;div ...&gt;</code> をスキャンし、属性中の全 <code>aipi-XXX</code> クラスを抽出</li>
+                  <li><code>aipi-card--{design}</code> パターンを認識（vertical/mini/proscons/score を正しく抽出）</li>
+                  <li><code>aipi-compare</code> / <code>aipi-ranking</code> はそのまま</li>
+                  <li>属性順違い・前空白・他属性混在にも対応</li>
+                </ul>
+              </li>
+              <li><strong>診断情報追加</strong>: スキャン結果に「カード総数 / マーカー総数 / ブロックを含む記事数」を表示。「カード0個」なら検出ロジック側、「カード多数あるが連続0」なら判定ロジック側、と切り分け可能に。</li>
+              <li><strong>再スキャン手順</strong>: 各サイトで inserter v1.9.23 に更新 → 「🔍 連続カード／マーカー検出」を再実行 → ステータスに「カード○個・マーカー○個を ○件の記事で検出」と出るはず。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.47 / inserter v1.9.22 (2026-06-23) — 連続検出が「未処理マーカー」も拾うように拡張</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>問題</strong>: <code>🔍 連続カード検出</code> ページが <code>&lt;div class="aipi-..."&gt;</code> カード（=挿入処理済み）しか見ておらず、<strong>予約投稿の状態でプラグイン未実行な記事</strong>（マーカー <code>&lt;!--ai-product:compare:3--&gt;</code> のみ）の連続バグを素通りしていた。</li>

@@ -104,10 +104,15 @@ function ai_pi_render_adjacent_cards_page() {
                     return;
                 }
                 scannedPosts = res.data.posts || [];
-                $('#aipi-adj-scan-status').text(
-                    `完了: ${res.data.scanned}件チェック / 連続カードあり ${scannedPosts.length}件`
+                const tc = res.data.total_cards || 0;
+                const tm = res.data.total_markers || 0;
+                const pwb = res.data.posts_with_blocks || 0;
+                $('#aipi-adj-scan-status').html(
+                    `完了: <strong>${res.data.scanned}件</strong>チェック / `
+                    + `カード<strong>${tc}個</strong>・マーカー<strong>${tm}個</strong>を ${pwb}件の記事で検出 / `
+                    + `連続あり <strong style="color:#dc2626">${scannedPosts.length}件</strong>`
                 );
-                $('#aipi-adj-summary').text(`${scannedPosts.length} 件の記事で商品カードが連続配置されています`);
+                $('#aipi-adj-summary').text(`${scannedPosts.length} 件の記事で商品カード／マーカーが連続配置されています`);
                 render(scannedPosts);
                 if (scannedPosts.length) $('#aipi-adj-result').show();
             } catch (e) {
@@ -211,7 +216,20 @@ add_action('wp_ajax_ai_pi_scan_adjacent_cards', function () {
     );
 
     $found = [];
+    $total_cards = 0;
+    $total_markers = 0;
+    $posts_with_blocks = 0;
     foreach ($rows as $r) {
+        // 全ブロック内訳もカウント（診断用）
+        $all_blocks = ai_pi_find_card_blocks($r->post_content);
+        if (!empty($all_blocks)) {
+            $posts_with_blocks++;
+            foreach ($all_blocks as $b) {
+                if (($b['type'] ?? 'card') === 'marker') $total_markers++;
+                else $total_cards++;
+            }
+        }
+
         $analysis = ai_pi_find_adjacent_cards($r->post_content);
         if ($analysis['adjacent_count'] <= 0) continue;
         $found[] = [
@@ -224,8 +242,11 @@ add_action('wp_ajax_ai_pi_scan_adjacent_cards', function () {
     }
 
     wp_send_json_success([
-        'scanned' => count($rows),
-        'posts'   => $found,
+        'scanned'           => count($rows),
+        'posts'             => $found,
+        'total_cards'       => $total_cards,
+        'total_markers'     => $total_markers,
+        'posts_with_blocks' => $posts_with_blocks,
     ]);
 });
 
@@ -256,21 +277,55 @@ const AI_PI_HEAVY_DESIGNS = ['compare', 'ranking', 'proscons', 'mini'];
 function ai_pi_find_card_blocks($content) {
     $blocks = [];
     if (!$content) return $blocks;
-    $offset = 0;
     $len = strlen($content);
-    $max_iter = 500; // 暴走防止
+    $max_iter = 2000; // 暴走防止
 
     // (1) カード div を検出（挿入処理済み記事）
+    //
+    // 旧版は `<div\s+class="(aipi-[a-z]+)...` で最初のクラスだけ見ていたため
+    // - vertical/mini/proscons/score: 全カードが `<div class="aipi-card aipi-card--mini">`
+    //   のように `aipi-card` で始まるため design='card' に潰れて検出不能
+    // - 属性順違い `<div data-x=".." class="aipi-...">` も無視
+    // という重大バグがあった。
+    //
+    // 新版: <div ...> 全部スキャン → 属性中の全 aipi-XXX クラスを抽出 →
+    //   - aipi-card--{design}     → design 名を抽出（vertical/mini/proscons/score）
+    //   - aipi-compare / aipi-ranking → そのまま
+    //   - その他（__子要素クラス等）は無視
+    $offset = 0;
     while ($max_iter-- > 0) {
-        if (!preg_match('/<div\s+class="(aipi-[a-z]+)[^"]*"/i', $content, $m, PREG_OFFSET_CAPTURE, $offset)) {
+        if (!preg_match('/<div\b([^>]*)>/i', $content, $m, PREG_OFFSET_CAPTURE, $offset)) {
             break;
         }
-        $start  = $m[0][1];
-        $design = preg_replace('/^aipi-/', '', $m[1][0]);
-        // 開始 <div ...> の終わりを探す
-        $tag_end = strpos($content, '>', $start);
-        if ($tag_end === false) break;
-        $pos = $tag_end + 1;
+        $tag_start = $m[0][1];
+        $attrs = $m[1][0];
+        $tag_end_pos = $tag_start + strlen($m[0][0]);
+
+        $design = null;
+        if (preg_match_all('/(?<![a-z0-9_-])(aipi-[a-z][a-z0-9_-]*)/i', $attrs, $cm)) {
+            foreach ($cm[1] as $cls) {
+                $cls = strtolower($cls);
+                // aipi-card--vertical / aipi-card--mini / aipi-card--proscons / aipi-card--score
+                if (preg_match('/^aipi-card--([a-z]+)$/', $cls, $mc)) {
+                    $design = $mc[1];
+                    break;
+                }
+                // aipi-compare / aipi-ranking はそのまま
+                if (preg_match('/^aipi-(compare|ranking)$/', $cls, $mc)) {
+                    $design = $mc[1];
+                    break;
+                }
+            }
+        }
+
+        if ($design === null) {
+            // カード div ではない（普通の div / wp-block-image 等）→ 次へ
+            $offset = $tag_end_pos;
+            continue;
+        }
+
+        // この div の終わりをネスト深度カウントで探す
+        $pos = $tag_end_pos;
         $depth = 1;
         $end = $len;
         $guard = 5000;
@@ -290,7 +345,7 @@ function ai_pi_find_card_blocks($content) {
                 $pos = $next_close + 6;
             }
         }
-        $blocks[] = ['start' => $start, 'end' => $end, 'design' => $design, 'type' => 'card'];
+        $blocks[] = ['start' => $tag_start, 'end' => $end, 'design' => $design, 'type' => 'card'];
         $offset = $end;
     }
 
