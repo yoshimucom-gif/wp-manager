@@ -22,7 +22,7 @@ OUT_DIR = os.path.join(ROOT, os.pardir, 'plugin-downloads')
 # (ソースディレクトリ, zip 内トップディレクトリ名, 出力 zip 名)
 SPECS = [
     (os.path.join(ROOT, 'affiros-product-inserter'),
-     'affiros-product-inserter', 'affiros-product-inserter-1.9.21.zip'),
+     'affiros-product-inserter', 'affiros-product-inserter-1.9.22.zip'),
     (os.path.join(ROOT, 'affiros-decoration'),
      'affiros-decoration', 'affiros-decoration-1.2.2.zip'),
     (os.path.join(ROOT, 'affiros-rewrite'),

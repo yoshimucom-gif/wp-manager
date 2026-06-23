@@ -1891,6 +1891,18 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.47 / inserter v1.9.22 (2026-06-23) — 連続検出が「未処理マーカー」も拾うように拡張</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>問題</strong>: <code>🔍 連続カード検出</code> ページが <code>&lt;div class="aipi-..."&gt;</code> カード（=挿入処理済み）しか見ておらず、<strong>予約投稿の状態でプラグイン未実行な記事</strong>（マーカー <code>&lt;!--ai-product:compare:3--&gt;</code> のみ）の連続バグを素通りしていた。</li>
+              <li><strong>修正</strong>: <code>ai_pi_find_card_blocks()</code> を拡張してカード div と未処理マーカーを両方検出。位置順ソートで混在ケース（マーカー → カード等）も正しく隣接判定。</li>
+              <li><strong>削除（修正）も対応</strong>: マーカーは <code>&lt;!-- wp:html --&gt;</code> で包まれていないので、巻き取り処理を <code>type='card'</code> のときだけ実行する分岐を追加。</li>
+              <li><strong>除外</strong>: <code>:brand</code> サフィックス付きマーカーは商品深掘り構造で意図的に複数置くため検出対象外（vertical 同士と同じ扱い）。</li>
+              <li><strong>UI</strong>: 「連続カード検出」→「連続カード／マーカー検出」に改名、判定基準の説明も追記。</li>
+              <li><strong>影響</strong>: 既に予約投稿に入ってる比較表/ランキングマーカーが連続している記事も、このページから1クリック修正できるようになった。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.46 / inserter v1.9.21 (2026-06-23) — 一括処理画面の不要選択肢を削除</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>削除した選択肢</strong>: インサータープラグインの一括処理画面から「未挿入の記事すべて」と「全件（挿入済みも再処理）」を削除（使われない上、誤って選ぶと全記事への再API課金が走る危険があった）。</li>

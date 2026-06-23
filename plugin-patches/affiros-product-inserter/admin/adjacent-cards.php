@@ -17,19 +17,21 @@ function ai_pi_render_adjacent_cards_page() {
     if (!current_user_can('manage_options')) return;
     ?>
     <div class="wrap">
-        <h1>🔍 連続カード検出（比較表 / ランキング）</h1>
+        <h1>🔍 連続カード／マーカー検出（比較表 / ランキング）</h1>
         <p style="font-size:13px;line-height:1.7">
-            <strong>比較表（compare）／ランキング型（ranking）の「大きいカード」が連続している記事</strong>を抽出します。<br>
+            <strong>比較表（compare）／ランキング型（ranking）の「大きいカード」または未処理マーカーが連続している記事</strong>を抽出します。<br>
             Affiros9 の広告挿入位置バグで「冒頭 + 末尾」で配置したつもりが両方冒頭に
             固まってしまった記事を特定する用途です。
+            <strong>予約投稿でまだ挿入処理していない記事（マーカーのみ）も対象</strong>。
         </p>
 
         <div style="background:#fffbeb;border:1px solid #fbbf24;padding:12px;margin:16px 0;border-radius:4px">
             <strong>⚠️ 判定基準</strong>
             <ul style="margin:6px 0 0 20px;line-height:1.7;font-size:13px">
-                <li><strong>検出対象</strong>: 連続するカードのうち、<strong>1枚以上が比較表 / ランキング / proscons / mini</strong> の「heavy カード」</li>
-                <li><strong>除外</strong>: vertical（縦置き1商品）同士の連続は読者誘導用の意図的な配置として<strong>触らない</strong></li>
-                <li><strong>連続</strong>: カードの終了直後に、間に H2/H3/通常段落 をはさまずに別のカードが配置されている状態</li>
+                <li><strong>検出対象</strong>: 連続するブロックのうち、<strong>1枚以上が比較表 / ランキング / proscons / mini</strong> の「heavy カード」または「未処理マーカー」</li>
+                <li><strong>検出する形式</strong>: 挿入処理済み <code>&lt;div class="aipi-..."&gt;</code> カード／未処理 <code>&lt;!--ai-product:compare:3--&gt;</code> マーカー（両方混在もOK）</li>
+                <li><strong>除外</strong>: vertical（縦置き1商品）同士の連続は読者誘導用の意図的な配置として<strong>触らない</strong>／<code>:brand</code> サフィックス付きマーカーも除外（商品深掘り構造で意図配置）</li>
+                <li><strong>連続</strong>: ブロックの終了直後に、間に H2/H3/通常段落 をはさまずに別のブロックが配置されている状態</li>
                 <li>空 <code>&lt;p&gt;&lt;/p&gt;</code>、wp ブロックコメント、改行のみが間にある場合は「連続」扱い</li>
                 <li>本物のテキストが間に1段落でもあれば「正常配置」</li>
             </ul>
@@ -236,13 +238,20 @@ add_action('wp_ajax_ai_pi_scan_adjacent_cards', function () {
 const AI_PI_HEAVY_DESIGNS = ['compare', 'ranking', 'proscons', 'mini'];
 
 /**
- * 商品カード（aipi-* で始まる div）の位置を、ネスト対応で正しく検出する。
+ * 商品カード（aipi-* で始まる div）と未処理マーカー（<!--ai-product:...-->）の
+ * 位置を、ネスト対応で正しく検出する。
  *
  * カードHTML は <div class="aipi-compare"><div class="aipi-compare__inner">...</div></div>
  * のような入れ子構造のため、非greedy regex だと最初の </div> で切れて誤検出する。
  * 開閉タグを数えて正しい終端を見つける。
  *
- * Returns: [['start' => int, 'end' => int, 'design' => string], ...]
+ * 検出対象（両方を「ブロック」として返す）:
+ *   - type='card':   挿入処理済みのカード div
+ *   - type='marker': まだ挿入処理されていない <!--ai-product:design[:count]--> マーカー
+ *                    （予約投稿の状態でプラグイン実行前の記事も検出対象にするため）
+ *
+ * Returns: [['start' => int, 'end' => int, 'design' => string, 'type' => 'card'|'marker'], ...]
+ * （位置順にソート済み）
  */
 function ai_pi_find_card_blocks($content) {
     $blocks = [];
@@ -250,6 +259,8 @@ function ai_pi_find_card_blocks($content) {
     $offset = 0;
     $len = strlen($content);
     $max_iter = 500; // 暴走防止
+
+    // (1) カード div を検出（挿入処理済み記事）
     while ($max_iter-- > 0) {
         if (!preg_match('/<div\s+class="(aipi-[a-z]+)[^"]*"/i', $content, $m, PREG_OFFSET_CAPTURE, $offset)) {
             break;
@@ -279,9 +290,33 @@ function ai_pi_find_card_blocks($content) {
                 $pos = $next_close + 6;
             }
         }
-        $blocks[] = ['start' => $start, 'end' => $end, 'design' => $design];
+        $blocks[] = ['start' => $start, 'end' => $end, 'design' => $design, 'type' => 'card'];
         $offset = $end;
     }
+
+    // (2) 未処理マーカー <!--ai-product:design[:count]--> も検出
+    //     予約投稿でまだプラグイン実行前の記事でも連続バグを拾うために必要。
+    //     :brand サフィックスは商品深掘り構造で意図的に複数置くため検出対象から除外。
+    $marker_re = '/<!--\s*ai-product:([a-z]+)(?::([a-z0-9]+))?\s*-->/i';
+    if (preg_match_all($marker_re, $content, $mm, PREG_OFFSET_CAPTURE)) {
+        foreach ($mm[0] as $i => $whole) {
+            $design = strtolower($mm[1][$i][0]);
+            $modifier = isset($mm[2][$i][0]) ? strtolower($mm[2][$i][0]) : '';
+            if ($modifier === 'brand') continue; // brand 深掘りは意図配置
+            $blocks[] = [
+                'start'  => $whole[1],
+                'end'    => $whole[1] + strlen($whole[0]),
+                'design' => $design,
+                'type'   => 'marker',
+            ];
+        }
+    }
+
+    // 位置順でソート（カードとマーカーが混在しても正しく隣接判定できるように）
+    usort($blocks, function ($a, $b) {
+        return $a['start'] <=> $b['start'];
+    });
+
     return $blocks;
 }
 
@@ -392,21 +427,27 @@ function ai_pi_remove_adjacent_cards($content) {
     foreach ($to_remove_unique as $idx) {
         $bstart = $blocks[$idx]['start'];
         $bend   = $blocks[$idx]['end'];
-        // 直前の空白行・改行・wp:html 開始コメントを巻き取って消す
+        $is_card = (($blocks[$idx]['type'] ?? 'card') === 'card');
+        // 直前の空白行・改行を巻き取って消す
         while ($bstart > 0 && in_array(substr($new_content, $bstart - 1, 1), [" ", "\t", "\n", "\r"], true)) {
             $bstart--;
         }
-        // 直前に <!-- wp:html --> があれば一緒に削除（カードを包んでた wp:html ブロック）
-        if (preg_match('/<!--\s*wp:html\s*-->\s*$/i', substr($new_content, 0, $bstart), $wm)) {
-            $bstart -= strlen($wm[0]);
+        // カードは wp:html ブロックで包まれているので、その開閉コメントも一緒に削除する。
+        // マーカー（生コメント）は包まれていないのでこの処理はスキップ。
+        if ($is_card) {
+            if (preg_match('/<!--\s*wp:html\s*-->\s*$/i', substr($new_content, 0, $bstart), $wm)) {
+                $bstart -= strlen($wm[0]);
+            }
         }
         // 直後の余分な改行も1つ巻き取る
         if (substr($new_content, $bend, 1) === "\n") {
             $bend++;
         }
-        // 直後に <!-- /wp:html --> があれば一緒に削除
-        if (preg_match('/^\s*<!--\s*\/wp:html\s*-->/i', substr($new_content, $bend), $wm)) {
-            $bend += strlen($wm[0]);
+        // 直後の <!-- /wp:html --> 巻き取り（カードのみ）
+        if ($is_card) {
+            if (preg_match('/^\s*<!--\s*\/wp:html\s*-->/i', substr($new_content, $bend), $wm)) {
+                $bend += strlen($wm[0]);
+            }
         }
         // 巻き取り後の直前空白を再度処理
         while ($bend < strlen($new_content) && in_array(substr($new_content, $bend, 1), [" ", "\t", "\n", "\r"], true)) {
