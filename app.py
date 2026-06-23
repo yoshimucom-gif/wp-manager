@@ -233,7 +233,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.44'
+APP_VERSION = '1.7.45'
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -2342,6 +2342,87 @@ def _has_ranking_signal(title):
     ))
 
 
+# H3 にランキング表現があるか判定する正規表現
+# 飾り文字（【】★●■◆▼《「『（()）を許容して「【1位】」「★1位」も拾う。
+# 「N位/第N位/No.N」に加えて「TOP1/Best1/ベスト1」も検出。
+_RANK_H3_SIGNAL_RE = re.compile(
+    r'(?:第\s*)?(?:\d+|[０-９]+)\s*位'                     # 第N位 / N位
+    r'|No\.?\s*(?:\d+|[０-９]+)'                            # No.N
+    r'|(?:TOP|BEST|ベスト)\s*(?:\d+|[０-９]+)',             # TOP1 / Best1 / ベスト1
+    re.IGNORECASE,
+)
+
+
+def detect_article_type_from_body(html, title=''):
+    """生成済み記事HTMLの構造から article_type を客観的に推論する。
+
+    ユーザー指定値（CSVや手動指定）が間違っていても、
+    本文の実構造から「本当はどのタイプか」を判定して
+    広告マーカー挿入のミスマッチを防ぐためのガード関数。
+
+    保守的判定:
+      - 本文 H3 に「N位 / No.N / TOPN / 第N位 / ベストN」が 3個以上 → ranking 確定
+      - 上記が 1個以上 + タイトルにランキング系シグナル → ranking 確定
+      - 本文 H3 に上記が 0個 だが H2 が 2個以上ある（記事として成立）
+        + タイトルが明確に column 系（「とは/方法/原因/対策/コツ」等）→ column
+      - それ以外（判定材料不足）→ None (reconcile で補正発動しない)
+
+    None を返すことで、タイトル「○選」混合 column 記事のような
+    判定が割れるケースで誤補正を起こさない（specified 値を尊重）。
+
+    Returns: 'ranking' | 'column' | None
+    """
+    if not html:
+        return None
+    text = str(html)
+    h3_texts = re.findall(r'<h3[^>]*>([^<]*)</h3>', text, re.IGNORECASE)
+    rank_h3_count = sum(1 for t in h3_texts if _RANK_H3_SIGNAL_RE.search(t))
+
+    if rank_h3_count >= 3:
+        return 'ranking'
+    if rank_h3_count >= 1 and _has_ranking_signal(title):
+        return 'ranking'
+
+    h2_count = len(re.findall(r'<h2[^>]*>', text, re.IGNORECASE))
+    if rank_h3_count == 0 and h2_count >= 2 and title:
+        # タイトルが column 系の明確シグナル（「とは/方法/原因/コツ」等）を持つ場合のみ column 確定。
+        # ranking 系シグナル「○選/おすすめN」混合タイトルはここで弾く（判定保留にする）。
+        if not _has_ranking_signal(title) and re.search(
+            r'(?:とは|選び方|使い方|洗い方|原因|対策|方法|違い|必要|いつ|なぜ|ポイント|コツ|チェック|理由|秘訣)',
+            str(title),
+        ):
+            return 'column'
+
+    # 判定材料不足 → None（reconcile で補正しない＝指定を尊重する安全側挙動）
+    return None
+
+
+def reconcile_article_type(specified, html, title=''):
+    """指定 article_type と本文構造から再判定した結果を突き合わせ、
+    致命的なミスマッチがあれば推論側を優先する。
+
+    マーカー挿入パターンは article_type ごとに最適化されているため、
+    指定を誤ると after_each_h3_rank が空振りして fallback に縮退する等の
+    品質劣化が起きる。300件一括生成の信頼性を保つための本体ガード。
+
+    補正は過剰反応を避けるため最小限:
+      - ranking 指定 ↔ 本文は column 構造 → column に補正
+      - column 指定 ↔ 本文は ranking 構造 (H3にN位多数) → ranking に補正
+      - brand 関連の差は触らない（深掘り構造を尊重）
+
+    Returns: (final_type, was_corrected: bool, detected_type: str|None)
+    """
+    specified_norm = normalize_article_type(specified, 'ranking')
+    detected = detect_article_type_from_body(html, title)
+    if not detected or detected == specified_norm:
+        return specified_norm, False, detected
+    if specified_norm == 'ranking' and detected == 'column':
+        return 'column', True, detected
+    if specified_norm == 'column' and detected == 'ranking':
+        return 'ranking', True, detected
+    return specified_norm, False, detected
+
+
 def validate_marker_insertion(stats, article_type, title=''):
     """insert_card_markers が返した stats を解析して挿入結果を判定する。
 
@@ -2396,6 +2477,15 @@ def validate_marker_insertion(stats, article_type, title=''):
         status = 'error'
 
     summary = '正常' if status == 'ok' else ' / '.join(problems)
+
+    # 本体ガードで article_type 補正が発動していたら印を残す（指定ミスを後で抽出できるように）。
+    # 補正自体は救済なので status は上げない。
+    if stats.get('article_type_corrected'):
+        orig = stats.get('original_article_type') or '?'
+        used = stats.get('reconciled_article_type') or '?'
+        tag = f'[type補正:{orig}→{used}]'
+        summary = f'{tag} {summary}'.strip()
+
     return {'status': status, 'problems': problems, 'summary': summary}
 
 
@@ -4382,7 +4472,10 @@ DEFAULT_CARD_INSERTION_PATTERNS = {
         {'position': 'after_last_h2', 'design': 'vertical'},
     ],
     'column': [
-        {'position': 'before_first_h2', 'design': 'vertical', 'repeat': 3},
+        # column 記事は「方法を解説する記事」のため読者は商品比較目的で来ていない。
+        # 冒頭に縦カード3枚並べる過剰広告は直帰率を上げてSEOを悪化させる。
+        # 冒頭は1枚で導線確保にとどめ、末尾の ranking カードで購買決定点に置く設計。
+        {'position': 'before_first_h2', 'design': 'vertical'},
         # after_last_h2: キーワードに依存しない確定位置。
         # after_matome_h2 はFAQ等のH2が記事末尾にある場合まとめから離れるため、
         # 無条件に「記事内の最後のH2直後」を使う方が安定。
@@ -4485,6 +4578,24 @@ def load_ad_insertion_patterns():
             print('[AD-MIGRATION] brand: after_last_h2 added as fallback', flush=True)
         except Exception:
             pass
+
+    # ── column 過剰広告 重複防止マイグレーション ───────────────────────────
+    # column 記事は「方法を解説する記事」のため冒頭縦カード3枚は
+    # 過剰広告でSEO悪化（直帰率上昇）を招く。before_first_h2 の repeat を
+    # 1 に強制縮小する。冒頭1枚＋末尾 ranking で十分な広告露出を確保できる。
+    column_migrated = False
+    for rule in merged.get('column', []):
+        if (rule.get('position') == 'before_first_h2'
+                and rule.get('design') == 'vertical'
+                and int(rule.get('repeat', 1)) > 1):
+            rule.pop('repeat', None)
+            column_migrated = True
+    if column_migrated:
+        try:
+            save_ad_insertion_patterns(merged)
+            print('[AD-MIGRATION] column: before_first_h2 vertical repeat → 1 (過剰広告防止)', flush=True)
+        except Exception as _e:
+            print(f'[AD-MIGRATION] column repeat migration save failed: {_e}', flush=True)
 
     return merged
 
@@ -4690,15 +4801,21 @@ def insert_card_markers(html, article_type='ranking', patterns=None, title=None)
             # ある時だけ ranking H3 として扱う。これを怠ると「4つの理由」のような
             # column 記事に商品カードが入って読者に意味不明な配置になる。
             title_has_ranking = _has_ranking_signal(title)
+            # 飾り文字（【】★●■◆▼《「『（()）を許容して
+            # 「【1位】商品名」「★1位 商品名」「●第1位:商品名」も拾う。
+            _DECOR = r'[\s\[【★●■◆▼《「『（(]*'
+            _SEP = r'[\s\]】:：、・　]*'
             h3_patterns = [
-                # 第N位 / N位
-                r'<h3[^>]*>\s*(?:第\s*)?(?:\d+|[０-９]+)\s*位[\s:：、・　]*[^<]*?</h3>',
-                # No.N
-                r'<h3[^>]*>\s*No\.?\s*(?:\d+|[０-９]+)[\s:：、・　]*[^<]*?</h3>',
+                # 第N位 / N位（飾り文字許容）
+                r'<h3[^>]*>' + _DECOR + r'(?:第\s*)?(?:\d+|[０-９]+)\s*位' + _SEP + r'[^<]*?</h3>',
+                # No.N（飾り文字許容）
+                r'<h3[^>]*>' + _DECOR + r'No\.?\s*(?:\d+|[０-９]+)' + _SEP + r'[^<]*?</h3>',
+                # TOP1 / Best1 / ベスト1（飾り文字許容）
+                r'<h3[^>]*>' + _DECOR + r'(?:TOP|BEST|ベスト)\s*(?:\d+|[０-９]+)' + _SEP + r'[^<]*?</h3>',
             ]
             if title_has_ranking:
                 # ①②③ パターン
-                h3_patterns.append(r'<h3[^>]*>\s*[①②③④⑤⑥⑦⑧⑨⑩][\s:：、・　]*[^<]*?</h3>')
+                h3_patterns.append(r'<h3[^>]*>' + _DECOR + r'[①②③④⑤⑥⑦⑧⑨⑩]' + _SEP + r'[^<]*?</h3>')
             matched_positions = set()
             for pat in h3_patterns:
                 rx = re.compile(pat, re.IGNORECASE)
@@ -4794,6 +4911,34 @@ def insert_card_markers(html, article_type='ranking', patterns=None, title=None)
 
     print(f'[MARKER] inserted: article_type={article_type}, stats={stats}', flush=True)
     return text, stats
+
+
+def insert_card_markers_with_reconcile(html, article_type, title='', call_site=''):
+    """insert_card_markers の前に reconcile_article_type を噛ませる本体ガード版。
+
+    指定された article_type と本文構造のズレを補正してから挿入することで、
+    CSV/手動指定の article_type ミスによる
+    マーカー配置ミスマッチ（after_each_h3_rank 空振り → fallback 縮退等）を
+    完全に防ぐ。300件一括生成の品質保証で必須のガード。
+
+    Returns: (new_html, stats_with_reconcile_info, used_article_type)
+    """
+    reconciled_type, was_corrected, detected_type = reconcile_article_type(
+        article_type, html, title or ''
+    )
+    if was_corrected:
+        print(
+            f'[ARTICLE-TYPE] reconciled[{call_site}]: '
+            f'specified={article_type} → detected={detected_type} → using={reconciled_type}',
+            flush=True,
+        )
+    new_html, stats = insert_card_markers(html, reconciled_type, title=title)
+    if isinstance(stats, dict):
+        stats['original_article_type'] = article_type
+        stats['reconciled_article_type'] = reconciled_type
+        stats['detected_article_type'] = detected_type
+        stats['article_type_corrected'] = was_corrected
+    return new_html, stats, reconciled_type
 
 
 def build_quality_structure_html_prompt(quality, limit=6000):
@@ -6297,8 +6442,10 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                 stage = 'inject affiliate markers'
                 update_job(current_title=article.get('title', ''), message=f"商品カードマーカー挿入中: {article.get('title', '')}")
                 _gen_title = article.get('title') if isinstance(article, dict) else None
-                raw_content, marker_stats = insert_card_markers(raw_content, article_type, title=_gen_title)
-                marker_validation = validate_marker_insertion(marker_stats, article_type, _gen_title or '')
+                raw_content, marker_stats, _used_type = insert_card_markers_with_reconcile(
+                    raw_content, article_type, title=_gen_title, call_site='BATCH'
+                )
+                marker_validation = validate_marker_insertion(marker_stats, _used_type, _gen_title or '')
                 print(f'[MARKER-VALIDATE] BATCH: {marker_validation["status"]} / {marker_validation["summary"]}', flush=True)
                 card_stats = {'h3_count': 0, 'matched_count': 0, 'products_available': 0,
                               'fallback_count': 0, 'marker_count': marker_stats.get('marker_count', 0), 'mode': 'marker_only'}
@@ -6447,11 +6594,11 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                         if enhance_warning:
                             postprocess_warnings.append(enhance_warning)
                         _post_title = article.get('title') if isinstance(article, dict) else None
-                        post_content, post_marker_stats = insert_card_markers(
+                        post_content, post_marker_stats, _post_used_type = insert_card_markers_with_reconcile(
                             post_content, article_type,
-                            title=_post_title,
+                            title=_post_title, call_site='BATCH-POST',
                         )
-                        post_marker_validation = validate_marker_insertion(post_marker_stats, article_type, _post_title or '')
+                        post_marker_validation = validate_marker_insertion(post_marker_stats, _post_used_type, _post_title or '')
                         marker_validation = post_marker_validation  # 後段の保存で使う
                         post_generated_at = now_iso()
                         with _DATA_LOCK:
@@ -7605,8 +7752,10 @@ def generate_article(article_id):
             print(f'[GEN-SSE] BEFORE inject: products={len(products) if products else 0}, content_len={len(full_content)}, has_card={"aff-product-card" in full_content}', flush=True)
             # プラグイン連携前提でマーカー挿入に固定（UIセレクタ廃止）
             _gen_title = article_work.get('title') if isinstance(article_work, dict) else None
-            full_content, marker_stats = insert_card_markers(full_content, article_type, title=_gen_title)
-            marker_validation = validate_marker_insertion(marker_stats, article_type, _gen_title or '')
+            full_content, marker_stats, _used_type = insert_card_markers_with_reconcile(
+                full_content, article_type, title=_gen_title, call_site='SSE'
+            )
+            marker_validation = validate_marker_insertion(marker_stats, _used_type, _gen_title or '')
             print(f'[MARKER-VALIDATE] SSE: {marker_validation["status"]} / {marker_validation["summary"]}', flush=True)
             card_stats = {'h3_count': 0, 'matched_count': 0, 'products_available': 0, 'fallback_count': 0,
                           'marker_count': marker_stats.get('marker_count', 0), 'mode': 'marker_only'}
@@ -7817,10 +7966,12 @@ def generate_article_direct(article_id):
             raise ValueError('Claude APIキーが設定されていません')
         # プラグイン連携前提でマーカー挿入に固定（UIセレクタ廃止）
         _gen_title = article_work.get('title') if isinstance(article_work, dict) else None
-        raw_content, _marker_stats = insert_card_markers(raw_content, article_type, title=_gen_title)
-        marker_validation = validate_marker_insertion(_marker_stats, article_type, _gen_title or '')
+        raw_content, _marker_stats, _used_type = insert_card_markers_with_reconcile(
+            raw_content, article_type, title=_gen_title, call_site='SYNC'
+        )
+        marker_validation = validate_marker_insertion(_marker_stats, _used_type, _gen_title or '')
         print(f'[MARKER-VALIDATE] SYNC: {marker_validation["status"]} / {marker_validation["summary"]}', flush=True)
-        clean_content, enhance_warning = safe_enhance_generated_article_html(raw_content, article_work, article_type)
+        clean_content, enhance_warning = safe_enhance_generated_article_html(raw_content, article_work, _used_type)
         clean_content = strip_summary_table_sections(clean_content)
         validation_error = validate_generated_article(article_work, article_type, clean_content, quality)
         content_chars = len(html_to_text(clean_content))

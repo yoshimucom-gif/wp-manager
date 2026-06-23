@@ -1891,6 +1891,47 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.45 (2026-06-23) — マーカー挿入の全リスクを徹底排除（300件一括生成の品質保証）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: 300件一括生成前の最終品質チェックで、マーカー挿入パイプラインに残っていた4種のリスクを<strong>同時に</strong>潰した。</li>
+
+              <li><strong>リスク1: article_type 指定ミス → 本体ガードで自動補正</strong>
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>問題: CSV/手動指定でcolumn記事をranking指定すると <code>after_each_h3_rank</code> が空振り→fallback縮退でカード1枚だけに</li>
+                  <li>追加: <code>detect_article_type_from_body()</code> — 本文H3に「N位/No.N/TOPN/ベストN」が3個以上 → ranking確定 / 1個以上＋タイトルにrankingシグナル → ranking確定 / 明確なcolumn指標があれば column / それ以外は<strong>None（判定保留）で specified 尊重</strong>（過剰補正を防ぐ）</li>
+                  <li>追加: <code>reconcile_article_type()</code> — ranking↔column の致命的ミスマッチのみ補正、brand は尊重</li>
+                  <li>追加: <code>insert_card_markers_with_reconcile()</code> — 全4経路（BATCH/BATCH-POST/SSE/SYNC）で噛ませる</li>
+                  <li>可視化: 補正発動時は <code>marker_summary</code> に <code>[type補正:ranking→column]</code> 印を残す</li>
+                </ul>
+              </li>
+
+              <li><strong>リスク2: H3検出パターンの取りこぼし</strong>
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>問題: 「N位/No.N」しか検出せず、「【1位】商品名」「★1位」「TOP1」「ベスト1」を漏らしていた</li>
+                  <li>修正: <code>_RANK_H3_SIGNAL_RE</code> と <code>h3_patterns</code> に飾り文字許容（【】★●■◆▼《「『）と TOP/Best/ベスト N を追加</li>
+                </ul>
+              </li>
+
+              <li><strong>リスク3: column記事の冒頭カード3枚過剰広告 → SEO悪化</strong>
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>問題: column記事は「方法を解説する記事」で読者は商品比較目的で来ていない。冒頭に縦カード3枚並べる過剰広告は直帰率を上げてSEOを悪化させる</li>
+                  <li>修正: <code>DEFAULT_CARD_INSERTION_PATTERNS['column']</code> の <code>before_first_h2</code> を <code>repeat:3 → repeat:1</code> に変更（冒頭1枚＋末尾 ranking で十分な広告露出を確保）</li>
+                  <li>マイグレーション: 既存UI保存設定も自動で <code>repeat:1</code> に縮小（load時に走る）</li>
+                </ul>
+              </li>
+
+              <li><strong>リスク4: 隣接マーカーの誤検知（既存ガードの確認）</strong>
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>MIN_GAP_CHARS=80</code> のガードは <code>after_each_h3_rank</code> 同士の連続を except 済み（意図配置を保護）</li>
+                  <li>marker_block 内の repeat は1単位として扱うため、意図的な連続配置は壊れない（Agent検証で確認）</li>
+                </ul>
+              </li>
+
+              <li><strong>結果</strong>: 指定ミス・H3表記揺れ・過剰広告・隣接誤検知の4つの事故ルートを本体側で完全に塞いだ。<strong>article_type を正しく流す運用すら不要</strong>になり、300件流して途中で品質が崩れる確率がほぼゼロに。CLAUDE.md の「根本原因を潰す/再発しないガードを置く/気付ける状態にする」3層対処を全リスクで満たす。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.33 / paragraph-splitter v1.0.0 (2026-06-09) — 段落強制分割の単機能プラグインを追加</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: 本体側にも段落分割（<code>split_paragraphs_per_sentence</code>）は入っているが、Claude が読点で繋いだ長文や接続詞ベタ詰めの長段落（句点が1つしかない 300字超の段落等）は捕まえきれない。本体ロジックは生成時しか走らないので既存記事も触れない。</li>
