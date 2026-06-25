@@ -233,7 +233,27 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.49'
+APP_VERSION = '1.7.50'
+
+# 記事品質バージョン（本体バージョンとは独立して管理）。
+#
+# プロンプト・スコアロジック・リード文/見出しルール・商品H3規約・
+# 共起語/キーワード密度評価など「記事の中身そのものの品質基準」が
+# 変わった時にこの値を上げる。
+#
+# 各記事の生成時にこの値を `quality_version` として articles.json に
+# 保存しておくので、後で「どのバージョンで作られた記事か」を追える。
+#
+# 過去バージョンに戻すには git 履歴を使う:
+#   1. 改修履歴ページの「記事品質履歴」で戻したい version のコミットを確認
+#   2. そのコミットからプロンプト関数（article_html_output_rules /
+#      title_generation_prompt / score_article_content 等）の中身を取得
+#   3. 現バージョンと差し替えて CONTENT_QUALITY_VERSION も合わせる
+#
+# 注意: マーカー挿入関連（insert_card_markers / reconcile_article_type
+# / _RANK_H3_SIGNAL_RE 等）はこのバージョン管理の対象外。
+# それらは APP_VERSION 側で管理される独立した安定インフラ。
+CONTENT_QUALITY_VERSION = '1.1.0'
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -1034,7 +1054,24 @@ def article_html_output_rules():
 - WordPress/Gutenbergコメント（<!-- wp:... -->、<!-- /wp:... -->）は出力しない
 - H2は主要セクション、H3はH2内の小項目に使う。メリット、デメリット・注意点、よくある質問を作る場合は、H2の直下に各項目・各質問を <h3 class="wp-block-heading">...</h3> で分ける
 
-- 記事冒頭は必ず <p> のリード文（2〜4段落、読者を本題に引き込む導入）から始める。**冒頭にいきなり <h2> を置かない**（WordPress 側でタイトルが上に表示されるため、本文の最初は段落であるべき）
+- 記事冒頭は必ず <p> のリード文（2〜4段落、合計250〜400字、読者を本題に引き込む導入）から始める。**冒頭にいきなり <h2> を置かない**（WordPress 側でタイトルが上に表示されるため、本文の最初は段落であるべき）
+
+  【リード文の SEO 必須要件（重要）】
+  - **主要キーワード（タイトルから抽出した核となる語）を最初の100文字以内に1回**、自然な日本語として含める。Google は冒頭でクエリ意図に応えているかを評価するため、ここで主要KWが不在だと検索順位に直結する
+  - 読者の検索意図（何を知りたくて検索したか）を1〜2文で受け止める
+  - 「この記事では○○を解説します」と記事のゴールを明示する
+  - 過剰な煽り（「絶対」「必ず」「最強」「神」「ヤバい」）は使わない
+
+  ✅ 良いリード文（主要KW「キャスターチェア」「床傷防止」の場合）:
+     キャスターチェアを使っていると、いつの間にかフローリングに細かい傷が
+     入っていることはありませんか？特に賃貸住宅では退去時の費用も気になります。
+     この記事では、キャスターチェアによる床傷を防止するためのおすすめ
+     グッズと選び方を、コスパと施工難易度の両面から徹底解説します。
+
+  ❌ 悪いリード文（主要KW不在・煽り・検索意図ズレ）:
+     絶対に失敗しない選び方を完全公開します。最強のアイテムだけを集めました。
+     必ずあなたの悩みを解決します。
+     → 主要KWゼロ／煽りスパム／読者の悩みに具体的に触れていない
 
 - 見出し（H2/H3）の SEO 品質基準（重要）:
 
@@ -2655,6 +2692,20 @@ def title_generation_prompt(keywords, count_per_keyword, category='', article_ty
 - 同じKW内でタイトルが似た構文・似た語尾にならないよう切り口を変える
 - 以下の表現は使用禁止: {forbidden_list}
 
+【やってはいけない例（few-shot bias 対策で明示・絶対にこの形にしない）】
+- ❌「【完全無料】絶対に失敗しないオフィスチェアの選び方｜決定版」
+   理由: 過剰修飾の連発（完全無料／絶対／決定版）。スパム判定される。
+- ❌「最強のオフィスチェア神7選！ヤバいモデル一覧」
+   理由: 「最強」「神」「ヤバい」はGoogleがHCUで品質低と判定する典型語。
+- ❌「キャスター」
+   理由: 単語1つだけでは検索意図（誰が・何のために）を反映していない。
+- ❌「オフィスチェアおすすめオフィスチェア比較オフィスチェアランキング」
+   理由: 同じKWを連発するキーワード詰め込み。過剰最適化でペナルティ対象。
+- ❌「※必ず読んで！オフィスチェアの選び方完全ガイド2026年版」
+   理由: 「必ず」「完全ガイド」「年版」の過剰盛り。中身と乖離しやすい。
+これらの形は禁止表現（{forbidden_list}）と組み合わせるとさらにスパム性が
+高まる。**1要素でも該当したら不採用**にしてください。
+
 {ranking_rule_block}
 【slug】
 - slug は英語のみ・小文字・ハイフン区切り（kebab-case）。3〜4単語、最大30文字以内。
@@ -3255,6 +3306,131 @@ def detect_heading_quality_issues(title, html):
     return issues, penalty, cap
 
 
+def detect_keyword_density_issues(main_keyword, text):
+    """主要キーワードの本文出現回数を測り、SEO的に問題のある密度を返す。
+
+    現状（v1.0.0）では「主要KWが本文に存在するか/しないか」の二値判定で
+    出現回数を全く評価していなかった。これだと「タイトルに1回、本文に1回」
+    でも「本文に20回」でも同じスコアになり、密度が薄い記事を取りこぼす。
+
+    判定（v1.1.0 で導入）:
+      - 0回: cap=40 致命的（タイトル外で主要KW不在）
+      - 1〜2回: cap=70 薄い
+      - 3〜20回: 適正範囲（減点なし）
+      - 21回以上: 詰め込み判定 (-15)
+
+    Returns: (issues: list[str], penalty: int, cap: int|None)
+    """
+    if not main_keyword or not text:
+        return [], 0, None
+    issues = []
+    penalty = 0
+    cap = None
+    count = text.count(main_keyword)
+    if count == 0:
+        issues.append(
+            f'本文中に主要キーワード「{main_keyword}」が一度も登場しません。'
+            'リード文と主要H2セクションに自然に3〜10回含めてください。'
+        )
+        penalty += 25
+        cap = 40
+    elif count <= 2:
+        issues.append(
+            f'本文中の主要キーワード「{main_keyword}」が{count}回しか登場しません。'
+            'リード文と各H2セクションに自然に散らしてください（目安 3〜10回）。'
+        )
+        penalty += 10
+        cap = 70
+    elif count >= 21:
+        issues.append(
+            f'主要キーワード「{main_keyword}」が{count}回登場しています。'
+            'キーワード詰め込み判定の対象になるため、関連語・代名詞・'
+            '言い換えで自然に分散させてください。'
+        )
+        penalty += 15
+    return issues, penalty, cap
+
+
+def detect_h3_product_compliance_issues(html):
+    """ランキングH3商品名の規約違反（効能語・用途語・キャッチコピー混入）を検知。
+
+    CLAUDE.md 規約:
+      必須: ブランド名 + 商品カテゴリ
+      任意: 識別語1個（5個セット／黒／Pro／型番）
+      禁止: キャッチコピー、効能語、用途語、タイトル丸ごと
+      目安: 15〜30文字
+
+    プラグイン側で H3 を Amazon/楽天 API のクエリにも使うため、効能語等が
+    混入すると別商品が大量にヒットして CV率が落ちる（収益直撃）。
+
+    判定（v1.1.0 で導入）:
+      - 違反H3 0個: 減点なし
+      - 1〜2個: -8
+      - 3個以上: -15 + cap=70
+
+    Returns: (issues, penalty, cap)
+    """
+    if not html:
+        return [], 0, None
+    h3_blocks = re.findall(r'<h3\b[^>]*>([^<]*)</h3>', html, re.I)
+    if not h3_blocks:
+        return [], 0, None
+
+    # 順位記号があるH3のみを評価対象に（ランキングH3のみ）
+    rank_re = re.compile(
+        r'(?:第\s*)?(?:\d+|[０-９]+)\s*位'
+        r'|No\.?\s*(?:\d+|[０-９]+)'
+        r'|(?:TOP|BEST|ベスト)\s*(?:\d+|[０-９]+)',
+        re.I,
+    )
+    effect_words = re.compile(
+        r'傷防止|キズ防止|キズ予防|振動吸収|静音|滑り止め|防音|断熱|耐久'
+        r'|防臭|脱臭|抗菌|防カビ|防汚|防水|撥水|防塵|床保護|床傷',
+        re.I,
+    )
+    use_words = re.compile(
+        r'フローリング用|オフィス用|賃貸対応|賃貸用|家庭用|業務用|車内用'
+        r'|屋外用|室内用|寝室用|キッチン用|リビング用|[一-龥]{2,8}向け',
+        re.I,
+    )
+    catch_phrase = re.compile(
+        r'がつかない|楽に[一-龥]|簡単に[一-龥]|快適に[一-龥]|サッと|ピタッと'
+        r'|やさしい|うれしい',
+        re.I,
+    )
+
+    violations = []
+    for h in h3_blocks:
+        if not rank_re.search(h):
+            continue
+        clean = re.sub(rank_re, '', h, count=1)
+        clean = re.sub(r'^[：:、・　\s]+', '', clean).strip()
+        reasons = []
+        if effect_words.search(clean):
+            reasons.append('効能語')
+        if use_words.search(clean):
+            reasons.append('用途語')
+        if catch_phrase.search(clean):
+            reasons.append('キャッチコピー')
+        if reasons:
+            violations.append((h.strip(), reasons))
+
+    if not violations:
+        return [], 0, None
+    n = len(violations)
+    examples = ', '.join(
+        f'「{h[:40]}」({"/".join(r)})' for h, r in violations[:3]
+    )
+    issue_msg = (
+        f'ランキングH3 {n}件に効能語/用途語/キャッチコピーが混入しています'
+        f'（例: {examples}）。H3は「ブランド名+商品カテゴリ」のみとし、'
+        f'効能や用途は本文で書いてください。Amazon検索精度にも影響します。'
+    )
+    if n >= 3:
+        return [issue_msg], 15, 70
+    return [issue_msg], 8, None
+
+
 def scoring_caps_and_penalties(title, html, text, keywords=''):
     suggestions = []
     penalties = 0
@@ -3288,6 +3464,24 @@ def scoring_caps_and_penalties(title, html, text, keywords=''):
         if heading_cap is not None:
             caps.append(heading_cap)
         suggestions.extend(heading_issues)
+
+    # 主要キーワード密度（v1.1.0 で導入。「1回も10回も同じ採点」を解消）
+    terms = [t.strip() for t in re.split(r'[,、\s]+', keywords or '') if t.strip()]
+    main_keyword = terms[0] if terms else ''
+    density_issues, density_penalty, density_cap = detect_keyword_density_issues(main_keyword, text)
+    if density_issues:
+        penalties += density_penalty
+        if density_cap is not None:
+            caps.append(density_cap)
+        suggestions.extend(density_issues)
+
+    # 商品H3規約違反（効能語/用途語/キャッチコピー混入。CV率と検索精度に直結）
+    h3_compliance_issues, h3_compliance_penalty, h3_compliance_cap = detect_h3_product_compliance_issues(html)
+    if h3_compliance_issues:
+        penalties += h3_compliance_penalty
+        if h3_compliance_cap is not None:
+            caps.append(h3_compliance_cap)
+        suggestions.extend(h3_compliance_issues)
 
     return caps, penalties, suggestions
 
@@ -3467,6 +3661,11 @@ def apply_score_fields(item, title=None, content=None, keywords=None):
     item['rewrite_priority'] = score_data['priority']
     item['score_data'] = score_data
     item['score_version'] = SCORE_VERSION
+    # 記事品質バージョン（プロンプト/スコアロジック/見出しルール等の基準セット）。
+    # この記事がどのバージョンで生成・採点されたかを記録しておくと、
+    # 後で「v1.0.0 で作った記事だけ抽出して v1.1.0 でリスコア」のような
+    # メンテができる。本体バージョン(APP_VERSION)とは独立に管理。
+    item['quality_version'] = CONTENT_QUALITY_VERSION
     return item
 
 
@@ -9128,8 +9327,11 @@ def api_storage_status():
 
 @app.route('/api/version', methods=['GET'])
 def api_version():
-    """本体バージョン取得。ナビ表示や改修履歴ページから利用。"""
-    return jsonify({'version': APP_VERSION})
+    """本体バージョンと記事品質バージョン取得。ナビ表示や改修履歴ページから利用。"""
+    return jsonify({
+        'version': APP_VERSION,
+        'quality_version': CONTENT_QUALITY_VERSION,
+    })
 
 @app.route('/api/data-snapshot', methods=['GET'])
 @login_required

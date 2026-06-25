@@ -1890,6 +1890,48 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         </div>
         <div style="max-width:780px">
 
+          <div class="settings-section" style="background:#f0f9ff;border:1px solid #38bdf8">
+            <div class="section-header">📚 記事品質バージョン履歴（プロンプト・スコア基準）</div>
+            <p style="margin:4px 0 12px;font-size:12px;color:var(--muted)">本体バージョン (APP_VERSION) とは独立した「記事の中身そのものの品質基準」のバージョン管理。生成された記事には <code>quality_version</code> が記録されるため、後でどのバージョンで作られたか追跡可能。過去バージョンに戻すには git log でコミットを探し <code>git checkout &lt;hash&gt; -- app.py</code> で復元。<strong>マーカー挿入関連は対象外</strong>（APP_VERSION 側で独立管理）。</p>
+
+            <details style="background:#fff;border:1px solid #cbd5e1;padding:10px;margin:8px 0;border-radius:4px" open>
+              <summary style="font-weight:600;cursor:pointer">記事品質 <strong>v1.1.0</strong>（2026-06-23・現行） — SEO水準を 6→8 割に引き上げ</summary>
+              <ul style="margin:8px 0 0 18px;font-size:12px;line-height:1.9">
+                <li><strong>タイトル生成プロンプトに bad 例追加</strong>: few-shot bias 対策。「絶対」「最強」「神」等の禁止語を含む4つの ❌例を明示</li>
+                <li><strong>リード文プロンプト強化</strong>: 主要キーワードを最初の100文字以内に1回含める指示。検索意図捕捉/煽り禁止/良いリード文と悪いリード文の good/bad 例示</li>
+                <li><strong>キーワード密度スコア追加</strong>: 旧版は「本文にKWあるか無いか」の二値だったが、出現回数で評価。0回=cap40、1〜2回=cap70、21回以上=詰め込み判定で-15</li>
+                <li><strong>商品H3規約違反スコア追加</strong>: ランキングH3に効能語/用途語/キャッチコピーが混入していたら検知。Amazon検索精度低下・CV率低下を防ぐ。違反3個以上で cap=70</li>
+              </ul>
+            </details>
+
+            <details style="background:#fff;border:1px solid #cbd5e1;padding:10px;margin:8px 0;border-radius:4px">
+              <summary style="cursor:pointer">記事品質 <strong>v1.0.0</strong>（〜2026-06-22）— バージョン管理開始時点の基準</summary>
+              <ul style="margin:8px 0 0 18px;font-size:12px;line-height:1.9;color:var(--muted)">
+                <li>article_html_output_rules() の見出しSEO品質基準（過剰最適化/裸見出し検知、good/bad例示）</li>
+                <li>商品H3 規約（ブランド名+カテゴリ、長さ15〜30字）</li>
+                <li>scoring_caps_and_penalties: タイトルコピペ/HTML崩れ/ランキング件数不足/責任回避フレーズ濫用</li>
+                <li>article_type 補正、マーカー隣接ガード等のインフラ（v1.7.45 完成済み）</li>
+              </ul>
+            </details>
+          </div>
+
+          <div class="settings-section">
+            <div class="section-header">// v1.7.50 (2026-06-23) — 記事品質バージョン管理を導入 (CONTENT_QUALITY_VERSION = 1.1.0)</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: 「SEOに強い記事が書けるか」調査の結果、現代SEO水準で6割程度。プロンプト/スコアロジックを改修して8割に引き上げ。今後の改修で過去バージョンに戻せるよう、本体とは独立した <code>CONTENT_QUALITY_VERSION</code> 定数を導入。</li>
+              <li><strong>追加</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>CONTENT_QUALITY_VERSION = '1.1.0'</code> 定数追加（バージョン管理の起点）</li>
+                  <li><code>apply_score_fields()</code> で記事に <code>quality_version</code> を記録</li>
+                  <li><code>/api/version</code> で <code>quality_version</code> も返す</li>
+                  <li>改修履歴ページに「記事品質バージョン履歴」セクション新設（上の青枠）</li>
+                </ul>
+              </li>
+              <li><strong>v1.1.0 で改修した4点</strong>: ❶タイトルbad例追加 ❷リード文キーワード含有指示 ❸キーワード密度スコア ❹商品H3規約違反スコア</li>
+              <li><strong>マーカー挿入関連は一切触っていない</strong>（insert_card_markers / reconcile_article_type / _RANK_H3_SIGNAL_RE 等）。広告挿入の挙動は v1.7.49 と完全に同じ。</li>
+            </ul>
+          </div>
+
           <div class="settings-section">
             <div class="section-header">// v1.7.49 / inserter v1.9.24 (2026-06-23) — 連続検出を現行使用design (compare/ranking/vertical) のみに絞る</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
