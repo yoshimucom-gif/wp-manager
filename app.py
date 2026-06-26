@@ -233,7 +233,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.50'
+APP_VERSION = '1.7.51'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -9332,6 +9332,30 @@ def api_version():
         'version': APP_VERSION,
         'quality_version': CONTENT_QUALITY_VERSION,
     })
+
+
+@app.route('/api/memo', methods=['GET'])
+@login_required
+def api_get_memo():
+    """自由記述メモ取得。data/memo.json を読む。"""
+    raw = load_doc('memo', None)
+    if isinstance(raw, dict):
+        content = str(raw.get('content') or '')
+        updated_at = str(raw.get('updated_at') or '')
+    else:
+        content = str(raw or '')
+        updated_at = ''
+    return jsonify({'content': content, 'updated_at': updated_at})
+
+
+@app.route('/api/memo', methods=['POST'])
+@login_required
+def api_post_memo():
+    """自由記述メモ保存。input が JSON でも sendBeacon の Blob でも受ける。"""
+    j = request.get_json(silent=True) or {}
+    content = str(j.get('content') or '')
+    save_doc('memo', {'content': content, 'updated_at': now_iso()})
+    return jsonify({'ok': True, 'updated_at': now_iso()})
 
 @app.route('/api/data-snapshot', methods=['GET'])
 @login_required

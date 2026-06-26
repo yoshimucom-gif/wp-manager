@@ -961,6 +961,9 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
       <a class="sidebar-link muted" onclick="showPage('changelog')" style="font-size:11px">
         <span>📋</span><span>改修履歴</span>
       </a>
+      <a class="sidebar-link muted" onclick="showPage('memo')" style="font-size:11px">
+        <span>📝</span><span>メモ</span>
+      </a>
     </div>
   </aside>
 
@@ -1889,6 +1892,15 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <div class="page-subtitle">Affiros9 本体の更新ログ（現在: <strong>v{{ app_version }}</strong>）</div>
         </div>
         <div style="max-width:780px">
+
+          <div class="settings-section">
+            <div class="section-header">// v1.7.51 (2026-06-23) — メモページを追加</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>追加</strong>: ナビ左下「改修履歴」の下に「📝 メモ」ページを新設。運用メモ・気付き・TODO を自由記述できる場所。</li>
+              <li><strong>仕様</strong>: 入力停止500ms後に自動保存（debounce）。サーバー側 <code>data/memo.json</code> に永続化されるので、ブラウザ/PC を変えても残る。ページ離脱時も <code>sendBeacon</code> で念のため保存。</li>
+              <li><strong>API</strong>: <code>GET/POST /api/memo</code>（login_required）</li>
+            </ul>
+          </div>
 
           <div class="settings-section" style="background:#f0f9ff;border:1px solid #38bdf8">
             <div class="section-header">📚 記事品質バージョン履歴（プロンプト・スコア基準）</div>
@@ -2903,6 +2915,25 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         </div>
       </div>
 
+      <div class="page" id="page-memo">
+        <div class="page-header">
+          <div class="page-title">📝 メモ</div>
+          <div class="page-subtitle">運用メモ・気付き・TODO を自由に書く場所。<strong>自動保存</strong>（入力停止500ms後）。サーバー側 <code>data/memo.json</code> に永続化されるので、ブラウザ/PC を変えても残ります。</div>
+        </div>
+        <div style="max-width:900px">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+            <span id="memo-status" style="font-size:12px;color:var(--muted)">読み込み中...</span>
+            <span style="flex:1"></span>
+            <span id="memo-char-count" style="font-size:12px;color:var(--muted)">0文字</span>
+          </div>
+          <textarea
+            id="memo-textarea"
+            style="width:100%;min-height:600px;padding:14px;border:1px solid var(--border);border-radius:6px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;line-height:1.7;resize:vertical;background:var(--card)"
+            placeholder="ここに自由にメモを書いてください。&#10;&#10;例:&#10;- 2026-06-23: 300件流す前にやること&#10;  - article_type の入力ミスは v1.7.45 で本体ガード済み&#10;  - リスク2〜4も v1.7.45 で潰した&#10;- TODO: 来週リライトする記事リスト&#10;- 気付き: なぜか KAGUASHI サイトだけ ranking H3 が崩れる → 要調査"
+          ></textarea>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -3243,6 +3274,7 @@ function showPage(name, opts = {}) {
     if (pageName === 'ad-insertion') loadAdInsertion();
     if (pageName === 'sites') loadSites();
     if (pageName === 'settings') loadSettings();
+    if (pageName === 'memo') loadMemo();
   }
   if (opts.updateUrl !== false) {
     const nextPath = pagePath(name);
@@ -6943,6 +6975,80 @@ async function toggleKeyVisibility(btn) {
     }
     input.type = 'password';
     btn.textContent = '表示';
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────
+// メモページ: 自由記述メモ。data/memo.json にサーバー永続化。
+// 入力停止500ms後に自動保存（debounce）。
+// ──────────────────────────────────────────────────────────────────
+let _memoSaveTimer = null;
+let _memoLastSavedContent = null;
+async function loadMemo() {
+  const ta = document.getElementById('memo-textarea');
+  const status = document.getElementById('memo-status');
+  const counter = document.getElementById('memo-char-count');
+  if (!ta) return;
+  status.textContent = '読み込み中...';
+  try {
+    const res = await fetch('/api/memo');
+    const data = await res.json();
+    ta.value = data.content || '';
+    _memoLastSavedContent = ta.value;
+    counter.textContent = `${ta.value.length}文字`;
+    status.textContent = data.updated_at
+      ? `最終保存: ${new Date(data.updated_at).toLocaleString('ja-JP')}`
+      : '未保存';
+    // listener は最初の1回だけセット
+    if (!ta.dataset.memoBound) {
+      ta.dataset.memoBound = '1';
+      ta.addEventListener('input', () => {
+        counter.textContent = `${ta.value.length}文字`;
+        status.textContent = '入力中... (停止500ms後に自動保存)';
+        clearTimeout(_memoSaveTimer);
+        _memoSaveTimer = setTimeout(saveMemo, 500);
+      });
+      // ページ離脱前にも保存（タイマー待ちで未保存なまま閉じる事故を防ぐ）
+      window.addEventListener('beforeunload', () => {
+        if (ta.value !== _memoLastSavedContent) {
+          // sendBeacon で非同期にfire-and-forget
+          try {
+            const blob = new Blob([JSON.stringify({content: ta.value})], {type: 'application/json'});
+            navigator.sendBeacon('/api/memo', blob);
+          } catch (e) { /* noop */ }
+        }
+      });
+    }
+  } catch (e) {
+    status.textContent = '読み込み失敗: ' + (e.message || e);
+  }
+}
+
+async function saveMemo() {
+  const ta = document.getElementById('memo-textarea');
+  const status = document.getElementById('memo-status');
+  if (!ta) return;
+  const content = ta.value;
+  if (content === _memoLastSavedContent) {
+    status.textContent = `最終保存: ${new Date().toLocaleString('ja-JP')}（変更なし）`;
+    return;
+  }
+  status.textContent = '保存中...';
+  try {
+    const res = await fetch('/api/memo', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({content})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      _memoLastSavedContent = content;
+      status.textContent = `✓ 保存しました（${new Date().toLocaleString('ja-JP')}）`;
+    } else {
+      status.textContent = '保存失敗: ' + (data.error || '不明なエラー');
+    }
+  } catch (e) {
+    status.textContent = '保存失敗: ' + (e.message || e);
   }
 }
 
