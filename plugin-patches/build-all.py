@@ -24,7 +24,7 @@ SPECS = [
     (os.path.join(ROOT, 'affiros-product-inserter'),
      'affiros-product-inserter', 'affiros-product-inserter-1.9.24.zip'),
     (os.path.join(ROOT, 'affiros-decoration'),
-     'affiros-decoration', 'affiros-decoration-1.2.2.zip'),
+     'affiros-decoration', 'affiros-decoration-1.2.3.zip'),
     (os.path.join(ROOT, 'affiros-rewrite'),
      'affiros-rewrite', 'affiros-rewrite-0.4.40.zip'),
     (os.path.join(ROOT, 'affiros-categorizer'),

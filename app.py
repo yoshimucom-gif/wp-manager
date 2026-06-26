@@ -233,7 +233,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.52'
+APP_VERSION = '1.7.53'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -253,7 +253,7 @@ APP_VERSION = '1.7.52'
 # 注意: マーカー挿入関連（insert_card_markers / reconcile_article_type
 # / _RANK_H3_SIGNAL_RE 等）はこのバージョン管理の対象外。
 # それらは APP_VERSION 側で管理される独立した安定インフラ。
-CONTENT_QUALITY_VERSION = '1.1.0'
+CONTENT_QUALITY_VERSION = '1.2.0'
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -1230,7 +1230,7 @@ def article_html_output_rules():
      具体的な数値・素材名・型番で差別化する
 
 - 「結論早見表」「おすすめ早見表」のような早見表セクションは作らない（比較表があれば十分。重複は不要）
-- 装飾は <strong>太字</strong>、<span style="color:#d32f2f">赤字</span>、<mark>マーカー</mark>、<ul><li>リスト</li></ul>、<table>表</table> だけを使う
+- 装飾は <strong>太字</strong>、<span style="color:#d32f2f">赤字</span>、<ul><li>リスト</li></ul>、<table>表</table> だけを使う（<mark>黄色マーカーは禁止</mark>。キーワード詰め込み感が出てSEO的にも見栄えにも悪い）
 - 装飾目的の複雑なdiv、独自class、吹き出し、ボックス、カード、GutenbergブロックHTMLは出力しない
 - 比較表は横幅が崩れにくいように列を増やしすぎず、セル内は短くする
 - 1つの<p>は必ず2〜3文以内で改行する。4文以上の長い<p>は読みづらいので絶対に作らない。
@@ -1402,6 +1402,10 @@ def sanitize_generated_html(content, title=None, keywords=None):
     if not BeautifulSoup:
         html = strip_non_affiliate_commerce_links_regex(balance_common_html_tags(html))
     html = strip_wp_block_artifacts(html).strip().strip('`').strip()
+
+    # v1.2.0: <mark>...</mark> 黄色マーカー装飾は廃止（過剰最適化に見えるため）。
+    # Claude が誤って出力した・装飾プラグインが追加した <mark> を中身だけ残してタグ剥がし。
+    html = re.sub(r'<mark\b[^>]*>([\s\S]*?)</mark>', r'\1', html, flags=re.I)
 
     # === 見出し品質ガード（title が渡された場合のみ） ===
     # 1) タイトル丸ごとコピペ除去（完全一致）
@@ -1852,7 +1856,7 @@ def _split_inner_html_by_sentence(inner_html):
 def split_paragraphs_per_sentence(soup):
     """各 <p> を文末記号で分割し、1文1段落 (1文改行) スタイルにする
 
-    - <strong>/<a>/<em>/<mark>/<span> 等のインラインタグは保持
+    - <strong>/<a>/<em>/<span> 等のインラインタグは保持（<mark>は v1.2.0 で廃止のため保持しない）
     - 画像・表・リスト等のブロック要素を含む <p> はスキップ
     - 結果として短すぎる断片（10文字未満）は前の文と結合
     """
@@ -2026,8 +2030,9 @@ def enhance_generated_article_html_fallback(html, keyword, article_type):
         return ''.join(f'<p{attrs}>{chunk.strip()}</p>' for chunk in chunks)
     html = re.sub(r'<p([^>]*)>([^<]{100,})</p>', paragraph_repl, html, flags=re.I)
 
-    if keyword and '<mark' not in html and keyword in html:
-        html = html.replace(keyword, f'<mark>{escape(keyword)}</mark>', 1)
+    # 過去は主要キーワード初回出現に <mark> を自動付与していたが、
+    # 「キーワード詰め込み・過剰最適化感」と「読者が黄色マーカーに気を取られる」
+    # 副作用が大きいため v1.2.0 で廃止。<mark> 付与は完全に行わない。
     return html
 
 
@@ -6004,9 +6009,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.9.24',
     },
     'decoration': {
-        'file': 'affiros-decoration-1.2.2.zip',
+        'file': 'affiros-decoration-1.2.3.zip',
         'name': 'Affiros デコレーター',
-        'version': '1.2.2',
+        'version': '1.2.3',
     },
     'rewrite': {
         'file': 'affiros-rewrite-0.4.40.zip',

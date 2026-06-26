@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros デコレーター
  * Description: Claude APIでAI生成記事をDBPテーマのGutenbergブロックで自動装飾するプラグイン
- * Version: 1.2.2
+ * Version: 1.2.3
  * Author: AI Decoration
  * License: GPL v2 or later
  * Text Domain: ai-decoration
@@ -31,7 +31,7 @@ if (defined('AI_DECO_VERSION')) {
     return;
 }
 
-define('AI_DECO_VERSION', '1.2.2');
+define('AI_DECO_VERSION', '1.2.3');
 define('AI_DECO_PATH', plugin_dir_path(__FILE__));
 define('AI_DECO_URL', plugin_dir_url(__FILE__));
 

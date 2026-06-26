@@ -1922,6 +1922,29 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.53 / decoration v1.2.3 / 記事品質 v1.2.0 (2026-06-23) — 黄色マーカー装飾を完全廃止</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>問題</strong>: WordPress で記事を見ると主要KW（例「防水スプレー」）に黄色マーカー <code>&lt;mark&gt;</code> が入って表示されていた。キーワード詰め込み感がSEO・UX両面で悪い。</li>
+              <li><strong>真因（3経路）</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>本体 <code>sanitize_generated_html()</code> が「主要KW初回出現に <code>&lt;mark&gt;</code> 自動付与」していた</li>
+                  <li>本体の装飾プロンプト指示に <code>&lt;mark&gt;マーカー&lt;/mark&gt;</code> が含まれていた</li>
+                  <li>decoration プラグインの system-light/standard/heavy.txt で <code>&lt;mark&gt;</code> 使用を Claude に指示</li>
+                </ul>
+              </li>
+              <li><strong>修正（3層）</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>❶ 本体 line 2029-2030 の自動マーカー付与処理を削除</li>
+                  <li>❷ 装飾プロンプトから <code>&lt;mark&gt;</code> 指示を削除、リライト保持タグからも除外</li>
+                  <li>❸ <code>sanitize_generated_html()</code> 末尾で <code>&lt;mark&gt;...&lt;/mark&gt;</code> → 中身だけ残してタグ除去（既存記事リライト時にも剥がれる）</li>
+                  <li>❹ decoration v1.2.3: 全プロンプトから <code>&lt;mark&gt;</code> 削除、「黄色マーカー禁止」を明示。赤字強調は <code>&lt;span style="color:#cf2e2e"&gt;</code> 形式に変更</li>
+                </ul>
+              </li>
+              <li><strong>記事品質バージョン更新</strong>: <code>CONTENT_QUALITY_VERSION</code> を 1.1.0 → <strong>1.2.0</strong> に上げた。プロンプト/後処理の変更を伴うため。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.52 / reschedule v1.0.0 (2026-06-23) — 予約再スケジュールプラグインを新設</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: 「すでに WP に予約投稿済みの記事の投稿頻度を変えたい（1日1件 → 5件など）」のニーズに対応。Affiros9 本体側は <code>schedule_date</code> 書き換えしかなく、WP の <code>post_date</code> を直接更新する手段がなかった。</li>
@@ -1956,7 +1979,17 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             <p style="margin:4px 0 12px;font-size:12px;color:var(--muted)">本体バージョン (APP_VERSION) とは独立した「記事の中身そのものの品質基準」のバージョン管理。生成された記事には <code>quality_version</code> が記録されるため、後でどのバージョンで作られたか追跡可能。過去バージョンに戻すには git log でコミットを探し <code>git checkout &lt;hash&gt; -- app.py</code> で復元。<strong>マーカー挿入関連は対象外</strong>（APP_VERSION 側で独立管理）。</p>
 
             <details style="background:#fff;border:1px solid #cbd5e1;padding:10px;margin:8px 0;border-radius:4px" open>
-              <summary style="font-weight:600;cursor:pointer">記事品質 <strong>v1.1.0</strong>（2026-06-23・現行） — SEO水準を 6→8 割に引き上げ</summary>
+              <summary style="font-weight:600;cursor:pointer">記事品質 <strong>v1.2.0</strong>（2026-06-23・現行） — 黄色マーカー装飾を完全廃止</summary>
+              <ul style="margin:8px 0 0 18px;font-size:12px;line-height:1.9">
+                <li><strong>背景</strong>: 記事内で主要KWに付与されていた <code>&lt;mark&gt;...&lt;/mark&gt;</code> の黄色マーカーが「キーワード詰め込み感」を醸して読者・SEO両面でマイナス</li>
+                <li><strong>削除</strong>: 本体 <code>sanitize_generated_html()</code> の自動マーカー付与処理（旧 line 2029）。装飾プロンプトのマーカー指示。リライト保持タグからも <code>&lt;mark&gt;</code> を除外</li>
+                <li><strong>剥がし処理</strong>: <code>sanitize_generated_html()</code> で <code>&lt;mark&gt;...&lt;/mark&gt;</code> → 中身だけ残してタグ除去（既存記事リライト時にも効く）</li>
+                <li><strong>装飾プラグイン (decoration v1.2.3)</strong>: light/standard/heavy 全プロンプトから <code>&lt;mark&gt;</code> 指示を削除、明示的に「黄色マーカー禁止」追記。赤字強調は <code>&lt;span style="color:#cf2e2e"&gt;</code> 形式に変更</li>
+              </ul>
+            </details>
+
+            <details style="background:#fff;border:1px solid #cbd5e1;padding:10px;margin:8px 0;border-radius:4px">
+              <summary style="cursor:pointer">記事品質 <strong>v1.1.0</strong>（2026-06-23） — SEO水準を 6→8 割に引き上げ</summary>
               <ul style="margin:8px 0 0 18px;font-size:12px;line-height:1.9">
                 <li><strong>タイトル生成プロンプトに bad 例追加</strong>: few-shot bias 対策。「絶対」「最強」「神」等の禁止語を含む4つの ❌例を明示</li>
                 <li><strong>リード文プロンプト強化</strong>: 主要キーワードを最初の100文字以内に1回含める指示。検索意図捕捉/煽り禁止/良いリード文と悪いリード文の good/bad 例示</li>
