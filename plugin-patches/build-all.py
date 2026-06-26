@@ -35,6 +35,8 @@ SPECS = [
      'affiros-paragraph-splitter', 'affiros-paragraph-splitter-1.1.1.zip'),
     (os.path.join(ROOT, 'affiros-reschedule'),
      'affiros-reschedule', 'affiros-reschedule-1.0.0.zip'),
+    (os.path.join(ROOT, 'affiros-mark-stripper'),
+     'affiros-mark-stripper', 'affiros-mark-stripper-1.0.0.zip'),
 ]
 
 
