@@ -1882,6 +1882,34 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             </a>
           </div>
 
+          <!-- ❼ 予約再スケジュール -->
+          <div class="settings-section" style="margin:0">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <div style="font-size:22px">📅</div>
+              <div style="flex:1">
+                <div style="font-weight:700;font-size:14px">❼ Affiros 予約再スケジュール</div>
+                <div style="font-size:11px;color:var(--muted)">予約投稿の投稿頻度を一括変更（1日N件で振り直し）</div>
+              </div>
+              <div style="font-size:11px;background:rgba(102,210,255,0.18);color:#66d2ff;padding:2px 8px;border-radius:10px">v{{ plugin_downloads['reschedule'].version }}</div>
+            </div>
+            <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:10px">
+              すでに WP に予約投稿済み（future ステータス）の記事の <strong>投稿日時を一括で再スケジュール</strong>するツール。
+              「1日1件で予約してたけど 1日5件に変えたい」のような頻度変更に。
+              対象カテゴリでフィルタ、時刻揺らぎ ±N分、プレビュー後に実行、各記事リビジョン自動保存で元に戻せる。
+            </div>
+            <div style="font-size:11px;color:var(--muted);background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:6px;margin-bottom:8px">
+              <div>📂 配布物: <code>{{ plugin_downloads['reschedule'].file }}</code></div>
+              <div>🔧 設定: WP管理画面 → ツール → 📅 予約再スケジュール</div>
+              <div>📝 必要キー: なし（WP内で完結、API不要）</div>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:12px">
+              主要機能: 全 future 記事を取得 / カテゴリフィルタ / 1日N件で 9:00〜21:00 等分 / 揺らぎ ±N分 / 並びは現在の予約日時順を維持 / プレビュー後に実行 / リビジョン自動保存
+            </div>
+            <a href="/download/plugin/reschedule" class="btn btn-primary" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;text-decoration:none">
+              ⬇ ダウンロード（v{{ plugin_downloads['reschedule'].version }}）
+            </a>
+          </div>
+
         </div>
       </div>
 
@@ -1892,6 +1920,27 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <div class="page-subtitle">Affiros9 本体の更新ログ（現在: <strong>v{{ app_version }}</strong>）</div>
         </div>
         <div style="max-width:780px">
+
+          <div class="settings-section">
+            <div class="section-header">// v1.7.52 / reschedule v1.0.0 (2026-06-23) — 予約再スケジュールプラグインを新設</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: 「すでに WP に予約投稿済みの記事の投稿頻度を変えたい（1日1件 → 5件など）」のニーズに対応。Affiros9 本体側は <code>schedule_date</code> 書き換えしかなく、WP の <code>post_date</code> を直接更新する手段がなかった。</li>
+              <li><strong>新規プラグイン</strong>: <code>affiros-reschedule</code> v1.0.0 を新設。WP管理画面 → ツール → 📅 予約再スケジュール。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>全 future 記事を取得（公開済み/下書きは触らない）</li>
+                  <li>カテゴリ複数フィルタ（未選択=全件）</li>
+                  <li>1日 N 件 / 9:00〜21:00 を等分（5件なら 9:00 / 12:00 / 15:00 / 18:00 / 21:00）</li>
+                  <li>並びは現在の予約日時順を維持（既存順を壊さない）</li>
+                  <li>揺らぎ ±N分（デフォルト10分、0で正時固定）</li>
+                  <li>プレビュー後に実行（DB書き換えは確定操作のみ）</li>
+                  <li>各記事リビジョン自動保存 → 編集画面の「リビジョン」から元の予約日時に戻せる</li>
+                  <li><code>wp_update_post</code> に <code>edit_date => true</code> を必須付与（これがないと post_date 変更が無視されるWPの仕様バグ回避）</li>
+                </ul>
+              </li>
+              <li><strong>独立性</strong>: 単機能プラグイン。Affiros9 連携不要、WP内で完結。dup-cleaner / paragraph-splitter と同じ「必要な時だけ入れて使い終わったら削除可」方針。</li>
+              <li><strong>自動更新対応</strong>: 既存6プラグインと同じ Affiros_Plugin_Updater を同梱。WP管理画面の「プラグイン」から更新通知あり。</li>
+            </ul>
+          </div>
 
           <div class="settings-section">
             <div class="section-header">// v1.7.51 (2026-06-23) — メモページを追加</div>

@@ -33,6 +33,8 @@ SPECS = [
      'affiros-dup-cleaner', 'affiros-dup-cleaner-1.0.1.zip'),
     (os.path.join(ROOT, 'affiros-paragraph-splitter'),
      'affiros-paragraph-splitter', 'affiros-paragraph-splitter-1.1.1.zip'),
+    (os.path.join(ROOT, 'affiros-reschedule'),
+     'affiros-reschedule', 'affiros-reschedule-1.0.0.zip'),
 ]
 
 
