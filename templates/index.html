@@ -1949,6 +1949,23 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         </div>
         <div style="max-width:780px">
 
+          <div class="settings-section">
+            <div class="section-header">// v1.7.56 (2026-06-23) — プロンプトキャッシュ Phase 1: インフラ整備（本番動作は変えない）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: Anthropic API のプロンプトキャッシュ機能を使うと、同一バッチ内の連続生成で静的部分（記事生成ルール等）の入力コストが <strong>1/10</strong> になる。月数百件運用で API 代を 30〜50% 削減できる見込み。</li>
+              <li><strong>Phase 1（今回）</strong>: インフラ整備のみ。本番動作はゼロ影響。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>環境変数 <code>ENABLE_PROMPT_CACHE</code> 追加（デフォルト <code>false</code>=従来動作）</li>
+                  <li><code>create_claude_message()</code> に <code>cacheable_system</code> 引数追加（呼び出し側は未使用なので影響ゼロ）</li>
+                  <li>OFF（既定）: <code>cacheable_system</code> を渡しても prompt 末尾に結合される → 従来と完全に同一動作</li>
+                  <li>ON: <code>cacheable_system</code> を system プロンプトとして <code>cache_control: ephemeral</code> 付きで送る</li>
+                </ul>
+              </li>
+              <li><strong>Phase 2（次回・別 PR）</strong>: 呼び出し側で <code>article_html_output_rules()</code> を <code>cacheable_system</code> に分離。プロンプト構造変更を伴うため、A/B 検証（OFF/ON で同条件3記事ずつ生成 → SEOスコア・構造一致確認）してから push。</li>
+              <li><strong>マーカー挿入機能には一切触っていない</strong>。記事品質も Phase 1 時点では完全に従来通り（プロンプトの中身も順序も変更なし）。</li>
+            </ul>
+          </div>
+
           <div class="settings-section" style="background:#fff7ed;border:1px solid #fb923c">
             <div class="section-header">// v1.7.55 (2026-06-23) — 私の越権コードを撤去（広告挿入定義はUIが常に第一優先に）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">

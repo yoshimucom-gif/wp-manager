@@ -233,7 +233,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.55'
+APP_VERSION = '1.7.56'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -254,6 +254,24 @@ APP_VERSION = '1.7.55'
 # / _RANK_H3_SIGNAL_RE 等）はこのバージョン管理の対象外。
 # それらは APP_VERSION 側で管理される独立した安定インフラ。
 CONTENT_QUALITY_VERSION = '1.2.0'
+
+# プロンプトキャッシュの ON/OFF フラグ。
+# 環境変数 ENABLE_PROMPT_CACHE で切替（デフォルト OFF=従来動作）。
+#
+# Phase 1 (v1.7.56): インフラだけ整備。create_claude_message に cacheable_system
+#   引数を追加するが、呼び出し側は変更しないため本番動作はゼロ影響。
+# Phase 2 (今後): 呼び出し側で article_html_output_rules() を cacheable_system
+#   に分離。プロンプト構造変更を伴うため A/B 検証を実施してから入れる。
+#
+# ON にした場合の挙動:
+#   - cacheable_system に渡したテキストを system プロンプトとして
+#     cache_control: ephemeral 付きで送る
+#   - 同一バッチ内の連続生成で静的部分の入力コストが 1/10 になる
+#   - キャッシュは 5分 TTL（5分以内に次のリクエストが来ないと消える）
+# OFF にした場合の挙動:
+#   - cacheable_system に渡したテキストは prompt 末尾に結合される（従来互換）
+#   - キャッシュは使わない、コスト削減なし
+ENABLE_PROMPT_CACHE = os.environ.get('ENABLE_PROMPT_CACHE', 'false').lower() in ('true', '1', 'yes')
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -2924,16 +2942,47 @@ def combine_article_usages(usages):
     }
 
 
-def create_claude_message(client, prompt, max_tokens=None, timeout=None, model=None):
+def create_claude_message(client, prompt, max_tokens=None, timeout=None, model=None, cacheable_system=None):
+    """Claude API を呼ぶ共通関数。プロンプトキャッシュ対応 (v1.7.56 で追加)。
+
+    cacheable_system:
+      - 同一バッチ内で「変わらない静的な部分」を渡す（記事生成ルール等）
+      - ENABLE_PROMPT_CACHE=true: system プロンプトとして cache_control 付きで送る
+        → 同一バッチ内で連続生成すると静的部分の入力コストが 1/10 になる
+      - ENABLE_PROMPT_CACHE=false: prompt 末尾に結合して 1 つの user content として
+        送る（従来と完全に同一動作）
+
+    OFF が既定なので、cacheable_system を渡すコードを後で書いても、
+    フラグを ON にするまでは挙動は一切変わらない。
+    """
     messages_api = getattr(client, 'messages', None)
     create = getattr(messages_api, 'create', None)
     if not callable(create):
         raise RuntimeError('Claude API client is not ready: messages.create is unavailable')
+
+    final_prompt = prompt
+    system_blocks = None
+    if cacheable_system:
+        if ENABLE_PROMPT_CACHE:
+            # キャッシュON: system プロンプトに分離 + cache_control
+            system_blocks = [
+                {
+                    'type': 'text',
+                    'text': str(cacheable_system),
+                    'cache_control': {'type': 'ephemeral'},
+                }
+            ]
+        else:
+            # キャッシュOFF: prompt 末尾に結合（位置を変えない=従来互換）
+            final_prompt = (prompt or '') + ('\n' if prompt else '') + str(cacheable_system)
+
     kwargs = {
         'model': model or get_article_model(),
         'max_tokens': max_tokens or CLAUDE_ARTICLE_MAX_TOKENS,
-        'messages': [{'role': 'user', 'content': prompt}],
+        'messages': [{'role': 'user', 'content': final_prompt}],
     }
+    if system_blocks is not None:
+        kwargs['system'] = system_blocks
     if timeout is not None:
         kwargs['timeout'] = timeout
     return create(**kwargs)
