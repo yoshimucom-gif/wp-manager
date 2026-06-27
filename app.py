@@ -233,7 +233,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.54'
+APP_VERSION = '1.7.55'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -4676,10 +4676,7 @@ DEFAULT_CARD_INSERTION_PATTERNS = {
         {'position': 'after_last_h2', 'design': 'vertical'},
     ],
     'column': [
-        # column 記事は「方法を解説する記事」のため読者は商品比較目的で来ていない。
-        # 冒頭に縦カード3枚並べる過剰広告は直帰率を上げてSEOを悪化させる。
-        # 冒頭は1枚で導線確保にとどめ、末尾の ranking カードで購買決定点に置く設計。
-        {'position': 'before_first_h2', 'design': 'vertical'},
+        {'position': 'before_first_h2', 'design': 'vertical', 'repeat': 3},
         # after_last_h2: キーワードに依存しない確定位置。
         # after_matome_h2 はFAQ等のH2が記事末尾にある場合まとめから離れるため、
         # 無条件に「記事内の最後のH2直後」を使う方が安定。
@@ -4782,24 +4779,6 @@ def load_ad_insertion_patterns():
             print('[AD-MIGRATION] brand: after_last_h2 added as fallback', flush=True)
         except Exception:
             pass
-
-    # ── column 過剰広告 重複防止マイグレーション ───────────────────────────
-    # column 記事は「方法を解説する記事」のため冒頭縦カード3枚は
-    # 過剰広告でSEO悪化（直帰率上昇）を招く。before_first_h2 の repeat を
-    # 1 に強制縮小する。冒頭1枚＋末尾 ranking で十分な広告露出を確保できる。
-    column_migrated = False
-    for rule in merged.get('column', []):
-        if (rule.get('position') == 'before_first_h2'
-                and rule.get('design') == 'vertical'
-                and int(rule.get('repeat', 1)) > 1):
-            rule.pop('repeat', None)
-            column_migrated = True
-    if column_migrated:
-        try:
-            save_ad_insertion_patterns(merged)
-            print('[AD-MIGRATION] column: before_first_h2 vertical repeat → 1 (過剰広告防止)', flush=True)
-        except Exception as _e:
-            print(f'[AD-MIGRATION] column repeat migration save failed: {_e}', flush=True)
 
     return merged
 

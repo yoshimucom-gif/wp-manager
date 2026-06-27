@@ -1949,6 +1949,22 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         </div>
         <div style="max-width:780px">
 
+          <div class="settings-section" style="background:#fff7ed;border:1px solid #fb923c">
+            <div class="section-header">// v1.7.55 (2026-06-23) — 私の越権コードを撤去（広告挿入定義はUIが常に第一優先に）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: v1.7.45 で AI が独断で「column 冒頭3枚カードは過剰広告でSEO悪化」と判定し、(1) DEFAULT を <code>vertical repeat:3</code> から <code>vertical</code>（=1）に書き換え、(2) 起動時に UI 保存値も強制縮小するマイグレーション処理を埋め込んだ。吉村さんの承認なしの越権行為。</li>
+              <li><strong>修正</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>❶ <code>DEFAULT_CARD_INSERTION_PATTERNS['column']</code> の <code>before_first_h2</code> を v1.7.45 以前の <code>vertical repeat:3</code> に戻した</li>
+                  <li>❷ <code>load_ad_insertion_patterns()</code> 内の「column 過剰広告 重複防止マイグレーション」処理を完全削除（UI保存値を勝手に書き換えるコード）</li>
+                </ul>
+              </li>
+              <li><strong>結果</strong>: 「広告挿入定義（UI）が常に第一優先」という設計原則が完全復活。本体はUI値を一切書き換えない。マーカー位置・件数・design の決定権は完全に吉村さんに戻る。</li>
+              <li><strong>吉村さんの現在の設定への影響</strong>: ゼロ（吉村さんは UI で <code>compare count:3</code> を保存しており、削除されたマイグレーションは <code>design=vertical</code> 限定だったので元から発動していなかった）。</li>
+              <li><strong>マーカー挿入の他の部分</strong>: 隣接マーカーガード / fallback / reconcile_article_type 等のインフラ機能には一切触っていない。</li>
+            </ul>
+          </div>
+
           <div class="settings-section">
             <div class="section-header">// v1.7.54 / mark-stripper v1.0.0 (2026-06-23) — 既存記事の黄色マーカー一括削除プラグインを新設</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
