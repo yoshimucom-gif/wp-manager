@@ -233,7 +233,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.56'
+APP_VERSION = '1.7.57'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -2942,26 +2942,58 @@ def combine_article_usages(usages):
     }
 
 
+# 記事生成プロンプトに埋め込まれる article_html_output_rules() の出力を
+# プロセス起動時に一度だけ計算してキャッシュする。プロンプトキャッシュ機能で
+# prompt 文字列から rules 部分を文字列マッチで抜き出すために使う。
+_ARTICLE_RULES_TEXT_CACHE = None
+
+
+def _cached_article_rules_text():
+    global _ARTICLE_RULES_TEXT_CACHE
+    if _ARTICLE_RULES_TEXT_CACHE is None:
+        try:
+            _ARTICLE_RULES_TEXT_CACHE = article_html_output_rules()
+        except Exception:
+            _ARTICLE_RULES_TEXT_CACHE = ''
+    return _ARTICLE_RULES_TEXT_CACHE
+
+
 def create_claude_message(client, prompt, max_tokens=None, timeout=None, model=None, cacheable_system=None):
-    """Claude API を呼ぶ共通関数。プロンプトキャッシュ対応 (v1.7.56 で追加)。
+    """Claude API を呼ぶ共通関数。プロンプトキャッシュ対応 (Phase 2 v1.7.57)。
 
     cacheable_system:
-      - 同一バッチ内で「変わらない静的な部分」を渡す（記事生成ルール等）
+      - 同一バッチ内で「変わらない静的な部分」を明示的に渡す
       - ENABLE_PROMPT_CACHE=true: system プロンプトとして cache_control 付きで送る
         → 同一バッチ内で連続生成すると静的部分の入力コストが 1/10 になる
       - ENABLE_PROMPT_CACHE=false: prompt 末尾に結合して 1 つの user content として
         送る（従来と完全に同一動作）
 
-    OFF が既定なので、cacheable_system を渡すコードを後で書いても、
-    フラグを ON にするまでは挙動は一切変わらない。
+    自動分離 (Phase 2):
+      ENABLE_PROMPT_CACHE=true かつ cacheable_system が未指定のとき、
+      prompt 文字列内に article_html_output_rules() のテキストが含まれていれば、
+      自動でそれを system プロンプトに分離してキャッシュ対象にする。
+      これにより呼び出し側のプロンプト構築コードを一切変えずにキャッシュが効く。
+
+    OFF が既定なので、フラグを ON にするまでは挙動は一切変わらない。
     """
     messages_api = getattr(client, 'messages', None)
     create = getattr(messages_api, 'create', None)
     if not callable(create):
         raise RuntimeError('Claude API client is not ready: messages.create is unavailable')
 
-    final_prompt = prompt
+    final_prompt = prompt if prompt is not None else ''
     system_blocks = None
+
+    # ── Phase 2 自動分離 ──────────────────────────────────────────────
+    # ENABLE_PROMPT_CACHE=true で cacheable_system が明示されていない場合、
+    # prompt から article_html_output_rules() の内容を抜き出して system に移動する。
+    if ENABLE_PROMPT_CACHE and not cacheable_system and final_prompt:
+        rules_text = _cached_article_rules_text()
+        if rules_text and rules_text in final_prompt:
+            cacheable_system = rules_text
+            final_prompt = final_prompt.replace(rules_text, '', 1)
+    # ────────────────────────────────────────────────────────────────
+
     if cacheable_system:
         if ENABLE_PROMPT_CACHE:
             # キャッシュON: system プロンプトに分離 + cache_control
@@ -2974,7 +3006,7 @@ def create_claude_message(client, prompt, max_tokens=None, timeout=None, model=N
             ]
         else:
             # キャッシュOFF: prompt 末尾に結合（位置を変えない=従来互換）
-            final_prompt = (prompt or '') + ('\n' if prompt else '') + str(cacheable_system)
+            final_prompt = (final_prompt or '') + ('\n' if final_prompt else '') + str(cacheable_system)
 
     kwargs = {
         'model': model or get_article_model(),
