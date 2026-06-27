@@ -233,7 +233,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.57'
+APP_VERSION = '1.7.58'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -7326,6 +7326,15 @@ def get_sites_dashboard():
         batch_total = sum(int(j.get('total', 0)) for j in active_jobs)
         wp_url = site.get('wp_url') or ''
         wp_connected = _get_wp_connection_status(sid, wp_url) if wp_url else False
+        # 「生成済」は「本文が生成された累計」（PUSH済・予約済・更新済を含む）。
+        # 旧版は status=='generated' だけをカウントしていたが、PUSH や予約投稿で
+        # status が published/scheduled に変わると除外され、「生成済 0件」のような
+        # 直感に反する表示になっていたため修正 (v1.7.58)。
+        generated_total = sum(
+            1 for a in site_articles
+            if a.get('status') in ('generated', 'published', 'scheduled', 'updated')
+        )
+        scheduled_count = sum(1 for a in site_articles if a.get('status') == 'scheduled')
         result.append({
             'id': sid,
             'name': site.get('name') or site.get('wp_url') or '(無名サイト)',
@@ -7335,7 +7344,8 @@ def get_sites_dashboard():
                 'total': len(site_articles),
                 'pending': sum(1 for a in site_articles if a.get('status') == 'pending'),
                 'generating': sum(1 for a in site_articles if a.get('status') == 'generating'),
-                'generated': sum(1 for a in site_articles if a.get('status') == 'generated'),
+                'generated': generated_total,
+                'scheduled': scheduled_count,
                 'published': len(published),
                 'error': sum(1 for a in site_articles if a.get('status') == 'error'),
             },
