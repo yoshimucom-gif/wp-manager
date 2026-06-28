@@ -1261,8 +1261,11 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </select>
           <select id="article-status-filter" style="font-size:12px;" onchange="filterArticles()" title="状態で絞り込み">
             <option value="">全状態</option>
+            <option value="pending">新規（未生成）</option>
+            <option value="generating">生成中</option>
             <option value="generated">生成済</option>
-            <option value="published">PUSH済</option>
+            <option value="scheduled">📅 予約済</option>
+            <option value="published">★ PUSH済</option>
             <option value="error">エラー</option>
             <option value="publish_failed">⚠️ PUSH失敗のみ</option>
           </select>
@@ -1952,6 +1955,26 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <div class="page-subtitle">Affiros9 本体の更新ログ（現在: <strong>v{{ app_version }}</strong>）</div>
         </div>
         <div style="max-width:780px">
+
+          <div class="settings-section">
+            <div class="section-header">// v1.7.60 (2026-06-27) — 対応履歴フィルタに「予約済」を独立追加 + 旧版の集約バグ修正</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>問題</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>対応履歴の状態フィルタに「予約済」の選択肢が無かった</li>
+                  <li>さらに「PUSH済」を選ぶと内部的に <code>['published', 'scheduled', 'updated']</code> を全部マッチさせていたため、予約済記事も「PUSH済」フィルタに混じって出てきていた = 区別不能</li>
+                </ul>
+              </li>
+              <li><strong>修正</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>ドロップダウンを 4択 → 7択に拡張:<br><code>新規（未生成） / 生成中 / 生成済 / 📅 予約済 / ★ PUSH済 / エラー / ⚠️ PUSH失敗のみ</code></li>
+                  <li>「予約済」と「PUSH済」を独立フィルタに分離 (scheduled / published+updated)</li>
+                  <li>「生成中」は generating + queued を合算（実態として処理待ちは同等）</li>
+                </ul>
+              </li>
+              <li><strong>効果</strong>: 「予約投稿待ちだけ見たい」「公開済だけ見たい」が一発で絞り込める。マーカー・記事生成ロジックには触っていない。</li>
+            </ul>
+          </div>
 
           <div class="settings-section">
             <div class="section-header">// v1.7.59 (2026-06-27) — サイト一覧カードにも「生成済」「予約済」を追加表示</div>
@@ -4336,11 +4359,20 @@ function filterArticles() {
   // 記事種別
   if (typeFilter) filtered = filtered.filter(a => (a.article_type || 'ranking') === typeFilter);
 
-  // 状態（5択 - 未生成は除外済）
-  if (statusFilter === 'generated') {
+  // 状態フィルタ (v1.7.60 で 4択 → 7択に拡張、scheduled を独立)
+  if (statusFilter === 'pending') {
+    filtered = filtered.filter(a => a.status === 'pending');
+  } else if (statusFilter === 'generating') {
+    // 生成中＋キュー待ち（実態として「処理待機中」）
+    filtered = filtered.filter(a => a.status === 'generating' || a.status === 'queued');
+  } else if (statusFilter === 'generated') {
     filtered = filtered.filter(a => a.status === 'generated');
+  } else if (statusFilter === 'scheduled') {
+    // 予約投稿のみ（旧版は published と合算されてて区別不能だった）
+    filtered = filtered.filter(a => a.status === 'scheduled');
   } else if (statusFilter === 'published') {
-    filtered = filtered.filter(a => ['published', 'scheduled', 'updated'].includes(a.status));
+    // 公開済みのみ（updated 含む。scheduled は別フィルタに分離）
+    filtered = filtered.filter(a => a.status === 'published' || a.status === 'updated');
   } else if (statusFilter === 'error') {
     filtered = filtered.filter(a => a.status === 'error');
   } else if (statusFilter === 'publish_failed') {
