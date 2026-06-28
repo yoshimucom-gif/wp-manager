@@ -121,8 +121,8 @@ body {
 .site-card__url { font-size: 11px; color: var(--muted, #888); margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .site-card__counts {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 4px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
   margin-top: 6px;
 }
 .site-card__count {
@@ -1167,15 +1167,11 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
               <div class="stat-value"><span id="dash-pending">0</span><span style="font-size:13px;font-weight:400">件</span></div>
             </div>
             <div class="stat-card">
-              <div class="stat-label" title="本文が生成された記事の累計。PUSH済・予約済・更新済も含む。">生成済（累計）</div>
+              <div class="stat-label" title="本文が生成された記事の累計。送信済も含む。">生成済（累計）</div>
               <div class="stat-value"><span id="dash-generated">0</span><span style="font-size:13px;font-weight:400">件</span></div>
             </div>
             <div class="stat-card">
-              <div class="stat-label" title="WPに予約投稿済みの記事数（status=scheduled）。">予約済</div>
-              <div class="stat-value"><span id="dash-scheduled">0</span><span style="font-size:13px;font-weight:400">件</span></div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label" title="WPに公開済みの記事数（status=published）。">PUSH済</div>
+              <div class="stat-label" title="WPに送信完了の記事数（即時公開 + 予約投稿の合算。公開タイミングは対応履歴の予定日カラムで確認）。">送信済</div>
               <div class="stat-value"><span id="dash-published">0</span><span style="font-size:13px;font-weight:400">件</span></div>
             </div>
             <div class="stat-card">
@@ -1264,10 +1260,9 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             <option value="pending">新規（未生成）</option>
             <option value="generating">生成中</option>
             <option value="generated">生成済</option>
-            <option value="scheduled">📅 予約済</option>
-            <option value="published">★ PUSH済</option>
+            <option value="sent">★ 送信済（公開＋予約）</option>
             <option value="error">エラー</option>
-            <option value="publish_failed">⚠️ PUSH失敗のみ</option>
+            <option value="publish_failed">⚠️ 送信失敗のみ</option>
           </select>
           <select id="article-marker-filter" style="font-size:12px;" onchange="filterArticles()" title="マーカー検証結果で絞り込み">
             <option value="">マーカー状態：全て</option>
@@ -1955,6 +1950,24 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <div class="page-subtitle">Affiros9 本体の更新ログ（現在: <strong>v{{ app_version }}</strong>）</div>
         </div>
         <div style="max-width:780px">
+
+          <div class="settings-section">
+            <div class="section-header">// v1.7.61 (2026-06-27) — 「PUSH済」「予約済」を「★ 送信済」に統合（ユーザー指示）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: ユーザー指摘「両方ともプッシュされているわけでしょ？分ける意味がわからない」。本質的には「WPに送信完了」は同じで、違いは公開タイミング（即時 or 予約）だけ。公開タイミングは予定日カラムで判別すれば十分。</li>
+              <li><strong>修正</strong>: 表示を全部「★ 送信済」に統合。<strong>内部の status 値（published/scheduled）はWPと整合するため維持、表示だけ統一</strong>。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>対応履歴の行表示: <code>published</code> も <code>scheduled</code> も「★ 送信済」バッジ</li>
+                  <li>対応履歴のフィルタ: 「📅 予約済」「★ PUSH済」を削除、代わりに「★ 送信済（公開＋予約）」1択に統合</li>
+                  <li>ダッシュボードKPI: 「予約済」カード削除、「PUSH済」→「送信済」（合算）</li>
+                  <li>サイト一覧カード: 5列 → 4列（合計/生成中/生成済/送信済）</li>
+                  <li>フィルタロジック: <code>statusFilter === 'sent'</code> で <code>['published','scheduled','updated']</code> をマッチ</li>
+                </ul>
+              </li>
+              <li><strong>公開タイミングの確認方法</strong>: 対応履歴の「予定日」カラムを見る。<code>予定日 &gt; 現在時刻</code> なら未公開（予約中）、<code>予定日 &lt;= 現在時刻</code> なら公開済。</li>
+              <li>マーカー・記事生成ロジックには触っていない。</li>
+            </ul>
+          </div>
 
           <div class="settings-section">
             <div class="section-header">// v1.7.60 (2026-06-27) — 対応履歴フィルタに「予約済」を独立追加 + 旧版の集約バグ修正</div>
@@ -4110,22 +4123,21 @@ function setArticlesLocalMessage(ids, message = '') {
 
 function updateStats() {
   const pending = allArticles.filter(a => a.status === 'pending').length;
-  // v1.7.58: 「生成済（累計）」は本文生成済の累計（PUSH済・予約済・更新済を含む）。
-  // 旧版は status==='generated' だけで PUSH/予約に進んだ瞬間に除外される直感に反する挙動だった。
+  // 「生成済（累計）」は本文生成済の累計（送信済・更新済を含む）
   const generated = allArticles.filter(a =>
     ['generated', 'published', 'scheduled', 'updated'].includes(a.status)
   ).length;
-  const scheduled = allArticles.filter(a => a.status === 'scheduled').length;
-  const published = allArticles.filter(a => a.status === 'published').length;
+  // v1.7.61: 「送信済」= published + scheduled + updated を合算（PUSH済と予約済を統合）。
+  // 公開タイミング（即時 or 予約）は対応履歴の予定日カラムで判別する。
+  const sent = allArticles.filter(a =>
+    ['published', 'scheduled', 'updated'].includes(a.status)
+  ).length;
   const lowScore = dashboardCandidates().length;
   const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
-  // 対応履歴ページの stat カード（TOTAL/PENDING/GENERATED/PUSHED）は撤去済み。
-  // ダッシュボード側のカードだけ更新する。
   set('dash-total', allArticles.length);
   set('dash-pending', pending);
   set('dash-generated', generated);
-  set('dash-scheduled', scheduled);
-  set('dash-published', published);
+  set('dash-published', sent); // 既存のdash-published DOMを再利用（ラベルは「送信済」）
   set('dash-low-score', lowScore);
 }
 
@@ -4359,7 +4371,7 @@ function filterArticles() {
   // 記事種別
   if (typeFilter) filtered = filtered.filter(a => (a.article_type || 'ranking') === typeFilter);
 
-  // 状態フィルタ (v1.7.60 で 4択 → 7択に拡張、scheduled を独立)
+  // 状態フィルタ (v1.7.61: PUSH済/予約済 を「送信済」に統合)
   if (statusFilter === 'pending') {
     filtered = filtered.filter(a => a.status === 'pending');
   } else if (statusFilter === 'generating') {
@@ -4367,16 +4379,13 @@ function filterArticles() {
     filtered = filtered.filter(a => a.status === 'generating' || a.status === 'queued');
   } else if (statusFilter === 'generated') {
     filtered = filtered.filter(a => a.status === 'generated');
-  } else if (statusFilter === 'scheduled') {
-    // 予約投稿のみ（旧版は published と合算されてて区別不能だった）
-    filtered = filtered.filter(a => a.status === 'scheduled');
-  } else if (statusFilter === 'published') {
-    // 公開済みのみ（updated 含む。scheduled は別フィルタに分離）
-    filtered = filtered.filter(a => a.status === 'published' || a.status === 'updated');
+  } else if (statusFilter === 'sent') {
+    // 送信済（即時公開・予約投稿・更新済を統合）。公開タイミングは予定日カラムで判別。
+    filtered = filtered.filter(a => ['published', 'scheduled', 'updated'].includes(a.status));
   } else if (statusFilter === 'error') {
     filtered = filtered.filter(a => a.status === 'error');
   } else if (statusFilter === 'publish_failed') {
-    // 直近のWP PUSH試行で失敗した記事（403/WAF等）。再試行対象。
+    // 直近のWP送信試行で失敗した記事（403/WAF等）。再試行対象。
     filtered = filtered.filter(a => !!a.last_publish_error);
   }
 
@@ -4513,11 +4522,13 @@ function statusBadge(status) {
     queued: ['…', '待機中'],
     generating: ['◌', '処理中'],
     generated: ['✓', '生成済'],
-    publishing: ['◌', 'PUSH中'],
-    published: ['★', 'PUSH済'],
-    repairing: ['◌', 'WP送信中'],
+    publishing: ['◌', '送信中'],
+    // v1.7.61: published と scheduled は表示上「★ 送信済」で統一。
+    // 公開タイミング（即時 or 予約）は予定日カラムで判別する。
+    published: ['★', '送信済'],
+    repairing: ['◌', '送信中'],
     updated: ['✓', '更新完了'],
-    scheduled: ['◷', '予約済'],
+    scheduled: ['★', '送信済'],
     error: ['✗', 'エラー'],
   };
   const [icon, label] = map[status] || ['?', status];
@@ -7599,17 +7610,13 @@ function renderSiteCardsOnHome() {
             <span class="num">${c.generating || 0}</span>
             <span class="lbl">生成中</span>
           </div>
-          <div class="site-card__count" title="本文生成済の累計（PUSH済・予約済を含む）">
+          <div class="site-card__count" title="本文生成済の累計（送信済を含む）">
             <span class="num">${c.generated || 0}</span>
             <span class="lbl">生成済</span>
           </div>
-          <div class="site-card__count" title="WP予約投稿済（status=scheduled）">
-            <span class="num">${c.scheduled || 0}</span>
-            <span class="lbl">予約済</span>
-          </div>
-          <div class="site-card__count" title="WP公開済（status=published）">
-            <span class="num">${c.published || 0}</span>
-            <span class="lbl">PUSH済</span>
+          <div class="site-card__count" title="WPに送信完了（即時公開＋予約投稿の合算）">
+            <span class="num">${(c.published || 0) + (c.scheduled || 0)}</span>
+            <span class="lbl">送信済</span>
           </div>
         </div>
         <div class="site-card__footer">
