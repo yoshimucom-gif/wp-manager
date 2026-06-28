@@ -121,8 +121,8 @@ body {
 .site-card__url { font-size: 11px; color: var(--muted, #888); margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .site-card__counts {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
   margin-top: 6px;
 }
 .site-card__count {
@@ -1952,6 +1952,21 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <div class="page-subtitle">Affiros9 本体の更新ログ（現在: <strong>v{{ app_version }}</strong>）</div>
         </div>
         <div style="max-width:780px">
+
+          <div class="settings-section">
+            <div class="section-header">// v1.7.59 (2026-06-27) — サイト一覧カードにも「生成済」「予約済」を追加表示</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: ダッシュボードのサイトカード一覧（全サイトを横並びで表示する画面）が「合計 / 生成中 / PUSH済」の3KPIしか出しておらず、KAGUASHI 644件などの大量の記事が pending なのか生成済なのか予約済なのか<strong>状態が見えない不安</strong>があった。</li>
+              <li><strong>修正</strong>: サイトカードの KPI を 3 → 5 に拡張。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>合計</code> / <code>生成中</code> / <strong><code>生成済</code></strong> / <strong><code>予約済</code></strong> / <code>PUSH済</code></li>
+                  <li><code>site-card__counts</code> のグリッドを 3列 → 5列に変更</li>
+                  <li>ツールチップ追加で各カウントの定義を明示</li>
+                </ul>
+              </li>
+              <li><strong>影響</strong>: 全サイトの状態が一目で把握できるように。マーカー・記事生成ロジックには触っていない。</li>
+            </ul>
+          </div>
 
           <div class="settings-section">
             <div class="section-header">// v1.7.58 (2026-06-27) — ダッシュボード「生成済」カウントのバグ修正 + 「予約済」カード追加</div>
@@ -7552,7 +7567,15 @@ function renderSiteCardsOnHome() {
             <span class="num">${c.generating || 0}</span>
             <span class="lbl">生成中</span>
           </div>
-          <div class="site-card__count">
+          <div class="site-card__count" title="本文生成済の累計（PUSH済・予約済を含む）">
+            <span class="num">${c.generated || 0}</span>
+            <span class="lbl">生成済</span>
+          </div>
+          <div class="site-card__count" title="WP予約投稿済（status=scheduled）">
+            <span class="num">${c.scheduled || 0}</span>
+            <span class="lbl">予約済</span>
+          </div>
+          <div class="site-card__count" title="WP公開済（status=published）">
             <span class="num">${c.published || 0}</span>
             <span class="lbl">PUSH済</span>
           </div>
