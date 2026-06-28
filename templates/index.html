@@ -1233,9 +1233,8 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div class="toolbar">
           <button class="btn btn-primary" onclick="generateSelected()">⚡ 選択を再生成</button>
           <span id="regen-progress-label" style="font-size:12px;color:var(--accent);display:none;align-items:center;gap:6px"></span>
-          <button class="btn btn-secondary" onclick="selectByScoreThreshold('low')" title="スコアが閾値未満の記事をまとめてチェック。再生成→『🗓️ 予定日振り直し』のフローに使う">📉 低スコア選択</button>
+          <button class="btn btn-secondary" onclick="selectByScoreThreshold('low')" title="スコアが閾値未満の記事をまとめてチェック。再生成して品質を改善する">📉 低スコア選択</button>
           <button class="btn btn-secondary" onclick="selectByScoreThreshold('high')" title="スコアが閾値以上の記事をまとめてチェック。そのまま『📅 予約投稿実行』に流す">📈 高スコア選択</button>
-          <button class="btn btn-secondary" onclick="bulkRescheduleSelected()" title="選択記事の予定日を「明日から1日 N 件」で振り直す。published/scheduled な記事はスキップ">🗓️ 予定日振り直し</button>
           <div class="split-btn">
             <select id="articles-post-status" title="WP投稿の種類" onchange="updateWpPostButtonLabel()">
               <option value="schedule">📅 予約投稿（schedule_date通り）</option>
@@ -1950,6 +1949,23 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <div class="page-subtitle">Affiros9 本体の更新ログ（現在: <strong>v{{ app_version }}</strong>）</div>
         </div>
         <div style="max-width:780px">
+
+          <div class="settings-section">
+            <div class="section-header">// v1.7.63 (2026-06-27) — 「🗓️ 予定日振り直し」ボタンを削除（affiros-reschedule プラグインに統合）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: 対応履歴の「🗓️ 予定日振り直し」ボタンは Affiros9 ローカルの <code>schedule_date</code> しか書き換えないため、すでにWPに送信済みの記事の実際の公開日時は変えられなかった。WP側の <code>post_date</code> を直接書き換える <code>affiros-reschedule</code> プラグイン (v1.0.0) を導入したので、本体側の機能は重複。</li>
+              <li><strong>削除内容</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>対応履歴ツールバーの「🗓️ 予定日振り直し」ボタン</li>
+                  <li>JS関数 <code>bulkRescheduleSelected()</code></li>
+                  <li>バックエンドAPI <code>POST /api/articles/bulk-schedule</code> および <code>bulk_schedule_articles()</code> 関数</li>
+                  <li>「📉 低スコア選択」ボタンのツールチップから「予定日振り直し」言及を削除</li>
+                </ul>
+              </li>
+              <li><strong>代替手段</strong>: 予定日（投稿頻度）を変えたい場合は WP管理画面 → ツール → 📅 予約再スケジュール（<code>affiros-reschedule</code> プラグイン）を使う。WP側の <code>post_date</code> を直接書き換えるので、実際の公開日時に即反映される。</li>
+              <li>マーカー・記事生成ロジックには触っていない。</li>
+            </ul>
+          </div>
 
           <div class="settings-section">
             <div class="section-header">// v1.7.62 (2026-06-27) — publish と batch-publish に冪等性ガード追加（重複送信防止）</div>
@@ -4660,45 +4676,6 @@ function selectByScoreThreshold(direction = 'low') {
     toast(`スコア ${compare} ${threshold} の記事 ${total} 件は既に選択済みでした ${skipMsg}`, 'info');
   } else {
     toast(`スコア ${compare} ${threshold} の記事 ${added} 件を追加選択しました（合計 ${total} 件該当）${skipMsg}`, 'success');
-  }
-}
-
-// 選択記事の予定日を「明日から1日 N 件」で振り直す。
-// 既に published / scheduled な記事はサーバー側でスキップされる。
-async function bulkRescheduleSelected() {
-  const ids = getSelectedIds();
-  if (!ids.length) { toast('記事を選択してください', 'error'); return; }
-  const perDayRaw = prompt(`${ids.length}件の予定日を「明日から」振り直します。\n\n1日あたり何件まで配分しますか？（1〜20）`, '3');
-  if (perDayRaw === null) return;
-  const perDay = parseInt(perDayRaw, 10);
-  if (!Number.isFinite(perDay) || perDay < 1 || perDay > 20) {
-    toast('1〜20 の数値を入力してください', 'error');
-    return;
-  }
-  // 予定範囲をプレビュー
-  const daysNeeded = Math.ceil(ids.length / perDay);
-  const start = new Date();
-  start.setDate(start.getDate() + 1);
-  const end = new Date(start);
-  end.setDate(start.getDate() + daysNeeded - 1);
-  const fmt = (d) => `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
-  if (!confirm(`${ids.length}件を ${fmt(start)} 〜 ${fmt(end)}（1日${perDay}件まで）に振り分けます。\nすでに公開済み・予約済みの記事はスキップされます。よろしいですか？`)) return;
-  try {
-    const res = await fetch('/api/articles/bulk-schedule', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({article_ids: ids, per_day: perDay}),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      toast(data.error || '予定日振り直しに失敗しました', 'error');
-      return;
-    }
-    const skipMsg = data.skipped_published ? ` / スキップ ${data.skipped_published}件（公開・予約済み）` : '';
-    toast(`${data.updated}件の予定日を振り直しました（${data.first_date} 〜 ${data.last_date}）${skipMsg}`, 'success');
-    await loadArticles();
-  } catch (e) {
-    toast('予定日振り直しに失敗しました: ' + e.message, 'error');
   }
 }
 
