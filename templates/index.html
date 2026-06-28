@@ -1952,6 +1952,23 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.62 (2026-06-27) — publish と batch-publish に冪等性ガード追加（重複送信防止）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>バグ</strong>: <code>/api/publish/&lt;id&gt;</code>（単体投稿）と <code>/api/batch-publish</code>（一括投稿）に冪等性ガードが無く、すでにWPに送信済みの記事を誤って再送できる状態だった。<code>/api/schedule-publish</code> は v1.7.43 で対策済みだったが、他2エンドポイントは抜けていた。</li>
+              <li><strong>修正</strong>: 両エンドポイントに同じガードを追加。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><strong>判定条件</strong>: <code>wp_post_id</code> がある、または <code>status in ('published', 'scheduled')</code></li>
+                  <li><strong>単体投稿</strong>: 該当時 <code>409 Conflict</code> で拒否、エラー文言で理由明示</li>
+                  <li><strong>一括投稿</strong>: 該当記事は targets から除外、レスポンスに <code>skipped_already_sent</code> 件数を返す</li>
+                  <li><strong>明示バイパス</strong>: <code>force=true</code> をPOST bodyに含めれば従来通り送信可能（公開済記事を更新したい等のケース用）</li>
+                </ul>
+              </li>
+              <li><strong>メモリ教訓の徹底</strong>: <code>feedback_idempotency_push_endpoints.md</code> が schedule-publish にしか反映されていなかったため、他のpush系エンドポイントすべてに横展開した。</li>
+              <li><strong>マーカー・記事生成ロジックには触っていない</strong>。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.61 (2026-06-27) — 「PUSH済」「予約済」を「★ 送信済」に統合（ユーザー指示）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: ユーザー指摘「両方ともプッシュされているわけでしょ？分ける意味がわからない」。本質的には「WPに送信完了」は同じで、違いは公開タイミング（即時 or 予約）だけ。公開タイミングは予定日カラムで判別すれば十分。</li>

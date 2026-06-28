@@ -233,7 +233,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.61'
+APP_VERSION = '1.7.62'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -8527,6 +8527,17 @@ def publish_article(article_id):
     if not article.get('content'):
         return jsonify({'error': '記事コンテンツがありません。先に生成してください。'}), 400
 
+    data = request.get_json(silent=True) or {}
+    # 冪等性ガード (v1.7.62 で追加): すでにWPに送信済みの記事の再送を防止。
+    # force=true で明示バイパス可能（公開済記事を再送して更新したい等の用途）。
+    force = bool(data.get('force'))
+    if not force and (article.get('wp_post_id') or article.get('status') in ('published', 'scheduled')):
+        return jsonify({
+            'error': 'この記事はすでにWPに送信済みです（重複送信防止のためブロック）。再送する場合は force=true を指定してください。',
+            'wp_post_id': article.get('wp_post_id'),
+            'status': article.get('status'),
+        }), 409
+
     settings = load_settings()
     quality = select_quality_definition(
         load_quality(),
@@ -8737,6 +8748,7 @@ def batch_publish():
     data = request.get_json(silent=True) or {}
     article_ids = data.get('article_ids', [])
     post_status = data.get('post_status', 'publish')  # デフォルト公開
+    force = bool(data.get('force'))
 
     with _DATA_LOCK:
         settings       = load_settings()
@@ -8744,11 +8756,27 @@ def batch_publish():
         quality_list   = load_quality()
 
     article_lookup = {a['id']: a for a in articles_snap}
-    targets = [article_lookup[i] for i in article_ids
-               if i in article_lookup and article_lookup[i].get('content')]
+    raw_targets = [article_lookup[i] for i in article_ids
+                   if i in article_lookup and article_lookup[i].get('content')]
+
+    # 冪等性ガード (v1.7.62 で追加): すでにWPに送信済みの記事を targets から除外。
+    # force=true なら全件含める（更新したいケース用）。
+    if force:
+        targets = raw_targets
+        skipped_already_sent = 0
+    else:
+        targets = [
+            a for a in raw_targets
+            if not a.get('wp_post_id') and a.get('status') not in ('published', 'scheduled')
+        ]
+        skipped_already_sent = len(raw_targets) - len(targets)
 
     if not targets:
-        return jsonify({'error': '投稿可能な記事（本文あり）が見つかりません'}), 400
+        return jsonify({
+            'error': '投稿可能な記事がありません'
+                     + (f'（{skipped_already_sent}件は既にWPに送信済みのためスキップ）' if skipped_already_sent else '（本文ありの記事が選択されていません）'),
+            'skipped_already_sent': skipped_already_sent,
+        }), 400
 
     job_id = str(uuid.uuid4())
     now    = now_iso()
@@ -8925,10 +8953,14 @@ def batch_publish():
             save_publish_jobs(pjobs)
 
     threading.Thread(target=worker, daemon=True).start()
+    msg = f'{len(targets)}件のWP投稿をバックグラウンドで開始しました。'
+    if skipped_already_sent:
+        msg += f'（{skipped_already_sent}件は既にWPに送信済みのためスキップ）'
     return jsonify({
         'job_id':  job_id,
         'total':   len(targets),
-        'message': f'{len(targets)}件のWP投稿をバックグラウンドで開始しました。',
+        'skipped_already_sent': skipped_already_sent,
+        'message': msg,
     })
 
 
