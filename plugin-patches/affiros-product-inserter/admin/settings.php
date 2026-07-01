@@ -42,6 +42,7 @@ function ai_pi_sanitize_settings($input) {
     // 自動挿入（v1.9.17〜）
     $output['auto_insert_enabled']         = ($input['auto_insert_enabled'] ?? ($existing['auto_insert_enabled'] ?? 'no')) === 'yes' ? 'yes' : 'no';
     $output['auto_insert_delay_minutes']   = max(0, min(60, intval($input['auto_insert_delay_minutes'] ?? ($existing['auto_insert_delay_minutes'] ?? 5))));
+    $output['auto_scan_limit']             = max(1, min(50, intval($input['auto_scan_limit'] ?? ($existing['auto_scan_limit'] ?? 10))));
 
     // 内部固定（UIから消したが値は持っておく）
     $output['default_insert_mode']  = 'marker';
@@ -173,6 +174,58 @@ function ai_pi_render_settings_page() {
                             <strong>5</strong>（推奨）: 5分後に挿入<br>
                             ※ WP Cron はサイトへのアクセスで発火するため、低トラフィックなサイトでは遅延がさらに伸びることがあります。
                         </p>
+                    </td>
+                </tr>
+                <tr>
+                    <th>毎時スキャン上限</th>
+                    <td>
+                        <input type="number" name="ai_pi_settings[auto_scan_limit]" value="<?php echo esc_attr($settings['auto_scan_limit'] ?? 10); ?>" min="1" max="50" style="width:80px;"> 件/時
+                        <p class="description">
+                            v1.9.26 で追加: <strong>毎時 1 回</strong>、published状態でマーカーが残っている記事を自動スキャンして処理します（<code>transition_post_status</code> フックの取りこぼしを救う）。<br>
+                            上記の「自動挿入を有効化」ON時のみ動作。1回で処理する上限（デフォルト 10件、超過分は次回スキャン）。<br>
+                            低トラフィックサイトで WP Cron が遅れがちな場合、サーバー側 cron で <code>wp-cron.php</code> を毎分叩くと確実。
+                        </p>
+                        <?php
+                        $last_at = get_option('ai_pi_last_scan_at', '');
+                        $last_processed = intval(get_option('ai_pi_last_scan_processed', 0));
+                        ?>
+                        <p style="margin-top:10px">
+                            <strong>最終スキャン</strong>:
+                            <?php if ($last_at): ?>
+                                <?php echo esc_html($last_at); ?> / 処理件数 <?php echo esc_html($last_processed); ?>件
+                            <?php else: ?>
+                                <em style="color:#888">まだ実行されていません</em>
+                            <?php endif; ?>
+                        </p>
+                        <p>
+                            <button type="button" class="button" id="ai-pi-manual-scan-btn">🔄 今すぐスキャン実行</button>
+                            <span id="ai-pi-manual-scan-status" style="margin-left:10px;font-size:12px;color:#666"></span>
+                        </p>
+                        <script>
+                        (function ($) {
+                            $('#ai-pi-manual-scan-btn').on('click', async function () {
+                                const btn = $(this);
+                                const status = $('#ai-pi-manual-scan-status');
+                                btn.prop('disabled', true).text('実行中... (最大数分)');
+                                status.text('');
+                                try {
+                                    const res = await $.post(ajaxurl, {
+                                        action: 'ai_pi_manual_scan',
+                                        nonce: '<?php echo esc_js(wp_create_nonce('ai_pi_manual_scan_nonce')); ?>',
+                                    });
+                                    if (res.success) {
+                                        status.html('<span style="color:#16a34a;font-weight:600">✓ 完了: ' + res.data.processed + '件処理 (' + res.data.last_scan_at + ')</span>');
+                                    } else {
+                                        status.html('<span style="color:#dc2626">失敗: ' + (res.data || '') + '</span>');
+                                    }
+                                } catch (e) {
+                                    status.html('<span style="color:#dc2626">通信エラー</span>');
+                                } finally {
+                                    btn.prop('disabled', false).text('🔄 今すぐスキャン実行');
+                                }
+                            });
+                        })(jQuery);
+                        </script>
                     </td>
                 </tr>
             </table>

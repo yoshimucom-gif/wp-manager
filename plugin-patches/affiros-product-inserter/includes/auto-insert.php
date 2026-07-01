@@ -108,4 +108,110 @@ function ai_pi_clear_auto_insert_crons() {
             wp_unschedule_event($timestamp, 'ai_pi_auto_insert_event', $args);
         }
     }
+    // hourly スキャン cron も掃除
+    $ts = wp_next_scheduled('ai_pi_auto_scan_event');
+    if ($ts) {
+        wp_unschedule_event($ts, 'ai_pi_auto_scan_event');
+    }
 }
+
+// ─────────────────────────────────────────────────────────────
+// 毎時スキャン cron (v1.9.26 で追加)
+//
+// 背景: transition_post_status フックは「WP Cron が動いた瞬間」しか発火しない。
+//   アクセスが少ないサイトだと WP Cron 自体が遅延し、予約投稿の自動公開すら
+//   遅れる → 自動挿入が発動しないケースがあった。
+//
+// 対策: 毎時 1 回、「published + マーカーあり + 未処理」の記事をスキャンして
+//   自動的に AI_PI_Inserter::run() で処理する。取りこぼしゼロ保証。
+//
+// 動作条件:
+//   - auto_insert_enabled === 'yes' （既存のトグルを流用）
+//   - 1回のスキャンで処理する上限は auto_scan_limit (デフォルト 10、1〜50)
+//     上限超過分は次のスキャンで処理される
+//
+// WP Cron が動かないと本 cron も動かないので、サーバー cron で
+// wp-cron.php を定期起動しておくと確実（毎分推奨）。
+// ─────────────────────────────────────────────────────────────
+
+add_action('init', 'ai_pi_register_hourly_scan_cron');
+function ai_pi_register_hourly_scan_cron() {
+    // 未登録なら初回スケジュール（プラグイン更新で新機能が入った場合に自動登録）
+    if (!wp_next_scheduled('ai_pi_auto_scan_event')) {
+        wp_schedule_event(time() + 60, 'hourly', 'ai_pi_auto_scan_event');
+    }
+}
+
+add_action('ai_pi_auto_scan_event', 'ai_pi_run_hourly_scan');
+
+function ai_pi_run_hourly_scan() {
+    $settings = get_option('ai_pi_settings', []);
+    if (empty($settings['auto_insert_enabled']) || $settings['auto_insert_enabled'] !== 'yes') {
+        return;
+    }
+    $limit = max(1, min(50, intval($settings['auto_scan_limit'] ?? 10)));
+
+    global $wpdb;
+    // published で マーカーあり (raw or entity-encoded) で 未処理・除外なし の記事
+    $sql = $wpdb->prepare(
+        "SELECT p.ID FROM {$wpdb->posts} p
+         WHERE p.post_type = 'post'
+           AND p.post_status = 'publish'
+           AND (p.post_content LIKE %s OR p.post_content LIKE %s)
+           AND NOT EXISTS (
+             SELECT 1 FROM {$wpdb->postmeta} pm
+             WHERE pm.post_id = p.ID
+               AND pm.meta_key = '_ai_pi_inserted'
+               AND pm.meta_value = '1'
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM {$wpdb->postmeta} pm2
+             WHERE pm2.post_id = p.ID
+               AND pm2.meta_key = '_ai_pi_excluded'
+           )
+         ORDER BY p.ID DESC
+         LIMIT %d",
+        '%<!--%ai-product%',
+        '%&lt;!--%ai-product%',
+        $limit
+    );
+    $ids = $wpdb->get_col($sql);
+
+    if (empty($ids)) {
+        // 実行実績を残す（UI で「最終スキャン日時」を出すため）
+        update_option('ai_pi_last_scan_at', current_time('mysql'));
+        update_option('ai_pi_last_scan_processed', 0);
+        return;
+    }
+
+    @set_time_limit(300);
+    $processed = 0;
+    foreach ($ids as $id) {
+        $result = AI_PI_Inserter::run(intval($id), []);
+        if (!is_wp_error($result)) {
+            $processed++;
+        } else {
+            error_log('[ai-pi hourly-scan] post_id=' . $id . ' failed: ' . $result->get_error_message());
+        }
+    }
+    update_option('ai_pi_last_scan_at', current_time('mysql'));
+    update_option('ai_pi_last_scan_processed', $processed);
+}
+
+/**
+ * 「今すぐスキャン実行」ボタン用 AJAX ハンドラ。
+ * cron を待たずに hourly scan と同じ処理を即時起動できる。
+ */
+add_action('wp_ajax_ai_pi_manual_scan', function () {
+    check_ajax_referer('ai_pi_manual_scan_nonce', 'nonce');
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error('権限がありません');
+    }
+    ai_pi_run_hourly_scan();
+    $last_at = get_option('ai_pi_last_scan_at', '');
+    $processed = intval(get_option('ai_pi_last_scan_processed', 0));
+    wp_send_json_success([
+        'last_scan_at' => $last_at,
+        'processed' => $processed,
+    ]);
+});

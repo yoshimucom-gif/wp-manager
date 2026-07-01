@@ -1951,6 +1951,25 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.65 / inserter v1.9.26 (2026-06-27) — 自動挿入に「毎時スキャン」cron 追加（transition_post_status の取りこぼしを救済）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>問題</strong>: 自動挿入 ON にしても、予約投稿の公開時に商品カード化が発火しない現象があった。原因は WP Cron 依存: <code>transition_post_status</code> フックは「WP Cron が動いた瞬間」しか発火しないため、アクセスが少ないサイトでは予約公開自体が遅延し、自動挿入も動かなかった。</li>
+              <li><strong>修正</strong>: 毎時 1 回の <code>ai_pi_auto_scan_event</code> cron を追加。<code>transition</code> フックの取りこぼしを救う。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>対象: <code>post_status=publish</code> かつ マーカーあり かつ 未処理（<code>_ai_pi_inserted</code> なし）の記事</li>
+                  <li>1回の上限: <code>auto_scan_limit</code>（デフォルト 10件、1〜50件で設定可）。超過分は次回スキャンで処理</li>
+                  <li>手動実行と完全に同じ <code>AI_PI_Inserter::run()</code> を呼ぶ（品質同等）</li>
+                  <li>「今すぐスキャン実行」ボタンで cron 待たずにテスト可能</li>
+                  <li>設定画面に「最終スキャン日時」「処理件数」表示</li>
+                </ul>
+              </li>
+              <li><strong>より確実にするには</strong>: ConoHa WING のコントロールパネルで cron 設定 → 毎分 <code>curl -s https://your-site.com/wp-cron.php > /dev/null</code> を叩けば WP Cron が確実に動くようになる（推奨だが必須ではない）。</li>
+              <li><strong>更新方法</strong>: プラグイン管理画面で v1.9.26 に更新 → 自動で cron 登録されます。</li>
+              <li><strong>マーカー挿入ロジックには一切触っていない</strong>（既存の <code>AI_PI_Inserter::run()</code> を呼ぶだけ）。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.64 / inserter v1.9.25 (2026-06-27) — 一括処理の処理上限デフォルトを 5件 → 50件 に変更</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>変更</strong>: <code>affiros-product-inserter</code> の一括処理画面「処理上限」入力欄のデフォルト値を <strong>5 → 50</strong> に変更。</li>
