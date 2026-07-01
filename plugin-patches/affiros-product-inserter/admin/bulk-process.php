@@ -62,8 +62,8 @@ function ai_pi_render_bulk_page() {
                 <tr>
                     <th>処理上限</th>
                     <td>
-                        <input type="number" id="aipi_limit" value="5" min="1" max="200" style="width:80px;">
-                        <p class="description">最初は<strong>5件</strong>でテスト推奨。最大 <strong>200件</strong> まで指定可能。</p>
+                        <input type="number" id="aipi_limit" value="50" min="1" max="200" style="width:80px;">
+                        <p class="description">デフォルト <strong>50件</strong>。初めて使う場合は <strong>5〜10件</strong> でテスト推奨。最大 <strong>200件</strong> まで指定可能。</p>
                         <details style="margin-top:10px;background:#fafafa;border:1px solid #e0e0e0;border-radius:4px;">
                             <summary style="padding:8px 12px;cursor:pointer;font-weight:600;color:#2271b1;">📊 件数別の所要時間・コスト目安（クリックで展開）</summary>
                             <table style="width:100%;border-collapse:collapse;font-size:12px;margin:0;">

@@ -1951,6 +1951,16 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.64 / inserter v1.9.25 (2026-06-27) — 一括処理の処理上限デフォルトを 5件 → 50件 に変更</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>変更</strong>: <code>affiros-product-inserter</code> の一括処理画面「処理上限」入力欄のデフォルト値を <strong>5 → 50</strong> に変更。</li>
+              <li><strong>理由</strong>: 5件は初回テスト用の値としては小さすぎる（毎回数字を書き換える手間）。実運用のバッチサイズ 50件 をデフォルトに。</li>
+              <li><strong>説明文</strong>: 「デフォルト 50件。初めて使う場合は 5〜10件 でテスト推奨。最大 200件 まで指定可能。」に修正。</li>
+              <li><strong>各サイトの更新</strong>: プラグイン管理画面から <strong>v1.9.25</strong> に更新すれば適用。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.63 (2026-06-27) — 「🗓️ 予定日振り直し」ボタンを削除（affiros-reschedule プラグインに統合）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: 対応履歴の「🗓️ 予定日振り直し」ボタンは Affiros9 ローカルの <code>schedule_date</code> しか書き換えないため、すでにWPに送信済みの記事の実際の公開日時は変えられなかった。WP側の <code>post_date</code> を直接書き換える <code>affiros-reschedule</code> プラグイン (v1.0.0) を導入したので、本体側の機能は重複。</li>
