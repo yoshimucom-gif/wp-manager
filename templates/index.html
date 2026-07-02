@@ -1951,6 +1951,17 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.66 (2026-06-27) — 一括生成の予算目安を実測ベースに修正（¥8 → ¥72/記事）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>バグ</strong>: 一括生成の確認ダイアログに表示される予算目安が <code>1記事 ¥8</code> の固定計算で、実測値の <strong>約 1/9</strong> と大幅に少なかった（100件で ¥800 表示 vs 実態 ¥7,200）。</li>
+              <li><strong>真因</strong>: v1.7.44 で予算目安機能を追加した時、実測値が無いまま大雑把な数字を入れていた。2026年6月に500記事流した実測データ（$229 = ¥36,000 → 1記事 ¥72）がある今、実測ベースに修正。</li>
+              <li><strong>修正</strong>: <code>Math.round(processCount * 8)</code> → <code>Math.round(processCount * 72)</code>。表示文言も「実測ベース。プロンプトキャッシュONで ~¥50に」に更新。</li>
+              <li><strong>効果</strong>: 100件生成の見積もりが <strong>¥800 → ¥7,200</strong> に正確化。「安いつもりで走らせて予算オーバー」を防止。</li>
+              <li>マーカー・記事生成ロジックには触っていない。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.65 / inserter v1.9.26 (2026-06-27) — 自動挿入に「毎時スキャン」cron 追加（transition_post_status の取りこぼしを救済）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>問題</strong>: 自動挿入 ON にしても、予約投稿の公開時に商品カード化が発火しない現象があった。原因は WP Cron 依存: <code>transition_post_status</code> フックは「WP Cron が動いた瞬間」しか発火しないため、アクセスが少ないサイトでは予約公開自体が遅延し、自動挿入も動かなかった。</li>
@@ -6842,12 +6853,13 @@ async function startBatchGenerate() {
   }
   const processCount = willProcess.length;
 
-  // 予算目安（Sonnet 4.6 1記事 約8円で概算。N選やリトライで上下する）
-  const estCostJpy = Math.round(processCount * 8);
+  // 予算目安（Sonnet 4.6 実測値: 2026年6月に500記事流して約 $229/¥36,000 消費 = 1記事 ¥72）。
+  // プロンプトキャッシュ (Phase 2) ON にすると ¥45-50 に下がる見込み。N選・リトライで上下する。
+  const estCostJpy = Math.round(processCount * 72);
   const skipMsg = (limit > 0 && totalSelected > limit)
     ? `\n選択 ${totalSelected} 件のうち、最初の ${processCount} 件のみ処理します（${totalSelected - processCount} 件は未処理のまま残ります）。`
     : '';
-  const confirmMsg = `${processCount} 件を一括生成します。\n予算目安: 約 ¥${estCostJpy.toLocaleString()}（Sonnet 4.6, 1記事 ~¥8）${skipMsg}\n\n続行しますか？`;
+  const confirmMsg = `${processCount} 件を一括生成します。\n予算目安: 約 ¥${estCostJpy.toLocaleString()}（Sonnet 4.6, 1記事 ~¥70 実測ベース。プロンプトキャッシュONで ~¥50に）${skipMsg}\n\n続行しますか？`;
   if (!confirm(confirmMsg)) return;
 
   ids = willProcess;
