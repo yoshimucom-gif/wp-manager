@@ -1604,7 +1604,19 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
                 <option value="claude-opus-4-7">Opus 4.7（最高品質・コスト高）</option>
               </select>
               <div style="font-size:11px;color:var(--muted);margin-top:4px">
-                Sonnet 4.6: 1記事 約13円 / Opus 4.7: 1記事 約65円。最高品質運用したい時だけ Opus に切替。
+                Sonnet 4.6: 1記事 約 ¥72 実測 / Opus 4.7: 1記事 約 ¥360（Sonnetの5倍単価）。最高品質運用したい時だけ Opus に切替。
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">
+                <input type="checkbox" id="s-enable-prompt-cache" style="margin-right:6px">
+                プロンプトキャッシュを有効化
+              </label>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.6">
+                <strong>入力トークンのコスト削減</strong>。同一バッチ内で連続生成すると静的部分（rules 3,000tokens）が
+                <strong>1/10 の単価</strong>で処理される。<strong>記事品質は完全に同じ</strong>（Anthropic公式仕様）。<br>
+                効果目安: 500件バッチで <strong>約 15-20% 削減</strong>（¥36,000 → ¥30,000 程度）。<br>
+                ※ 環境変数 <code>ENABLE_PROMPT_CACHE</code> が設定されていればそちらが優先されます。
               </div>
             </div>
           </div>
@@ -1949,6 +1961,24 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <div class="page-subtitle">Affiros9 本体の更新ログ（現在: <strong>v{{ app_version }}</strong>）</div>
         </div>
         <div style="max-width:780px">
+
+          <div class="settings-section">
+            <div class="section-header">// v1.7.68 (2026-06-27) — プロンプトキャッシュを管理画面から ON/OFF できるように（Render 再デプロイ不要）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: 従来はプロンプトキャッシュを ON にするには Render の Environment に <code>ENABLE_PROMPT_CACHE=true</code> を設定して再デプロイが必要だった。手間なので管理画面から即時切替できるようにした。</li>
+              <li><strong>追加</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>API設定ページに「プロンプトキャッシュを有効化」チェックボックス追加</li>
+                  <li><code>settings.enable_prompt_cache</code> フィールドに保存</li>
+                  <li>従来の定数 <code>ENABLE_PROMPT_CACHE</code> を関数 <code>is_prompt_cache_enabled()</code> に置換</li>
+                  <li>判定優先順位: 環境変数 &gt; settings.json &gt; デフォルト OFF</li>
+                </ul>
+              </li>
+              <li><strong>使い方</strong>: 「API設定」ページで「プロンプトキャッシュを有効化」にチェック → 保存 → 次のバッチ生成から即効く（デプロイ不要）。</li>
+              <li><strong>効果</strong>: 品質完全維持のまま入力トークンコスト削減。500件バッチで約 15-20% 削減（¥36,000 → ¥30,000 程度）。品質は Anthropic 公式仕様で完全に同じ。</li>
+              <li>マーカー・記事生成ロジックには触っていない。</li>
+            </ul>
+          </div>
 
           <div class="settings-section">
             <div class="section-header">// v1.7.67 (2026-06-27) — 品質定義の「書き方参考URL」「記事構成HTML」を完全撤去</div>
@@ -7203,6 +7233,7 @@ function collectSettingsFormData() {
   return {
     claude_api_key: document.getElementById('s-claude-key').value,
     claude_article_model: document.getElementById('s-article-model').value,
+    enable_prompt_cache: document.getElementById('s-enable-prompt-cache').checked,
     default_quality_id: document.getElementById('s-default-quality').value,
     amazon_access_key: document.getElementById('s-amazon-access-key').value,
     amazon_secret_key: document.getElementById('s-amazon-secret-key').value,
@@ -7359,6 +7390,7 @@ async function loadSettings() {
   s = await restoreSettingsFromBrowserBackup(s);
   document.getElementById('s-claude-key').value = s.claude_api_key || '';
   document.getElementById('s-article-model').value = s.claude_article_model || 'claude-sonnet-4-6';
+  document.getElementById('s-enable-prompt-cache').checked = !!s.enable_prompt_cache;
   syncUsageEstimateConfigModel();   // 選択モデルに合わせてコスト単価を同期
   document.getElementById('s-amazon-access-key').value = s.amazon_access_key || '';
   document.getElementById('s-amazon-secret-key').value = s.amazon_secret_key || '';

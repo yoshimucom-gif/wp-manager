@@ -233,7 +233,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.67'
+APP_VERSION = '1.7.68'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -271,7 +271,29 @@ CONTENT_QUALITY_VERSION = '1.2.0'
 # OFF にした場合の挙動:
 #   - cacheable_system に渡したテキストは prompt 末尾に結合される（従来互換）
 #   - キャッシュは使わない、コスト削減なし
-ENABLE_PROMPT_CACHE = os.environ.get('ENABLE_PROMPT_CACHE', 'false').lower() in ('true', '1', 'yes')
+_ENABLE_PROMPT_CACHE_ENV = os.environ.get('ENABLE_PROMPT_CACHE', '').lower()
+
+
+def is_prompt_cache_enabled():
+    """プロンプトキャッシュの有効/無効を判定する（v1.7.68 で動的化）。
+
+    優先順位:
+      1. 環境変数 ENABLE_PROMPT_CACHE = true/false が明示されていればそれに従う
+      2. 未設定なら settings.json の enable_prompt_cache フラグを見る
+         （API設定ページで ON/OFF 切替可能）
+      3. どちらも未設定なら OFF（従来動作）
+
+    これで Render の再デプロイ不要で管理画面から切替できる。
+    """
+    if _ENABLE_PROMPT_CACHE_ENV in ('true', '1', 'yes'):
+        return True
+    if _ENABLE_PROMPT_CACHE_ENV in ('false', '0', 'no'):
+        return False
+    try:
+        settings = load_settings()
+    except Exception:
+        return False
+    return bool(settings.get('enable_prompt_cache', False))
 SONNET_INPUT_USD_PER_MTOK = 3.0
 SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
@@ -2981,9 +3003,11 @@ def create_claude_message(client, prompt, max_tokens=None, timeout=None, model=N
     system_blocks = None
 
     # ── Phase 2 自動分離 ──────────────────────────────────────────────
-    # ENABLE_PROMPT_CACHE=true で cacheable_system が明示されていない場合、
-    # prompt から article_html_output_rules() の内容を抜き出して system に移動する。
-    if ENABLE_PROMPT_CACHE and not cacheable_system and final_prompt:
+    # プロンプトキャッシュ有効時 (環境変数 or 管理画面で ON) かつ
+    # cacheable_system が明示されていない場合、prompt から
+    # article_html_output_rules() の内容を抜き出して system に移動する。
+    cache_on = is_prompt_cache_enabled()
+    if cache_on and not cacheable_system and final_prompt:
         rules_text = _cached_article_rules_text()
         if rules_text and rules_text in final_prompt:
             cacheable_system = rules_text
@@ -2991,7 +3015,7 @@ def create_claude_message(client, prompt, max_tokens=None, timeout=None, model=N
     # ────────────────────────────────────────────────────────────────
 
     if cacheable_system:
-        if ENABLE_PROMPT_CACHE:
+        if cache_on:
             # キャッシュON: system プロンプトに分離 + cache_control
             system_blocks = [
                 {
@@ -9347,6 +9371,7 @@ def get_settings():
     safe = {
         'claude_api_key': mask_secret(settings.get('claude_api_key', ''), 10),
         'claude_article_model': settings.get('claude_article_model', 'claude-sonnet-4-6'),
+        'enable_prompt_cache': bool(settings.get('enable_prompt_cache', False)),
         'default_quality_id': settings.get('default_quality_id', 'default'),
         'amazon_access_key': mask_secret(settings.get('amazon_access_key', ''), 10),
         'amazon_secret_key': mask_secret(settings.get('amazon_secret_key', ''), 10),
@@ -9395,6 +9420,9 @@ def update_settings():
         model_val = str(data.get('claude_article_model') or '').strip()
         if model_val in ('claude-sonnet-4-6', 'claude-opus-4-7'):
             settings['claude_article_model'] = model_val
+    if 'enable_prompt_cache' in data:
+        # プロンプトキャッシュ有効/無効（v1.7.68 で管理画面から切替可能に）
+        settings['enable_prompt_cache'] = bool(data.get('enable_prompt_cache'))
     if data.get('claude_api_key') and not is_masked_value(data['claude_api_key']):
         settings['claude_api_key'] = data['claude_api_key']
     for key in ('amazon_access_key', 'amazon_secret_key', 'rakuten_app_id'):
