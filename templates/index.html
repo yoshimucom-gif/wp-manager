@@ -1065,7 +1065,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
                   </tbody>
                 </table>
                 <div style="font-size:11px;color:var(--muted);margin-bottom:18px;line-height:1.6;">
-                  ※ 文字数3,000〜5,000字 / SEO標準構成（ランキング・コラム・商標いずれも近似）。プロンプト・品質定義・参考URL・商品検索結果込み。API設定で Sonnet ↔ Opus 切替可能。
+                  ※ 文字数3,000〜5,000字 / SEO標準構成（ランキング・コラム・商標いずれも近似）。プロンプト・品質定義・商品検索結果込み。API設定で Sonnet ↔ Opus 切替可能。
                 </div>
 
                 <!-- 表2: 商品挿入料金 -->
@@ -1513,7 +1513,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
       <div class="page" id="page-quality">
         <div class="page-header">
           <div class="page-title">品質定義</div>
-          <div class="page-subtitle">記事種類・文字数・書き方参考URL・追加ルールを含む品質プリセットを管理</div>
+          <div class="page-subtitle">記事種類・文字数・追加ルールを含む品質プリセットを管理</div>
         </div>
         <div class="toolbar">
           <button class="btn btn-primary" onclick="openQualityModal()">+ 新規追加</button>
@@ -1949,6 +1949,27 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <div class="page-subtitle">Affiros9 本体の更新ログ（現在: <strong>v{{ app_version }}</strong>）</div>
         </div>
         <div style="max-width:780px">
+
+          <div class="settings-section">
+            <div class="section-header">// v1.7.67 (2026-06-27) — 品質定義の「書き方参考URL」「記事構成HTML」を完全撤去</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: 全 quality プリセットで <code>reference_url</code> / <code>structure_html</code> のいずれも未設定であることが確認された。使われていない機能がプロンプト構築コードとUI両方に残っていたため完全撤去。</li>
+              <li><strong>削除内容</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>関数削除: <code>build_quality_structure_html_prompt()</code> / <code>quality_style_reference_url()</code> / <code>fetch_quality_style_reference()</code></li>
+                  <li>プロンプト構築3経路（バッチ生成 / SSE / SYNC）から参考URL・構成HTMLの挿入コードを削除</li>
+                  <li><code>style_reference_cache</code> 変数と関連処理を削除</li>
+                  <li>quality API (<code>POST/PUT /api/quality</code>) から <code>reference_url</code> / <code>structure_html</code> フィールド削除</li>
+                  <li>品質定義の起動時アップグレード処理で <code>preserve_reference</code> / <code>preserve_structure</code> 削除</li>
+                  <li>UI: 品質定義編集フォームから「書き方参考URL」「記事構成HTML」入力欄削除、カード表示のリンク・バッジも削除</li>
+                  <li>料金目安テーブルの注釈から「参考URL」の言及削除</li>
+                  <li>ページサブタイトルから「書き方参考URL」の言及削除</li>
+                </ul>
+              </li>
+              <li><strong>互換性</strong>: 保存済みJSONに残っている <code>reference_url</code> / <code>structure_html</code> フィールドは無害（読み込まれるがプロンプトに影響しない）。次回の save で自然に消える。</li>
+              <li>マーカー・記事生成本体ロジックには触っていない。</li>
+            </ul>
+          </div>
 
           <div class="settings-section">
             <div class="section-header">// v1.7.66 (2026-06-27) — 一括生成の予算目安を実測ベースに修正（¥8 → ¥72/記事）</div>
@@ -3276,11 +3297,6 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
       <label class="form-label">定義名</label>
       <input type="text" id="quality-name" class="form-control" placeholder="例: SEO特化">
     </div>
-    <div class="form-group">
-      <label class="form-label">書き方参考URL（任意）</label>
-      <input type="url" id="quality-reference-url" class="form-control" placeholder="https://example.com/reference-article">
-      <div style="font-size:11px;color:var(--muted);margin-top:4px">内容ではなく、文章構成・権威性・根拠の置き方・説得力の出し方だけを参考にします</div>
-    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
       <div class="form-group">
         <label class="form-label">記事種類</label>
@@ -3309,15 +3325,6 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
     <div class="form-group">
       <label class="form-label">追加ルール（任意）</label>
       <textarea id="quality-extra-rules" class="form-control" rows="3" placeholder="例: 結論を先に書く。箇条書きを多めにする。CTAは最後に1回だけ。"></textarea>
-    </div>
-    <div class="form-group">
-      <label class="form-label">記事構成HTML（完成版見本・任意）</label>
-      <textarea id="quality-structure-html" class="form-control" rows="8" placeholder="<h2>結論</h2>
-<p>...</p>
-<h2>比較表</h2>
-<table>...</table>
-<h2>まとめ</h2>"></textarea>
-      <div style="font-size:11px;color:var(--muted);margin-top:4px">完成記事のHTMLを貼ると、見出し順・表・CTA配置・HTMLブロック構成だけを参考にします</div>
     </div>
     <div class="form-group">
       <label class="form-label">プロンプト</label>
@@ -7034,8 +7041,6 @@ function renderQuality() {
         ${articleTypeLabel(q.article_type || 'common')} · ${q.target_chars ? `${esc(q.target_chars)}文字` : '文字数指定なし'} · ${esc(q.tone || 'ですます調')}
       </div>
       <div class="quality-prompt">${esc(q.prompt)}</div>
-      ${q.reference_url ? `<div style="font-size:10px;margin-top:6px"><a href="${esc(q.reference_url)}" target="_blank" style="color:var(--accent)">🔗 書き方参考URL</a></div>` : ''}
-      ${q.structure_html ? `<div style="font-size:10px;margin-top:6px;color:var(--accent)">HTML構成見本あり</div>` : ''}
       <div class="quality-actions">
         <button class="btn btn-secondary btn-sm" onclick="editQuality('${q.id}')">✏ 編集</button>
         <button class="btn btn-secondary btn-sm" onclick="setDefaultQuality('${q.id}')">★ デフォルト</button>
@@ -7076,12 +7081,10 @@ function defaultQualityId(articleType = currentArticleType) {
 function openQualityModal() {
   document.getElementById('quality-edit-id').value = '';
   document.getElementById('quality-name').value = '';
-  document.getElementById('quality-reference-url').value = '';
   document.getElementById('quality-article-type').value = currentArticleType || '';
   document.getElementById('quality-target-chars').value = '3000';
   document.getElementById('quality-tone').value = 'ですます調';
   document.getElementById('quality-extra-rules').value = '';
-  document.getElementById('quality-structure-html').value = '';
   document.getElementById('quality-prompt').value = '';
   document.getElementById('quality-is-default').checked = false;
   document.getElementById('quality-modal-title').textContent = '// 品質定義を追加';
@@ -7093,12 +7096,10 @@ function editQuality(id) {
   if (!q) return;
   document.getElementById('quality-edit-id').value = id;
   document.getElementById('quality-name').value = q.name;
-  document.getElementById('quality-reference-url').value = q.reference_url || '';
   document.getElementById('quality-article-type').value = q.article_type || '';
   document.getElementById('quality-target-chars').value = q.target_chars || '';
   document.getElementById('quality-tone').value = q.tone || 'ですます調';
   document.getElementById('quality-extra-rules').value = q.extra_rules || '';
-  document.getElementById('quality-structure-html').value = q.structure_html || '';
   document.getElementById('quality-prompt').value = q.prompt;
   document.getElementById('quality-is-default').checked = q.is_default || false;
   document.getElementById('quality-modal-title').textContent = '// 品質定義を編集';
@@ -7113,12 +7114,10 @@ async function saveQuality() {
   const id = document.getElementById('quality-edit-id').value;
   const body = {
     name: document.getElementById('quality-name').value,
-    reference_url: document.getElementById('quality-reference-url').value,
     article_type: document.getElementById('quality-article-type').value,
     target_chars: document.getElementById('quality-target-chars').value,
     tone: document.getElementById('quality-tone').value,
     extra_rules: document.getElementById('quality-extra-rules').value,
-    structure_html: document.getElementById('quality-structure-html').value,
     prompt: document.getElementById('quality-prompt').value,
     is_default: document.getElementById('quality-is-default').checked,
   };

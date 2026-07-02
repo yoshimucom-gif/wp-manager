@@ -233,7 +233,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.66'
+APP_VERSION = '1.7.67'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -830,8 +830,6 @@ def load_quality():
             should_upgrade = True
         if should_upgrade:
             preserve_default = existing.get('is_default', preset.get('is_default', False))
-            preserve_reference = existing.get('reference_url', preset.get('reference_url', ''))
-            preserve_structure = existing.get('structure_html', preset.get('structure_html', ''))
             existing_target = str(existing.get('target_chars', '')).strip()
             target_chars = (
                 preset.get('target_chars', existing_target)
@@ -847,8 +845,6 @@ def load_quality():
                 'extra_rules': preset.get('extra_rules', existing.get('extra_rules', '')),
                 'system_preset_version': preset.get('system_preset_version', version),
                 'is_default': preserve_default,
-                'reference_url': preserve_reference,
-                'structure_html': preserve_structure,
             })
             if existing.get('article_type') is None:
                 existing.pop('article_type', None)
@@ -5205,25 +5201,6 @@ def insert_card_markers_with_reconcile(html, article_type, title='', call_site='
     return new_html, stats, reconciled_type
 
 
-def build_quality_structure_html_prompt(quality, limit=6000):
-    html = str((quality or {}).get('structure_html') or '').strip()
-    if not html:
-        return ''
-    if len(html) > limit:
-        html = html[:limit] + '\n\n...（構成HTMLが長いため後半を省略）'
-    return f"""
-
-記事構成HTMLの参考:
-- 以下は完成記事のHTML構成見本です。内容、固有名詞、口コミ、価格、リンク、商品名、事実関係は流用しないでください。
-- 見出し階層、ブロック順、比較表の位置、FAQやまとめへの流れだけを参考にしてください。
-- 今回の記事テーマに合わない見出しや要素は無理に使わず、自然な構成へ調整してください。
-
-```html
-{html}
-```
-"""
-
-
 def build_article_continuation_prompt(article, article_type, quality, current_content, validation_error):
     target = effective_target_chars(quality, article=article)
     minimum = minimum_required_content_chars(quality, article=article)
@@ -5922,19 +5899,6 @@ def select_quality_definition(quality_list, quality_id=None, article_type='ranki
     )
 
 
-def quality_style_reference_url(article_type, settings, quality=None):
-    # 品質定義 (quality) 内の reference_url が真の SoT。
-    # 旧 settings.quality_style_references フォールバックは廃止済み（引数 settings は互換のため残置）。
-    return str((quality or {}).get('reference_url') or '').strip()
-
-
-def fetch_quality_style_reference(article_type, settings, quality=None):
-    url = quality_style_reference_url(article_type, settings, quality)
-    if not url:
-        return '', ''
-    return url, fetch_url_text(url)
-
-
 def get_site_credentials(article, settings):
     site_id = article.get('site_id')
     if site_id:
@@ -6565,8 +6529,6 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
         q = quality_cache[art_type]
         return q, build_quality_prompt(q, article=article)
 
-    style_reference_cache = {}
-
     def update_job(**changes):
         with _DATA_LOCK:
             jobs = load_batch_jobs()
@@ -6640,11 +6602,6 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                     save_articles(current_articles)
                 article_type = normalize_article_type(article.get('article_type') or batch_article_type, batch_article_type)
                 quality, quality_prompt = resolve_quality_for(article_type, article=article)
-                # 品質定義の「書き方参考URL」を一括生成でも使う。
-                # （以前は False ハードコードで、参考URLが一括生成では完全に無視されていた。
-                #   単体生成(SSE)では使われるのに不整合だった）。
-                # fetch は記事タイプ単位でキャッシュ＋try/exceptされるので低コスト・安全。
-                use_generation_extras = True
                 pipeline_warnings = []
                 if not api_key and article_type != 'ranking':
                     raise ValueError('Claude APIキーが設定されていません')
@@ -6660,14 +6617,6 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                     build_ranking_structure_prompt(article, article_type)
                 )
                 regeneration_instruction = build_regeneration_instruction(article.get('content', ''))
-                style_reference_url, style_reference_text = style_reference_cache.get(article_type, ('', ''))
-                if use_generation_extras and article_type not in style_reference_cache:
-                    stage = 'fetch style reference'
-                    try:
-                        style_reference_url, style_reference_text = fetch_quality_style_reference(article_type, settings, quality)
-                    except Exception:
-                        style_reference_url, style_reference_text = '', ''
-                    style_reference_cache[article_type] = (style_reference_url, style_reference_text)
                 stage = 'fetch products'
                 update_job(current_title=article.get('title', ''), message=f"Amazon/楽天で実商品データ取得中: {article.get('title', '')}")
                 products, _ = fetch_product_context(article, settings, limit=15)
@@ -6689,18 +6638,6 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
 {regeneration_instruction}"""
 
                 prompt += build_product_context_prompt(products, article_type)
-
-                if style_reference_text:
-                    prompt += f'''\n\n記事品質の書き方参考:
-- 参考URL: {style_reference_url}
-- この参考記事は内容・事実・固有名詞を流用するためではありません。
-- 文章構成、導入の作り方、権威性の示し方、根拠の置き方、説得力の作り方、CTAまでの流れだけを参考にしてください。
-- テーマや読者に合わない表現は使わず、今回の記事内容に自然に合わせてください。
-
-参考記事テキスト:
-{style_reference_text[:2500]}'''
-
-                prompt += build_quality_structure_html_prompt(quality)
 
                 prompt += build_article_completion_prompt(
                     quality,
@@ -7890,12 +7827,6 @@ def generate_article(article_id):
         build_ranking_count_prompt(article_work, article_type) +
         build_ranking_structure_prompt(article_work, article_type)
     )
-    style_reference_url = ''
-    style_reference_text = ''
-    try:
-        style_reference_url, style_reference_text = fetch_quality_style_reference(article_type, settings, quality)
-    except Exception:
-        style_reference_text = ''
     def generate():
         full_content = ''
         try:
@@ -7926,18 +7857,6 @@ def generate_article(article_id):
 {regeneration_instruction}"""
 
             prompt += build_product_context_prompt(products, article_type)
-
-            if style_reference_text:
-                prompt += f'''\n\n記事品質の書き方参考:
-- 参考URL: {style_reference_url}
-- この参考記事は内容・事実・固有名詞を流用するためではありません。
-- 文章構成、導入の作り方、権威性の示し方、根拠の置き方、説得力の作り方、CTAまでの流れだけを参考にしてください。
-- テーマや読者に合わない表現は使わず、今回の記事内容に自然に合わせてください。
-
-参考記事テキスト:
-{style_reference_text[:2500]}'''
-
-            prompt += build_quality_structure_html_prompt(quality)
 
             prompt += build_article_completion_prompt(
                 quality,
@@ -8162,7 +8081,6 @@ def generate_article_direct(article_id):
 
 {article_html_output_rules()}
 {build_product_context_prompt(products, article_type)}
-{build_quality_structure_html_prompt(quality)}
 {build_article_completion_prompt(quality, article_type, article=article_work)}
 """
         if client and should_use_segmented_generation(article_type, quality, article_work):
@@ -9234,11 +9152,9 @@ def create_quality():
     q = {
         'id': str(uuid.uuid4()),
         'name': data.get('name', ''),
-        'reference_url': data.get('reference_url', ''),
         'target_chars': data.get('target_chars', ''),
         'tone': data.get('tone', 'ですます調'),
         'extra_rules': data.get('extra_rules', ''),
-        'structure_html': data.get('structure_html', ''),
         'prompt': data.get('prompt', ''),
         'is_default': bool(data.get('is_default')),
     }
@@ -9260,7 +9176,6 @@ def update_quality(quality_id):
     for q in quality_list:
         if q['id'] == quality_id:
             q['name'] = data.get('name', q['name'])
-            q['reference_url'] = data.get('reference_url', q.get('reference_url', ''))
             if 'article_type' in data:
                 article_type = normalize_article_type(data.get('article_type'), '') if data.get('article_type') else ''
                 if article_type:
@@ -9270,7 +9185,6 @@ def update_quality(quality_id):
             q['target_chars'] = data.get('target_chars', q.get('target_chars', ''))
             q['tone'] = data.get('tone', q.get('tone', 'ですます調'))
             q['extra_rules'] = data.get('extra_rules', q.get('extra_rules', ''))
-            q['structure_html'] = data.get('structure_html', q.get('structure_html', ''))
             q['prompt'] = data.get('prompt', q['prompt'])
             if data.get('is_default'):
                 for other in quality_list:
