@@ -1963,6 +1963,22 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.69 (2026-06-27) — 予約投稿ダイアログに「過去日付を自動繰り上げ」ボタン追加</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: 予約投稿しようとして、CSVの日付が過去だったり時間が経ちすぎて過去になった記事は、v1.7.19 のガードで <strong>その記事だけスキップ</strong>される。他の記事は送信されるが、スキップされた記事を手動で1件ずつ日付修正するのが地味に不便だった。</li>
+              <li><strong>追加</strong>: プレビューモーダルの「⛔ 予約日が過去」欄の上に <strong>「⚡ この N 件を明日以降に自動繰り上げ」ボタン</strong> 追加。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>クリック → 確認ダイアログ → 過去日付の記事だけを <strong>明日から 1日1件で 10:00</strong> に振り分けて <code>PUT /api/articles/&lt;id&gt;</code> で更新</li>
+                  <li>完了後にモーダル自動再描画（更新後の状態でプレビュー表示）</li>
+                  <li>v1.7.19 の「過去日付ガード」自体は維持。ユーザーが明示的にボタンを押した時だけ繰り上げるので即時公開の事故は起きない</li>
+                </ul>
+              </li>
+              <li><strong>注意</strong>: これは<strong>予約投稿</strong>専用。「公開投稿」は元から <code>date</code> フィールドを WP に送っておらず日付は無視されるため、こちらの改修は関係なし。</li>
+              <li>マーカー・記事生成ロジックには触っていない。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.68 (2026-06-27) — プロンプトキャッシュを管理画面から ON/OFF できるように（Render 再デプロイ不要）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: 従来はプロンプトキャッシュを ON にするには Render の Environment に <code>ENABLE_PROMPT_CACHE=true</code> を設定して再デプロイが必要だった。手間なので管理画面から即時切替できるようにした。</li>
@@ -5175,6 +5191,7 @@ function openSchedulePublishModal() {
   }
   if (pastDate.length) {
     preview += '<div style="font-weight:600;margin-top:10px;color:#dc2626">⛔ 予約日が過去（送信されません - 即時公開を防ぐためスキップ）</div>';
+    preview += `<div style="margin:6px 0"><button type="button" class="btn btn-secondary btn-sm" onclick="bumpPastScheduleDates()">⚡ この ${pastDate.length} 件を明日以降に自動繰り上げ（1日1件で振り分け）</button></div>`;
     pastDate.forEach(a => {
       preview += `<div style="color:#dc2626"><code>${_schedEscapeHtml(a.schedule_date)}</code> — ${_schedEscapeHtml(a.title)}</div>`;
     });
@@ -5191,6 +5208,62 @@ function openSchedulePublishModal() {
   document.getElementById('sched-preview').innerHTML = preview;
 
   document.getElementById('schedule-publish-modal').classList.add('open');
+}
+
+// 過去日付の予約記事を「明日から1日1件」で 10:00 に振り分けて更新する。
+// 予約投稿ダイアログのプレビューから呼ばれる。
+async function bumpPastScheduleDates() {
+  const nowMs = Date.now();
+  const isPastDate = (s) => {
+    const raw = String(s || '').trim();
+    if (!raw) return false;
+    const norm = raw.replace(/\//g, '-').replace('T', ' ');
+    const padded = /^\d{4}-\d{2}-\d{2}$/.test(norm) ? norm + ' 10:00' : norm;
+    const t = Date.parse(padded);
+    if (Number.isNaN(t)) return false;
+    return t < nowMs - 5 * 60 * 1000;
+  };
+  const targets = _scheduleTargetIds
+    .map(id => allArticles.find(a => a.id === id))
+    .filter(Boolean)
+    .filter(a => isPastDate(a.schedule_date));
+  if (!targets.length) {
+    toast('過去日付の記事がありません', 'info');
+    return;
+  }
+  if (!confirm(`${targets.length}件の予約日を明日から1日1件で 10:00 に振り分けます。よろしいですか？`)) return;
+
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(10, 0, 0, 0);
+
+  let ok = 0, ng = 0;
+  for (let i = 0; i < targets.length; i++) {
+    const d = new Date(tomorrow);
+    d.setDate(tomorrow.getDate() + i);
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} 10:00:00`;
+    try {
+      const res = await fetch(`/api/articles/${targets[i].id}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({schedule_date: dateStr}),
+      });
+      if (res.ok) {
+        const local = allArticles.find(a => a.id === targets[i].id);
+        if (local) local.schedule_date = dateStr;
+        ok++;
+      } else {
+        ng++;
+      }
+    } catch (e) {
+      ng++;
+    }
+  }
+  toast(`✓ 繰り上げ完了: 成功 ${ok}件${ng ? ' / 失敗 ' + ng + '件' : ''}`, 'success');
+
+  // モーダル再描画（チェック状態は保持されているので同じ選択でプレビューが更新される）
+  closeSchedulePublishModal();
+  setTimeout(() => openSchedulePublishModal(), 100);
 }
 
 function closeSchedulePublishModal() {
