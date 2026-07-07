@@ -1224,6 +1224,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
           <span id="publish-progress-label" style="font-size:12px;color:var(--accent);display:inline-block;min-width:80px"></span>
           <button class="btn btn-danger" onclick="deleteSelected()">🗑 選択を削除</button>
+          <button class="btn btn-secondary" onclick="resetPublishSelected()" title="WP側の記事を全削除して再送したい時に使う。選択記事のwp_post_id等を消してstatusをgeneratedに戻す">🔁 投稿状態リセット</button>
           <button class="btn btn-secondary" onclick="rescoreArticles()" title="記事スコアを再計算">↯ スコア再計算</button>
         </div>
         <div class="toolbar" style="margin-top:-8px">
@@ -1964,6 +1965,49 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <div class="page-subtitle">Affiros9 本体の更新ログ（現在: <strong>v{{ app_version }}</strong>）</div>
         </div>
         <div style="max-width:780px">
+
+          <div class="settings-section">
+            <div class="section-header">// v1.7.74 (2026-07-07) — 対応履歴に「投稿状態リセット」ボタン追加（Snapshot Restore 後の再送対応）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: 2026-07-07 の本番データ消失事故 → Render 自動 Snapshot（9:21 AM 時点）で復元。ただし 9:21 AM 〜 10:10 AM の間に WP へ push した記事は Affiros9 側の <code>wp_post_id</code> / <code>status=published</code> の情報が復元されず、「WP には記事があるのに Affiros9 は未送信扱い」の乖離が発生。</li>
+              <li><strong>問題</strong>: この状態で単に再度 push すると WP に重複記事が作られる。かといって Affiros9 側の 冪等性ガード（v1.7.63）が status=published/scheduled を弾くので、既存の「送信済」扱い記事を上書き送信もできない。</li>
+              <li><strong>追加</strong>: 対応履歴タブのツールバーに <strong>「🔁 投稿状態リセット」</strong>ボタンを追加。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>選択記事の <code>wp_post_id</code> / <code>wp_url</code> / <code>published_at</code> / <code>scheduled_at</code> / <code>posted_at</code> / <code>repaired_at</code> をクリア</li>
+                  <li><code>status</code> が <code>published</code>/<code>scheduled</code>/<code>updated</code> の場合は <code>generated</code>（本文あり）or <code>pending</code>（本文なし）に戻す</li>
+                  <li>再度「予約投稿実行」等で送信できる状態になる</li>
+                </ul>
+              </li>
+              <li><strong>誤爆防止ガード</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>フロント: 選択記事に複数サイトが混在していたら実行拒否（サイトフィルタで絞ってから使う）</li>
+                  <li>フロント: 実行前に「対象サイト名・件数・警告文（WP側削除しないと重複投稿）」を確認ダイアログで明示</li>
+                  <li>バック: <code>site_id</code> と <code>ids</code> の両方必須、<code>site_id</code> 不一致の記事はスキップして <code>mismatch_count</code> で報告</li>
+                </ul>
+              </li>
+              <li><strong>使い方（想定シナリオ）</strong>:
+                <ol style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>WP 管理画面で該当サイトの記事を全削除</li>
+                  <li>対応履歴 → サイトで絞り込み → 「送信済」フィルタで対象抽出</li>
+                  <li>全選択 → 「🔁 投稿状態リセット」→ 確認ダイアログで実行</li>
+                  <li>「予約投稿実行」or「公開投稿」で再送</li>
+                </ol>
+              </li>
+              <li>マーカー・記事生成ロジックには触っていない。既存の記事本文はそのまま。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
+            <div class="section-header">// v1.7.70〜73 (2026-07-07) — データ消失事故対応（バックアップDL・空snapshot上書きガード・スプレッドシート機能撤去）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>事故の概要</strong>: 2026-07-07 に「1000件バッチ生成」中に SQLite の Disk Full → 私の Manual Deploy 指示 → Persistent Disk 上のデータが全消失（サイト情報・記事・APIキー・カスタマイズ設定含む 5万円相当の損失）。Render の Daily Snapshot（9:21 AM）で復元済。</li>
+              <li><strong>v1.7.70</strong>: 起動時自動復元（<code>_auto_recover_on_startup()</code>）と 5分ごとの snapshot_backup.json 自動書き出し追加。ただし「空データを snapshot に書いてしまう」二次災害の温床になった。</li>
+              <li><strong>v1.7.71</strong>: <code>/api/admin/diagnose-storage</code> / <code>/api/admin/force-recover</code> と API設定タブの緊急復旧UI追加。</li>
+              <li><strong>v1.7.72</strong>: <strong>空 snapshot 書き出しガード</strong>（<code>_snapshot_has_real_data()</code>）追加。データが確実にある時だけ書く。API設定タブに緑枠の「💾 バックアップDL」セクションを目立たせて配置。危険操作の前に必ず DL する運用を強制。</li>
+              <li><strong>v1.7.73</strong>: 未使用の「管理スプレッドシート」機能（サイト単位のURL入力欄）を完全撤去。</li>
+              <li><strong>CLAUDE.md ❹</strong>: 「本番データを飛ばす操作を軽々しく提案しない」原則を追加。Render Manual Deploy / Redeploy / Restart / Disk リサイズを提案する前に <code>/api/data-snapshot</code> の DL 完了を必須にする。</li>
+            </ul>
+          </div>
 
           <div class="settings-section">
             <div class="section-header">// v1.7.69 (2026-06-27) — 予約投稿ダイアログに「過去日付を自動繰り上げ」ボタン追加</div>
@@ -4759,6 +4803,50 @@ async function deleteSelected() {
   await fetch('/api/articles/bulk-delete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids})});
   toast(`${ids.length}件削除しました`, 'success');
   loadArticles();
+}
+
+// v1.7.74: 選択記事のWP投稿状態をリセット（WP側削除→再送のためのユーティリティ）
+async function resetPublishSelected() {
+  const ids = getSelectedIds();
+  if (!ids.length) { toast('記事を選択してください', 'error'); return; }
+  const selected = allArticles.filter(a => ids.includes(a.id));
+  const siteIds = [...new Set(selected.map(a => String(a.site_id || '')))];
+  if (siteIds.length > 1) {
+    toast('複数サイトの記事が混在しています。1サイトずつ実行してください（サイトフィルタで絞り込んでから）。', 'error');
+    return;
+  }
+  const siteId = siteIds[0];
+  if (!siteId) {
+    toast('サイト未紐付けの記事が選択されています。リセットできません。', 'error');
+    return;
+  }
+  const siteName = getSitePlainName(siteId) || '(不明)';
+  const sentCount = selected.filter(a => ['published', 'scheduled', 'updated'].includes(a.status)).length;
+  const msg =
+    `【${siteName}】の選択 ${ids.length} 件の投稿状態をリセットします。\n\n` +
+    `・${sentCount} 件が「送信済」→「生成済」に戻ります\n` +
+    `・wp_post_id / wp_url / 予定日 の紐付けが消えます\n` +
+    `・再度「予約投稿実行」等で送信可能な状態になります\n\n` +
+    `⚠️ WP側の該当記事を先に削除しておかないと、再送で重複投稿になります。\n\n` +
+    `実行しますか？`;
+  if (!confirm(msg)) return;
+  try {
+    const res = await fetch('/api/articles/bulk-reset-publish', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ids, site_id: siteId}),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      toast(data.error || 'リセットに失敗しました', 'error');
+      return;
+    }
+    const mismatchNote = data.mismatch_count ? `（サイト不一致で ${data.mismatch_count} 件スキップ）` : '';
+    toast(`${data.reset_count} 件の投稿状態をリセットしました${mismatchNote}`, 'success');
+    await loadArticles();
+  } catch (e) {
+    toast('リセットに失敗しました: ' + e.message, 'error');
+  }
 }
 
 async function deleteBatchSelected() {

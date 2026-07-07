@@ -233,7 +233,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.73'
+APP_VERSION = '1.7.74'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -7799,6 +7799,52 @@ def bulk_delete():
     articles = [a for a in load_articles() if a['id'] not in ids]
     save_articles(articles)
     return jsonify({'success': True})
+
+
+@app.route('/api/articles/bulk-reset-publish', methods=['POST'])
+@login_required
+@with_data_lock
+def bulk_reset_publish():
+    """指定サイトの選択記事の投稿状態をリセットして再送可能状態に戻す。
+
+    誤爆防止: site_id と ids の両方を必須にし、site_id が一致しない記事はスキップ。
+    2026-07-07 の Snapshot Restore で「WPには送信済だがAffiros9では未送信扱い」に
+    なった記事を、WP側削除→再送するための機能。
+    """
+    data = request.get_json(silent=True) or {}
+    site_id = str(data.get('site_id') or '').strip()
+    ids = data.get('ids') or []
+    if not site_id:
+        return jsonify({'error': 'site_id が必要です'}), 400
+    if not isinstance(ids, list) or not ids:
+        return jsonify({'error': 'ids が必要です'}), 400
+
+    id_set = {str(x) for x in ids}
+    reset_count = 0
+    mismatch_count = 0
+    articles = load_articles()
+    for a in articles:
+        if str(a.get('id')) not in id_set:
+            continue
+        if str(a.get('site_id') or '') != site_id:
+            mismatch_count += 1
+            continue
+        a.pop('wp_post_id', None)
+        a.pop('wp_url', None)
+        a.pop('published_at', None)
+        a.pop('posted_at', None)
+        a.pop('scheduled_at', None)
+        a.pop('repaired_at', None)
+        if a.get('status') in ('published', 'scheduled', 'updated'):
+            a['status'] = 'generated' if a.get('content') else 'pending'
+        a['updated_at'] = now_iso()
+        reset_count += 1
+    save_articles(articles)
+    return jsonify({
+        'success': True,
+        'reset_count': reset_count,
+        'mismatch_count': mismatch_count,
+    })
 
 
 @app.route('/api/articles/reset-all', methods=['POST'])
