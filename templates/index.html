@@ -1967,6 +1967,26 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.75 (2026-07-07) — 低スコア/高スコア選択を「置換モード」に変更（追加モードから）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>バグ</strong>: 「📈 高スコア選択」「📉 低スコア選択」ボタンが「既存選択に追加」の和集合モードだったため、既に check-all で全選択されている状態で高スコア選択を押しても低スコア記事のチェックが解除されず、モーダルには低スコア記事も混ざったまま送信対象になっていた。</li>
+              <li><strong>症状の再現</strong>: 全選択→「高スコア選択」80 → トーストは「スコア >= 80 の記事 43 件は既に選択済みでした」と表示されるが、実際にはスコア 45/58/73 の記事もチェックされたままだった。</li>
+              <li><strong>修正</strong>: 常に「置換モード」に統一。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>既存チェックを一旦全部外す</li>
+                  <li>スコア条件にマッチする記事だけをチェック</li>
+                  <li>ヘッダーの check-all インジケータもマッチ数に合わせて更新</li>
+                  <li>プロンプト文言も「既存選択に追加」→「既存の選択は置き換え」に</li>
+                  <li>トースト表示: 「スコア >= 80 の 43 件を選択しました（送信済 5 件は除外）（既存選択 100 件をクリア）」形式に</li>
+                </ul>
+              </li>
+              <li><strong>効果</strong>: ボタン名「高スコア選択」と実挙動が一致。ワンクリックで「今 check されているものを解除して、高スコアだけに絞る」が可能。</li>
+              <li><strong>追加モード</strong>: 追加で選びたい場合は「高スコア選択」後に個別チェックで足す運用に。</li>
+              <li>マーカー・記事生成ロジックには触っていない。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.74 (2026-07-07) — 対応履歴に「投稿状態リセット」ボタン追加（Snapshot Restore 後の再送対応）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: 2026-07-07 の本番データ消失事故 → Render 自動 Snapshot（9:21 AM 時点）で復元。ただし 9:21 AM 〜 10:10 AM の間に WP へ push した記事は Affiros9 側の <code>wp_post_id</code> / <code>status=published</code> の情報が復元されず、「WP には記事があるのに Affiros9 は未送信扱い」の乖離が発生。</li>
@@ -4724,15 +4744,16 @@ function getSelectedIds() {
   return [...document.querySelectorAll('#articles-body .check-row:checked')].map(c => c.value);
 }
 
-// 現在テーブルに見えている行のうち、スコアが閾値より低い／高い記事をまとめてチェック。
+// 現在テーブルに見えている行のうち、スコアが閾値より低い／高い記事だけをチェックする。
 // direction: 'low' = スコア < 閾値 / 'high' = スコア >= 閾値
-// 既存の選択は維持して追加選択する（和集合）。スコア未計測の記事は対象外（誤爆防止）。
+// v1.7.75: 追加モードから「置換モード」に変更。既存の選択は一旦クリアしてマッチする記事だけを選ぶ。
+// スコア未計測の記事は対象外（誤爆防止）。
 function selectByScoreThreshold(direction = 'low') {
   const isLow = direction === 'low';
   const verb = isLow ? '未満' : '以上';
   const compare = isLow ? '<' : '>=';
   const raw = prompt(
-    `スコア ${verb} の記事を選択します（既存選択に追加）。\n例: 80 → スコア ${compare} 80 の記事を全部チェック。\n\nスコア未計測の記事は対象外（再計算は「↯ スコア再計算」で）。`,
+    `スコア ${verb} の記事だけを選択します（既存の選択は置き換え）。\n例: 80 → スコア ${compare} 80 の記事だけをチェック。\n\nスコア未計測の記事は対象外（再計算は「↯ スコア再計算」で）。`,
     '80'
   );
   if (raw === null) return;
@@ -4742,46 +4763,48 @@ function selectByScoreThreshold(direction = 'low') {
     return;
   }
   const rows = document.querySelectorAll('#articles-body tr');
-  let added = 0;
-  let alreadySelected = 0;
+  let selected = 0;
   let skippedPublished = 0;
+  let cleared = 0;
   rows.forEach(row => {
     const cb = row.querySelector('.check-row');
     if (!cb || cb.disabled) return;
+    const wasChecked = cb.checked;
     const id = cb.value;
     const article = allArticles.find(a => a.id === id);
-    if (!article) return;
-    const score = article.seo_score;
-    if (score === null || score === undefined || score === '') return; // 未計測は除外
+    const score = article ? article.seo_score : null;
     const numScore = Number(score);
-    if (!Number.isFinite(numScore)) return;
-    const match = isLow ? (numScore < threshold) : (numScore >= threshold);
-    if (!match) return;
+    const hasScore = score !== null && score !== undefined && score !== '' && Number.isFinite(numScore);
+    const match = article && hasScore && (isLow ? (numScore < threshold) : (numScore >= threshold));
     // 高スコア選択（プッシュ目的）の時は、既に公開／予約済みの記事を除外
     // → 同じ記事を再プッシュして WP に重複投稿される事故を防止
-    if (!isLow && (article.wp_post_id || ['published', 'scheduled'].includes(article.status))) {
-      skippedPublished++;
-      return;
-    }
-    if (cb.checked) {
-      alreadySelected++;
-    } else {
+    const isAlreadyPublished =
+      !isLow && article && (article.wp_post_id || ['published', 'scheduled'].includes(article.status));
+    if (match && !isAlreadyPublished) {
       cb.checked = true;
-      added++;
+      selected++;
+    } else {
+      cb.checked = false;
+      if (wasChecked) cleared++;
+      if (match && isAlreadyPublished) skippedPublished++;
     }
   });
-  const total = added + alreadySelected;
-  const skipMsg = skippedPublished ? `（既に公開／予約済み ${skippedPublished} 件は対象外）` : '';
-  if (total === 0) {
+  // ヘッダーの check-all インジケータを揃える
+  const checkAll = document.getElementById('check-all');
+  if (checkAll) {
+    const totalRows = document.querySelectorAll('#articles-body .check-row').length;
+    checkAll.checked = totalRows > 0 && selected === totalRows;
+  }
+  const skipMsg = skippedPublished ? `（送信済 ${skippedPublished} 件は除外）` : '';
+  const clearMsg = cleared ? `（既存選択 ${cleared} 件をクリア）` : '';
+  if (selected === 0) {
     if (skippedPublished) {
-      toast(`スコア ${compare} ${threshold} の該当記事 ${skippedPublished} 件は全て公開／予約済みのためスキップしました`, 'info');
+      toast(`スコア ${compare} ${threshold} の該当記事 ${skippedPublished} 件は全て送信済のためスキップ ${clearMsg}`, 'info');
     } else {
-      toast(`スコア ${compare} ${threshold} の記事は現在の表示範囲にありません`, 'info');
+      toast(`スコア ${compare} ${threshold} の記事は現在の表示範囲にありません ${clearMsg}`, 'info');
     }
-  } else if (added === 0) {
-    toast(`スコア ${compare} ${threshold} の記事 ${total} 件は既に選択済みでした ${skipMsg}`, 'info');
   } else {
-    toast(`スコア ${compare} ${threshold} の記事 ${added} 件を追加選択しました（合計 ${total} 件該当）${skipMsg}`, 'success');
+    toast(`スコア ${compare} ${threshold} の記事 ${selected} 件を選択しました${skipMsg} ${clearMsg}`, 'success');
   }
 }
 
