@@ -233,7 +233,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.69'
+APP_VERSION = '1.7.70'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -428,6 +428,170 @@ def _db_init():
 
 
 _db_init()
+
+
+def _auto_recover_on_startup():
+    """起動時に /data 内の残存ファイルを全部スキャンして、
+    documents テーブルが空の key を自動復元する。
+
+    v1.7.70 で追加。データ消失事故（Render 再デプロイ時 or SQLite 破損時）から
+    ユーザーが何も操作しなくても元の状態に戻すため。
+
+    復元優先順位:
+      1. /data/snapshot_backup.json（全キー統合スナップショット）
+      2. /data/*.json（settings.json / articles.json / quality.json / decorations.json 等）
+      3. /data/wpmanager.db.bak（SQLite バックアップから救出）
+
+    既に documents テーブルに実データがある key はスキップ（上書きしない=安全）。
+    """
+    import json as _json
+    def _has_key(key):
+        try:
+            conn = _db_connect()
+            try:
+                row = conn.execute('SELECT length(value) FROM documents WHERE key=?', (key,)).fetchone()
+                return row is not None and row[0] and int(row[0]) > 2
+            finally:
+                conn.close()
+        except Exception:
+            return False
+
+    def _restore_key(key, value):
+        try:
+            payload = _json.dumps(value, ensure_ascii=False)
+            ts = datetime.now().isoformat()
+            conn = _db_connect()
+            try:
+                with conn:
+                    conn.execute(
+                        'INSERT INTO documents(key, value, updated_at) VALUES(?,?,?) '
+                        'ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at',
+                        (key, payload, ts)
+                    )
+            finally:
+                conn.close()
+            print(f'[AUTO-RECOVER] restored key={key} size={len(payload)}', flush=True)
+            return True
+        except Exception as e:
+            print(f'[AUTO-RECOVER] failed key={key}: {e}', flush=True)
+            return False
+
+    restored_count = 0
+
+    # 1. snapshot_backup.json（統合バックアップ）
+    snapshot_path = DATA_DIR / 'snapshot_backup.json'
+    if snapshot_path.exists():
+        try:
+            with open(snapshot_path, encoding='utf-8') as f:
+                snapshot = _json.load(f)
+            for key in ('settings', 'articles', 'quality', 'decorations', 'batch_jobs', 'publish_jobs', 'ad_insertion', 'memo'):
+                if not _has_key(key) and key in snapshot and snapshot[key]:
+                    if _restore_key(key, snapshot[key]):
+                        restored_count += 1
+            print(f'[AUTO-RECOVER] snapshot_backup.json processed, restored so far={restored_count}', flush=True)
+        except Exception as e:
+            print(f'[AUTO-RECOVER] snapshot_backup.json read failed: {e}', flush=True)
+
+    # 2. 個別 JSON ファイル
+    for key, filename in [
+        ('settings', 'settings.json'),
+        ('articles', 'articles.json'),
+        ('quality', 'quality.json'),
+        ('decorations', 'decorations.json'),
+        ('ad_insertion', 'ad_insertion.json'),
+        ('batch_jobs', 'batch_jobs.json'),
+        ('publish_jobs', 'publish_jobs.json'),
+        ('memo', 'memo.json'),
+    ]:
+        if _has_key(key):
+            continue
+        path = DATA_DIR / filename
+        if not path.exists():
+            continue
+        try:
+            with open(path, encoding='utf-8') as f:
+                data = _json.load(f)
+            if data:
+                if _restore_key(key, data):
+                    restored_count += 1
+        except Exception as e:
+            print(f'[AUTO-RECOVER] {filename} read failed: {e}', flush=True)
+
+    # 3. SQLite バックアップ (wpmanager.db.bak)
+    backup_db = DATA_DIR / 'wpmanager.db.bak'
+    if backup_db.exists():
+        try:
+            bconn = sqlite3.connect(str(backup_db), timeout=10.0)
+            try:
+                rows = bconn.execute('SELECT key, value FROM documents').fetchall()
+                for key, value in rows:
+                    if _has_key(key):
+                        continue
+                    try:
+                        data = _json.loads(value)
+                        if _restore_key(key, data):
+                            restored_count += 1
+                    except Exception:
+                        pass
+            finally:
+                bconn.close()
+        except Exception as e:
+            print(f'[AUTO-RECOVER] wpmanager.db.bak read failed: {e}', flush=True)
+
+    # 4. 診断ログ
+    if restored_count > 0:
+        print(f'[AUTO-RECOVER] ✓ restored {restored_count} keys from disk backups', flush=True)
+    else:
+        try:
+            files_info = []
+            for entry in os.listdir(DATA_DIR):
+                full = DATA_DIR / entry
+                if full.is_file():
+                    files_info.append(f'{entry}({full.stat().st_size}b)')
+            print(f'[AUTO-RECOVER] no data restored. /data contents: {files_info}', flush=True)
+        except Exception:
+            pass
+
+
+# 起動時に自動復元を試みる（既存データがあれば上書きしない安全設計）
+try:
+    _auto_recover_on_startup()
+except Exception as _e:
+    print(f'[AUTO-RECOVER] top-level exception: {_e}', flush=True)
+
+
+def _auto_snapshot_backup_periodic():
+    """DATA_DIR に snapshot_backup.json を定期的に書き出すバックグラウンドスレッド。
+    Render 再デプロイ時に DB が飛んでも、このファイルから自動復元できる。
+    v1.7.70 で追加。"""
+    import threading
+    import time
+    import json as _json2
+    def _worker():
+        while True:
+            try:
+                time.sleep(300)  # 5分間隔
+                snapshot = {
+                    'exported_at': datetime.now().isoformat(),
+                    'settings': load_doc('settings', {}),
+                    'articles': load_doc('articles', []),
+                    'quality': load_doc('quality', []),
+                    'decorations': load_doc('decorations', []),
+                    'ad_insertion': load_doc('ad_insertion', {}),
+                    'memo': load_doc('memo', {}),
+                }
+                snapshot_path = DATA_DIR / 'snapshot_backup.json'
+                tmp_path = DATA_DIR / 'snapshot_backup.json.tmp'
+                with open(tmp_path, 'w', encoding='utf-8') as f:
+                    _json2.dump(snapshot, f, ensure_ascii=False)
+                os.replace(str(tmp_path), str(snapshot_path))
+            except Exception as e:
+                print(f'[AUTO-SNAPSHOT] failed: {e}', flush=True)
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+
+
+_auto_snapshot_backup_periodic()
 
 
 def load_doc(key, default):

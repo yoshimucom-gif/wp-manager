@@ -3761,11 +3761,9 @@ function readDataSnapshotBackup() {
 
 function writeDataSnapshotBackup(snapshot) {
   if (!snapshotHasUserData(snapshot)) return;
-  // 永続ディスクが効いていればサーバー側に必ず残るため、ブラウザバックアップは不要。
-  // 600件級の記事を全部 localStorage に詰めようとして容量オーバーで失敗していた問題対策。
-  if (snapshot && snapshot.storage && snapshot.storage.persistent) {
-    return;
-  }
+  // v1.7.70: 永続ディスク前提の書き込みスキップを削除。
+  // 永続ディスクが飛んだ事故（SQLite破損 / Render再デプロイ）が実際に発生したため、
+  // ブラウザ側にも必ずバックアップを残す方針に変更。
   const payload = {...snapshot, backed_up_at: new Date().toISOString()};
   try {
     localStorage.setItem(DATA_SNAPSHOT_KEY, JSON.stringify(payload));
