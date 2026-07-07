@@ -1620,6 +1620,18 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
               </div>
             </div>
           </div>
+          <div class="settings-section" style="border:2px solid #16a34a;background:rgba(34,197,94,0.06)">
+            <div class="section-header" style="color:#16a34a">💾 バックアップDL（Manual Deploy等の危険操作の前に必ず実行）</div>
+            <div style="font-size:12px;line-height:1.7;margin-bottom:10px">
+              <strong style="color:#dc2626">⚠️ Render Manual Deploy / Redeploy / ディスク操作をする前に、必ずこのボタンを押してJSONをPCに保存してください。</strong><br>
+              2026-07-07 に「Manual Deploy 実行 → データ全消失」の事故が発生済み。同じ事故を防ぐため、危険操作の前は必ずこのDLを取ってください。
+            </div>
+            <div style="display:flex;gap:8px;margin-bottom:10px">
+              <a href="/api/data-snapshot" download="affiros9-backup.json" class="btn btn-primary" style="background:#16a34a;color:#fff;text-decoration:none;padding:8px 20px;font-size:14px;font-weight:600">⬇ バックアップをダウンロード</a>
+              <button type="button" class="btn btn-secondary" onclick="uploadBackupJson()">⬆ バックアップJSONから復元</button>
+              <input type="file" id="backup-upload-input" accept=".json" style="display:none" onchange="handleBackupUpload(this)">
+            </div>
+          </div>
           <div class="settings-section" style="border:1px solid #dc2626;background:rgba(220,38,38,0.05)">
             <div class="section-header" style="color:#dc2626">🚨 データ復旧（緊急時のみ）</div>
             <div style="font-size:12px;line-height:1.6;margin-bottom:10px">
@@ -7464,6 +7476,34 @@ async function saveMemo() {
     }
   } catch (e) {
     status.textContent = '保存失敗: ' + (e.message || e);
+  }
+}
+
+// v1.7.72: バックアップDLしたJSONから復元
+function uploadBackupJson() {
+  document.getElementById('backup-upload-input').click();
+}
+async function handleBackupUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (!confirm(`${file.name} から復元します。既存データは上書きされます。実行しますか?`)) return;
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    const res = await fetch('/api/data-snapshot', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data),
+    });
+    if (res.ok) {
+      toast('✓ バックアップから復元しました。ページをリロードします', 'success');
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      const err = await res.json().catch(() => ({}));
+      toast('復元失敗: ' + (err.error || res.status), 'error');
+    }
+  } catch (e) {
+    toast('ファイル読み込み失敗: ' + (e.message || e), 'error');
   }
 }
 

@@ -233,7 +233,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.71'
+APP_VERSION = '1.7.72'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -666,10 +666,29 @@ except Exception as _e:
 def _auto_snapshot_backup_periodic():
     """DATA_DIR に snapshot_backup.json を定期的に書き出すバックグラウンドスレッド。
     Render 再デプロイ時に DB が飛んでも、このファイルから自動復元できる。
-    v1.7.70 で追加。"""
+
+    v1.7.70 で追加 → v1.7.72 で「実データがある時だけ書き出す」条件を追加。
+    2026-07-07 の事故で「空の状態を書き出して元データの残骸を破壊した」
+    二次災害を教訓に、articles または settings.sites が実データを持つ時だけ書き出す。
+    """
     import threading
     import time
     import json as _json2
+
+    def _snapshot_has_real_data(snapshot):
+        """snapshot が「書き出す価値のある実データ」を持つか判定。
+        空 snapshot が既存の生きたバックアップを潰す事故を防ぐガード。
+        """
+        articles = snapshot.get('articles') or []
+        settings = snapshot.get('settings') or {}
+        sites = settings.get('sites') or []
+        # 実データの目安: 記事が1件以上、または サイト情報が1件以上
+        if isinstance(articles, list) and len(articles) > 0:
+            return True
+        if isinstance(sites, list) and len(sites) > 0:
+            return True
+        return False
+
     def _worker():
         while True:
             try:
@@ -683,6 +702,9 @@ def _auto_snapshot_backup_periodic():
                     'ad_insertion': load_doc('ad_insertion', {}),
                     'memo': load_doc('memo', {}),
                 }
+                # 実データが無ければ書き出しをスキップ（既存バックアップを破壊しない）
+                if not _snapshot_has_real_data(snapshot):
+                    continue
                 snapshot_path = DATA_DIR / 'snapshot_backup.json'
                 tmp_path = DATA_DIR / 'snapshot_backup.json.tmp'
                 with open(tmp_path, 'w', encoding='utf-8') as f:
