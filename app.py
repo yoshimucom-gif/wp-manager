@@ -233,7 +233,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.70'
+APP_VERSION = '1.7.71'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -537,6 +537,109 @@ def _auto_recover_on_startup():
                 bconn.close()
         except Exception as e:
             print(f'[AUTO-RECOVER] wpmanager.db.bak read failed: {e}', flush=True)
+
+    # 4. 【強力】現行 DB の破損救出（sqlite3 .recover 相当）
+    #    ディスクフル → 中途半端な書き込み → 起動時に「空扱い」される
+    #    ケースを救う。sqlite3 コマンドラインの .recover を subprocess で実行して
+    #    救出できたレコードから documents テーブルを復元する。
+    still_missing_keys = [k for k in ('settings', 'articles', 'quality', 'decorations', 'ad_insertion', 'memo') if not _has_key(k)]
+    if still_missing_keys:
+        try:
+            import subprocess
+            import tempfile
+            print(f'[AUTO-RECOVER] running .recover on {DB_FILE} for missing keys: {still_missing_keys}', flush=True)
+            # 破損DBを別ファイルにコピーしてから .recover （現行DBを壊さないように）
+            recover_src = str(DATA_DIR / 'wpmanager.db.recover-src')
+            try:
+                import shutil
+                shutil.copy2(str(DB_FILE), recover_src)
+            except Exception as _cp_err:
+                print(f'[AUTO-RECOVER] db copy failed: {_cp_err}', flush=True)
+                recover_src = str(DB_FILE)
+
+            # subprocess で sqlite3 コマンドを起動して .recover
+            proc = subprocess.run(
+                ['sqlite3', recover_src, '.recover'],
+                capture_output=True, text=True, timeout=120,
+            )
+            recover_sql = proc.stdout
+            if recover_sql:
+                # 一時 DB を作って .recover 出力を投入
+                tmp_recovered = str(DATA_DIR / 'wpmanager-recovered.db')
+                try:
+                    if os.path.exists(tmp_recovered):
+                        os.remove(tmp_recovered)
+                except Exception:
+                    pass
+                proc2 = subprocess.run(
+                    ['sqlite3', tmp_recovered],
+                    input=recover_sql, capture_output=True, text=True, timeout=120,
+                )
+                # 救出DBから documents を読む
+                try:
+                    rconn = sqlite3.connect(tmp_recovered, timeout=10.0)
+                    try:
+                        # documents テーブルが存在するか確認
+                        tables = [r[0] for r in rconn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+                        if 'documents' in tables:
+                            rows = rconn.execute('SELECT key, value FROM documents').fetchall()
+                            print(f'[AUTO-RECOVER] .recover salvaged {len(rows)} rows from documents', flush=True)
+                            for key, value in rows:
+                                if _has_key(key):
+                                    continue
+                                try:
+                                    data = _json.loads(value)
+                                    if _restore_key(key, data):
+                                        restored_count += 1
+                                except Exception as _je:
+                                    print(f'[AUTO-RECOVER] .recover row parse failed key={key}: {_je}', flush=True)
+                        else:
+                            print(f'[AUTO-RECOVER] .recover output has no documents table. tables={tables}', flush=True)
+                    finally:
+                        rconn.close()
+                except Exception as _re:
+                    print(f'[AUTO-RECOVER] recovered db read failed: {_re}', flush=True)
+                # 一時ファイル片付け
+                try:
+                    if os.path.exists(tmp_recovered):
+                        os.remove(tmp_recovered)
+                    if recover_src != str(DB_FILE) and os.path.exists(recover_src):
+                        os.remove(recover_src)
+                except Exception:
+                    pass
+            else:
+                print(f'[AUTO-RECOVER] .recover produced empty output. stderr={proc.stderr[:300]}', flush=True)
+        except FileNotFoundError:
+            print('[AUTO-RECOVER] sqlite3 CLI not found on this system', flush=True)
+        except subprocess.TimeoutExpired:
+            print('[AUTO-RECOVER] .recover timed out', flush=True)
+        except Exception as e:
+            print(f'[AUTO-RECOVER] .recover failed: {e}', flush=True)
+
+    # 5. WAL/SHM ファイルからの救出（.recover でカバーできない場合の最後の手段）
+    still_missing_keys = [k for k in ('settings', 'articles', 'quality', 'decorations') if not _has_key(k)]
+    if still_missing_keys:
+        # WAL は既にメインDBに適用済みのはずだが、破損時は残存している可能性
+        # SQLite に WAL 読み込みを再度促す: PRAGMA wal_checkpoint(TRUNCATE)
+        try:
+            conn = _db_connect()
+            try:
+                conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+                # 再度 documents を読み直す
+                rows = conn.execute('SELECT key, value FROM documents').fetchall()
+                print(f'[AUTO-RECOVER] after WAL checkpoint, documents has {len(rows)} rows', flush=True)
+                for key, value in rows:
+                    if key in still_missing_keys and not _has_key(key):
+                        try:
+                            data = _json.loads(value)
+                            if _restore_key(key, data):
+                                restored_count += 1
+                        except Exception:
+                            pass
+            finally:
+                conn.close()
+        except Exception as e:
+            print(f'[AUTO-RECOVER] WAL checkpoint failed: {e}', flush=True)
 
     # 4. 診断ログ
     if restored_count > 0:
@@ -9523,6 +9626,97 @@ def restore_data_snapshot_api():
         return jsonify({'error': 'スナップショット形式が不正です'}), 400
     restore_data_snapshot(snapshot)
     return jsonify({'success': True, 'storage': storage_status()})
+
+
+@app.route('/api/admin/diagnose-storage', methods=['GET'])
+@login_required
+def admin_diagnose_storage():
+    """データ復旧用診断API (v1.7.71 で追加)。
+    /data 内の全ファイル・SQLite documents 全キー・復元可能ソースを返す。
+    """
+    import subprocess
+    result = {
+        'data_dir': str(DATA_DIR),
+        'files': [],
+        'sqlite_documents': [],
+        'sqlite_error': None,
+        'recover_output_available': False,
+        'recoverable_json_files': [],
+        'auto_recover_log_hint': 'Render → wp-manager → Logs で「[AUTO-RECOVER]」を検索',
+    }
+    # 全ファイル一覧
+    try:
+        for entry in sorted(os.listdir(str(DATA_DIR))):
+            full = DATA_DIR / entry
+            try:
+                if full.is_file():
+                    result['files'].append({
+                        'name': entry,
+                        'size': full.stat().st_size,
+                        'mtime': datetime.fromtimestamp(full.stat().st_mtime).isoformat(),
+                    })
+                elif full.is_dir():
+                    result['files'].append({'name': entry + '/', 'size': None, 'mtime': None})
+            except Exception:
+                pass
+    except Exception as e:
+        result['listdir_error'] = str(e)
+    # SQLite documents
+    try:
+        conn = _db_connect()
+        try:
+            rows = conn.execute('SELECT key, length(value), updated_at FROM documents ORDER BY key').fetchall()
+            for row in rows:
+                result['sqlite_documents'].append({
+                    'key': row[0], 'value_size': row[1] or 0, 'updated_at': row[2],
+                })
+        finally:
+            conn.close()
+    except Exception as e:
+        result['sqlite_error'] = str(e)
+    # 復元可能な JSON ファイル
+    for name in ('snapshot_backup.json', 'settings.json', 'articles.json', 'quality.json',
+                 'decorations.json', 'ad_insertion.json', 'batch_jobs.json',
+                 'publish_jobs.json', 'memo.json'):
+        p = DATA_DIR / name
+        if p.exists():
+            preview = {}
+            try:
+                with open(p, encoding='utf-8') as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    preview = {'type': 'dict', 'keys_sample': list(data.keys())[:10]}
+                    if 'sites' in data:
+                        preview['sites_count'] = len(data.get('sites') or [])
+                elif isinstance(data, list):
+                    preview = {'type': 'list', 'length': len(data)}
+            except Exception as e:
+                preview = {'error': str(e)}
+            result['recoverable_json_files'].append({
+                'name': name, 'size': p.stat().st_size, 'preview': preview,
+            })
+    # sqlite3 コマンドの存在確認
+    try:
+        proc = subprocess.run(['sqlite3', '-version'], capture_output=True, text=True, timeout=5)
+        result['sqlite3_cli'] = {'available': True, 'version': proc.stdout.strip()}
+    except FileNotFoundError:
+        result['sqlite3_cli'] = {'available': False}
+    except Exception as e:
+        result['sqlite3_cli'] = {'error': str(e)}
+    return jsonify(result)
+
+
+@app.route('/api/admin/force-recover', methods=['POST'])
+@login_required
+@with_data_lock
+def admin_force_recover():
+    """管理画面から起動時と同じ自動復元処理を再実行する (v1.7.71 で追加)。
+    docs テーブルに実データがある key はスキップ（上書きなし）。"""
+    try:
+        _auto_recover_on_startup()
+        return jsonify({'success': True, 'message': '復元処理を実行しました。Render Logs で [AUTO-RECOVER] を確認してください。'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 # Settings

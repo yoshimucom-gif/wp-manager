@@ -1620,6 +1620,18 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
               </div>
             </div>
           </div>
+          <div class="settings-section" style="border:1px solid #dc2626;background:rgba(220,38,38,0.05)">
+            <div class="section-header" style="color:#dc2626">🚨 データ復旧（緊急時のみ）</div>
+            <div style="font-size:12px;line-height:1.6;margin-bottom:10px">
+              サイト一覧やAPIキーが消えた場合、<code>/data</code> に残っているファイル・破損SQLite・snapshot_backup.json から自動復旧を試みるボタンです。<br>
+              起動時に自動で1回動きますが、それでも復元できていない場合、このボタンで再度強制実行します（既存データがある key は上書きされません）。
+            </div>
+            <div style="display:flex;gap:8px;margin-bottom:10px">
+              <button type="button" class="btn btn-secondary" onclick="diagnoseStorage()">🔎 診断実行</button>
+              <button type="button" class="btn" style="background:#dc2626;color:#fff" onclick="forceRecover()">🛠 強制復旧</button>
+            </div>
+            <pre id="s-diagnose-output" style="font-size:11px;background:#111;color:#0f0;padding:10px;border-radius:4px;max-height:400px;overflow:auto;margin:0;display:none;white-space:pre-wrap;word-break:break-all"></pre>
+          </div>
           <div class="settings-section">
             <div class="section-header">// 商品カード挿入ルール</div>
             <div class="form-help" style="margin-bottom:8px">
@@ -7452,6 +7464,36 @@ async function saveMemo() {
     }
   } catch (e) {
     status.textContent = '保存失敗: ' + (e.message || e);
+  }
+}
+
+// v1.7.71: データ復旧用（緊急時）
+async function diagnoseStorage() {
+  const out = document.getElementById('s-diagnose-output');
+  out.style.display = 'block';
+  out.textContent = '診断中...';
+  try {
+    const res = await fetch('/api/admin/diagnose-storage');
+    const data = await res.json();
+    out.textContent = JSON.stringify(data, null, 2);
+  } catch (e) {
+    out.textContent = 'エラー: ' + (e.message || e);
+  }
+}
+
+async function forceRecover() {
+  if (!confirm('起動時と同じ自動復元処理を再実行します。既存データがある key は上書きされません。実行しますか?')) return;
+  const out = document.getElementById('s-diagnose-output');
+  out.style.display = 'block';
+  out.textContent = '復元実行中...';
+  try {
+    const res = await fetch('/api/admin/force-recover', {method: 'POST'});
+    const data = await res.json();
+    out.textContent = JSON.stringify(data, null, 2) + '\n\n続けて「診断実行」で結果を確認してください。Render Logs で [AUTO-RECOVER] を検索するとサーバー側の詳細ログが見えます。';
+    // 復元後は自動でサイト一覧などを再読み込み
+    setTimeout(() => location.reload(), 2000);
+  } catch (e) {
+    out.textContent = 'エラー: ' + (e.message || e);
   }
 }
 
