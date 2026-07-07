@@ -233,7 +233,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.72'
+APP_VERSION = '1.7.73'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -7589,7 +7589,6 @@ def get_sites_dashboard():
             'id': sid,
             'name': site.get('name') or site.get('wp_url') or '(無名サイト)',
             'wp_url': wp_url,
-            'sheet_url': site.get('sheet_url') or '',
             'counts': {
                 'total': len(site_articles),
                 'pending': sum(1 for a in site_articles if a.get('status') == 'pending'),
@@ -9542,7 +9541,6 @@ def create_site():
         'wp_url': data.get('wp_url', '').rstrip('/'),
         'wp_user': data.get('wp_user', ''),
         'wp_password': data.get('wp_password', ''),
-        'sheet_url': data.get('sheet_url', ''),
     }
     sites.append(site)
     settings['sites'] = sites
@@ -9565,8 +9563,6 @@ def update_site(site_id):
             s['wp_user'] = data.get('wp_user', s['wp_user'])
             if data.get('wp_password') and not is_masked_value(data['wp_password']):
                 s['wp_password'] = data['wp_password']
-            if 'sheet_url' in data:
-                s['sheet_url'] = str(data['sheet_url']).strip()
             break
     save_settings(settings)
     return jsonify({'success': True})

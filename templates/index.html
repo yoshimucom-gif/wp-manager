@@ -1180,28 +1180,7 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             </div>
           </div>
           <div class="dashboard-intel">
-            <!-- 左: 管理スプレッドシート -->
-            <div class="intel-panel">
-              <div class="intel-header">
-                <div>
-                  <div class="intel-title">管理スプレッドシート</div>
-                  <div class="intel-sub">このサイトの管理用シートURL</div>
-                </div>
-                <a id="sheet-url-open-btn" href="#" target="_blank" rel="noopener noreferrer"
-                   class="btn btn-secondary btn-sm" style="display:none">開く ↗</a>
-              </div>
-              <div class="intel-list" style="padding:10px 0 4px">
-                <input type="url" id="dashboard-sheet-url" class="form-control"
-                       placeholder="https://docs.google.com/spreadsheets/..."
-                       style="font-size:12px;margin-bottom:8px;width:100%;">
-                <button class="btn btn-primary btn-sm" onclick="saveSheetUrl()">保存</button>
-                <span id="sheet-url-saved-msg" style="display:none;font-size:11px;color:var(--accent);margin-left:8px">✓ 保存しました</span>
-                <div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5">
-                  URLを保存すると「開く ↗」ボタンからシートを直接開けます。
-                </div>
-              </div>
-            </div>
-            <!-- 右: 今月の記事作成料金目安 -->
+            <!-- 今月の記事作成料金目安 -->
             <div class="intel-panel">
               <div class="intel-header">
                 <div>
@@ -3438,11 +3417,6 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
       </div>
       <div class="form-help" id="site-password-help">WordPressのユーザー設定で発行したアプリケーションパスワードを入力してください。</div>
     </div>
-    <div class="form-group">
-      <label class="form-label">管理スプレッドシートURL <span style="color:var(--muted);font-size:11px">（任意）</span></label>
-      <input type="url" id="site-sheet-url" class="form-control" placeholder="https://docs.google.com/spreadsheets/...">
-      <div class="form-help">このサイトの管理用スプレッドシートのURL（作業ホームに表示）</div>
-    </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeSiteModal()">キャンセル</button>
       <button class="btn btn-primary" onclick="saveSite()">保存</button>
@@ -4014,7 +3988,6 @@ function editSite(id) {
   document.getElementById('site-name').value = s.name;
   document.getElementById('site-wp-url').value = s.wp_url;
   document.getElementById('site-wp-user').value = s.wp_user;
-  document.getElementById('site-sheet-url').value = s.sheet_url || '';
   const passwordEl = document.getElementById('site-wp-password');
   passwordEl.value = s.wp_password || '';
   resetSitePasswordToggle(passwordEl, '/api/sites/' + id + '/reveal-password');
@@ -4035,7 +4008,6 @@ async function saveSite() {
     wp_url: document.getElementById('site-wp-url').value,
     wp_user: document.getElementById('site-wp-user').value,
     wp_password: document.getElementById('site-wp-password').value,
-    sheet_url: document.getElementById('site-sheet-url').value,
   };
   if (!body.name || !body.wp_url) { toast('サイト名とURLは必須です', 'error'); return; }
   if (id) {
@@ -4053,31 +4025,6 @@ async function deleteSite(id) {
   await fetch(`/api/sites/${id}`, {method:'DELETE'});
   toast('削除しました', 'success');
   await loadSites();
-}
-
-async function saveSheetUrl() {
-  if (!currentSiteId) return;
-  const url = (document.getElementById('dashboard-sheet-url').value || '').trim();
-  try {
-    await fetch(`/api/sites/${currentSiteId}`, {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({sheet_url: url}),
-    });
-    // ローカルキャッシュを更新
-    [sitesDashboardData, siteList].forEach(list => {
-      const s = list.find(s => String(s.id) === currentSiteId);
-      if (s) s.sheet_url = url;
-    });
-    // 開くボタンを更新
-    const openBtn = document.getElementById('sheet-url-open-btn');
-    if (openBtn) { openBtn.href = url || '#'; openBtn.style.display = url ? '' : 'none'; }
-    // 保存完了フラッシュ
-    const msg = document.getElementById('sheet-url-saved-msg');
-    if (msg) { msg.style.display = ''; setTimeout(() => { msg.style.display = 'none'; }, 2000); }
-  } catch (e) {
-    toast('保存に失敗しました: ' + e.message, 'error');
-  }
 }
 
 // ---- カテゴリー設定 ----
@@ -7754,15 +7701,6 @@ function updateHomePageMode() {
       urlEl.innerHTML = url
         ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:none">${esc(url)} ↗</a>`
         : '';
-    }
-    // 管理スプレッドシートURLをダッシュボードパネルに反映
-    const sheetInput = document.getElementById('dashboard-sheet-url');
-    const sheetOpenBtn = document.getElementById('sheet-url-open-btn');
-    const sheetUrl = (current && current.sheet_url) ? current.sheet_url : '';
-    if (sheetInput) sheetInput.value = sheetUrl;
-    if (sheetOpenBtn) {
-      sheetOpenBtn.href = sheetUrl || '#';
-      sheetOpenBtn.style.display = sheetUrl ? '' : 'none';
     }
   }
   // 各フォームの「投稿先サイト」セレクタを現在サイト時は非表示にして自動選択
