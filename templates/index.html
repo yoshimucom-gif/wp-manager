@@ -1967,6 +1967,36 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.76 (2026-07-08) — 途中切れ記事の silent-save を撲滅（バルーン風船で 66/100 件被害）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>被害の実測</strong>: バルーン風船サイトで低スコア記事（35〜75点）を確認すると、上位 4 件中 4 件が全て <code>本文末尾が文の途中で終わっています</code> の警告付き。100 件中 66 件が「途中切れなのに status=generated」の状態で保存されていた。<strong>¥72 × 66 = 約 ¥4,752 の予算がゴミ記事に流出</strong>。</li>
+              <li><strong>真因</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>バッチ生成の <code>_do_batch_generate()</code> で、途中切れ検出（<code>_looks_truncated</code>）がエラーではなく <code>pipeline_warnings</code> に追加されるだけだった（<code>app.py:7027-7030</code>）</li>
+                  <li>content_chars &gt;= 500 なら「まあ短くはないから OK」で <code>status=generated</code> に保存</li>
+                  <li>SSE 経路（<code>app.py:8309</code>）は正しく <code>status=error</code> にしていたので、経路間の挙動不整合</li>
+                  <li>ユーザーは <code>send_wp</code> できる状態で低品質記事を大量に抱えた</li>
+                </ul>
+              </li>
+              <li><strong>修正</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>_do_batch_generate()</code> の途中切れハンドリングを SSE 経路と統一 → <code>raise ValueError(validation_error)</code></li>
+                  <li>途中切れ検出時は <code>status=error</code> で保存、次回リトライ or 対応履歴での「⚡ 再生成」対象になる</li>
+                  <li><code>CLAUDE_ARTICLE_CONTINUATION_MAX_ROUNDS</code> のデフォルトを <strong>4 → 8</strong> に増量。途中切れ検出後の続き生成リトライを倍にする</li>
+                </ul>
+              </li>
+              <li><strong>影響</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>今後の生成は途中切れ即 error 扱い → status=error の記事だけ再生成すれば無駄弾ゼロ</li>
+                  <li>続き生成が 8 回まで発火するので、1 記事あたりのトークン使用量が微増する可能性（実測は要様子見）</li>
+                  <li>既存の 66 件は自動修復されない → 対応履歴で選択 → 「⚡ 選択を再生成」で復旧</li>
+                </ul>
+              </li>
+              <li>マーカー・記事本文プロンプト自体には触っていない。生成完了判定のロジックだけを厳格化した。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.75 (2026-07-07) — 低スコア/高スコア選択を「置換モード」に変更（追加モードから）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>バグ</strong>: 「📈 高スコア選択」「📉 低スコア選択」ボタンが「既存選択に追加」の和集合モードだったため、既に check-all で全選択されている状態で高スコア選択を押しても低スコア記事のチェックが解除されず、モーダルには低スコア記事も混ざったまま送信対象になっていた。</li>

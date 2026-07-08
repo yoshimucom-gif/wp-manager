@@ -198,9 +198,11 @@ def describe_wp_request_error(e):
         hint = ' ／ HTML応答 = WPに到達してない。ホスティング側 WAF or セキュリティプラグインによるブロックの可能性（ConoHa WINGの「海外アクセス制限」/ SiteGuard等）'
     return f"HTTP {status}: {snippet or 'Forbidden'}{hint}"
 try:
-    CLAUDE_ARTICLE_CONTINUATION_MAX_ROUNDS = int(os.environ.get('CLAUDE_ARTICLE_CONTINUATION_MAX_ROUNDS', '4'))
+    # v1.7.76: 4 → 8 に増量。途中切れが多発していた（バルーン風船で66/100件が途中切れ）ため、
+    # 続き生成のリトライ回数を倍にして完結率を上げる。
+    CLAUDE_ARTICLE_CONTINUATION_MAX_ROUNDS = int(os.environ.get('CLAUDE_ARTICLE_CONTINUATION_MAX_ROUNDS', '8'))
 except ValueError:
-    CLAUDE_ARTICLE_CONTINUATION_MAX_ROUNDS = 4
+    CLAUDE_ARTICLE_CONTINUATION_MAX_ROUNDS = 8
 try:
     BATCH_GENERATION_MAX_RETRIES = int(os.environ.get('BATCH_GENERATION_MAX_RETRIES', '2'))
 except ValueError:
@@ -233,7 +235,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.75'
+APP_VERSION = '1.7.76'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -7025,9 +7027,11 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                 if not validation_error and content_chars < 500:
                     validation_error = f'生成結果が短すぎます（{content_chars}文字）。Claude生成が途中で止まった可能性があります。もう一度生成してください。'
                 if validation_error:
-                    if content_chars < 500:
-                        raise ValueError(validation_error)
-                    pipeline_warnings.append(validation_error)
+                    # v1.7.76: 途中切れ検出時は必ずエラー扱いにする（従来は 500文字以上あれば
+                    # 警告付きで status=generated 保存していた）。この silent-save が原因で
+                    # バルーン風船サイトで 66/100 件の途中切れ記事が「生成済」扱いのまま
+                    # WP push できる状態になっていた。SSE 経路（line 8309）と挙動を統一。
+                    raise ValueError(validation_error)
                 generated_at = now_iso()
                 run_id = str(uuid.uuid4())
 
