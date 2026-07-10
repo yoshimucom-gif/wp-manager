@@ -1967,6 +1967,24 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.77 / inserter v1.9.27 (2026-07-08) — プラグインの秘匿キー入力に「表示/非表示」トグル追加</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>要望</strong>: WordPress プラグイン「Affiros プロダクトインサーター」の設定画面で、Claude / Amazon Access / Amazon Secret の 3 つの API キー入力欄が全部 <code>type="password"</code> でマスク表示（黒丸）だった。入力ミスや貼り直し確認が難しい。</li>
+              <li><strong>追加</strong>: 各秘匿キー入力欄の横に <strong>「表示」ボタン</strong> を配置。クリックで <code>type</code> を <code>password ⇔ text</code> 切り替え、ボタンラベルも「表示 ⇔ 非表示」で連動。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>対象: Claude APIキー / Amazon Access Key / Amazon Secret Key</li>
+                  <li>楽天アプリID・楽天アフィリエイトID・Amazonアソシエイトタグは元から平文表示なので対象外</li>
+                  <li>jQuery で軽く実装（<code>assets/admin.js</code>）</li>
+                  <li>スタイル: <code>.ai-pi-secret-wrap</code> で input と button を横並び（<code>assets/admin.css</code>）</li>
+                </ul>
+              </li>
+              <li><strong>安全性</strong>: 保存値がマスク化される仕組みは維持。ボタンを押した時だけ現画面で平文可視化するので、DB や POST 経路のセキュリティは無影響。</li>
+              <li>プラグイン Version: <code>1.9.26 → 1.9.27</code>、<code>AI_PI_VERSION</code> と <code>build-all.py</code> の zip 名も同期。</li>
+              <li>本体側は APP_VERSION の追従とプラグインダウンロード zip の差し替えのみ。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.76 (2026-07-08) — 途中切れ記事の silent-save を撲滅（バルーン風船で 66/100 件被害）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>被害の実測</strong>: バルーン風船サイトで低スコア記事（35〜75点）を確認すると、上位 4 件中 4 件が全て <code>本文末尾が文の途中で終わっています</code> の警告付き。100 件中 66 件が「途中切れなのに status=generated」の状態で保存されていた。<strong>¥72 × 66 = 約 ¥4,752 の予算がゴミ記事に流出</strong>。</li>

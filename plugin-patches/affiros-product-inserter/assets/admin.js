@@ -5,6 +5,19 @@
 
     $(document).ready(function() {
 
+        // === v1.9.27: 秘匿キー入力の「表示/非表示」トグル ===
+        $(document).on('click', '.ai-pi-secret-toggle', function() {
+            const $btn = $(this);
+            const $input = $btn.closest('.ai-pi-secret-wrap').find('.ai-pi-secret');
+            if ($input.attr('type') === 'password') {
+                $input.attr('type', 'text');
+                $btn.text('非表示');
+            } else {
+                $input.attr('type', 'password');
+                $btn.text('表示');
+            }
+        });
+
         // === メタボックス：商品挿入実行 ===
         $('.aipi-run').on('click', function() {
             const $box = $('.aipi-metabox');

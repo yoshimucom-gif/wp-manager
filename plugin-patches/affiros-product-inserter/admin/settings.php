@@ -82,7 +82,10 @@ function ai_pi_render_settings_page() {
                 <tr>
                     <th><label>Claude APIキー</label></th>
                     <td>
-                        <input type="password" name="ai_pi_settings[claude_api_key]" value="<?php echo esc_attr($settings['claude_api_key'] ?? ''); ?>" class="regular-text" autocomplete="off">
+                        <span class="ai-pi-secret-wrap">
+                            <input type="password" name="ai_pi_settings[claude_api_key]" value="<?php echo esc_attr($settings['claude_api_key'] ?? ''); ?>" class="regular-text ai-pi-secret" autocomplete="off">
+                            <button type="button" class="button ai-pi-secret-toggle">表示</button>
+                        </span>
                         <p class="description">Anthropic Console で発行</p>
                     </td>
                 </tr>
@@ -99,11 +102,21 @@ function ai_pi_render_settings_page() {
                 </tr>
                 <tr>
                     <th><label>Amazon Access Key</label></th>
-                    <td><input type="password" name="ai_pi_settings[amazon_access_key]" value="<?php echo esc_attr($settings['amazon_access_key'] ?? ''); ?>" class="regular-text" autocomplete="off"></td>
+                    <td>
+                        <span class="ai-pi-secret-wrap">
+                            <input type="password" name="ai_pi_settings[amazon_access_key]" value="<?php echo esc_attr($settings['amazon_access_key'] ?? ''); ?>" class="regular-text ai-pi-secret" autocomplete="off">
+                            <button type="button" class="button ai-pi-secret-toggle">表示</button>
+                        </span>
+                    </td>
                 </tr>
                 <tr>
                     <th><label>Amazon Secret Key</label></th>
-                    <td><input type="password" name="ai_pi_settings[amazon_secret_key]" value="<?php echo esc_attr($settings['amazon_secret_key'] ?? ''); ?>" class="regular-text" autocomplete="off"></td>
+                    <td>
+                        <span class="ai-pi-secret-wrap">
+                            <input type="password" name="ai_pi_settings[amazon_secret_key]" value="<?php echo esc_attr($settings['amazon_secret_key'] ?? ''); ?>" class="regular-text ai-pi-secret" autocomplete="off">
+                            <button type="button" class="button ai-pi-secret-toggle">表示</button>
+                        </span>
+                    </td>
                 </tr>
                 <tr>
                     <th><label>Amazon アソシエイトタグ</label></th>

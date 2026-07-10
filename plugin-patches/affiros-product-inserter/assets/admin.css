@@ -2,6 +2,11 @@
 
 .aipi-wrap { max-width: 1200px; }
 
+/* v1.9.27: 秘匿キー入力の「表示/非表示」トグル */
+.ai-pi-secret-wrap { display: inline-flex; gap: 6px; align-items: center; }
+.ai-pi-secret-wrap .ai-pi-secret { flex: 1; }
+.ai-pi-secret-wrap .ai-pi-secret-toggle { flex-shrink: 0; min-width: 56px; }
+
 /* メタボックス */
 .aipi-metabox .aipi-status {
     padding: 10px 12px;
