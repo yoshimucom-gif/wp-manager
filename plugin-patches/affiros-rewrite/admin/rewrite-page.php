@@ -319,7 +319,8 @@ function affiros_rewrite_render_rewrite_page() {
                 html += '<td>' + escapeHtml(p.modified) + '</td>';
                 html += '<td>';
                 html += '<button type="button" class="button button-primary button-small affiros-rewrite-btn" data-post-id="' + p.id + '">✍ リライト</button> ';
-                html += '<button type="button" class="button button-small affiros-markers-only-btn" data-post-id="' + p.id + '" title="Claude を呼ばずにマーカーだけ再配置。既存の商品カード・マーカーは自動除去してから記事タイプ別ルールで再挿入します。">🎯 マーカーのみ</button> ';
+                html += '<button type="button" class="button button-small affiros-cleanup-btn" data-post-id="' + p.id + '" title="既存の商品カード・マーカーを全て除去（挿入はしない）。除去後に🎯挿入で新規配置します。">🗑 マーカー消す</button> ';
+                html += '<button type="button" class="button button-small affiros-insert-btn" data-post-id="' + p.id + '" title="Claude を呼ばずに記事タイプ別ルールでマーカー挿入。既存マーカーが検出されたら🗑で先に消してください。ランキング記事は N選 のN個 全部揃わないと保存拒否。">🎯 マーカー挿入</button> ';
                 html += '<a href="' + p.edit_link + '" target="_blank" class="button button-small">編集</a>';
                 html += '</td>';
                 html += '</tr>';
@@ -391,23 +392,20 @@ function affiros_rewrite_render_rewrite_page() {
             });
         }
 
-        // --- マーカーのみ再挿入（Claude 呼ばない）---
-        // v1.7.78 追加：既に WP に公開済みの記事のマーカー位置ズレを直すため
-        function runMarkersOnly(postId) {
+        // --- 🗑 マーカー消す（v0.4.42）---
+        // Pre_Cleanup だけ実行。既存の商品カード・マーカーを全部除去。
+        function runCleanup(postId) {
             const $row = $('tr[data-post-id="' + postId + '"]');
-            const $btn = $row.find('.affiros-markers-only-btn');
+            const $btn = $row.find('.affiros-cleanup-btn');
             const origLabel = $btn.html();
-            $btn.prop('disabled', true).html('挿入中...');
-
-            const articleType = $('#affiros-article-type').val() || 'auto';
+            $btn.prop('disabled', true).html('除去中...');
             return $.post(AffirosRewrite.ajaxUrl, {
-                action: 'affiros_rewrite_insert_markers_only',
+                action: 'affiros_rewrite_cleanup_markers',
                 nonce: AffirosRewrite.nonce,
                 post_id: postId,
-                article_type: articleType,
             }).done(function(resp) {
                 if (!resp.success) {
-                    alert('マーカー挿入に失敗しました: ' + (resp.data?.message || '不明'));
+                    alert('マーカー除去に失敗しました: ' + (resp.data?.message || '不明'));
                     return;
                 }
                 openResultModal(resp.data);
@@ -417,9 +415,48 @@ function affiros_rewrite_render_rewrite_page() {
                 $btn.prop('disabled', false).html(origLabel);
             });
         }
-        $('#affiros-result').on('click', '.affiros-markers-only-btn', function() {
+        $('#affiros-result').on('click', '.affiros-cleanup-btn', function() {
             const postId = $(this).data('post-id');
-            runMarkersOnly(postId);
+            runCleanup(postId);
+        });
+
+        // --- 🎯 マーカー挿入（v0.4.42、Pre_Cleanup しない）---
+        // 既存マーカー検出時はサーバー側で保存拒否。ランキング記事は strict 判定。
+        function runInsert(postId) {
+            const $row = $('tr[data-post-id="' + postId + '"]');
+            const $btn = $row.find('.affiros-insert-btn');
+            const origLabel = $btn.html();
+            $btn.prop('disabled', true).html('挿入中...');
+            const articleType = $('#affiros-article-type').val() || 'auto';
+            return $.post(AffirosRewrite.ajaxUrl, {
+                action: 'affiros_rewrite_insert_markers_new',
+                nonce: AffirosRewrite.nonce,
+                post_id: postId,
+                article_type: articleType,
+            }).done(function(resp) {
+                if (!resp.success) {
+                    // existing_markers_detected の時は特別なガイダンスを出す
+                    const code = resp.data?.code || '';
+                    const msg = resp.data?.message || '不明';
+                    if (code === 'existing_markers_detected') {
+                        alert('⚠️ ' + msg);
+                    } else if (code === 'ranking_marker_count_mismatch') {
+                        alert('⚠️ ランキング数不整合\n\n' + msg);
+                    } else {
+                        alert('マーカー挿入に失敗しました: ' + msg);
+                    }
+                    return;
+                }
+                openResultModal(resp.data);
+            }).fail(function(xhr) {
+                alert('通信エラー: HTTP ' + xhr.status);
+            }).always(function() {
+                $btn.prop('disabled', false).html(origLabel);
+            });
+        }
+        $('#affiros-result').on('click', '.affiros-insert-btn', function() {
+            const postId = $(this).data('post-id');
+            runInsert(postId);
         });
 
         function openResultModal(data) {

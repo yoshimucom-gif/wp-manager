@@ -11,6 +11,181 @@ class Affiros_Rewrite_Engine {
     const MAX_SOURCE_CHARS = 30000;
 
     /**
+     * v0.4.42: マーカー除去のみモード
+     *
+     * Pre_Cleanup で既存の商品カード・マーカーを除去して返す。
+     * 新規マーカー挿入はしない（🎯 マーカー挿入 ボタンで別途行う）。
+     *
+     * 除去 → 目視確認 → 挿入 の 2 段階運用にすることで、
+     * 中途半端な状態で保存される事故を防ぐ。
+     *
+     * @param int $post_id
+     * @return array|WP_Error
+     */
+    public static function cleanup_markers_only($post_id) {
+        $post = Affiros_Rewrite_Post_Fetcher::get_post_content($post_id);
+        if (!$post) {
+            return new WP_Error('post_not_found', '記事が見つかりません');
+        }
+        $original_content = $post['content'];
+        // 既存カード・マーカー計数（除去前後の差を UI に見せるため）
+        $before_cards   = preg_match_all('/<div\s+class="aipi-/i', $original_content, $_c);
+        $before_markers = preg_match_all('/<!--\s*ai-product/i', $original_content, $_m);
+
+        $content = class_exists('Affiros_Rewrite_Pre_Cleanup')
+            ? Affiros_Rewrite_Pre_Cleanup::clean($original_content)
+            : $original_content;
+
+        $after_cards   = preg_match_all('/<div\s+class="aipi-/i', $content, $_c2);
+        $after_markers = preg_match_all('/<!--\s*ai-product/i', $content, $_m2);
+
+        // Gutenberg ブロック化（マーカー挿入と挙動を合わせる）
+        if (class_exists('Affiros_Rewrite_Gutenberg')) {
+            $content = Affiros_Rewrite_Gutenberg::convert($content);
+        }
+
+        return [
+            'post_id' => $post_id,
+            'original_title' => $post['title'],
+            'original_content' => $original_content,
+            'rewritten_title' => $post['title'],
+            'rewritten_content' => $content,
+            'usage' => [],
+            'model' => '',
+            'article_type' => '',
+            'article_type_auto' => false,
+            'markers_inserted' => false,
+            'marker_stats' => null,
+            'marker_validation' => null,
+            'product_candidates_count' => 0,
+            'mode' => 'cleanup_only',
+            'cleanup_report' => [
+                'cards_before'   => intval($before_cards),
+                'cards_after'    => intval($after_cards),
+                'markers_before' => intval($before_markers),
+                'markers_after'  => intval($after_markers),
+            ],
+        ];
+    }
+
+    /**
+     * v0.4.42: マーカー挿入のみモード（Pre_Cleanup しない）
+     *
+     * 既存マーカー・カードは触らず、記事タイプに応じた新規マーカーを挿入する。
+     * 既存マーカーが検出された場合は保存拒否（先に 🗑 マーカー消す を実行してもらう）。
+     *
+     * ランキング記事は strict 判定（N選のNに対して after_each_h3_rank が
+     * N/N 揃わなければ WP_Error）。中途半端な状態で保存させない。
+     *
+     * @param int   $post_id
+     * @param array $opts
+     *   - article_type ('auto'|'ranking'|'brand'|'column')
+     * @return array|WP_Error
+     */
+    public static function insert_markers_new($post_id, $opts = []) {
+        $post = Affiros_Rewrite_Post_Fetcher::get_post_content($post_id);
+        if (!$post) {
+            return new WP_Error('post_not_found', '記事が見つかりません');
+        }
+        $original_content = $post['content'];
+
+        // 既存マーカー・カードの検出（先に消してからやり直しを促す）
+        $existing_cards   = preg_match_all('/<div\s+class="aipi-/i', $original_content, $_c);
+        $existing_markers = preg_match_all('/<!--\s*ai-product/i', $original_content, $_m);
+        if ($existing_cards > 0 || $existing_markers > 0) {
+            return new WP_Error(
+                'existing_markers_detected',
+                "既存の商品カード {$existing_cards} 個 / マーカー {$existing_markers} 個が検出されました。" .
+                "先に「🗑 マーカー消す」を実行して除去してから挿入してください。"
+            );
+        }
+
+        // 記事タイプ確定
+        $requested_type = $opts['article_type'] ?? 'auto';
+        if ($requested_type === 'auto' || $requested_type === '') {
+            $article_type = class_exists('Affiros_Rewrite_Article_Type')
+                ? Affiros_Rewrite_Article_Type::infer('', $post['title'])
+                : 'ranking';
+        } else {
+            $article_type = class_exists('Affiros_Rewrite_Article_Type')
+                ? Affiros_Rewrite_Article_Type::normalize($requested_type, 'ranking')
+                : $requested_type;
+        }
+        if (!$article_type) {
+            return new WP_Error('no_article_type', '記事タイプを確定できませんでした。手動で指定してください。');
+        }
+
+        // マーカー挿入
+        $ins_result = Affiros_Rewrite_Marker_Inserter::insert($original_content, $article_type, $post['title']);
+        $content = is_array($ins_result) ? ($ins_result['html'] ?? $original_content) : $ins_result;
+        $marker_stats = is_array($ins_result) ? ($ins_result['stats'] ?? null) : null;
+        $marker_validation = null;
+        if (class_exists('Affiros_Rewrite_Marker_Validator') && $marker_stats) {
+            $marker_validation = Affiros_Rewrite_Marker_Validator::check(
+                $marker_stats, $article_type, $post['title']
+            );
+        }
+
+        // 基本ガード: マーカー0個 / 検証error
+        if (!$marker_stats || intval($marker_stats['marker_count'] ?? 0) === 0) {
+            return new WP_Error(
+                'no_markers_inserted',
+                'マーカーが1個も挿入できませんでした。記事タイプまたは本文の見出し構造を確認してください。'
+            );
+        }
+        if ($marker_validation && ($marker_validation['status'] ?? '') === 'error') {
+            return new WP_Error(
+                'marker_validation_failed',
+                'マーカー挿入検証に失敗: ' . ($marker_validation['summary'] ?? '不明')
+            );
+        }
+
+        // ランキング記事の strict 判定（v0.4.42）:
+        // タイトルに「N選」があれば after_each_h3_rank が N 個ないと保存拒否。
+        // 「5/7 位まで検出、残 2 位分は H3 未検出」のような中途半端保存を防ぐ。
+        if ($article_type === 'ranking') {
+            $expected_n = null;
+            $t = strtr($post['title'], ['０'=>'0','１'=>'1','２'=>'2','３'=>'3','４'=>'4','５'=>'5','６'=>'6','７'=>'7','８'=>'8','９'=>'9']);
+            if (preg_match('/([1-9][0-9]?)\s*選/u', $t, $mn)) {
+                $n = intval($mn[1]);
+                if ($n >= 2 && $n <= 30) $expected_n = $n;
+            }
+            if ($expected_n) {
+                $actual = intval(($marker_stats['per_position'] ?? [])['after_each_h3_rank'] ?? 0);
+                if ($actual !== $expected_n) {
+                    return new WP_Error(
+                        'ranking_marker_count_mismatch',
+                        "ランキング {$expected_n} 選の記事ですが、ランキングH3マーカーが {$actual}/{$expected_n} 個しか挿入できません。" .
+                        "本文の見出し（1位〜{$expected_n}位）が全て存在するか確認してください。"
+                    );
+                }
+            }
+        }
+
+        // Gutenberg ブロック化
+        if (class_exists('Affiros_Rewrite_Gutenberg')) {
+            $content = Affiros_Rewrite_Gutenberg::convert($content);
+        }
+
+        return [
+            'post_id' => $post_id,
+            'original_title' => $post['title'],
+            'original_content' => $original_content,
+            'rewritten_title' => $post['title'],
+            'rewritten_content' => $content,
+            'usage' => [],
+            'model' => '',
+            'article_type' => $article_type,
+            'article_type_auto' => ($requested_type === 'auto' || $requested_type === ''),
+            'markers_inserted' => true,
+            'marker_stats' => $marker_stats,
+            'marker_validation' => $marker_validation,
+            'product_candidates_count' => 0,
+            'mode' => 'insert_only',
+        ];
+    }
+
+    /**
      * マーカーのみ挿入モード（Claude API 呼び出しなし）
      *
      * リライトはせず、既存の商品カード・マーカーだけを除去して
@@ -19,6 +194,8 @@ class Affiros_Rewrite_Engine {
      * 直すためのモード。
      *
      * v1.7.78 で追加（fudosan-uru の kabe-deco.com 事故対応）。
+     * v0.4.42 で cleanup_markers_only / insert_markers_new に分割。
+     * 本メソッドは後方互換として残置。
      *
      * @param int   $post_id
      * @param array $opts

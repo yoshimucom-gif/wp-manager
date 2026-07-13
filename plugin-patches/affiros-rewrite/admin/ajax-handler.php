@@ -76,9 +76,56 @@ add_action('wp_ajax_affiros_rewrite_run_single', function () {
 });
 
 /**
+ * v0.4.42: マーカー除去のみ（Pre_Cleanup のみ実行）
+ */
+add_action('wp_ajax_affiros_rewrite_cleanup_markers', function () {
+    check_ajax_referer('affiros_rewrite_nonce', 'nonce');
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(['message' => '権限がありません']);
+    }
+    $post_id = intval($_POST['post_id'] ?? 0);
+    if (!$post_id) {
+        wp_send_json_error(['message' => '記事IDが不正です']);
+    }
+    $result = Affiros_Rewrite_Engine::cleanup_markers_only($post_id);
+    if (is_wp_error($result)) {
+        wp_send_json_error(['message' => $result->get_error_message()]);
+    }
+    wp_send_json_success($result);
+});
+
+/**
+ * v0.4.42: マーカー挿入のみ（Pre_Cleanup しない・既存マーカー検出時は保存拒否）
+ * ランキング記事は strict 判定（N選なら N/N 必須）。
+ */
+add_action('wp_ajax_affiros_rewrite_insert_markers_new', function () {
+    check_ajax_referer('affiros_rewrite_nonce', 'nonce');
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(['message' => '権限がありません']);
+    }
+    $post_id = intval($_POST['post_id'] ?? 0);
+    if (!$post_id) {
+        wp_send_json_error(['message' => '記事IDが不正です']);
+    }
+    $opts = [];
+    if (isset($_POST['article_type']) && $_POST['article_type'] !== '') {
+        $opts['article_type'] = sanitize_text_field($_POST['article_type']);
+    }
+    $result = Affiros_Rewrite_Engine::insert_markers_new($post_id, $opts);
+    if (is_wp_error($result)) {
+        wp_send_json_error([
+            'message' => $result->get_error_message(),
+            'code'    => $result->get_error_code(),
+        ]);
+    }
+    wp_send_json_success($result);
+});
+
+/**
  * マーカーのみ挿入モード（Claude 呼ばずに広告マーカーを再配置）
  * v1.7.78 追加。既に WP に公開済みの記事でマーカー位置がおかしいものを
  * リライトせずに直せる。
+ * v0.4.42 で cleanup_markers / insert_markers_new に分割。後方互換で残置。
  */
 add_action('wp_ajax_affiros_rewrite_insert_markers_only', function () {
     check_ajax_referer('affiros_rewrite_nonce', 'nonce');

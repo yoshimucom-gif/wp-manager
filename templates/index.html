@@ -1991,6 +1991,36 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.81 / rewrite v0.4.42 (2026-07-08) — マーカー操作の 🗑消す / 🎯挿入 分離 + ランキング strict 判定</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: v0.4.41 の統合版「🎯 マーカーのみ」は 1 クリックで <code>Pre_Cleanup + Marker_Inserter</code> を連続実行していた。Step 1 除去は成功したが Step 2 挿入が失敗した場合、カード・マーカー全欠落の状態で保存される事故リスクがあった。80件級で使う前に分離した。</li>
+              <li><strong>機能分離（v0.4.42）</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><strong>🗑 マーカー消す</strong>: Pre_Cleanup のみ実行。既存 <code>aipi-*</code> カード + <code>&lt;!--ai-product--&gt;</code> マーカーを全部除去。プレビューで除去件数（before/after）を表示。</li>
+                  <li><strong>🎯 マーカー挿入</strong>: Pre_Cleanup せずに Marker_Inserter のみ実行。既存マーカー/カードが検出されたら <code>existing_markers_detected</code> WP_Error で保存拒否 → ユーザーに「先に🗑を押して」と誘導。</li>
+                  <li>統合版 <code>insert_markers_only</code> は後方互換で残置。</li>
+                </ul>
+              </li>
+              <li><strong>ランキング記事 strict 判定</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>タイトルに「N選」があれば <code>per_position['after_each_h3_rank']</code> が正確に N 個ないと <code>ranking_marker_count_mismatch</code> で保存拒否。</li>
+                  <li>まとめ後の ranking マーカー（after_last_h2）は別カウンタ扱いなので N + 1 = 8 個検出でも合格。</li>
+                  <li>「5/7 位まで検出、残 2 位分の H3 未検出」のような中途半端保存を防ぐ。</li>
+                </ul>
+              </li>
+              <li><strong>UI 変更</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>各行のボタン: <code>[✍ リライト] [🗑 マーカー消す] [🎯 マーカー挿入] [編集]</code></li>
+                  <li>Insert 失敗時のエラーダイアログ: <code>existing_markers_detected</code> / <code>ranking_marker_count_mismatch</code> をコード別に表示</li>
+                </ul>
+              </li>
+              <li><strong>プラグイン設定について</strong>: Affiros9 側でカスタマイズしていない前提（DEFAULT パターン相当）で strict 判定を組んでいる。今後 Affiros9 側でパターン編集する場合は WP プラグイン側にも同期実装が必要。</li>
+              <li><strong>バージョン同期</strong>: <code>AFFIROS_REWRITE_VERSION</code> 0.4.41 → 0.4.42 / <code>affiros-rewrite-0.4.42.zip</code> 生成 / <code>PLUGIN_DOWNLOADS['rewrite']</code> 追従 / <code>APP_VERSION</code> 1.7.80 → 1.7.81。</li>
+              <li>本体側 <code>app.py</code> には触っていない（<code>APP_VERSION</code> のみ）。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.80 / paragraph-splitter v1.1.2 (2026-07-08) — 段落プラグイン「整形対象0件」誤検出を修正</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>症状</strong>: Affiros 段落整形プラグインで「🔍 全記事スキャン」を実行すると「整形対象 0件」と出るが、実際は <code>&lt;li&gt;&lt;strong&gt;ラベル&lt;/strong&gt;：長い説明文&lt;/li&gt;</code> パターンが検出可能な記事が多数存在していた。</li>
