@@ -235,7 +235,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.77'
+APP_VERSION = '1.7.78'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -5370,17 +5370,18 @@ def insert_card_markers(html, article_type='ranking', patterns=None, title=None)
                 placed = repeat
         elif pos == 'after_each_h3_rank':
             # h3ランキング見出し直下に1個ずつ
-            # 「第1位」「1位」「No.1」は常にランキング文脈なので採用。
+            # 「第1位」「1位」「No.1」「TOP1」「BEST1」は常にランキング文脈の強シグナル。
             # ①②③ は「ポイント」「チェック」「ステップ」等の用途でも頻出するため、
-            # タイトルにランキング系の強シグナル（○選/ランキング/おすすめN/ベストN/TOP N）が
-            # ある時だけ ranking H3 として扱う。これを怠ると「4つの理由」のような
-            # column 記事に商品カードが入って読者に意味不明な配置になる。
+            # 強シグナルH3が1個でも見つかった場合は絶対に混ぜない。
+            # 2026-07-08 事故（ws-outlet の 選び方 H3 ①②③④ に誤挿入されて quota 食い潰し）
+            # の再発防止として v1.7.78 で fallback-only 化。
             title_has_ranking = _has_ranking_signal(title)
             # 飾り文字（【】★●■◆▼《「『（()）を許容して
             # 「【1位】商品名」「★1位 商品名」「●第1位:商品名」も拾う。
             _DECOR = r'[\s\[【★●■◆▼《「『（(]*'
             _SEP = r'[\s\]】:：、・　]*'
-            h3_patterns = [
+            # 強シグナルパターン: N位 / No.N / TOPN / BESTN
+            strong_patterns = [
                 # 第N位 / N位（飾り文字許容）
                 r'<h3[^>]*>' + _DECOR + r'(?:第\s*)?(?:\d+|[０-９]+)\s*位' + _SEP + r'[^<]*?</h3>',
                 # No.N（飾り文字許容）
@@ -5388,11 +5389,8 @@ def insert_card_markers(html, article_type='ranking', patterns=None, title=None)
                 # TOP1 / Best1 / ベスト1（飾り文字許容）
                 r'<h3[^>]*>' + _DECOR + r'(?:TOP|BEST|ベスト)\s*(?:\d+|[０-９]+)' + _SEP + r'[^<]*?</h3>',
             ]
-            if title_has_ranking:
-                # ①②③ パターン
-                h3_patterns.append(r'<h3[^>]*>' + _DECOR + r'[①②③④⑤⑥⑦⑧⑨⑩]' + _SEP + r'[^<]*?</h3>')
             matched_positions = set()
-            for pat in h3_patterns:
+            for pat in strong_patterns:
                 rx = re.compile(pat, re.IGNORECASE)
                 for m in rx.finditer(text):
                     if m.start() in matched_positions:
@@ -5400,7 +5398,21 @@ def insert_card_markers(html, article_type='ranking', patterns=None, title=None)
                     matched_positions.add(m.start())
                     insertions.append((m.end(), '\n' + marker))
                     placed += 1
-            # フォールバック（全H3 挿入）もランキング文脈の時だけ。
+            # v1.7.78: ①②③ を弱シグナル fallback に降格。
+            # 強シグナル (N位/No.N/TOPN/BESTN) が1個でも見つかった時は絶対に発動しない。
+            # これで「選び方」章の H3 ①②③④ に誤挿入する事故が撲滅される。
+            if not matched_positions and title_has_ranking:
+                weak_pattern = r'<h3[^>]*>' + _DECOR + r'[①②③④⑤⑥⑦⑧⑨⑩]' + _SEP + r'[^<]*?</h3>'
+                weak_rx = re.compile(weak_pattern, re.IGNORECASE)
+                for m in weak_rx.finditer(text):
+                    if m.start() in matched_positions:
+                        continue
+                    matched_positions.add(m.start())
+                    insertions.append((m.end(), '\n' + marker))
+                    placed += 1
+                if matched_positions:
+                    print(f'[MARKER] after_each_h3_rank: weak-①②③ fallback ({len(matched_positions)} markers)', flush=True)
+            # 更なるフォールバック（全H3 挿入）もランキング文脈の時だけ。
             if not matched_positions and title_has_ranking:
                 end_limit = matome_range[0] if matome_range else len(text)
                 start_limit = first_h2_range[1] if first_h2_range else 0
@@ -6373,9 +6385,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.1.1',
     },
     'reschedule': {
-        'file': 'affiros-reschedule-1.0.0.zip',
+        'file': 'affiros-reschedule-1.1.0.zip',
         'name': 'Affiros 予約再スケジュール',
-        'version': '1.0.0',
+        'version': '1.1.0',
     },
     'mark-stripper': {
         'file': 'affiros-mark-stripper-1.0.0.zip',
@@ -6987,6 +6999,16 @@ def _start_batch_worker(job_id, api_key, quality_id, batch_article_type, pending
                 )
                 marker_validation = validate_marker_insertion(marker_stats, _used_type, _gen_title or '')
                 print(f'[MARKER-VALIDATE] BATCH: {marker_validation["status"]} / {marker_validation["summary"]}', flush=True)
+                # v1.7.78: マーカー validation が error の時は即失敗させる
+                # （マーカー0個 / ランキングN選なのに after_each_h3_rank=0 / 全ルール失敗fallback発動）
+                # 従来はログを出すだけで status=generated として保存していたため、
+                # kabe-deco.com/ws-character 型（マーカー0個で WP push）の事故が
+                # ユーザーに気付かれないまま発生していた。
+                if marker_validation.get('status') == 'error':
+                    raise ValueError(
+                        f'商品カードマーカーの挿入に致命的な失敗（{marker_validation["summary"]}）。'
+                        f'記事タイプ/本文構造を確認して再生成してください。'
+                    )
                 card_stats = {'h3_count': 0, 'matched_count': 0, 'products_available': 0,
                               'fallback_count': 0, 'marker_count': marker_stats.get('marker_count', 0), 'mode': 'marker_only'}
                 if card_stats.get('h3_count') and not card_stats.get('matched_count'):
@@ -8253,6 +8275,12 @@ def generate_article(article_id):
             )
             marker_validation = validate_marker_insertion(marker_stats, _used_type, _gen_title or '')
             print(f'[MARKER-VALIDATE] SSE: {marker_validation["status"]} / {marker_validation["summary"]}', flush=True)
+            # v1.7.78: マーカー validation が error の時は即失敗させる（BATCH と同じガード）
+            if marker_validation.get('status') == 'error':
+                raise ValueError(
+                    f'商品カードマーカーの挿入に致命的な失敗（{marker_validation["summary"]}）。'
+                    f'記事タイプ/本文構造を確認して再生成してください。'
+                )
             card_stats = {'h3_count': 0, 'matched_count': 0, 'products_available': 0, 'fallback_count': 0,
                           'marker_count': marker_stats.get('marker_count', 0), 'mode': 'marker_only'}
             _cards_msg = f'広告マーカー挿入: {card_stats["marker_count"]}件（プラグイン処理）'

@@ -1967,6 +1967,65 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.78 / reschedule v1.1.0 (2026-07-10) — 予約再スケジュールが下書きにも対応、取り消し機能を追加</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>要望</strong>: 「Affiros 予約再スケジュール」の対象が <code>post_status = future</code>（予約投稿）のみで、溜まった下書きを配信スケジュールに乗せられなかった。</li>
+              <li><strong>追加</strong>: 画面上部に<strong>対象ステータスのチェックボックス</strong>（予約投稿 / 下書き、初期値は両方ON）。下書きを含めると <code>post_status</code> が <code>future</code> に変換され、割り当てた日時に自動公開される。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>並び順は「予約投稿（現在の予約日時順）→ 下書き（作成日時順）」。既存の予約順は崩さない</li>
+                  <li>プレビュー表に「現ステータス」列を追加。下書きが何件公開対象になるかを実行前に赤字で警告</li>
+                </ul>
+              </li>
+              <li><strong>事故防止（3層）</strong>: 下書きの <code>future</code> 変換は日時を間違えると即時公開になるため、過去日時を作らせない。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>① プレビュー時に開始日時が過去ならエラーで弾く</li>
+                  <li>② スロット生成時、開始日時より前の時間帯（開始20:00に対する初日9:00枠など）と、揺らぎ加算後に現在時刻を下回るスロットをスキップ。<strong>v1.0.0 は初日に開始時刻より前のスロットを平気で割り当てていた</strong></li>
+                  <li>③ 実行時、プレビューから時間が経って新日時が過去になっていた記事は個別にスキップ</li>
+                  <li>WP は <code>post_status=future</code> かつ過去日時を <code>publish</code> に自動変換するため、この3層がないと下書きが即座に公開される</li>
+                </ul>
+              </li>
+              <li><strong>取り消し機能</strong>: 実行前の <code>post_date</code> / <code>post_status</code> を投稿メタに退避し、「直前の実行を取り消す」ボタンで丸ごと復元（下書きは下書きに戻る）。取り消せるのは直近1回分のみ。</li>
+              <li><strong>誤記修正</strong>: v1.0.0 の画面に「リビジョンから元の予約日時に戻せる」とあったが、WP のリビジョンは <code>post_title</code> / <code>post_content</code> / <code>post_excerpt</code> しか復元せず <code>post_date</code> と <code>post_status</code> は戻らない。この虚偽の説明を削除し、実際に戻せる取り消し機能に置き換えた。</li>
+              <li><strong>修正</strong>: 実行時に対象記事が削除済みだと <code>$p-&gt;post_status</code> を null に対して読んでいた箇所をガード。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
+            <div class="section-header">// v1.7.78 (2026-07-08) — 広告マーカー誤挿入 &amp; マーカー0個 silent-save の撲滅</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>被害の実測</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><a href="https://kabe-deco.com/ws-outlet/" target="_blank" rel="noopener">kabe-deco.com/ws-outlet</a>: 商品カードが「選び方」章の H3 ①②③④ に誤挿入。ランキング章の 1位〜7位 H3 にはゼロ。</li>
+                  <li><a href="https://kabe-deco.com/ws-character/" target="_blank" rel="noopener">kabe-deco.com/ws-character</a>: そもそも <code>&lt;!--ai-product--&gt;</code> マーカー自体が0個で WP に送信されており、プラグイン側は「マーカー未検出」エラー表示。</li>
+                </ul>
+              </li>
+              <li><strong>Bug A: ①②③ 誤マッチ問題</strong>
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>従来コード（<code>app.py:5391</code>）: タイトルに「7選/ランキング」等の signal があると、①②③④⑤⑥⑦⑧⑨⑩ H3 も強シグナル扱いでマーカー挿入していた。</li>
+                  <li>結果: 「選び方」章の H3 ①②③④（実際はガイド見出し）に商品カードが誤挿入され、WPプラグイン側の商品数 quota を食い潰し、本来入るべき「1位〜7位」ランキング H3 が空。</li>
+                  <li>修正: <code>strong_patterns</code>（N位/No.N/TOPN/BESTN）と <code>weak_pattern</code>（①②③）を厳格に分離。強シグナルで1個でも見つかった時は絶対に ①②③ を触らない。①②③ は「N位系が0個で、かつタイトルに ranking signal がある時」の fallback だけ発動。</li>
+                </ul>
+              </li>
+              <li><strong>Bug B: マーカー0個 silent-save 問題</strong>
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>従来コード（<code>app.py:6989</code> BATCH / <code>app.py:8277</code> SSE）: <code>validate_marker_insertion()</code> が <code>status=error</code> を返してもログ出力だけで <code>status=generated</code> として保存していた。</li>
+                  <li>ユーザーは「マーカー0個の記事が WP に送信された」ことに気付けず、実測でしか発見できなかった。</li>
+                  <li>修正: <code>marker_validation['status'] == 'error'</code> の時は <code>raise ValueError</code>。BATCH/SSE の両経路で <code>status=error</code> として保存。次回の対応履歴で「⚡ 選択を再生成」の対象になる。</li>
+                  <li>error 判定条件（既存の <code>validate_marker_insertion</code> ロジックをそのまま利用）: 全ルール失敗 fallback 発動 / <code>marker_count == 0</code> / ランキングN選なのに <code>after_each_h3_rank=0</code>。</li>
+                </ul>
+              </li>
+              <li><strong>効果</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>ws-outlet 型（誤挿入）は 90% 直る想定。</li>
+                  <li>ws-character 型（0個）は再発しても <code>status=error</code> で明示される。silent-save が閉じたため、今後は「気付いたら WP にマーカーなし記事が公開されていた」が起きない。</li>
+                </ul>
+              </li>
+              <li><strong>既存記事は自動修復されない</strong>: WP側で既に公開されている ws-outlet / ws-character は今回の修正では変わらない。「投稿状態リセット（v1.7.74）→ 再生成」で復旧可能。</li>
+              <li>マーカー配置ロジック本体（<code>insert_card_markers</code>）以外には触っていない。プロンプト・スコア・段落プラグインは無影響。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.77 / inserter v1.9.27 (2026-07-08) — プラグインの秘匿キー入力に「表示/非表示」トグル追加</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>要望</strong>: WordPress プラグイン「Affiros プロダクトインサーター」の設定画面で、Claude / Amazon Access / Amazon Secret の 3 つの API キー入力欄が全部 <code>type="password"</code> でマスク表示（黒丸）だった。入力ミスや貼り直し確認が難しい。</li>
