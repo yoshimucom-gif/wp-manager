@@ -11,6 +11,55 @@ class Affiros_Rewrite_Engine {
     const MAX_SOURCE_CHARS = 30000;
 
     /**
+     * v0.4.46: セクション並び替えモード
+     *
+     * H2 セクションを SEO 最適な順序（選定基準→ランキング→選び方→FAQ→まとめ）
+     * に並び替える。Claude API 呼び出しなし・マーカーは触らない。
+     *
+     * @param int $post_id
+     * @return array|WP_Error
+     */
+    public static function reorder_sections_only($post_id) {
+        $post = Affiros_Rewrite_Post_Fetcher::get_post_content($post_id);
+        if (!$post) {
+            return new WP_Error('post_not_found', '記事が見つかりません');
+        }
+        $original_content = $post['content'];
+
+        if (!class_exists('Affiros_Rewrite_Section_Reorder')) {
+            return new WP_Error('reorder_unavailable', 'セクション並び替え機能が読み込めませんでした');
+        }
+        $result = Affiros_Rewrite_Section_Reorder::reorder($original_content);
+        $content = $result['html'];
+
+        if (!$result['changed']) {
+            return new WP_Error('reorder_no_change', 'セクションの順序は既に最適です（変更なし）');
+        }
+
+        // Gutenberg ブロック化はしない。既存のブロック構造をそのまま並び替えるだけ。
+
+        return [
+            'post_id' => $post_id,
+            'original_title' => $post['title'],
+            'original_content' => $original_content,
+            'rewritten_title' => $post['title'],
+            'rewritten_content' => $content,
+            'usage' => [],
+            'model' => '',
+            'article_type' => '',
+            'article_type_auto' => false,
+            'markers_inserted' => false,
+            'marker_stats' => null,
+            'marker_validation' => null,
+            'product_candidates_count' => 0,
+            'mode' => 'reorder_only',
+            'reorder_report' => [
+                'sections' => $result['sections'],
+            ],
+        ];
+    }
+
+    /**
      * v0.4.42: マーカー除去のみモード
      *
      * Pre_Cleanup で既存の商品カード・マーカーを除去して返す。

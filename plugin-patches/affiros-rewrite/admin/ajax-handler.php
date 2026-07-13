@@ -76,6 +76,28 @@ add_action('wp_ajax_affiros_rewrite_run_single', function () {
 });
 
 /**
+ * v0.4.46: セクション並び替え（H2 順序を SEO 最適に並び替え）
+ */
+add_action('wp_ajax_affiros_rewrite_reorder_sections', function () {
+    check_ajax_referer('affiros_rewrite_nonce', 'nonce');
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(['message' => '権限がありません']);
+    }
+    $post_id = intval($_POST['post_id'] ?? 0);
+    if (!$post_id) {
+        wp_send_json_error(['message' => '記事IDが不正です']);
+    }
+    $result = Affiros_Rewrite_Engine::reorder_sections_only($post_id);
+    if (is_wp_error($result)) {
+        wp_send_json_error([
+            'message' => $result->get_error_message(),
+            'code'    => $result->get_error_code(),
+        ]);
+    }
+    wp_send_json_success($result);
+});
+
+/**
  * v0.4.42: マーカー除去のみ（Pre_Cleanup のみ実行）
  */
 add_action('wp_ajax_affiros_rewrite_cleanup_markers', function () {

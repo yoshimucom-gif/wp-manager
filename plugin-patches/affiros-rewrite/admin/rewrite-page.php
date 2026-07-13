@@ -162,8 +162,11 @@ function affiros_rewrite_render_rewrite_page() {
             <button type="button" class="button" id="affiros-bulk-insert-btn" style="margin-left:6px;" title="選択記事にマーカー挿入（既存があれば拒否・N選ならstrict判定）">
                 🎯 一括挿入
             </button>
-            <button type="button" class="button" id="affiros-bulk-reset-btn" style="margin-left:6px;title="🗑除去→🎯挿入 を1記事ごとに連続実行（マーカー位置を一発で治す）">
+            <button type="button" class="button" id="affiros-bulk-reset-btn" style="margin-left:6px;" title="🗑除去→🎯挿入 を1記事ごとに連続実行（マーカー位置を一発で治す）">
                 🔁 一括リセット（除去→挿入）
+            </button>
+            <button type="button" class="button" id="affiros-bulk-reorder-btn" style="margin-left:6px;" title="選択記事の H2 章順序を SEO 最適に並び替え（Claude 不要）">
+                🔀 一括章並替
             </button>
             <span class="description" style="margin-left:10px;">実行前に確認ダイアログあり。各記事の結果はログに順次表示。</span>
             <?php if (!$has_api_key): ?>
@@ -330,6 +333,7 @@ function affiros_rewrite_render_rewrite_page() {
                 html += '<button type="button" class="button button-primary button-small affiros-rewrite-btn" data-post-id="' + p.id + '">✍ リライト</button> ';
                 html += '<button type="button" class="button button-small affiros-cleanup-btn" data-post-id="' + p.id + '" title="既存の商品カード・マーカーを全て除去（挿入はしない）。除去後に🎯挿入で新規配置します。">🗑 マーカー消す</button> ';
                 html += '<button type="button" class="button button-small affiros-insert-btn" data-post-id="' + p.id + '" title="Claude を呼ばずに記事タイプ別ルールでマーカー挿入。既存マーカーが検出されたら🗑で先に消してください。ランキング記事は N選 のN個 全部揃わないと保存拒否。">🎯 マーカー挿入</button> ';
+                html += '<button type="button" class="button button-small affiros-reorder-btn" data-post-id="' + p.id + '" title="H2 章の順序を SEO 最適（選定基準→ランキング→選び方→FAQ→まとめ）に並び替え。Claude 不要。">🔀 章並替</button> ';
                 html += '<a href="' + p.edit_link + '" target="_blank" class="button button-small">編集</a>';
                 html += '</td>';
                 html += '</tr>';
@@ -466,6 +470,39 @@ function affiros_rewrite_render_rewrite_page() {
         $('#affiros-result').on('click', '.affiros-insert-btn', function() {
             const postId = $(this).data('post-id');
             runInsert(postId);
+        });
+
+        // --- 🔀 章並び替え（v0.4.46）---
+        function runReorder(postId) {
+            const $row = $('tr[data-post-id="' + postId + '"]');
+            const $btn = $row.find('.affiros-reorder-btn');
+            const origLabel = $btn.html();
+            $btn.prop('disabled', true).html('並替中...');
+            return $.post(AffirosRewrite.ajaxUrl, {
+                action: 'affiros_rewrite_reorder_sections',
+                nonce: AffirosRewrite.nonce,
+                post_id: postId,
+            }).done(function(resp) {
+                if (!resp.success) {
+                    const code = resp.data?.code || '';
+                    const msg = resp.data?.message || '不明';
+                    if (code === 'reorder_no_change') {
+                        alert('ℹ️ ' + msg);
+                    } else {
+                        alert('章並び替えに失敗しました: ' + msg);
+                    }
+                    return;
+                }
+                openResultModal(resp.data);
+            }).fail(function(xhr) {
+                alert('通信エラー: HTTP ' + xhr.status);
+            }).always(function() {
+                $btn.prop('disabled', false).html(origLabel);
+            });
+        }
+        $('#affiros-result').on('click', '.affiros-reorder-btn', function() {
+            const postId = $(this).data('post-id');
+            runReorder(postId);
         });
 
         function openResultModal(data) {
@@ -621,6 +658,7 @@ function affiros_rewrite_render_rewrite_page() {
                 cleanup: '🗑 マーカー除去',
                 insert:  '🎯 マーカー挿入',
                 reset:   '🔁 リセット（除去→挿入）',
+                reorder: '🔀 章順序を SEO 最適化',
             };
             const label = modeLabels[mode] || mode;
             if (!confirm(ids.length + ' 件の記事に「' + label + '」を実行し、即座に WP へ上書き保存します。\n\n' +
@@ -710,6 +748,37 @@ function affiros_rewrite_render_rewrite_page() {
                         const rep = c.data.cleanup_report || {};
                         appendBulkLog('  ✓ #' + id + ' 除去完了（カード ' + (rep.cards_before || 0) + '→' + (rep.cards_after || 0) +
                                       ' / マーカー ' + (rep.markers_before || 0) + '→' + (rep.markers_after || 0) + '）', 'success');
+                    } else if (mode === 'reorder') {
+                        const r = await jqXhrPromise($.post(AffirosRewrite.ajaxUrl, {
+                            action: 'affiros_rewrite_reorder_sections',
+                            nonce: AffirosRewrite.nonce,
+                            post_id: id,
+                        }));
+                        if (!r.success) {
+                            const errCode = r.data?.code || '';
+                            const errMsg = r.data?.message || '不明';
+                            // reorder_no_change は「変更なし」なのでスキップ扱い
+                            if (errCode === 'reorder_no_change') {
+                                appendBulkLog('  ⏭ #' + id + ' スキップ（既に最適順序）', 'info');
+                                skipped++;
+                                done++;
+                                $('#affiros-bulk-done').text(done);
+                                $('#affiros-bulk-progress').css('width', (done / ids.length * 100) + '%');
+                                continue;
+                            }
+                            throw new Error('[' + errCode + '] ' + errMsg);
+                        }
+                        const s = await jqXhrPromise($.post(AffirosRewrite.ajaxUrl, {
+                            action: 'affiros_rewrite_save',
+                            nonce: AffirosRewrite.nonce,
+                            post_id: id,
+                            title: r.data.rewritten_title,
+                            content: r.data.rewritten_content,
+                        }));
+                        if (!s.success) throw new Error('保存失敗: ' + (s.data?.message || '不明'));
+                        const sections = r.data.reorder_report?.sections || [];
+                        const sectionSummary = sections.map(s => s.category).join('→');
+                        appendBulkLog('  ✓ #' + id + ' 並替完了 (' + sectionSummary + ')', 'success');
                     } else if (mode === 'insert') {
                         const i = await jqXhrPromise($.post(AffirosRewrite.ajaxUrl, {
                             action: 'affiros_rewrite_insert_markers_new',
@@ -789,6 +858,7 @@ function affiros_rewrite_render_rewrite_page() {
         $('#affiros-bulk-cleanup-btn').on('click', function() { runBulkOp('cleanup'); });
         $('#affiros-bulk-insert-btn').on('click', function() { runBulkOp('insert'); });
         $('#affiros-bulk-reset-btn').on('click', function() { runBulkOp('reset'); });
+        $('#affiros-bulk-reorder-btn').on('click', function() { runBulkOp('reorder'); });
 
         $('#affiros-modal-close, #affiros-modal-discard').on('click', closeResultModal);
         $('#affiros-modal-save').on('click', saveModal);

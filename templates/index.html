@@ -1991,6 +1991,45 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.85 / rewrite v0.4.46 (2026-07-08) — H2 章順序を SEO 最適化する「🔀 章並替」機能追加</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>症状</strong>: kabe-deco.com/ws-outlet の実測で、記事の H2 章順序が SEO 最悪の並びだった：
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>導入 → 選定基準 → 選び方 → <strong>FAQ</strong>（← ランキング前！）→ ランキング7選 → まとめ</li>
+                  <li>本来の SEO 最適順序: 導入 → 選定基準 → <strong>ランキング</strong> → 選び方 → FAQ → まとめ</li>
+                  <li>読者は本文に入る前に FAQ を通過しないと商品にたどり着けない → 離脱率↑・CVR↓</li>
+                </ul>
+              </li>
+              <li><strong>真因</strong>: Claude プロンプトが章順序を厳密指定していなかった（CLAUDE.md ❶ で挙げてる SEO 最適順を守る指示が不足）。</li>
+              <li><strong>対処（プラグイン v0.4.46）</strong>: リライトなしで章順を並び替える <code>Affiros_Rewrite_Section_Reorder</code> クラスを新設。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>H2 の位置と Gutenberg コメントを検出して章単位で分割</li>
+                  <li>各 H2 のタイトル or 本文の H3 パターンから章カテゴリを判定（criteria / ranking / howto / faq / summary / other）</li>
+                  <li>SEO 最適順（criteria→ranking→howto→faq→other→summary）に並び替え</li>
+                  <li>同カテゴリは元順序を保持（安定ソート）</li>
+                </ul>
+              </li>
+              <li><strong>新ボタン</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>単記事: <code>[🔀 章並替]</code> — 現在の記事の章順を最適化</li>
+                  <li>一括: <code>[🔀 一括章並替]</code> — 選択記事全てに適用（既に最適順序の記事は「⏭ スキップ」）</li>
+                </ul>
+              </li>
+              <li><strong>Claude 呼び出しなし</strong>: 章の文章自体は書き換えない、順序を並び替えるだけ。<strong>API 料金ゼロ・数秒で完了</strong>。</li>
+              <li><strong>失敗時のリカバリ</strong>: <code>wp_update_post</code> でリビジョン自動作成 → いつでも復旧可能。</li>
+              <li><strong>推奨実行順（80件被害記事の完全復旧）</strong>:
+                <ol style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>🔀 一括章並替 → 章順を SEO 最適化</li>
+                  <li>🔁 一括リセット → マーカー位置を正しく再挿入</li>
+                  <li>AI プロダクトインサーターがカード描画</li>
+                </ol>
+              </li>
+              <li><strong>今後の対策（未着手）</strong>: 本体側 Claude プロンプトに「章順序を厳密に守る」指示を追加する必要あり（次回対応）。</li>
+              <li><strong>バージョン同期</strong>: <code>AFFIROS_REWRITE_VERSION</code> 0.4.45 → 0.4.46 / <code>affiros-rewrite-0.4.46.zip</code> 生成 / <code>PLUGIN_DOWNLOADS['rewrite']</code> 追従 / <code>APP_VERSION</code> 1.7.84 → 1.7.85。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.84 / rewrite v0.4.45 (2026-07-08) — まとめ後 ranking カードを TOP3 → TOP5 に変更</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>変更</strong>: ranking / column 記事の まとめ後（after_last_h2）に挿入される ranking デザインのカードを、<strong>TOP3 → TOP5</strong> に変更。</li>
