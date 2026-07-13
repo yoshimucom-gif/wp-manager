@@ -47,7 +47,13 @@ class Affiros_Rewrite_Pre_Cleanup {
         $html = self::strip_aipi_divs($html);
 
         // 3) 未処理マーカーを除去（リライト後に新規で置くため）
-        $html = preg_replace('/<!--\s*ai-product(?::[a-z]+(?::[a-z0-9]+)?)?\s*-->/i', '', $html);
+        // v0.4.49: regex を広く取り直し。
+        // 旧: /<!--\s*ai-product(?::[a-z]+(?::[a-z0-9]+)?)?\s*-->/i
+        //     → コロン2個までしか許容せず、3コロン以上や変則形式が消せず残っていた
+        // 新: /<!--[^>]*?ai-product[^>]*?-->/i
+        //     → 「ai-product を含むHTMLコメント」を無条件で削除
+        //     → insert_markers_new の検出 regex と挙動を揃える（詰み状態撲滅）
+        $html = preg_replace('/<!--[^>]*?ai-product[^>]*?-->/i', '', $html);
 
         // 4) Gutenberg ブロック区切りコメントを除去
         //    <!-- wp:paragraph --> <!-- /wp:paragraph --> 等。残しても Claude には

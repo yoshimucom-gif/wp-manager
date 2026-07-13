@@ -1991,6 +1991,30 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.88 / rewrite v0.4.49 (2026-07-13) — Pre_Cleanup と existing_markers 検出の regex 齟齬を修正</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>症状</strong>: karenai-green.com の実測で「🗑 マーカー消す → 保存 → 🎯 マーカー挿入」の順に実行しても「既存の商品カード 0 個 / マーカー 1 個が検出されました。先に🗑を実行して除去してから挿入してください。」のエラーで詰み。</li>
+              <li><strong>真因</strong>: Pre_Cleanup（削除側）と <code>insert_markers_new</code>（検出側）の regex が非対称。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>削除: <code>/&lt;!--\s*ai-product(?::[a-z]+(?::[a-z0-9]+)?)?\s*--&gt;/i</code> — コロン最大2個・厳格</li>
+                  <li>検出: <code>/&lt;!--\s*ai-product/i</code> — 「ai-product 始まり」なら全部カウント</li>
+                  <li>結果: 3コロン以上（例 <code>&lt;!--ai-product:ranking:3:brand--&gt;</code>）や変則形式は「検出はする、削除できない」の非対称バグ</li>
+                </ul>
+              </li>
+              <li><strong>修正</strong>: 削除側・検出側とも <code>/&lt;!--[^&gt;]*?ai-product[^&gt;]*?--&gt;/i</code> に統一。「ai-product を含む HTML コメント」を無条件で処理。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>pre-cleanup.php:50</code></li>
+                  <li><code>rewrite-engine.php:82</code>（cleanup_report before）</li>
+                  <li><code>rewrite-engine.php:89</code>（cleanup_report after）</li>
+                  <li><code>rewrite-engine.php:143</code>（insert_markers_new の existing_markers 検出）</li>
+                </ul>
+              </li>
+              <li><strong>効果</strong>: 「🗑 で消えないマーカー」が撲滅。cleanup 後の詰み状態解消。</li>
+              <li><strong>バージョン同期</strong>: <code>AFFIROS_REWRITE_VERSION</code> 0.4.48 → 0.4.49 / <code>affiros-rewrite-0.4.49.zip</code> 生成 / <code>PLUGIN_DOWNLOADS['rewrite']</code> 追従 / <code>APP_VERSION</code> 1.7.87 → 1.7.88。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.87 / rewrite v0.4.48 (2026-07-08) — 章並替の優先順位バグ修正（コラム記事誤爆）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>症状</strong>: v0.4.46 の <code>Section_Reorder</code> で、コラム記事も並び替え対象として判定されて誤動作。「選定基準 → 本文A → 本文B → FAQ → まとめ」の正常記事が「選定基準 → FAQ → 本文A → 本文B → まとめ」に破壊される深刻なバグ。</li>

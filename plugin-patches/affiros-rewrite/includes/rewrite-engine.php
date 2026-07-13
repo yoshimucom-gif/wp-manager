@@ -79,14 +79,14 @@ class Affiros_Rewrite_Engine {
         $original_content = $post['content'];
         // 既存カード・マーカー計数（除去前後の差を UI に見せるため）
         $before_cards   = preg_match_all('/<div\s+class="aipi-/i', $original_content, $_c);
-        $before_markers = preg_match_all('/<!--\s*ai-product/i', $original_content, $_m);
+        $before_markers = preg_match_all('/<!--[^>]*?ai-product[^>]*?-->/i', $original_content, $_m);
 
         $content = class_exists('Affiros_Rewrite_Pre_Cleanup')
             ? Affiros_Rewrite_Pre_Cleanup::clean($original_content)
             : $original_content;
 
         $after_cards   = preg_match_all('/<div\s+class="aipi-/i', $content, $_c2);
-        $after_markers = preg_match_all('/<!--\s*ai-product/i', $content, $_m2);
+        $after_markers = preg_match_all('/<!--[^>]*?ai-product[^>]*?-->/i', $content, $_m2);
 
         // Gutenberg ブロック化（マーカー挿入と挙動を合わせる）
         if (class_exists('Affiros_Rewrite_Gutenberg')) {
@@ -140,7 +140,7 @@ class Affiros_Rewrite_Engine {
 
         // 既存マーカー・カードの検出（先に消してからやり直しを促す）
         $existing_cards   = preg_match_all('/<div\s+class="aipi-/i', $original_content, $_c);
-        $existing_markers = preg_match_all('/<!--\s*ai-product/i', $original_content, $_m);
+        $existing_markers = preg_match_all('/<!--[^>]*?ai-product[^>]*?-->/i', $original_content, $_m);
         if ($existing_cards > 0 || $existing_markers > 0) {
             return new WP_Error(
                 'existing_markers_detected',
