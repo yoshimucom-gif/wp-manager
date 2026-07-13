@@ -1991,6 +1991,30 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.87 / rewrite v0.4.48 (2026-07-08) — 章並替の優先順位バグ修正（コラム記事誤爆）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>症状</strong>: v0.4.46 の <code>Section_Reorder</code> で、コラム記事も並び替え対象として判定されて誤動作。「選定基準 → 本文A → 本文B → FAQ → まとめ」の正常記事が「選定基準 → FAQ → 本文A → 本文B → まとめ」に破壊される深刻なバグ。</li>
+              <li><strong>真因</strong>: <code>section-reorder.php</code> の優先順位が <code>faq=4</code> / <code>other=5</code> と設定されていた。コラム記事の本文 H2 は「other」に分類されるため、FAQ より後ろに追いやられて先頭に FAQ が来る結果になっていた。</li>
+              <li><strong>修正</strong>: <code>other</code> を 4, <code>faq</code> を 5 に入れ替え：
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>criteria=1 / ranking=2 / howto=3 / other=4 / faq=5 / summary=6</code></li>
+                  <li>ランキング記事: criteria → ranking → howto → other → faq → summary ✅</li>
+                  <li>コラム記事: criteria → other × N → faq → summary ✅</li>
+                </ul>
+              </li>
+              <li><strong>効果</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>既に正しい順序のコラム記事は「⏭ 既に最適順序（変更なし）」でスキップされるようになる</li>
+                  <li>FAQ が本文より前に来る誤動作が撲滅</li>
+                  <li>ランキング記事の並替は従来通り正しく動作</li>
+                </ul>
+              </li>
+              <li><strong>未知カテゴリのフォールバック</strong>: <code>usort</code> で <code>$order_map[cat] ?? 5</code> だったのを <code>?? 4</code>（other 相当）に変更。将来新しい章タイプが出ても FAQ・summary より前に配置される。</li>
+              <li><strong>バージョン同期</strong>: <code>AFFIROS_REWRITE_VERSION</code> 0.4.47 → 0.4.48 / <code>affiros-rewrite-0.4.48.zip</code> 生成 / <code>PLUGIN_DOWNLOADS['rewrite']</code> 追従 / <code>APP_VERSION</code> 1.7.86 → 1.7.87。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.86 / rewrite v0.4.47 (2026-07-08) — リライター UI を機能別3タブに再構成</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: v0.4.46 まででボタン数が増えすぎ、1 記事行に 5 個・一括バーに 5 個のボタンが並んで使い勝手が悪くなっていた。</li>

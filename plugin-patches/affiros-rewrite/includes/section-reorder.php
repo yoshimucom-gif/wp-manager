@@ -19,12 +19,20 @@ if (!defined('ABSPATH')) exit;
 class Affiros_Rewrite_Section_Reorder {
 
     // 章カテゴリの優先順位
+    //
+    // v0.4.48 (2026-07-08): other と faq の順位を入れ替え。
+    // 従来 other=5, faq=4 だったため、コラム記事（本文H2 = other）で
+    // 「選定基準 → FAQ → 本文 → まとめ」になってしまう深刻なバグがあった。
+    // 本文（other）→ FAQ の順が正しいので、other=4, faq=5 に修正。
+    //
+    // ランキング記事は criteria → ranking → howto → other → faq → summary で正しい。
+    // コラム記事は     criteria → other × N → faq → summary で正しい。
     private static $order_map = [
         'criteria' => 1,
         'ranking'  => 2,
         'howto'    => 3,
-        'faq'      => 4,
-        'other'    => 5,
+        'other'    => 4,
+        'faq'      => 5,
         'summary'  => 6,
     ];
 
@@ -66,8 +74,9 @@ class Affiros_Rewrite_Section_Reorder {
         // 並び替え
         $sorted = $h2_sections;
         usort($sorted, function ($a, $b) {
-            $ao = self::$order_map[$a['category']] ?? 5;
-            $bo = self::$order_map[$b['category']] ?? 5;
+            // 未知カテゴリは other 相当（4）にフォールバック
+            $ao = self::$order_map[$a['category']] ?? 4;
+            $bo = self::$order_map[$b['category']] ?? 4;
             if ($ao !== $bo) return $ao - $bo;
             // 同カテゴリは元の順序を保持
             return $a['orig_index'] - $b['orig_index'];
