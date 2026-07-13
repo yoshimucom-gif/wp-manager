@@ -11,6 +11,98 @@ class Affiros_Rewrite_Engine {
     const MAX_SOURCE_CHARS = 30000;
 
     /**
+     * マーカーのみ挿入モード（Claude API 呼び出しなし）
+     *
+     * リライトはせず、既存の商品カード・マーカーだけを除去して
+     * 記事タイプに応じた新規マーカーを再挿入する。既に WP に公開済みの
+     * 記事で「マーカー位置がおかしい」「マーカーが入っていない」を
+     * 直すためのモード。
+     *
+     * v1.7.78 で追加（fudosan-uru の kabe-deco.com 事故対応）。
+     *
+     * @param int   $post_id
+     * @param array $opts
+     *   - article_type ('auto'|'ranking'|'brand'|'column', 任意, 既定 'auto')
+     * @return array|WP_Error
+     */
+    public static function insert_markers_only($post_id, $opts = []) {
+        $post = Affiros_Rewrite_Post_Fetcher::get_post_content($post_id);
+        if (!$post) {
+            return new WP_Error('post_not_found', '記事が見つかりません');
+        }
+
+        $original_content = $post['content'];
+        // 既存の商品カード・マーカーを除去
+        $content = class_exists('Affiros_Rewrite_Pre_Cleanup')
+            ? Affiros_Rewrite_Pre_Cleanup::clean($original_content)
+            : $original_content;
+
+        // 記事タイプ確定
+        $requested_type = $opts['article_type'] ?? 'auto';
+        if ($requested_type === 'auto' || $requested_type === '') {
+            $article_type = class_exists('Affiros_Rewrite_Article_Type')
+                ? Affiros_Rewrite_Article_Type::infer('', $post['title'])
+                : 'ranking';
+        } else {
+            $article_type = class_exists('Affiros_Rewrite_Article_Type')
+                ? Affiros_Rewrite_Article_Type::normalize($requested_type, 'ranking')
+                : $requested_type;
+        }
+
+        if (!$article_type) {
+            return new WP_Error('no_article_type', '記事タイプを確定できませんでした。手動で指定してください。');
+        }
+
+        // マーカー挿入
+        $ins_result = Affiros_Rewrite_Marker_Inserter::insert($content, $article_type, $post['title']);
+        $content = is_array($ins_result) ? ($ins_result['html'] ?? $content) : $ins_result;
+        $marker_stats = is_array($ins_result) ? ($ins_result['stats'] ?? null) : null;
+        $marker_validation = null;
+        if (class_exists('Affiros_Rewrite_Marker_Validator') && $marker_stats) {
+            $marker_validation = Affiros_Rewrite_Marker_Validator::check(
+                $marker_stats, $article_type, $post['title']
+            );
+        }
+
+        // マーカー0個 or validation error なら失敗扱いにする
+        // （silent-save で「マーカーなし記事が WP に残る」事故を防ぐ）
+        if (!$marker_stats || intval($marker_stats['marker_count'] ?? 0) === 0) {
+            return new WP_Error(
+                'no_markers_inserted',
+                'マーカーが1個も挿入できませんでした。記事タイプまたは本文の見出し構造を確認してください。'
+            );
+        }
+        if ($marker_validation && ($marker_validation['status'] ?? '') === 'error') {
+            return new WP_Error(
+                'marker_validation_failed',
+                'マーカー挿入検証に失敗: ' . ($marker_validation['summary'] ?? '不明')
+            );
+        }
+
+        // Gutenberg ブロック化（マーカーコメントもブロック区切り位置に保持される）
+        if (class_exists('Affiros_Rewrite_Gutenberg')) {
+            $content = Affiros_Rewrite_Gutenberg::convert($content);
+        }
+
+        return [
+            'post_id' => $post_id,
+            'original_title' => $post['title'],
+            'original_content' => $original_content,
+            'rewritten_title' => $post['title'],       // タイトルは変えない
+            'rewritten_content' => $content,
+            'usage' => [],                              // Claude 呼ばないのでゼロ
+            'model' => '',
+            'article_type' => $article_type,
+            'article_type_auto' => ($requested_type === 'auto' || $requested_type === ''),
+            'markers_inserted' => true,
+            'marker_stats' => $marker_stats,
+            'marker_validation' => $marker_validation,
+            'product_candidates_count' => 0,
+            'mode' => 'markers_only',
+        ];
+    }
+
+    /**
      * 1記事をリライトする
      *
      * @param int $post_id

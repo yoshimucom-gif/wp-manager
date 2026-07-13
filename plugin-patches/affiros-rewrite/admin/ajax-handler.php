@@ -76,6 +76,31 @@ add_action('wp_ajax_affiros_rewrite_run_single', function () {
 });
 
 /**
+ * マーカーのみ挿入モード（Claude 呼ばずに広告マーカーを再配置）
+ * v1.7.78 追加。既に WP に公開済みの記事でマーカー位置がおかしいものを
+ * リライトせずに直せる。
+ */
+add_action('wp_ajax_affiros_rewrite_insert_markers_only', function () {
+    check_ajax_referer('affiros_rewrite_nonce', 'nonce');
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(['message' => '権限がありません']);
+    }
+    $post_id = intval($_POST['post_id'] ?? 0);
+    if (!$post_id) {
+        wp_send_json_error(['message' => '記事IDが不正です']);
+    }
+    $opts = [];
+    if (isset($_POST['article_type']) && $_POST['article_type'] !== '') {
+        $opts['article_type'] = sanitize_text_field($_POST['article_type']);
+    }
+    $result = Affiros_Rewrite_Engine::insert_markers_only($post_id, $opts);
+    if (is_wp_error($result)) {
+        wp_send_json_error(['message' => $result->get_error_message()]);
+    }
+    wp_send_json_success($result);
+});
+
+/**
  * リライト結果をWP投稿へ保存
  * リビジョンは wp_update_post が自動作成するので、いつでもロールバック可能
  */

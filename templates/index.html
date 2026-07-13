@@ -1991,6 +1991,34 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.79 / rewrite v0.4.41 (2026-07-08) — リライター「マーカーのみ挿入」モード追加 + 誤挿入バグ同期修正</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: v1.7.78 で本体側の広告マーカー挿入バグは修正したが、<strong>既に WordPress に公開済みの記事は自動修復されない</strong>。ws-outlet / ws-character 型の被害記事を「リライトなしでマーカーだけ正しい位置に打ち直す」機能が必要だった。</li>
+              <li><strong>新機能: 🎯 マーカーのみ挿入モード</strong>
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>WordPress の管理画面 → <strong>Affiros リライター</strong> → 投稿一覧に <strong>「🎯 マーカーのみ」ボタン</strong>追加。</li>
+                  <li>クリックで <code>Affiros_Rewrite_Engine::insert_markers_only()</code> が動く。Claude API を呼ばずに、既存の商品カード・マーカーだけを除去 → 記事タイプ別ルールで再挿入。</li>
+                  <li>API 料金ゼロ（Claude 呼ばない）。処理は数秒。</li>
+                  <li>マーカー0個 / validation error の場合は WP_Error で失敗扱い → 元記事は変更されない（silent-save 事故ゼロ）。</li>
+                </ul>
+              </li>
+              <li><strong>Bug A 同期修正</strong>: プラグイン側の <code>marker-inserter.php</code> にも本体と同じ「①②③ を fallback のみ発動」の修正を反映。強シグナル（N位/No.N/TOPN/BESTN）で1個でも見つかったら ①②③ は絶対に触らない。</li>
+              <li><strong>使い方（想定シナリオ）</strong>:
+                <ol style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>WP → Affiros リライター → 投稿一覧を開く</li>
+                  <li>ws-outlet や ws-character など被害記事を検索</li>
+                  <li>記事タイプを「ranking」に選択（or auto）</li>
+                  <li>「🎯 マーカーのみ」クリック → 数秒後にプレビューモーダル</li>
+                  <li>差分を確認して「保存」→ WP に反映</li>
+                  <li>WP プラグイン（affiros-product-inserter）が次回のスキャンで新マーカーから商品カードを描画</li>
+                </ol>
+              </li>
+              <li><strong>バージョン同期</strong>: <code>AFFIROS_REWRITE_VERSION</code> 0.4.40 → 0.4.41 / <code>affiros-rewrite-0.4.41.zip</code> 生成 / <code>PLUGIN_DOWNLOADS['rewrite']</code> 追従 / <code>APP_VERSION</code> 1.7.78 → 1.7.79。</li>
+              <li>マーカー配置ロジック本体（<code>insert_card_markers</code>）以外には触っていない。リライト本流の Claude 呼び出しにも無影響。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.78 (2026-07-08) — 広告マーカー誤挿入 &amp; マーカー0個 silent-save の撲滅</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>被害の実測</strong>:

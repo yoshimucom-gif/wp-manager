@@ -26,7 +26,7 @@ SPECS = [
     (os.path.join(ROOT, 'affiros-decoration'),
      'affiros-decoration', 'affiros-decoration-1.2.3.zip'),
     (os.path.join(ROOT, 'affiros-rewrite'),
-     'affiros-rewrite', 'affiros-rewrite-0.4.40.zip'),
+     'affiros-rewrite', 'affiros-rewrite-0.4.41.zip'),
     (os.path.join(ROOT, 'affiros-categorizer'),
      'affiros-categorizer', 'affiros-categorizer-0.1.1.zip'),
     (os.path.join(ROOT, 'affiros-dup-cleaner'),
@@ -34,7 +34,7 @@ SPECS = [
     (os.path.join(ROOT, 'affiros-paragraph-splitter'),
      'affiros-paragraph-splitter', 'affiros-paragraph-splitter-1.1.1.zip'),
     (os.path.join(ROOT, 'affiros-reschedule'),
-     'affiros-reschedule', 'affiros-reschedule-1.0.0.zip'),
+     'affiros-reschedule', 'affiros-reschedule-1.1.0.zip'),
     (os.path.join(ROOT, 'affiros-mark-stripper'),
      'affiros-mark-stripper', 'affiros-mark-stripper-1.0.0.zip'),
 ]

@@ -247,22 +247,21 @@ class Affiros_Rewrite_Marker_Inserter {
      * 本体 insert_card_markers 内の after_each_h3_rank 分岐の移植。
      */
     private static function collect_h3_rank_insertions($text, $marker, $matome_range, $first_h2_range, $title = '') {
-        // 強シグナル（必ず ranking 文脈）：「第N位」「N位」「No.N」
-        $h3_patterns = [
-            '/<h3[^>]*>\s*(?:第\s*)?(?:\d+|[０-９]+)\s*位[\s:：、・　]*[^<]*?<\/h3>/iu',
-            '/<h3[^>]*>\s*No\.?\s*(?:\d+|[０-９]+)[\s:：、・　]*[^<]*?<\/h3>/iu',
+        // 強シグナル（必ず ranking 文脈）：「第N位」「N位」「No.N」「TOP1」「BEST1」「ベスト1」
+        // 本体 app.py:5384-5390 と同期。
+        $strong_patterns = [
+            '/<h3[^>]*>[\s\[【★●■◆▼《「『（(]*(?:第\s*)?(?:\d+|[０-９]+)\s*位[\s\]】:：、・　]*[^<]*?<\/h3>/iu',
+            '/<h3[^>]*>[\s\[【★●■◆▼《「『（(]*No\.?\s*(?:\d+|[０-９]+)[\s\]】:：、・　]*[^<]*?<\/h3>/iu',
+            '/<h3[^>]*>[\s\[【★●■◆▼《「『（(]*(?:TOP|BEST|ベスト)\s*(?:\d+|[０-９]+)[\s\]】:：、・　]*[^<]*?<\/h3>/iu',
         ];
-        // ①②③ は弱シグナル：チェックポイント・ポイント・サイン・ステップ等で
-        // 使われがちなので、タイトルにランキング系の強シグナルがある時だけ採用する
         $title_has_ranking_signal = class_exists('Affiros_Rewrite_Article_Type')
             ? Affiros_Rewrite_Article_Type::has_ranking_signal($title)
             : (bool) preg_match('/[0-9０-9]+\s*選|ランキング/u', (string)$title);
-        if ($title_has_ranking_signal) {
-            $h3_patterns[] = '/<h3[^>]*>\s*[①②③④⑤⑥⑦⑧⑨⑩][\s:：、・　]*[^<]*?<\/h3>/iu';
-        }
+
         $insertions = [];
         $seen = [];
-        foreach ($h3_patterns as $re) {
+        // 第1段: 強シグナルパターンで検出
+        foreach ($strong_patterns as $re) {
             if (preg_match_all($re, $text, $matches, PREG_OFFSET_CAPTURE | PREG_SET_ORDER)) {
                 foreach ($matches as $m) {
                     $start = $m[0][1];
@@ -274,7 +273,24 @@ class Affiros_Rewrite_Marker_Inserter {
                 }
             }
         }
-        // フォールバック（全H3挿入）はタイトルがランキング文脈の時だけ
+        // 第2段: ①②③ 弱シグナル fallback（強シグナルで1個も見つからず、
+        // かつタイトルに ranking signal がある時だけ発動）
+        // 2026-07-08 事故（ws-outlet の 選び方 H3 ①②③④ に誤挿入されて quota 食い潰し）
+        // の再発防止として v1.7.78 で fallback-only 化。
+        if (!$seen && $title_has_ranking_signal) {
+            $weak_re = '/<h3[^>]*>[\s\[【★●■◆▼《「『（(]*[①②③④⑤⑥⑦⑧⑨⑩][\s\]】:：、・　]*[^<]*?<\/h3>/iu';
+            if (preg_match_all($weak_re, $text, $matches, PREG_OFFSET_CAPTURE | PREG_SET_ORDER)) {
+                foreach ($matches as $m) {
+                    $start = $m[0][1];
+                    if (isset($seen[$start])) {
+                        continue;
+                    }
+                    $seen[$start] = true;
+                    $insertions[] = [$start + strlen($m[0][0]), "\n" . $marker];
+                }
+            }
+        }
+        // 第3段: 更なるフォールバック（全H3挿入）はタイトルがランキング文脈の時だけ
         // 旧版ではこの分岐が暴走してコラム記事のH3全部に商品カードが付くことがあった
         if (!$seen && $title_has_ranking_signal) {
             $end_limit = $matome_range ? $matome_range[0] : strlen($text);
