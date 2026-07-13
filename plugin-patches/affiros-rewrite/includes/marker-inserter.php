@@ -21,21 +21,27 @@ class Affiros_Rewrite_Marker_Inserter {
 
     /**
      * 記事タイプ別 既定の挿入パターン。
-     * 本体 DEFAULT_CARD_INSERTION_PATTERNS と一致させること。
+     * 本体 app.py:DEFAULT_CARD_INSERTION_PATTERNS と一致させること。
+     *
+     * v0.4.44 (2026-07-08): 本体との乖離を修正。
+     * - ranking の after_last_h2: compare/5 → ranking/3
+     * - column の before_first_h2: compare/3 → vertical/repeat=3
+     * - column の after_last_h2: compare/3 → ranking/3
+     * これで既存の Affiros9 生成記事と 🔁リセットの結果が完全に一致する。
      */
     public static function default_patterns() {
         return [
             'ranking' => [
-                ['position' => 'after_each_h3_rank', 'design' => 'vertical',  'repeat' => 1],
-                ['position' => 'after_last_h2',      'design' => 'compare',   'count'  => 5],
+                ['position' => 'after_each_h3_rank', 'design' => 'vertical', 'repeat' => 1],
+                ['position' => 'after_last_h2',      'design' => 'ranking',  'count'  => 3],
             ],
             'column' => [
-                ['position' => 'before_first_h2',    'design' => 'compare',   'count'  => 3],
-                ['position' => 'after_last_h2',      'design' => 'compare',   'count'  => 3],
+                ['position' => 'before_first_h2',    'design' => 'vertical', 'repeat' => 3],
+                ['position' => 'after_last_h2',      'design' => 'ranking',  'count'  => 3],
             ],
             'brand' => [
-                ['position' => 'after_first_h2',     'design' => 'vertical',  'repeat' => 1],
-                ['position' => 'after_last_h2',      'design' => 'vertical',  'repeat' => 1],
+                ['position' => 'after_first_h2',     'design' => 'vertical', 'repeat' => 1],
+                ['position' => 'after_last_h2',      'design' => 'vertical', 'repeat' => 1],
             ],
         ];
     }
