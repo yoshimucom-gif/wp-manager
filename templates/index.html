@@ -1991,6 +1991,49 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.82 / rewrite v0.4.43 (2026-07-08) — マーカー一括処理（🗑除去 / 🎯挿入 / 🔁リセット）追加</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: v0.4.42 で単記事の 🗑除去 / 🎯挿入ボタンを追加したが、80件級の被害記事を手動で 80 回クリックは非現実的。既存の「一括リライト」と同じパターンで一括処理を追加。</li>
+              <li><strong>新機能: 一括処理3種</strong>
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><strong>🗑 一括除去</strong>: 選択記事の <code>Pre_Cleanup</code> のみ実行 → save。既存カード・マーカーを全部消す。</li>
+                  <li><strong>🎯 一括挿入</strong>: 選択記事に <code>Marker_Inserter</code> のみ実行 → save。既存マーカー検出時は<strong>スキップ</strong>（エラーではなくログに「⏭ スキップ」）。</li>
+                  <li><strong>🔁 一括リセット</strong>: 1 記事ごとに 除去→save→挿入→save を連続実行。<strong>被害記事の一発修復用</strong>。ランキング strict 判定も効くので、N選のNが揃わない記事は挿入で失敗ログが残る。</li>
+                </ul>
+              </li>
+              <li><strong>実行フロー</strong>:
+                <ol style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>投稿一覧を絞り込み（マーカー状態フィルタ「⚠️ 警告」or「❌ 異常」で被害記事を抽出）</li>
+                  <li>各行のチェックボックスで選択（or ヘッダーで全選択）</li>
+                  <li>「N 件選択中」バーが出る</li>
+                  <li>ボタンクリック → 確認ダイアログ → 開始</li>
+                  <li>進捗モーダルで各記事の成功/失敗ログをリアルタイム表示</li>
+                  <li>完了後「成功 X / 失敗 Y / スキップ Z / 全 N」のサマリ</li>
+                </ol>
+              </li>
+              <li><strong>安全策</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>各記事ごとに <code>wp_update_post</code> がリビジョン自動作成 → 個別に元に戻せる</li>
+                  <li>タブを閉じると <code>onbeforeunload</code> で警告 → 誤操作防止</li>
+                  <li>「中止」ボタンで途中停止可能（現在のリクエスト完了後に停止）</li>
+                  <li>1 記事ごとに順次実行（サーバー負荷分散）</li>
+                  <li>ランキング strict 判定は継続。中途半端な保存は起きない</li>
+                </ul>
+              </li>
+              <li><strong>想定所要時間</strong>: 1 記事あたり 除去/挿入は 2〜3 秒 / リセットは 4〜5 秒。80 件のリセットで 5〜7 分。</li>
+              <li><strong>失敗時の切り分け</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>ログに <code>[existing_markers_detected]</code> → 🗑先に実行が必要</li>
+                  <li>ログに <code>[ranking_marker_count_mismatch]</code> → 記事本文の見出し（1位〜N位）が全部揃ってない → 手動でリライト</li>
+                  <li>ログに <code>[no_markers_inserted]</code> → 記事タイプ判定ミス or 見出し構造の問題</li>
+                </ul>
+              </li>
+              <li><strong>バージョン同期</strong>: <code>AFFIROS_REWRITE_VERSION</code> 0.4.42 → 0.4.43 / <code>affiros-rewrite-0.4.43.zip</code> 生成 / <code>PLUGIN_DOWNLOADS['rewrite']</code> 追従 / <code>APP_VERSION</code> 1.7.81 → 1.7.82。</li>
+              <li>本体側 <code>app.py</code> には触っていない（<code>APP_VERSION</code> のみ）。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.81 / rewrite v0.4.42 (2026-07-08) — マーカー操作の 🗑消す / 🎯挿入 分離 + ランキング strict 判定</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: v0.4.41 の統合版「🎯 マーカーのみ」は 1 クリックで <code>Pre_Cleanup + Marker_Inserter</code> を連続実行していた。Step 1 除去は成功したが Step 2 挿入が失敗した場合、カード・マーカー全欠落の状態で保存される事故リスクがあった。80件級で使う前に分離した。</li>

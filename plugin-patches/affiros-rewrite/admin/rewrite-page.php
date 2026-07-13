@@ -154,15 +154,24 @@ function affiros_rewrite_render_rewrite_page() {
         <div id="affiros-bulk-bar" style="display:none;margin-bottom:10px;padding:10px;background:#f0f6fc;border-left:4px solid #2271b1;">
             <strong><span id="affiros-bulk-count">0</span></strong> 件選択中
             <button type="button" class="button button-primary" id="affiros-bulk-rewrite-btn" style="margin-left:12px;" <?php echo $has_api_key ? '' : 'disabled'; ?>>
-                ✍ 選択した記事を一括リライト
+                ✍ 一括リライト
             </button>
-            <?php if ($has_api_key): ?>
-                <span class="description" style="margin-left:10px;">上のオプションが適用されます。確認画面を経由せず順次実行</span>
-            <?php else: ?>
-                <span class="description" style="margin-left:10px;color:#b32d2e;">
-                    ⚠ Claude APIキーが未設定のため実行できません。
+            <button type="button" class="button" id="affiros-bulk-cleanup-btn" style="margin-left:6px;" title="選択記事のカード・マーカーを全部除去（挿入はしない）">
+                🗑 一括除去
+            </button>
+            <button type="button" class="button" id="affiros-bulk-insert-btn" style="margin-left:6px;" title="選択記事にマーカー挿入（既存があれば拒否・N選ならstrict判定）">
+                🎯 一括挿入
+            </button>
+            <button type="button" class="button" id="affiros-bulk-reset-btn" style="margin-left:6px;title="🗑除去→🎯挿入 を1記事ごとに連続実行（マーカー位置を一発で治す）">
+                🔁 一括リセット（除去→挿入）
+            </button>
+            <span class="description" style="margin-left:10px;">実行前に確認ダイアログあり。各記事の結果はログに順次表示。</span>
+            <?php if (!$has_api_key): ?>
+                <div style="margin-top:6px;color:#b32d2e;font-size:12px;">
+                    ⚠ Claude APIキーが未設定のため「一括リライト」は実行できません。
                     <a href="<?php echo esc_url(admin_url('admin.php?page=affiros-rewrite-settings')); ?>">設定画面で入力 →</a>
-                </span>
+                    （🗑除去 / 🎯挿入 / 🔁リセット は Claude 不要なので利用可能）
+                </div>
             <?php endif; ?>
         </div>
 
@@ -602,6 +611,157 @@ function affiros_rewrite_render_rewrite_page() {
             });
         }
 
+        // ---- v0.4.43 一括処理: 🗑 除去 / 🎯 挿入 / 🔁 リセット ----
+        // 各記事1件ずつ順次実行（confirm 1回、進捗ログ表示、リビジョン自動作成）。
+        async function runBulkOp(mode) {
+            const ids = $('.affiros-pick:checked').map(function() { return parseInt($(this).val(), 10); }).get();
+            if (!ids.length) return;
+
+            const modeLabels = {
+                cleanup: '🗑 マーカー除去',
+                insert:  '🎯 マーカー挿入',
+                reset:   '🔁 リセット（除去→挿入）',
+            };
+            const label = modeLabels[mode] || mode;
+            if (!confirm(ids.length + ' 件の記事に「' + label + '」を実行し、即座に WP へ上書き保存します。\n\n' +
+                         '各記事にリビジョンが自動作成されるので個別に元に戻せます。\n\n' +
+                         '実行しますか？')) return;
+
+            const articleType = $('#affiros-article-type').val() || 'auto';
+
+            bulkAbort = false;
+            window.onbeforeunload = function() {
+                return '一括処理を実行中です。このページを離れると残りの記事は処理されません。';
+            };
+            $('#affiros-bulk-modal').css('display', 'flex');
+            $('#affiros-bulk-total').text(ids.length);
+            $('#affiros-bulk-done').text(0);
+            $('#affiros-bulk-progress').css('width', '0%');
+            $('#affiros-bulk-log').html('');
+            $('#affiros-bulk-close').hide();
+            $('#affiros-bulk-cancel').show();
+            $('#affiros-bulk-status').text('開始しています... (' + label + ')');
+
+            let done = 0, succeeded = 0, failed = 0, skipped = 0;
+            for (const id of ids) {
+                if (bulkAbort) { appendBulkLog('中止しました', 'warn'); break; }
+                appendBulkLog('[' + (done + 1) + '/' + ids.length + '] post #' + id + ' 処理中...', 'info');
+                $('#affiros-bulk-status').text('[' + (done + 1) + '/' + ids.length + '] post #' + id);
+
+                try {
+                    // mode に応じて処理選択
+                    if (mode === 'reset') {
+                        // 1. cleanup → save → 2. insert → save
+                        const c = await jqXhrPromise($.post(AffirosRewrite.ajaxUrl, {
+                            action: 'affiros_rewrite_cleanup_markers',
+                            nonce: AffirosRewrite.nonce,
+                            post_id: id,
+                        }));
+                        if (!c.success) throw new Error('除去失敗: ' + (c.data?.message || '不明'));
+                        const s1 = await jqXhrPromise($.post(AffirosRewrite.ajaxUrl, {
+                            action: 'affiros_rewrite_save',
+                            nonce: AffirosRewrite.nonce,
+                            post_id: id,
+                            title: c.data.rewritten_title,
+                            content: c.data.rewritten_content,
+                        }));
+                        if (!s1.success) throw new Error('除去後保存失敗: ' + (s1.data?.message || '不明'));
+
+                        const i = await jqXhrPromise($.post(AffirosRewrite.ajaxUrl, {
+                            action: 'affiros_rewrite_insert_markers_new',
+                            nonce: AffirosRewrite.nonce,
+                            post_id: id,
+                            article_type: articleType,
+                        }));
+                        if (!i.success) {
+                            const errCode = i.data?.code || '';
+                            const errMsg = i.data?.message || '不明';
+                            throw new Error('挿入失敗 [' + errCode + ']: ' + errMsg);
+                        }
+                        const mv = i.data.marker_validation || null;
+                        const s2 = await jqXhrPromise($.post(AffirosRewrite.ajaxUrl, {
+                            action: 'affiros_rewrite_save',
+                            nonce: AffirosRewrite.nonce,
+                            post_id: id,
+                            title: i.data.rewritten_title,
+                            content: i.data.rewritten_content,
+                            marker_validation: mv ? JSON.stringify(mv) : '',
+                        }));
+                        if (!s2.success) throw new Error('挿入後保存失敗: ' + (s2.data?.message || '不明'));
+
+                        const mkCount = (i.data.marker_stats?.marker_count) || 0;
+                        const mvStatus = mv?.status === 'ok' ? ' ✅' : mv?.status === 'warning' ? ' ⚠️' : '';
+                        appendBulkLog('  ✓ #' + id + ' リセット完了（' + mkCount + '個マーカー挿入）' + mvStatus, 'success');
+                    } else if (mode === 'cleanup') {
+                        const c = await jqXhrPromise($.post(AffirosRewrite.ajaxUrl, {
+                            action: 'affiros_rewrite_cleanup_markers',
+                            nonce: AffirosRewrite.nonce,
+                            post_id: id,
+                        }));
+                        if (!c.success) throw new Error(c.data?.message || '不明');
+                        const s = await jqXhrPromise($.post(AffirosRewrite.ajaxUrl, {
+                            action: 'affiros_rewrite_save',
+                            nonce: AffirosRewrite.nonce,
+                            post_id: id,
+                            title: c.data.rewritten_title,
+                            content: c.data.rewritten_content,
+                        }));
+                        if (!s.success) throw new Error('保存失敗: ' + (s.data?.message || '不明'));
+                        const rep = c.data.cleanup_report || {};
+                        appendBulkLog('  ✓ #' + id + ' 除去完了（カード ' + (rep.cards_before || 0) + '→' + (rep.cards_after || 0) +
+                                      ' / マーカー ' + (rep.markers_before || 0) + '→' + (rep.markers_after || 0) + '）', 'success');
+                    } else if (mode === 'insert') {
+                        const i = await jqXhrPromise($.post(AffirosRewrite.ajaxUrl, {
+                            action: 'affiros_rewrite_insert_markers_new',
+                            nonce: AffirosRewrite.nonce,
+                            post_id: id,
+                            article_type: articleType,
+                        }));
+                        if (!i.success) {
+                            const errCode = i.data?.code || '';
+                            const errMsg = i.data?.message || '不明';
+                            // 既存マーカー検出はスキップ扱い（エラーではなく警告）
+                            if (errCode === 'existing_markers_detected') {
+                                appendBulkLog('  ⏭ #' + id + ' スキップ（既存マーカーあり・先に🗑除去してください）', 'warn');
+                                skipped++;
+                                done++;
+                                $('#affiros-bulk-done').text(done);
+                                $('#affiros-bulk-progress').css('width', (done / ids.length * 100) + '%');
+                                continue;
+                            }
+                            throw new Error('[' + errCode + '] ' + errMsg);
+                        }
+                        const mv = i.data.marker_validation || null;
+                        const s = await jqXhrPromise($.post(AffirosRewrite.ajaxUrl, {
+                            action: 'affiros_rewrite_save',
+                            nonce: AffirosRewrite.nonce,
+                            post_id: id,
+                            title: i.data.rewritten_title,
+                            content: i.data.rewritten_content,
+                            marker_validation: mv ? JSON.stringify(mv) : '',
+                        }));
+                        if (!s.success) throw new Error('保存失敗: ' + (s.data?.message || '不明'));
+                        const mkCount = (i.data.marker_stats?.marker_count) || 0;
+                        const mvStatus = mv?.status === 'ok' ? ' ✅' : mv?.status === 'warning' ? ' ⚠️' : '';
+                        appendBulkLog('  ✓ #' + id + ' 挿入完了（' + mkCount + '個マーカー）' + mvStatus, 'success');
+                    }
+                    succeeded++;
+                } catch (e) {
+                    appendBulkLog('  ✗ #' + id + ' 失敗: ' + e.message, 'error');
+                    failed++;
+                }
+                done++;
+                $('#affiros-bulk-done').text(done);
+                $('#affiros-bulk-progress').css('width', (done / ids.length * 100) + '%');
+            }
+
+            window.onbeforeunload = null;
+            const skipMsg = skipped > 0 ? ' / スキップ ' + skipped : '';
+            $('#affiros-bulk-status').text('完了: 成功 ' + succeeded + ' / 失敗 ' + failed + skipMsg + ' / 全 ' + ids.length);
+            $('#affiros-bulk-close').show();
+            $('#affiros-bulk-cancel').hide();
+        }
+
         function appendBulkLog(msg, kind) {
             const colors = { info: '#333', success: '#0a7a2f', error: '#c00', warn: '#a06000' };
             const c = colors[kind] || '#333';
@@ -625,6 +785,10 @@ function affiros_rewrite_render_rewrite_page() {
             runSingleRewrite(parseInt($(this).data('post-id'), 10));
         });
         $('#affiros-bulk-rewrite-btn').on('click', runBulkRewrite);
+        // v0.4.43 一括処理ボタン
+        $('#affiros-bulk-cleanup-btn').on('click', function() { runBulkOp('cleanup'); });
+        $('#affiros-bulk-insert-btn').on('click', function() { runBulkOp('insert'); });
+        $('#affiros-bulk-reset-btn').on('click', function() { runBulkOp('reset'); });
 
         $('#affiros-modal-close, #affiros-modal-discard').on('click', closeResultModal);
         $('#affiros-modal-save').on('click', saveModal);
