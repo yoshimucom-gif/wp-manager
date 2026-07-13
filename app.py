@@ -235,7 +235,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.83'
+APP_VERSION = '1.7.84'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -5056,7 +5056,8 @@ def strip_summary_table_sections(html):
 DEFAULT_CARD_INSERTION_PATTERNS = {
     'ranking': [
         {'position': 'after_each_h3_rank', 'design': 'vertical'},
-        {'position': 'after_last_h2', 'design': 'ranking', 'count': 3},
+        # v1.7.84: まとめ後の ranking カードは TOP5 表示（旧 TOP3 → TOP5）
+        {'position': 'after_last_h2', 'design': 'ranking', 'count': 5},
     ],
     'brand': [
         # 商標記事は1商品深掘り構造。
@@ -5072,7 +5073,8 @@ DEFAULT_CARD_INSERTION_PATTERNS = {
         # after_last_h2: キーワードに依存しない確定位置。
         # after_matome_h2 はFAQ等のH2が記事末尾にある場合まとめから離れるため、
         # 無条件に「記事内の最後のH2直後」を使う方が安定。
-        {'position': 'after_last_h2', 'design': 'ranking', 'count': 3},
+        # v1.7.84: まとめ後の ranking カードは TOP5 表示（旧 TOP3 → TOP5）
+        {'position': 'after_last_h2', 'design': 'ranking', 'count': 5},
     ],
 }
 
@@ -6365,9 +6367,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.2.3',
     },
     'rewrite': {
-        'file': 'affiros-rewrite-0.4.44.zip',
+        'file': 'affiros-rewrite-0.4.45.zip',
         'name': 'Affiros リライター',
-        'version': '0.4.44',
+        'version': '0.4.45',
     },
     'categorizer': {
         'file': 'affiros-categorizer-0.1.1.zip',

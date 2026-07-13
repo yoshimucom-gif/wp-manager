@@ -1991,6 +1991,22 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.84 / rewrite v0.4.45 (2026-07-08) — まとめ後 ranking カードを TOP3 → TOP5 に変更</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>変更</strong>: ranking / column 記事の まとめ後（after_last_h2）に挿入される ranking デザインのカードを、<strong>TOP3 → TOP5</strong> に変更。</li>
+              <li><strong>マーカー変化</strong>: <code>&lt;!--ai-product:ranking:3--&gt;</code> → <code>&lt;!--ai-product:ranking:5--&gt;</code></li>
+              <li><strong>影響範囲</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>本体（app.py）と プラグイン（marker-inserter.php）の両方を同時変更。乖離ゼロを維持。</li>
+                  <li>今後生成する新規記事: まとめ後カードが TOP5 表示</li>
+                  <li>既存記事（すでに TOP3 マーカーで公開済）: 🔁 一括リセットで再挿入すれば TOP5 に切り替わる</li>
+                </ul>
+              </li>
+              <li><strong>バージョン同期</strong>: <code>AFFIROS_REWRITE_VERSION</code> 0.4.44 → 0.4.45 / <code>affiros-rewrite-0.4.45.zip</code> 生成 / <code>PLUGIN_DOWNLOADS['rewrite']</code> 追従 / <code>APP_VERSION</code> 1.7.83 → 1.7.84。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.83 / rewrite v0.4.44 (2026-07-08) — プラグイン DEFAULT パターンを本体と完全一致に同期</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: 本体（<code>app.py:DEFAULT_CARD_INSERTION_PATTERNS</code>）とプラグイン（<code>marker-inserter.php:default_patterns</code>）のデフォルトが乖離していた。「同じ記事を本体生成 vs プラグイン🔁リセット」で <strong>まとめ後のカードの design と件数が変わる</strong> 状態だった。</li>
