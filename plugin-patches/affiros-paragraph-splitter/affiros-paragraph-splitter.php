@@ -2,14 +2,14 @@
 /**
  * Plugin Name: Affiros 段落整形
  * Description: 長すぎる段落を機械的に分割して読みやすくする単機能ツール。句点・接続詞・最大文字数で強制改行。Affiros9で生成した記事の段落が密になりがちな問題への確実な対策。リライター・インサーター・デコレーターと完全に独立。
- * Version: 1.1.1
+ * Version: 1.1.2
  * Author: Affiros
  * License: GPL v2 or later
  */
 
 if (!defined('ABSPATH')) exit;
 
-define('AFFIROS_PSPLIT_VERSION', '1.1.1');
+define('AFFIROS_PSPLIT_VERSION', '1.1.2');
 define('AFFIROS_PSPLIT_OPTION_KEY', 'affiros_psplit_settings');
 
 // 自動更新通知（Affiros9 サーバーから定期チェック）
@@ -643,22 +643,40 @@ function affiros_psplit_add_media_spacing($html) {
  * 昇格候補（見出しっぽい段落）の数も返す。
  */
 function affiros_psplit_stats($html, $settings = null) {
-    if (!preg_match_all('/<p\b[^>]*>([\s\S]*?)<\/p>/i', $html, $m)) {
-        return ['count' => 0, 'avg' => 0, 'max' => 0, 'over_200' => 0, 'heading_candidates' => 0];
-    }
+    if ($settings === null) $settings = affiros_psplit_get_settings();
+
+    // <p> の統計取得（over_200 用）
     $lens = [];
-    foreach ($m[1] as $inner) {
-        $plain = trim(preg_replace('/<[^>]+>/u', '', $inner));
-        if ($plain === '') continue;
-        $lens[] = mb_strlen($plain);
-    }
-    if (empty($lens)) {
-        return ['count' => 0, 'avg' => 0, 'max' => 0, 'over_200' => 0, 'heading_candidates' => 0];
+    if (preg_match_all('/<p\b[^>]*>([\s\S]*?)<\/p>/i', $html, $m)) {
+        foreach ($m[1] as $inner) {
+            $plain = trim(preg_replace('/<[^>]+>/u', '', $inner));
+            if ($plain === '') continue;
+            $lens[] = mb_strlen($plain);
+        }
     }
 
-    // 見出し昇格候補のカウント
+    // v1.1.2: strong+コロンの <li> パターンを別カウンタで数える。
+    // 従来は heading_candidates として数えていたが、
+    // 「<li> 全体の plain text が heading_max_chars(=60) を超える場合 SKIP」
+    // されるため、実際の <li><strong>ラベル</strong>：長文</li>（合計 60字超）
+    // が全部カウント漏れしていた。整形対象0件と誤表示される真因。
+    $strong_label_candidates = 0;
+    if (($settings['split_strong_label_list'] ?? 'yes') === 'yes') {
+        $min_content = max(10, intval($settings['split_min_content_chars'] ?? 25));
+        if (preg_match_all('/<li\b[^>]*>([\s\S]*?)<\/li>/i', $html, $li_m)) {
+            $strong_pattern = '/^\s*<strong[^>]*>([^<]+?)<\/strong>\s*[：:]\s*([\s\S]+)$/iu';
+            foreach ($li_m[1] as $inner) {
+                if (!preg_match($strong_pattern, $inner, $sm)) continue;
+                // 中身（コロン後の長文）の plain text 長を測る
+                $content_plain = trim(preg_replace('/<[^>]+>/u', '', $sm[2]));
+                if (mb_strlen($content_plain) < $min_content) continue;
+                $strong_label_candidates++;
+            }
+        }
+    }
+
+    // 見出し昇格候補のカウント（既存ロジック）
     $heading_candidates = 0;
-    if ($settings === null) $settings = affiros_psplit_get_settings();
     if (($settings['promote_headings'] ?? 'yes') === 'yes') {
         $max_chars = intval($settings['heading_max_chars'] ?? 60);
         $patterns = array_filter(array_map('trim', preg_split('/\r?\n/', $settings['heading_patterns'] ?? '')));
@@ -667,18 +685,20 @@ function affiros_psplit_stats($html, $settings = null) {
             if (strpos($p, '^') !== 0) $p = '^\s*' . $p;
             $regex_list[] = '/' . str_replace('/', '\/', $p) . '/u';
         }
-        foreach ($m[1] as $inner) {
-            if (preg_match('/<(img|table|ul|ol|h[1-6]|div|figure|iframe|hr|blockquote)\b/i', $inner)) continue;
-            $plain = trim(preg_replace('/<[^>]+>/u', '', $inner));
-            if ($plain === '' || mb_strlen($plain) > $max_chars) continue;
-            if (preg_match('/[。.!?！？]\s*$/u', $plain)) continue;
-            foreach ($regex_list as $rx) {
-                if (preg_match($rx, $plain)) { $heading_candidates++; break; }
+        if (isset($m[1])) {
+            foreach ($m[1] as $inner) {
+                if (preg_match('/<(img|table|ul|ol|h[1-6]|div|figure|iframe|hr|blockquote)\b/i', $inner)) continue;
+                $plain = trim(preg_replace('/<[^>]+>/u', '', $inner));
+                if ($plain === '' || mb_strlen($plain) > $max_chars) continue;
+                if (preg_match('/[。.!?！？]\s*$/u', $plain)) continue;
+                foreach ($regex_list as $rx) {
+                    if (preg_match($rx, $plain)) { $heading_candidates++; break; }
+                }
             }
         }
         // <li> も昇格候補としてカウント
-        if (preg_match_all('/<li\b[^>]*>([\s\S]*?)<\/li>/i', $html, $li_m)) {
-            foreach ($li_m[1] as $inner) {
+        if (preg_match_all('/<li\b[^>]*>([\s\S]*?)<\/li>/i', $html, $li_m2)) {
+            foreach ($li_m2[1] as $inner) {
                 if (preg_match('/<(img|table|ul|ol|h[1-6]|div|figure|iframe|hr|blockquote)\b/i', $inner)) continue;
                 $plain = trim(preg_replace('/<[^>]+>/u', '', $inner));
                 if ($plain === '' || mb_strlen($plain) > $max_chars) continue;
@@ -690,12 +710,24 @@ function affiros_psplit_stats($html, $settings = null) {
         }
     }
 
+    if (empty($lens)) {
+        return [
+            'count'              => 0,
+            'avg'                => 0,
+            'max'                => 0,
+            'over_200'           => 0,
+            'heading_candidates' => $heading_candidates,
+            'strong_label_candidates' => $strong_label_candidates,
+        ];
+    }
+
     return [
         'count'              => count($lens),
         'avg'                => intval(array_sum($lens) / count($lens)),
         'max'                => max($lens),
         'over_200'           => count(array_filter($lens, function ($l) { return $l > 200; })),
         'heading_candidates' => $heading_candidates,
+        'strong_label_candidates' => $strong_label_candidates,
     ];
 }
 
@@ -930,6 +962,7 @@ function affiros_psplit_render_page() {
                         <th style="width:90px">最大字数</th>
                         <th style="width:120px">200字超</th>
                         <th style="width:140px">見出し昇格候補</th>
+                        <th style="width:140px" title="&lt;li&gt;&lt;strong&gt;ラベル&lt;/strong&gt;：長文 パターン">strongラベル</th>
                         <th style="width:220px">アクション</th>
                     </tr>
                 </thead>
@@ -977,6 +1010,7 @@ function affiros_psplit_render_page() {
             posts.forEach(p => {
                 const editUrl = `${location.origin}/wp-admin/post.php?post=${p.id}&action=edit`;
                 const hc = p.heading_candidates || 0;
+                const slc = p.strong_label_candidates || 0;
                 tbody.append(`
                     <tr data-id="${p.id}">
                         <td>${p.id}</td>
@@ -985,6 +1019,7 @@ function affiros_psplit_render_page() {
                         <td>${p.max}字</td>
                         <td style="color:${p.over_200 > 0 ? '#dc2626' : '#6b7280'};font-weight:600">${p.over_200}件</td>
                         <td style="color:${hc > 0 ? '#d97706' : '#6b7280'};font-weight:600">${hc}件</td>
+                        <td style="color:${slc > 0 ? '#2563eb' : '#6b7280'};font-weight:600">${slc}件</td>
                         <td>
                             <button type="button" class="button button-small aps-preview" data-id="${p.id}">👁 プレビュー</button>
                             <button type="button" class="button button-primary button-small aps-apply" data-id="${p.id}">✨ 適用</button>
@@ -1107,15 +1142,18 @@ add_action('wp_ajax_affiros_psplit_scan', function () {
     $targets = [];
     foreach ($rows as $r) {
         $stats = affiros_psplit_stats($r->post_content, $settings);
-        // 「長段落あり」または「見出し昇格候補あり」のどちらかで対象に
-        if ($stats['over_200'] <= 0 && ($stats['heading_candidates'] ?? 0) <= 0) continue;
+        // v1.1.2: 「長段落」「見出し昇格候補」「strong+コロン <li>」のいずれかで対象に
+        if ($stats['over_200'] <= 0
+            && ($stats['heading_candidates'] ?? 0) <= 0
+            && ($stats['strong_label_candidates'] ?? 0) <= 0) continue;
         $targets[] = [
-            'id'                 => (int)$r->ID,
-            'title'              => $r->post_title,
-            'count'              => $stats['count'],
-            'max'                => $stats['max'],
-            'over_200'           => $stats['over_200'],
-            'heading_candidates' => $stats['heading_candidates'] ?? 0,
+            'id'                       => (int)$r->ID,
+            'title'                    => $r->post_title,
+            'count'                    => $stats['count'],
+            'max'                      => $stats['max'],
+            'over_200'                 => $stats['over_200'],
+            'heading_candidates'       => $stats['heading_candidates'] ?? 0,
+            'strong_label_candidates'  => $stats['strong_label_candidates'] ?? 0,
         ];
     }
     wp_send_json_success([
@@ -1184,12 +1222,14 @@ add_action('add_meta_boxes', function () {
 function affiros_psplit_render_metabox($post) {
     $stats = affiros_psplit_stats($post->post_content);
     $hc = $stats['heading_candidates'] ?? 0;
+    $slc = $stats['strong_label_candidates'] ?? 0;
     ?>
     <div style="font-size:12px;line-height:1.7">
         <div>段落数: <strong><?php echo intval($stats['count']); ?></strong></div>
         <div>最大字数: <strong><?php echo intval($stats['max']); ?>字</strong></div>
         <div>200字超: <strong style="color:<?php echo $stats['over_200'] > 0 ? '#dc2626' : '#16a34a'; ?>"><?php echo intval($stats['over_200']); ?>件</strong></div>
         <div>見出し昇格候補: <strong style="color:<?php echo $hc > 0 ? '#d97706' : '#16a34a'; ?>"><?php echo intval($hc); ?>件</strong></div>
+        <div>strongラベル: <strong style="color:<?php echo $slc > 0 ? '#2563eb' : '#16a34a'; ?>" title="&lt;li&gt;&lt;strong&gt;ラベル&lt;/strong&gt;：長文 パターン"><?php echo intval($slc); ?>件</strong></div>
     </div>
     <hr style="margin:10px 0">
     <button type="button" class="button button-primary" id="aps-mb-apply" data-id="<?php echo intval($post->ID); ?>" style="width:100%">✨ この記事を整形</button>

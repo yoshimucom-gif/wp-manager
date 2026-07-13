@@ -1991,6 +1991,33 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.80 / paragraph-splitter v1.1.2 (2026-07-08) — 段落プラグイン「整形対象0件」誤検出を修正</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>症状</strong>: Affiros 段落整形プラグインで「🔍 全記事スキャン」を実行すると「整形対象 0件」と出るが、実際は <code>&lt;li&gt;&lt;strong&gt;ラベル&lt;/strong&gt;：長い説明文&lt;/li&gt;</code> パターンが検出可能な記事が多数存在していた。</li>
+              <li><strong>真因</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>スキャンフィルタ（<code>affiros_psplit_scan</code>）は <code>over_200</code>（200字超の<code>&lt;p&gt;</code>）と <code>heading_candidates</code>（見出し昇格候補）の2つでしか対象を数えていなかった。</li>
+                  <li>strong+コロンの <code>&lt;li&gt;</code> パターンは実際には <code>affiros_psplit_split_strong_label_list</code> が「見出し + 段落」に分解できる機能を持っているのに、スキャン統計に含まれていなかった。</li>
+                  <li>結果: 分割機能は動くはずなのに、スキャン画面では「整形対象 0件」で表示され、ユーザーは「動いてない」と誤認する。</li>
+                  <li>ws-outlet の実測: <code>&lt;li&gt;&lt;strong&gt;コンセント・スイッチとの一体感&lt;/strong&gt;：プレートの穴や枠を...&lt;/li&gt;</code> の plain text は 89字 → <code>heading_max_chars=60</code> でスキップされていた（<code>affiros-paragraph-splitter.php:684</code>）。</li>
+                </ul>
+              </li>
+              <li><strong>修正</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>affiros_psplit_stats</code> に新カウンタ <code>strong_label_candidates</code> を追加。<code>&lt;li&gt;&lt;strong&gt;ラベル&lt;/strong&gt;：長文&lt;/li&gt;</code> パターンで、コロン後の説明文が <code>split_min_content_chars</code>（既定 25）超の <code>&lt;li&gt;</code> を数える。</li>
+                  <li>スキャンフィルタに <code>strong_label_candidates > 0</code> を対象条件に追加。</li>
+                  <li>スキャン結果テーブルに「strongラベル」列（青字で件数表示）を追加。</li>
+                  <li>編集画面のメタボックスにも「strongラベル: N件」表示を追加。</li>
+                </ul>
+              </li>
+              <li><strong>効果</strong>: 段落分割の「動いてない疑い」が解消。既存の分割ロジック（<code>affiros_psplit_split_strong_label_list</code>）を活かせるようになり、strong+コロンの <code>&lt;li&gt;</code> パターンが正しく検出・整形される。</li>
+              <li><strong>実際の挙動確認</strong>: プレビュー機能（👁 プレビュー）で before/after を確認してから「✨ 適用」で保存する運用は変更なし。誤爆リスクなし。</li>
+              <li><strong>バージョン同期</strong>: <code>AFFIROS_PSPLIT_VERSION</code> 1.1.1 → 1.1.2 / <code>affiros-paragraph-splitter-1.1.2.zip</code> 生成 / <code>PLUGIN_DOWNLOADS['paragraph-splitter']</code> 追従 / <code>APP_VERSION</code> 1.7.79 → 1.7.80。</li>
+              <li>本体側 app.py には触っていない（<code>APP_VERSION</code> のみ）。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.79 / rewrite v0.4.41 (2026-07-08) — リライター「マーカーのみ挿入」モード追加 + 誤挿入バグ同期修正</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: v1.7.78 で本体側の広告マーカー挿入バグは修正したが、<strong>既に WordPress に公開済みの記事は自動修復されない</strong>。ws-outlet / ws-character 型の被害記事を「リライトなしでマーカーだけ正しい位置に打ち直す」機能が必要だった。</li>
