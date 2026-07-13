@@ -14,10 +14,26 @@ function affiros_rewrite_render_rewrite_page() {
     $tags = Affiros_Rewrite_Post_Fetcher::get_tags();
     ?>
     <div class="wrap affiros-wrap">
-        <h1>Affiros リライト</h1>
+        <h1>Affiros リライター</h1>
         <p class="description">
             WP_Query で記事を内部取得するため、ホスティングの WAF / 海外IP制限の影響を受けません（403回避）。
         </p>
+
+        <!-- v0.4.47: タブナビゲーション（機能ごとに UI を切替） -->
+        <h2 class="nav-tab-wrapper" style="margin-top:18px;">
+            <a href="#" class="nav-tab nav-tab-active affiros-tab-nav" data-tab="rewrite">✍ リライト</a>
+            <a href="#" class="nav-tab affiros-tab-nav" data-tab="ads">📢 広告削除&amp;挿入</a>
+            <a href="#" class="nav-tab affiros-tab-nav" data-tab="reorder">🔀 章入れ替え</a>
+        </h2>
+        <div class="affiros-tab-desc" data-tab="rewrite" style="margin:8px 0 12px;padding:8px 12px;background:#f0f6fc;border-left:3px solid #2271b1;font-size:13px;">
+            <strong>✍ リライト</strong>: Claude API で記事本文を書き直します。料金あり（¥数十/記事）。マーカー挿入も同時実行可（オプション参照）。
+        </div>
+        <div class="affiros-tab-desc" data-tab="ads" style="display:none;margin:8px 0 12px;padding:8px 12px;background:#f0f6fc;border-left:3px solid #2271b1;font-size:13px;">
+            <strong>📢 広告削除&amp;挿入</strong>: 既存の商品カード・マーカーの除去 / 新規マーカー挿入 / 除去+挿入の一括リセット。Claude 呼ばず料金ゼロ。
+        </div>
+        <div class="affiros-tab-desc" data-tab="reorder" style="display:none;margin:8px 0 12px;padding:8px 12px;background:#f0f6fc;border-left:3px solid #2271b1;font-size:13px;">
+            <strong>🔀 章入れ替え</strong>: H2 章の順序を SEO 最適（選定基準→ランキング→選び方→FAQ→まとめ）に並び替え。本文自体は変更しない。Claude 呼ばず料金ゼロ。
+        </div>
 
         <?php if (!$has_api_key): ?>
             <div class="notice notice-warning">
@@ -129,9 +145,9 @@ function affiros_rewrite_render_rewrite_page() {
             </div>
         </details>
 
-        <!-- リライト共通オプション -->
-        <div style="margin-bottom:14px;padding:12px;background:#fafafa;border:1px solid #e0e0e0;border-radius:4px;">
-            <strong style="display:block;margin-bottom:8px;">リライト オプション</strong>
+        <!-- リライト共通オプション（リライト・広告タブでのみ表示） -->
+        <div class="affiros-tab-panel" data-tab="rewrite ads" style="margin-bottom:14px;padding:12px;background:#fafafa;border:1px solid #e0e0e0;border-radius:4px;">
+            <strong style="display:block;margin-bottom:8px;">オプション</strong>
             <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
                 <label>
                     記事タイプ:
@@ -143,37 +159,45 @@ function affiros_rewrite_render_rewrite_page() {
                         <option value="column">コラム</option>
                     </select>
                 </label>
-                <label>
+                <label class="affiros-tab-only" data-tab="rewrite">
                     <input type="checkbox" id="affiros-insert-markers" checked>
-                    商品カードマーカーを挿入する
+                    リライト後にマーカーを挿入する
                 </label>
             </div>
         </div>
 
-        <!-- 一括操作バー -->
+        <!-- 一括操作バー：タブごとに表示ボタンを切替 -->
         <div id="affiros-bulk-bar" style="display:none;margin-bottom:10px;padding:10px;background:#f0f6fc;border-left:4px solid #2271b1;">
             <strong><span id="affiros-bulk-count">0</span></strong> 件選択中
-            <button type="button" class="button button-primary" id="affiros-bulk-rewrite-btn" style="margin-left:12px;" <?php echo $has_api_key ? '' : 'disabled'; ?>>
-                ✍ 一括リライト
-            </button>
-            <button type="button" class="button" id="affiros-bulk-cleanup-btn" style="margin-left:6px;" title="選択記事のカード・マーカーを全部除去（挿入はしない）">
-                🗑 一括除去
-            </button>
-            <button type="button" class="button" id="affiros-bulk-insert-btn" style="margin-left:6px;" title="選択記事にマーカー挿入（既存があれば拒否・N選ならstrict判定）">
-                🎯 一括挿入
-            </button>
-            <button type="button" class="button" id="affiros-bulk-reset-btn" style="margin-left:6px;" title="🗑除去→🎯挿入 を1記事ごとに連続実行（マーカー位置を一発で治す）">
-                🔁 一括リセット（除去→挿入）
-            </button>
-            <button type="button" class="button" id="affiros-bulk-reorder-btn" style="margin-left:6px;" title="選択記事の H2 章順序を SEO 最適に並び替え（Claude 不要）">
-                🔀 一括章並替
-            </button>
+            <!-- リライトタブのボタン -->
+            <span class="affiros-tab-only" data-tab="rewrite">
+                <button type="button" class="button button-primary" id="affiros-bulk-rewrite-btn" style="margin-left:12px;" <?php echo $has_api_key ? '' : 'disabled'; ?>>
+                    ✍ 一括リライト
+                </button>
+            </span>
+            <!-- 広告タブのボタン -->
+            <span class="affiros-tab-only" data-tab="ads">
+                <button type="button" class="button" id="affiros-bulk-cleanup-btn" style="margin-left:12px;" title="選択記事のカード・マーカーを全部除去（挿入はしない）">
+                    🗑 一括除去
+                </button>
+                <button type="button" class="button" id="affiros-bulk-insert-btn" style="margin-left:6px;" title="選択記事にマーカー挿入（既存があれば拒否・N選ならstrict判定）">
+                    🎯 一括挿入
+                </button>
+                <button type="button" class="button button-primary" id="affiros-bulk-reset-btn" style="margin-left:6px;" title="🗑除去→🎯挿入 を1記事ごとに連続実行（マーカー位置を一発で治す）">
+                    🔁 一括リセット（除去→挿入）
+                </button>
+            </span>
+            <!-- 章並替タブのボタン -->
+            <span class="affiros-tab-only" data-tab="reorder">
+                <button type="button" class="button button-primary" id="affiros-bulk-reorder-btn" style="margin-left:12px;" title="選択記事の H2 章順序を SEO 最適に並び替え（Claude 不要）">
+                    🔀 一括章並替
+                </button>
+            </span>
             <span class="description" style="margin-left:10px;">実行前に確認ダイアログあり。各記事の結果はログに順次表示。</span>
             <?php if (!$has_api_key): ?>
-                <div style="margin-top:6px;color:#b32d2e;font-size:12px;">
+                <div class="affiros-tab-only" data-tab="rewrite" style="margin-top:6px;color:#b32d2e;font-size:12px;">
                     ⚠ Claude APIキーが未設定のため「一括リライト」は実行できません。
                     <a href="<?php echo esc_url(admin_url('admin.php?page=affiros-rewrite-settings')); ?>">設定画面で入力 →</a>
-                    （🗑除去 / 🎯挿入 / 🔁リセット は Claude 不要なので利用可能）
                 </div>
             <?php endif; ?>
         </div>
@@ -330,10 +354,11 @@ function affiros_rewrite_render_rewrite_page() {
                 html += '<td>' + mkHtml + '</td>';
                 html += '<td>' + escapeHtml(p.modified) + '</td>';
                 html += '<td>';
-                html += '<button type="button" class="button button-primary button-small affiros-rewrite-btn" data-post-id="' + p.id + '">✍ リライト</button> ';
-                html += '<button type="button" class="button button-small affiros-cleanup-btn" data-post-id="' + p.id + '" title="既存の商品カード・マーカーを全て除去（挿入はしない）。除去後に🎯挿入で新規配置します。">🗑 マーカー消す</button> ';
-                html += '<button type="button" class="button button-small affiros-insert-btn" data-post-id="' + p.id + '" title="Claude を呼ばずに記事タイプ別ルールでマーカー挿入。既存マーカーが検出されたら🗑で先に消してください。ランキング記事は N選 のN個 全部揃わないと保存拒否。">🎯 マーカー挿入</button> ';
-                html += '<button type="button" class="button button-small affiros-reorder-btn" data-post-id="' + p.id + '" title="H2 章の順序を SEO 最適（選定基準→ランキング→選び方→FAQ→まとめ）に並び替え。Claude 不要。">🔀 章並替</button> ';
+                // タブ別ボタン: 各ボタンに data-tab を付けて、activeTab に応じて表示/非表示
+                html += '<span class="affiros-tab-only" data-tab="rewrite"><button type="button" class="button button-primary button-small affiros-rewrite-btn" data-post-id="' + p.id + '">✍ リライト</button></span> ';
+                html += '<span class="affiros-tab-only" data-tab="ads"><button type="button" class="button button-small affiros-cleanup-btn" data-post-id="' + p.id + '" title="既存の商品カード・マーカーを全て除去（挿入はしない）。除去後に🎯挿入で新規配置します。">🗑 マーカー消す</button></span> ';
+                html += '<span class="affiros-tab-only" data-tab="ads"><button type="button" class="button button-small affiros-insert-btn" data-post-id="' + p.id + '" title="Claude を呼ばずに記事タイプ別ルールでマーカー挿入。既存マーカーが検出されたら🗑で先に消してください。ランキング記事は N選 のN個 全部揃わないと保存拒否。">🎯 マーカー挿入</button></span> ';
+                html += '<span class="affiros-tab-only" data-tab="reorder"><button type="button" class="button button-small affiros-reorder-btn" data-post-id="' + p.id + '" title="H2 章の順序を SEO 最適（選定基準→ランキング→選び方→FAQ→まとめ）に並び替え。Claude 不要。">🔀 章並替</button></span> ';
                 html += '<a href="' + p.edit_link + '" target="_blank" class="button button-small">編集</a>';
                 html += '</td>';
                 html += '</tr>';
@@ -343,6 +368,8 @@ function affiros_rewrite_render_rewrite_page() {
             $('#affiros-result').html(html);
             renderPagination(data);
             updateBulkBar();
+            // v0.4.47: テーブル再描画後にタブ切替を適用（新しい .affiros-tab-only 要素にも反映）
+            if (typeof applyTab === 'function' && typeof currentTab !== 'undefined') applyTab(currentTab);
         }
 
         function renderPagination(data) {
@@ -836,6 +863,45 @@ function affiros_rewrite_render_rewrite_page() {
             const c = colors[kind] || '#333';
             $('#affiros-bulk-log').append('<div style="color:' + c + ';">' + escapeHtml(msg) + '</div>').scrollTop(99999);
         }
+
+        // --- v0.4.47: タブナビゲーション ---
+        // localStorage で選択タブを永続化。次回開いた時に前回のタブを復元。
+        let currentTab = localStorage.getItem('affiros_rewrite_tab') || 'rewrite';
+
+        function applyTab(tab) {
+            currentTab = tab;
+            localStorage.setItem('affiros_rewrite_tab', tab);
+
+            // タブナビの active 表示切替
+            $('.affiros-tab-nav').removeClass('nav-tab-active');
+            $('.affiros-tab-nav[data-tab="' + tab + '"]').addClass('nav-tab-active');
+
+            // タブ説明の切替
+            $('.affiros-tab-desc').hide();
+            $('.affiros-tab-desc[data-tab="' + tab + '"]').show();
+
+            // タブ限定要素の表示切替
+            $('.affiros-tab-only').each(function() {
+                const allowed = ($(this).data('tab') || '').toString().split(/\s+/);
+                if (allowed.includes(tab)) {
+                    $(this).show();
+                } else {
+                    $(this).hide();
+                }
+            });
+
+            // タブ切替時にモーダルを閉じる（別タブの操作が残ってると混乱するので）
+            $('#affiros-bulk-modal').hide();
+            closeResultModal();
+        }
+
+        $('.affiros-tab-nav').on('click', function(e) {
+            e.preventDefault();
+            applyTab($(this).data('tab'));
+        });
+
+        // ページロード時に前回タブを適用
+        applyTab(currentTab);
 
         // --- イベントバインド ---
         $('#affiros-fetch-btn').on('click', function() { fetchPosts(1); });

@@ -1991,6 +1991,38 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.86 / rewrite v0.4.47 (2026-07-08) — リライター UI を機能別3タブに再構成</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: v0.4.46 まででボタン数が増えすぎ、1 記事行に 5 個・一括バーに 5 個のボタンが並んで使い勝手が悪くなっていた。</li>
+              <li><strong>新 UI: 上部にタブナビゲーション</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><strong>✍ リライト</strong>: Claude API で本文書き直し（¥数十/記事）。単記事「✍ リライト」＋一括「✍ 一括リライト」ボタン。</li>
+                  <li><strong>📢 広告削除&amp;挿入</strong>: 「🗑 マーカー消す」「🎯 マーカー挿入」＋一括「🗑 除去」「🎯 挿入」「🔁 リセット」ボタン。Claude 呼ばず料金ゼロ。</li>
+                  <li><strong>🔀 章入れ替え</strong>: 「🔀 章並替」＋一括「🔀 一括章並替」ボタン。SEO 最適順序に自動並替、料金ゼロ。</li>
+                </ul>
+              </li>
+              <li><strong>実装</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>各タブ限定要素に <code>class="affiros-tab-only" data-tab="rewrite"</code> 等を付与</li>
+                  <li>タブ切替時に <code>applyTab(tab)</code> で表示/非表示を切替</li>
+                  <li>選択タブは <code>localStorage</code> に保存 → 次回開いた時に前回タブを復元</li>
+                  <li>投稿一覧・フィルタ・検索は全タブ共通</li>
+                  <li>タブ切替時にモーダルを閉じる（別タブの操作の残骸で混乱しないように）</li>
+                </ul>
+              </li>
+              <li><strong>効果</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>1 タブあたりのボタン数が 1〜3 個に減って直感的</li>
+                  <li>タブ切替で「今どの操作をする画面か」が明確化</li>
+                  <li>タブ説明文で各機能の料金有無・目的が一目でわかる</li>
+                </ul>
+              </li>
+              <li><strong>バージョン同期</strong>: <code>AFFIROS_REWRITE_VERSION</code> 0.4.46 → 0.4.47 / <code>affiros-rewrite-0.4.47.zip</code> 生成 / <code>PLUGIN_DOWNLOADS['rewrite']</code> 追従 / <code>APP_VERSION</code> 1.7.85 → 1.7.86。</li>
+              <li>本体側 <code>app.py</code> には触っていない（<code>APP_VERSION</code> のみ）。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.85 / rewrite v0.4.46 (2026-07-08) — H2 章順序を SEO 最適化する「🔀 章並替」機能追加</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>症状</strong>: kabe-deco.com/ws-outlet の実測で、記事の H2 章順序が SEO 最悪の並びだった：
