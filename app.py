@@ -235,7 +235,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.92'
+APP_VERSION = '1.7.93'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -4455,77 +4455,53 @@ def amazon_search(query, client_id, client_secret, partner_tag,
         )
     data = resp.json() or {}
 
-    # v1.7.92: レスポンスのキー名は PascalCase / lowerCamelCase の両方に対応する。
-    # 「リクエストは lowerCamelCase」と公式が言っていても、レスポンスが
-    # PA-API v5 互換で PascalCase を返してくる可能性がある（要検証）。
-    # 両方 fallback する parser にして、どちらでも動くようにしておく。
-    def g(d, *keys, default=None):
-        """辞書から「lowerCamelCase または PascalCase」のどちらかで取れる値を返す。
-        keys にはいろんな候補を並べる（最初にヒットしたのを返す）。"""
-        if not isinstance(d, dict):
-            return default
-        for k in keys:
-            if k in d:
-                return d[k]
-        return default
+    # v1.7.93: 公式ドキュメントに基づく正しい parser。
+    # レスポンス形式（api-reference の Sample Response より）:
+    #   searchResult.items[].asin
+    #   searchResult.items[].detailPageURL  (URL 部分は大文字)
+    #   searchResult.items[].images.primary.medium.url  (url は小文字)
+    #   searchResult.items[].itemInfo.title.displayValue
+    #   searchResult.items[].offersV2.listings[0].price.money.amount
+    #   searchResult.items[].offersV2.listings[0].price.money.currency
+    #   searchResult.items[].offersV2.listings[0].price.money.displayAmount
+    # ※ customerReviews は Creators API で提供されない（レビュー情報なし）
 
-    items = (
-        g((g(data, 'searchResult', 'SearchResult') or {}), 'items', 'Items')
-        or g((g(data, 'itemsResult', 'ItemsResult') or {}), 'items', 'Items')
-        or []
-    )
+    items = (data.get('searchResult') or {}).get('items') or []
     results = []
     for item in items:
-        item_info = g(item, 'itemInfo', 'ItemInfo') or {}
-        title_obj = g(item_info, 'title', 'Title') or {}
-        title = g(title_obj, 'displayValue', 'DisplayValue', default='') or ''
+        item_info = item.get('itemInfo') or {}
+        title_obj = item_info.get('title') or {}
+        title = title_obj.get('displayValue') or ''
 
-        offers = g(item, 'offers', 'Offers') or {}
-        listings = g(offers, 'listings', 'Listings') or []
-        summaries = g(offers, 'summaries', 'Summaries') or []
+        images = item.get('images') or {}
+        primary = images.get('primary') or {}
+        med = primary.get('medium') or {}
+        large = primary.get('large') or {}
+        image_url = med.get('url') or large.get('url') or ''
+
+        offers_v2 = item.get('offersV2') or {}
+        listings = offers_v2.get('listings') or []
         price_amount = None
         price_display = ''
         if listings:
-            price_obj = g((listings[0] or {}), 'price', 'Price') or {}
-            price_amount = g(price_obj, 'amount', 'Amount')
-            price_display = g(price_obj, 'displayAmount', 'DisplayAmount', default='') or ''
-        if not price_amount and not price_display and summaries:
-            for summary in summaries:
-                low = g((summary or {}), 'lowestPrice', 'LowestPrice') or {}
-                a = g(low, 'amount', 'Amount')
-                d_ = g(low, 'displayAmount', 'DisplayAmount', default='')
-                if a or d_:
-                    price_amount = price_amount or a
-                    price_display = price_display or d_ or ''
-                    break
+            price_obj = (listings[0] or {}).get('price') or {}
+            money = price_obj.get('money') or {}
+            price_amount = money.get('amount')
+            price_display = money.get('displayAmount') or ''
 
-        images = g(item, 'images', 'Images') or {}
-        primary = g(images, 'primary', 'Primary') or {}
-        med = g(primary, 'medium', 'Medium') or {}
-        large = g(primary, 'large', 'Large') or {}
-        image_url = g(med, 'url', 'URL', default='') or g(large, 'url', 'URL', default='') or ''
-
-        reviews = g(item, 'customerReviews', 'CustomerReviews') or {}
-        count_raw = g(reviews, 'count', 'Count')
-        if isinstance(count_raw, dict):
-            review_count = g(count_raw, 'value', 'Value', default=0) or 0
-        else:
-            review_count = count_raw or 0
-        avg_raw = g(reviews, 'starRating', 'StarRating')
-        if isinstance(avg_raw, dict):
-            review_avg = g(avg_raw, 'value', 'Value', default=0) or 0
-        else:
-            review_avg = avg_raw or 0
+        # detailPageURL: URL が大文字（レスポンスの実キー）
+        detail_url = item.get('detailPageURL') or item.get('detailPageUrl') or ''
 
         results.append({
             'name': (title or '').strip(),
             'price': price_amount,
             'price_display': price_display,
-            'url': g(item, 'detailPageUrl', 'DetailPageURL', default='') or '',
+            'url': detail_url,
             'image_url': image_url,
-            'asin': g(item, 'asin', 'ASIN', default='') or '',
-            'review_count': review_count,
-            'review_avg': review_avg,
+            'asin': item.get('asin') or '',
+            # Creators API はレビュー情報を返さないので 0 で埋める
+            'review_count': 0,
+            'review_avg': 0,
         })
     return results
 
