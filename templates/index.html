@@ -1917,6 +1917,22 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.8.2 / rewrite v0.5.4 (2026-07-17) — ポストプロセッサー内部の相互干渉ガード追加</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>対応した潜在バグ</strong>: 段落整形の <code>auto_on_save</code> を ON にすると、リライトタブ・章入れ替えタブ・広告削除挿入タブ・テーブル修復ページからの <code>wp_update_post()</code> にも <code>save_post_post</code> フックが発火し、段落整形が結果を再処理して上書きしてしまう。</li>
+              <li><strong>症状発生条件</strong>: 段落整形設定「保存時に自動整形」を ON にした場合のみ（既定 OFF）。統合前でも旧2プラグイン併用時に同じ問題があった既存問題。</li>
+              <li><strong>修正</strong>: リライト系の <code>wp_update_post()</code> 呼び出しの前後に <code>set_transient('affiros_psplit_skip_$post_id')</code> / <code>delete_transient</code> を仕込む。段落整形側の <code>affiros_psplit_on_save</code> はこの transient を既に検知して自身の再帰保存を止める仕組みがあるので、そこに便乗する形。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>Affiros_Rewrite_Post_Fetcher::update_post()</code>（リライト / 章入れ替え / 広告削除挿入から呼ばれる本命）</li>
+                  <li>ajax-handler.php の table-repair 内 <code>wp_update_post</code>（テーブル修復ページから）</li>
+                </ul>
+              </li>
+              <li><strong>相互干渉監査で確認済み（干渉なし）</strong>: AJAX action 名 (<code>affiros_rewrite_*</code> vs <code>affiros_psplit_*</code>) / DOM ID (<code>#affiros-*</code> vs <code>#aps-*</code>) / JS グローバル (<code>AffirosRewrite</code> vs <code>AffirosPsplit</code>) / nonce 名 / 設定オプションキー / JS scope（各タブ IIFE で完全隔離）— 全て別プレフィックスで衝突なし。</li>
+              <li><strong>バージョン同期</strong>: <code>AFFIROS_REWRITE_VERSION</code> 0.5.3 → 0.5.4 / <code>affiros-rewrite-0.5.4.zip</code> 生成 / <code>PLUGIN_DOWNLOADS['rewrite']</code> 追従 / <code>APP_VERSION</code> 1.8.1 → 1.8.2。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.8.1 (2026-07-17) — プラグイン配布ページから3つのカードを削除</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>変更</strong>: 「プラグインダウンロード」ページから以下の3カードを削除。7枚 → 4枚にスリム化。

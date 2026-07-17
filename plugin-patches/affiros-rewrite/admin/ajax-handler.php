@@ -513,10 +513,14 @@ add_action('wp_ajax_affiros_rewrite_repair_tables', function () {
     // post_modified を更新せずに本文だけ書き換えたい場合は wp_insert_post に
     // edit_date を渡せばよいが、ここではリビジョン作成と更新日時更新を
     // そのまま許容する（=「いつ修復したか」を残す）。
+    // v0.5.4: 段落整形の auto_on_save が発火して修復結果を上書きしないよう
+    //          skip transient を仕込む。
+    set_transient('affiros_psplit_skip_' . $post_id, 1, 30);
     $result = wp_update_post([
         'ID'           => $post_id,
         'post_content' => $repaired,
     ], true);
+    delete_transient('affiros_psplit_skip_' . $post_id);
     if (is_wp_error($result)) {
         wp_send_json_error($result->get_error_message());
     }

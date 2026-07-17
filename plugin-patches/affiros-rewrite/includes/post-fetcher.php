@@ -190,7 +190,13 @@ class Affiros_Rewrite_Post_Fetcher {
         if ($new_title) {
             $update['post_title'] = $new_title;
         }
+        // v0.5.4: 統合された「段落整形」の auto_on_save フックが、
+        //          本 update_post をトリガに走ってリライト結果を上書きしないように
+        //          skip transient を仕込んでから wp_update_post する。
+        //          (段落整形側 line 774 の get_transient で検知)
+        set_transient('affiros_psplit_skip_' . $post_id, 1, 30);
         $result = wp_update_post($update, true);
+        delete_transient('affiros_psplit_skip_' . $post_id);
         if (is_wp_error($result)) {
             return $result;
         }
