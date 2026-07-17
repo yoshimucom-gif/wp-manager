@@ -4401,24 +4401,23 @@ def amazon_search(query, client_id, client_secret, partner_tag,
     marketplace = marketplace or AMAZON_MARKETPLACE_DEFAULT
 
     payload = {
-        'keywords':    query.strip(),
-        'searchIndex': 'All',
-        'itemCount':   max(1, min(10, int(limit) if str(limit).isdigit() else 10)),
-        'partnerTag':  partner_tag,
-        'partnerType': 'Associates',
-        # v1.7.92: resources 配列の値は PA-API v5 の PascalCase 表記を維持する。
-        # Creators API の「lowerCamelCase」化はリクエストのフィールド名だけで、
-        # resources の enum 値は PascalCase のまま。lowerCamelCase で送ると
-        # 400 "1 validation error detected: Value '[...] failed to satisfy constraint"
-        # が返る。
+        # v1.7.93: 公式ドキュメント（api-reference の SearchItems 章）に基づく正しい payload。
+        # 学び:
+        #   - PA-API v5 の 'Offers' は 'offersV2' に改称された
+        #   - partnerType, searchIndex はデフォルトで OK なので省略
+        #   - resources 値は lowerCamelCase（PA-API v5 の PascalCase ではない）
+        #   - offers → offersV2 に注意
+        #   - summaries は存在しない、listings のみ
+        'keywords':   query.strip(),
+        'itemCount':  max(1, min(10, int(limit) if str(limit).isdigit() else 10)),
+        'partnerTag': partner_tag,
         'resources': [
-            'Images.Primary.Medium',
-            'Images.Primary.Large',
-            'ItemInfo.Title',
-            'ItemInfo.ByLineInfo',
-            'ItemInfo.Features',
-            'Offers.Listings.Price',
-            'Offers.Summaries.LowestPrice',
+            'images.primary.medium',
+            'images.primary.large',
+            'itemInfo.title',
+            'itemInfo.byLineInfo',
+            'itemInfo.features',
+            'offersV2.listings.price',
         ],
     }
     headers = {
