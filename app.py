@@ -235,7 +235,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.91'
+APP_VERSION = '1.7.92'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -4406,13 +4406,19 @@ def amazon_search(query, client_id, client_secret, partner_tag,
         'itemCount':   max(1, min(10, int(limit) if str(limit).isdigit() else 10)),
         'partnerTag':  partner_tag,
         'partnerType': 'Associates',
+        # v1.7.92: resources 配列の値は PA-API v5 の PascalCase 表記を維持する。
+        # Creators API の「lowerCamelCase」化はリクエストのフィールド名だけで、
+        # resources の enum 値は PascalCase のまま。lowerCamelCase で送ると
+        # 400 "1 validation error detected: Value '[...] failed to satisfy constraint"
+        # が返る。
         'resources': [
-            'images.primary.medium',
-            'itemInfo.title',
-            'itemInfo.byLineInfo',
-            'itemInfo.features',
-            'offers.listings.price',
-            'offers.summaries.lowestPrice',
+            'Images.Primary.Medium',
+            'Images.Primary.Large',
+            'ItemInfo.Title',
+            'ItemInfo.ByLineInfo',
+            'ItemInfo.Features',
+            'Offers.Listings.Price',
+            'Offers.Summaries.LowestPrice',
         ],
     }
     headers = {
@@ -4449,51 +4455,75 @@ def amazon_search(query, client_id, client_secret, partner_tag,
         )
     data = resp.json() or {}
 
-    # Creators API は lowerCamelCase。
-    # searchResult.items / itemsResult.items の両方をチェック（documented alias）
+    # v1.7.92: レスポンスのキー名は PascalCase / lowerCamelCase の両方に対応する。
+    # 「リクエストは lowerCamelCase」と公式が言っていても、レスポンスが
+    # PA-API v5 互換で PascalCase を返してくる可能性がある（要検証）。
+    # 両方 fallback する parser にして、どちらでも動くようにしておく。
+    def g(d, *keys, default=None):
+        """辞書から「lowerCamelCase または PascalCase」のどちらかで取れる値を返す。
+        keys にはいろんな候補を並べる（最初にヒットしたのを返す）。"""
+        if not isinstance(d, dict):
+            return default
+        for k in keys:
+            if k in d:
+                return d[k]
+        return default
+
     items = (
-        (data.get('searchResult') or {}).get('items')
-        or (data.get('itemsResult') or {}).get('items')
+        g((g(data, 'searchResult', 'SearchResult') or {}), 'items', 'Items')
+        or g((g(data, 'itemsResult', 'ItemsResult') or {}), 'items', 'Items')
         or []
     )
     results = []
     for item in items:
-        title = ((item.get('itemInfo') or {}).get('title') or {}).get('displayValue') or ''
-        offers = item.get('offers') or {}
-        listings = offers.get('listings') or []
-        summaries = offers.get('summaries') or []
+        item_info = g(item, 'itemInfo', 'ItemInfo') or {}
+        title_obj = g(item_info, 'title', 'Title') or {}
+        title = g(title_obj, 'displayValue', 'DisplayValue', default='') or ''
+
+        offers = g(item, 'offers', 'Offers') or {}
+        listings = g(offers, 'listings', 'Listings') or []
+        summaries = g(offers, 'summaries', 'Summaries') or []
         price_amount = None
         price_display = ''
         if listings:
-            price_obj = (listings[0] or {}).get('price') or {}
-            price_amount = price_obj.get('amount')
-            price_display = price_obj.get('displayAmount') or ''
+            price_obj = g((listings[0] or {}), 'price', 'Price') or {}
+            price_amount = g(price_obj, 'amount', 'Amount')
+            price_display = g(price_obj, 'displayAmount', 'DisplayAmount', default='') or ''
         if not price_amount and not price_display and summaries:
             for summary in summaries:
-                low = (summary or {}).get('lowestPrice') or {}
-                if low.get('amount') or low.get('displayAmount'):
-                    price_amount = price_amount or low.get('amount')
-                    price_display = price_display or low.get('displayAmount') or ''
+                low = g((summary or {}), 'lowestPrice', 'LowestPrice') or {}
+                a = g(low, 'amount', 'Amount')
+                d_ = g(low, 'displayAmount', 'DisplayAmount', default='')
+                if a or d_:
+                    price_amount = price_amount or a
+                    price_display = price_display or d_ or ''
                     break
-        image_url = (((item.get('images') or {}).get('primary') or {}).get('medium') or {}).get('url', '')
-        reviews = item.get('customerReviews') or {}
-        review_count_raw = reviews.get('count')
-        if isinstance(review_count_raw, dict):
-            review_count = review_count_raw.get('value') or 0
+
+        images = g(item, 'images', 'Images') or {}
+        primary = g(images, 'primary', 'Primary') or {}
+        med = g(primary, 'medium', 'Medium') or {}
+        large = g(primary, 'large', 'Large') or {}
+        image_url = g(med, 'url', 'URL', default='') or g(large, 'url', 'URL', default='') or ''
+
+        reviews = g(item, 'customerReviews', 'CustomerReviews') or {}
+        count_raw = g(reviews, 'count', 'Count')
+        if isinstance(count_raw, dict):
+            review_count = g(count_raw, 'value', 'Value', default=0) or 0
         else:
-            review_count = review_count_raw or 0
-        review_avg_raw = reviews.get('starRating')
-        if isinstance(review_avg_raw, dict):
-            review_avg = review_avg_raw.get('value') or 0
+            review_count = count_raw or 0
+        avg_raw = g(reviews, 'starRating', 'StarRating')
+        if isinstance(avg_raw, dict):
+            review_avg = g(avg_raw, 'value', 'Value', default=0) or 0
         else:
-            review_avg = review_avg_raw or 0
+            review_avg = avg_raw or 0
+
         results.append({
-            'name': title.strip(),
+            'name': (title or '').strip(),
             'price': price_amount,
             'price_display': price_display,
-            'url': item.get('detailPageUrl') or '',
+            'url': g(item, 'detailPageUrl', 'DetailPageURL', default='') or '',
             'image_url': image_url,
-            'asin': item.get('asin') or '',
+            'asin': g(item, 'asin', 'ASIN', default='') or '',
             'review_count': review_count,
             'review_avg': review_avg,
         })
