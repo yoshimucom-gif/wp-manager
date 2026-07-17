@@ -2031,6 +2031,23 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.98 / rewrite v0.5.1 (2026-07-17) — 🚨 段落整形統合の Fatal error 緊急修正</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>症状</strong>: v0.5.0 導入後、旧 affiros-paragraph-splitter プラグインを有効なままにしていた WP サイトで<strong>白画面 Fatal error</strong>: <code>Cannot redeclare function affiros_psplit_default_settings()</code>。WP 管理画面すら開けなくなる致命的なバグ。</li>
+              <li><strong>真因</strong>: 統合版の共存ガードが <code>defined('AFFIROS_PSPLIT_VERSION')</code> だけをチェックしていたが、実測でこのガードが素通りするケースがあった（実測: kabe-deco.com）。<code>define</code> と <code>function</code> 宣言のタイミング / 定数の伝搬に想定外のズレがあった可能性。</li>
+              <li><strong>修正</strong>: ガードを <strong><code>function_exists('affiros_psplit_default_settings') || defined('AFFIROS_PSPLIT_VERSION')</code></strong> に強化。<code>function_exists</code> は定数と違って必ず「宣言済み関数」を検出できるので、旧プラグインの function 宣言が先にあれば統合版は 100% skip する。</li>
+              <li><strong>復旧手順</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>① 白画面になった WP サイトは FTP または hosting のファイルマネージャで <code>wp-content/plugins/affiros-paragraph-splitter/</code> をリネーム（例: <code>affiros-paragraph-splitter-DISABLED</code>）→ 即座にサイト復旧</li>
+                  <li>② Affiros9 の「プラグインダウンロード」から <strong>affiros-rewrite-0.5.1.zip</strong> をダウンロードしてリライタープラグインを更新</li>
+                  <li>③ 更新後、リネームした旧プラグインフォルダは削除して構いません（統合版に完全引き継がれる）</li>
+                </ul>
+              </li>
+              <li><strong>バージョン同期</strong>: <code>AFFIROS_REWRITE_VERSION</code> 0.5.0 → 0.5.1 / <code>affiros-rewrite-0.5.1.zip</code> 生成 / <code>PLUGIN_DOWNLOADS['rewrite']</code> 追従 / <code>APP_VERSION</code> 1.7.97 → 1.7.98。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.97 / rewrite v0.5.0 / paragraph-splitter v1.1.4 (2026-07-17) — 段落整形をリライタープラグインに統合</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: 「章入れ替え / 広告削除&挿入 / リライト / 段落整形」の4つはどれも「Affiros9 で生成した記事の HTML 品質を機械的に整える」系機能。これまで段落整形だけ独立プラグイン affiros-paragraph-splitter になっていて、ユーザー的には「同じ目的のプラグインを2個管理する」手間があった。統合してリライタープラグイン1個に集約。</li>

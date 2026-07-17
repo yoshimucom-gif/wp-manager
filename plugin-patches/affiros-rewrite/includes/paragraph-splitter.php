@@ -16,10 +16,13 @@
 
 if (!defined('ABSPATH')) exit;
 
-if (defined('AFFIROS_PSPLIT_INTEGRATED_LOADED')) return; // 二重ロード防止
-if (defined('AFFIROS_PSPLIT_VERSION')) {
-    // 旧スタンドアロン版が先にロードされている場合、統合版はスキップ。
-    // 旧を優先させて衝突を避ける（機能は同じ、ただし旧版は個別プラグイン更新が必要）
+// v0.5.1: 二重ロード防止 & 旧独立プラグイン (affiros-paragraph-splitter) との共存ガード
+//
+// 判定は「関数がすでに宣言されているか」で行う（defined チェックだけだと
+// タイミング問題で漏れることがあった実測: kabe-deco.com で Fatal error）。
+// 旧プラグインが先にロードされていたら、統合版は一切何もせず終了する。
+if (defined('AFFIROS_PSPLIT_INTEGRATED_LOADED')) return;
+if (function_exists('affiros_psplit_default_settings') || defined('AFFIROS_PSPLIT_VERSION')) {
     add_action('admin_notices', function () {
         if (!current_user_can('manage_options')) return;
         echo '<div class="notice notice-warning is-dismissible"><p>'
@@ -30,7 +33,9 @@ if (defined('AFFIROS_PSPLIT_VERSION')) {
     return;
 }
 define('AFFIROS_PSPLIT_INTEGRATED_LOADED', true);
-define('AFFIROS_PSPLIT_VERSION', '1.1.3'); // 統合版が保有するバージョン
+if (!defined('AFFIROS_PSPLIT_VERSION')) {
+    define('AFFIROS_PSPLIT_VERSION', '1.1.3');
+}
 if (!defined('AFFIROS_PSPLIT_OPTION_KEY')) {
     define('AFFIROS_PSPLIT_OPTION_KEY', 'affiros_psplit_settings');
 }
