@@ -160,10 +160,17 @@
                 nonce: aiPI.nonce,
                 claude_api_key: fieldVal('claude_api_key'),
                 claude_model: fieldVal('claude_model'),
+                // Amazon Creators API (v1.9.29〜)
+                amazon_creators_client_id:     fieldVal('amazon_creators_client_id'),
+                amazon_creators_client_secret: fieldVal('amazon_creators_client_secret'),
+                amazon_marketplace:            fieldVal('amazon_marketplace'),
+                amazon_partner_tag:            fieldVal('amazon_partner_tag'),
+                // 旧 PA-API（互換のため送信、実際は使われない）
                 amazon_access_key: fieldVal('amazon_access_key'),
                 amazon_secret_key: fieldVal('amazon_secret_key'),
-                amazon_partner_tag: fieldVal('amazon_partner_tag'),
-                rakuten_app_id: fieldVal('rakuten_app_id'),
+                // 楽天（v1.9.31〜 accessKey 必須）
+                rakuten_app_id:       fieldVal('rakuten_app_id'),
+                rakuten_access_key:   fieldVal('rakuten_access_key'),
                 rakuten_affiliate_id: fieldVal('rakuten_affiliate_id'),
             }).done(function(response) {
                 $btn.prop('disabled', false);

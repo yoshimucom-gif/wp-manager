@@ -184,10 +184,17 @@ function ai_pi_ajax_test_credentials() {
     $config = [
         'claude_api_key'       => sanitize_text_field($_POST['claude_api_key'] ?? ''),
         'claude_model'         => sanitize_text_field($_POST['claude_model'] ?? 'claude-sonnet-4-6'),
+        // Amazon Creators API (v1.9.29〜)
+        'amazon_creators_client_id'     => sanitize_text_field($_POST['amazon_creators_client_id']     ?? ''),
+        'amazon_creators_client_secret' => sanitize_text_field($_POST['amazon_creators_client_secret'] ?? ''),
+        'amazon_marketplace'            => sanitize_text_field($_POST['amazon_marketplace']            ?? 'www.amazon.co.jp'),
+        'amazon_partner_tag'            => sanitize_text_field($_POST['amazon_partner_tag']            ?? ''),
+        // 旧 PA-API（互換のため保持）
         'amazon_access_key'    => sanitize_text_field($_POST['amazon_access_key'] ?? ''),
         'amazon_secret_key'    => sanitize_text_field($_POST['amazon_secret_key'] ?? ''),
-        'amazon_partner_tag'   => sanitize_text_field($_POST['amazon_partner_tag'] ?? ''),
-        'rakuten_app_id'       => sanitize_text_field($_POST['rakuten_app_id'] ?? ''),
+        // 楽天（v1.9.31〜 accessKey 必須）
+        'rakuten_app_id'       => sanitize_text_field($_POST['rakuten_app_id']       ?? ''),
+        'rakuten_access_key'   => sanitize_text_field($_POST['rakuten_access_key']   ?? ''),
         'rakuten_affiliate_id' => sanitize_text_field($_POST['rakuten_affiliate_id'] ?? ''),
     ];
 
@@ -206,23 +213,26 @@ function ai_pi_ajax_test_credentials() {
         }
     }
 
-    // --- Amazon PA-API ---
+    // --- Amazon Creators API (v1.9.29〜) ---
     $amazon = new AI_PI_Amazon_API($config);
     if (!$amazon->is_configured()) {
-        $results[] = ['service' => 'amazon', 'label' => 'Amazon PA-API', 'status' => 'skip', 'message' => 'Access Key / Secret Key / アソシエイトタグ のいずれか未入力'];
+        $results[] = ['service' => 'amazon', 'label' => 'Amazon Creators API', 'status' => 'skip', 'message' => 'Client ID / Client Secret / アソシエイトタグ のいずれか未入力'];
     } else {
         $r = $amazon->search('ボールペン', 1);
         if (is_wp_error($r)) {
-            $results[] = ['service' => 'amazon', 'label' => 'Amazon PA-API', 'status' => 'ng', 'message' => $r->get_error_message()];
+            $results[] = ['service' => 'amazon', 'label' => 'Amazon Creators API', 'status' => 'ng', 'message' => $r->get_error_message()];
         } else {
-            $results[] = ['service' => 'amazon', 'label' => 'Amazon PA-API', 'status' => 'ok', 'message' => '接続成功（' . count($r) . '件取得）'];
+            $results[] = ['service' => 'amazon', 'label' => 'Amazon Creators API', 'status' => 'ok', 'message' => '接続成功（' . count($r) . '件取得）'];
         }
     }
 
-    // --- 楽天市場API ---
+    // --- 楽天市場API (v1.9.31〜: 新エンドポイント + accessKey) ---
     $rakuten = new AI_PI_Rakuten_API($config);
     if (!$rakuten->is_configured()) {
-        $results[] = ['service' => 'rakuten', 'label' => '楽天市場API', 'status' => 'skip', 'message' => 'アプリID未入力'];
+        $missing = [];
+        if (empty($config['rakuten_app_id']))     $missing[] = 'アプリID';
+        if (empty($config['rakuten_access_key'])) $missing[] = 'アクセスキー';
+        $results[] = ['service' => 'rakuten', 'label' => '楽天市場API', 'status' => 'skip', 'message' => implode(' / ', $missing) . ' 未入力'];
     } else {
         $r = $rakuten->search('ボールペン', 1);
         if (!is_wp_error($r)) {
