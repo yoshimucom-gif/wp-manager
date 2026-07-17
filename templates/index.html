@@ -2003,6 +2003,31 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.8.0 / rewrite v0.5.3 (2026-07-17) — WP サイドバーメニュー最適化</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: v0.5.2 でプラグイン名を「ポストプロセッサー」に改称したが、WP サイドバーのサブメニューは絵文字有無がバラバラ、順序も昔のリライトプラグイン時代のまま。使用頻度と絵文字の統一で導線を最適化。</li>
+              <li><strong>変更前 → 変更後</strong>:
+                <table style="margin-top:6px;font-size:12px;color:var(--muted);border-collapse:collapse;">
+                  <tr><td style="padding:3px 12px 3px 0;">1</td><td>リライト実行</td><td style="padding:0 10px;color:var(--text)">→</td><td>✏️ 記事整備 <em>(絵文字追加)</em></td></tr>
+                  <tr><td style="padding:3px 12px 3px 0;">2</td><td>⏮ リビジョン復元</td><td style="padding:0 10px;color:var(--text)">→</td><td>📦 重複投稿削除 <em>(頻度順で繰り上げ)</em></td></tr>
+                  <tr><td style="padding:3px 12px 3px 0;">3</td><td>🔧 テーブル修復</td><td style="padding:0 10px;color:var(--text)">→</td><td>⏮ リビジョン復元</td></tr>
+                  <tr><td style="padding:3px 12px 3px 0;">4</td><td>📦 重複投稿削除</td><td style="padding:0 10px;color:var(--text)">→</td><td>🔧 テーブル修復</td></tr>
+                  <tr><td style="padding:3px 12px 3px 0;">5</td><td>設定</td><td style="padding:0 10px;color:var(--text)">→</td><td>⚙️ 設定 <em>(絵文字追加)</em></td></tr>
+                </table>
+              </li>
+              <li><strong>並び順の考え方</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>毎日使う → ✏️ 記事整備（メインの4タブ画面）</li>
+                  <li>時々使う → 📦 重複投稿削除（予約投稿バグ後の掃除等）</li>
+                  <li>稀に使う → ⏮ リビジョン復元 / 🔧 テーブル修復（緊急時のみ）</li>
+                  <li>初期のみ → ⚙️ 設定</li>
+                </ul>
+              </li>
+              <li><strong>バージョン同期</strong>: <code>AFFIROS_REWRITE_VERSION</code> 0.5.2 → 0.5.3 / <code>affiros-rewrite-0.5.3.zip</code> 生成 / <code>PLUGIN_DOWNLOADS['rewrite']</code> 追従 / <code>APP_VERSION</code> 1.7.99 → 1.8.0（マイルストーンなので minor 上げ）。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.99 / rewrite v0.5.2 (2026-07-17) — プラグイン改称: リライター → ポストプロセッサー</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: v0.5.0 の段落整形統合で4機能構成になった結果（リライト / 広告削除&挿入 / 章入れ替え / 段落整形）、「リライター」という名前が実態と乖離。1/4 の機能でしかない「リライト」が名乗ってると、他機能が発見されにくい。</li>
