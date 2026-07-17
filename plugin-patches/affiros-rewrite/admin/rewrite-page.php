@@ -14,9 +14,10 @@ function affiros_rewrite_render_rewrite_page() {
     $tags = Affiros_Rewrite_Post_Fetcher::get_tags();
     ?>
     <div class="wrap affiros-wrap">
-        <h1>Affiros リライター</h1>
+        <h1>Affiros ポストプロセッサー</h1>
         <p class="description">
-            WP_Query で記事を内部取得するため、ホスティングの WAF / 海外IP制限の影響を受けません（403回避）。
+            Affiros9 で生成した記事の後工程を全部やる: <strong>Claude リライト / 広告削除&amp;挿入 / 章入れ替え / 段落整形</strong>。<br>
+            WP_Query で記事を内部取得するため、ホスティングの WAF / 海外 IP 制限の影響を受けません（403 回避）。
         </p>
 
         <!-- v0.4.47: タブナビゲーション（機能ごとに UI を切替） -->

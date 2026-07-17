@@ -2031,6 +2031,22 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.99 / rewrite v0.5.2 (2026-07-17) — プラグイン改称: リライター → ポストプロセッサー</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: v0.5.0 の段落整形統合で4機能構成になった結果（リライト / 広告削除&挿入 / 章入れ替え / 段落整形）、「リライター」という名前が実態と乖離。1/4 の機能でしかない「リライト」が名乗ってると、他機能が発見されにくい。</li>
+              <li><strong>変更</strong>: Plugin Name とメニューラベルを「Affiros リライター」→「<strong>Affiros ポストプロセッサー</strong>」に改称。<code>Post</code>には「WordPress の投稿」と「（生成後の）後処理」のダブルミーニング。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>変更: <code>Plugin Name</code>ヘッダー / WP 管理サイドバーのラベル / rewrite-page.php の h1 / settings-page.php の h1</li>
+                  <li>据置き: ディレクトリ名 <code>affiros-rewrite</code> / メニュースラッグ <code>affiros-rewrite</code> / 定数 <code>AFFIROS_REWRITE_VERSION</code> / 設定オプションキー <code>affiros_rewrite_settings</code>（全部据置きにするため互換性は保たれる）</li>
+                  <li>タブ内の「✍ リライト」は Claude API 呼び出し機能そのものなので、そちらは名称そのまま</li>
+                </ul>
+              </li>
+              <li><strong>期待効果</strong>: 「これリライトプラグインでしょ？」で新機能が見過ごされる状況を解消。今後さらに機能追加（校正・目次生成・内部リンク自動化など）してもプラグイン名の看板に矛盾が出ない</li>
+              <li><strong>バージョン同期</strong>: <code>AFFIROS_REWRITE_VERSION</code> 0.5.1 → 0.5.2 / <code>affiros-rewrite-0.5.2.zip</code> 生成 / 旧 <code>affiros-paragraph-splitter</code> の統合先表記も更新して v1.1.5 / <code>PLUGIN_DOWNLOADS</code> 追従 / <code>APP_VERSION</code> 1.7.98 → 1.7.99。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.98 / rewrite v0.5.1 (2026-07-17) — 🚨 段落整形統合の Fatal error 緊急修正</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>症状</strong>: v0.5.0 導入後、旧 affiros-paragraph-splitter プラグインを有効なままにしていた WP サイトで<strong>白画面 Fatal error</strong>: <code>Cannot redeclare function affiros_psplit_default_settings()</code>。WP 管理画面すら開けなくなる致命的なバグ。</li>

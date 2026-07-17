@@ -26,7 +26,7 @@ if (function_exists('affiros_psplit_default_settings') || defined('AFFIROS_PSPLI
     add_action('admin_notices', function () {
         if (!current_user_can('manage_options')) return;
         echo '<div class="notice notice-warning is-dismissible"><p>'
-            . '<strong>Affiros:</strong> 「Affiros 段落整形」プラグインは Affiros リライター v0.5.0 に統合されました。'
+            . '<strong>Affiros:</strong> 「Affiros 段落整形」プラグインは Affiros ポストプロセッサー (v0.5.0〜) に統合されました。'
             . '<strong>プラグイン一覧で旧「Affiros 段落整形」を無効化・削除</strong>してください。設定と挙動は完全に引き継がれます。'
             . '</p></div>';
     });

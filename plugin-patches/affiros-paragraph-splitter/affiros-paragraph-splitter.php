@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: Affiros 段落整形
- * Description: 【統合済】affiros-rewrite v0.5.0 に統合されました。affiros-rewrite プラグインをインストールしていればこのプラグインは無効化して構いません。
- * Version: 1.1.4
+ * Description: 【統合済】Affiros ポストプロセッサー (v0.5.0〜) に統合されました。affiros-rewrite プラグインをインストールしていればこのプラグインは無効化して構いません。
+ * Version: 1.1.5
  * Author: Affiros
  * License: GPL v2 or later
  */
@@ -17,14 +17,14 @@ if (defined('AFFIROS_PSPLIT_INTEGRATED_LOADED')) {
     add_action('admin_notices', function () {
         if (!current_user_can('manage_options')) return;
         echo '<div class="notice notice-warning is-dismissible"><p>'
-            . '<strong>Affiros 段落整形</strong> は Affiros リライター v0.5.0 に統合されました。'
+            . '<strong>Affiros 段落整形</strong> は Affiros ポストプロセッサー (v0.5.0〜) に統合されました。'
             . 'このプラグインは <strong>無効化・削除して構いません</strong>（機能は統合版でそのまま提供され、設定・データも引き継がれます）。'
             . '</p></div>';
     });
     return;
 }
 
-define('AFFIROS_PSPLIT_VERSION', '1.1.4');
+define('AFFIROS_PSPLIT_VERSION', '1.1.5');
 define('AFFIROS_PSPLIT_OPTION_KEY', 'affiros_psplit_settings');
 
 // 自動更新通知（Affiros9 サーバーから定期チェック）

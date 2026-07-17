@@ -1,8 +1,8 @@
 <?php
 /**
- * Plugin Name: Affiros リライター
- * Description: WordPress記事をClaude APIでリライトする。WP_Queryで内部処理するためホスティングWAFの影響を受けない（403回避）。
- * Version: 0.5.1
+ * Plugin Name: Affiros ポストプロセッサー
+ * Description: Affiros9 で生成した記事の後工程を全部やる統合ツール。Claude API リライト / 商品カード・マーカーの削除&挿入 / H2 章の並び替え / 段落整形。WP_Query 内部処理でホスティング WAF の影響を受けない（403 回避）。
+ * Version: 0.5.2
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-rewrite
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('AFFIROS_REWRITE_VERSION', '0.5.1');
+define('AFFIROS_REWRITE_VERSION', '0.5.2');
 define('AFFIROS_REWRITE_PATH', plugin_dir_path(__FILE__));
 define('AFFIROS_REWRITE_URL', plugin_dir_url(__FILE__));
 
@@ -112,9 +112,12 @@ function affiros_rewrite_get_settings() {
  * 管理メニュー登録
  */
 add_action('admin_menu', function () {
+    // v0.5.2: メニューラベル「Affiros リライト」→「Affiros ポストプロセッサー」に改称。
+    // リライトは4機能の1つ（他: 広告削除&挿入 / 章入れ替え / 段落整形）に降格したので
+    // プラグイン名が実態と乖離していた。ディレクトリ名・スラッグ・定数はそのまま。
     add_menu_page(
-        'Affiros リライト',
-        'Affiros リライト',
+        'Affiros ポストプロセッサー',
+        'Affiros ポストプロセッサー',
         'manage_options',
         'affiros-rewrite',
         'affiros_rewrite_render_rewrite_page',
@@ -123,8 +126,8 @@ add_action('admin_menu', function () {
     );
     add_submenu_page(
         'affiros-rewrite',
-        'リライト実行',
-        'リライト実行',
+        'ポストプロセッサー',
+        '記事整備',
         'manage_options',
         'affiros-rewrite',
         'affiros_rewrite_render_rewrite_page'

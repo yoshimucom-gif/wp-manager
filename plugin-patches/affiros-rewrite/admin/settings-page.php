@@ -94,7 +94,7 @@ function affiros_rewrite_render_settings_page() {
     }
     ?>
     <div class="wrap affiros-wrap">
-        <h1>Affiros リライト 設定</h1>
+        <h1>Affiros ポストプロセッサー 設定</h1>
 
         <?php if (!empty($_GET['saved'])): ?>
             <div class="notice notice-success is-dismissible"><p>設定を保存しました。</p></div>
