@@ -235,7 +235,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.94'
+APP_VERSION = '1.7.95'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -1314,14 +1314,20 @@ def fetch_url_text(url, max_chars=2500, timeout=5):
     return p.text()[:max_chars]
 
 
-# v1.7.89 (2026-07-17): 20220601 は「メンテナンス中」応答を返すようになり
-# 2026-08-17 に廃止予定。安定版の 20260401 に更新。
-# レスポンス形状は formatVersion=2 でほぼ互換。
-RAKUTEN_SEARCH_ENDPOINT = 'https://app.rakuten.co.jp/services/api/IchibaItem/Search/20260401'
+# v1.7.95 (2026-07-17): 楽天 API 全面リニューアル対応
+# - 旧: https://app.rakuten.co.jp/services/api/IchibaItem/Search/20260401
+# - 新: https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20260401
+# - accessKey パラメータ追加（必須）
+# - Origin ヘッダー必須
+# - アプリの再登録が必要（accessKey 取得のため）
+RAKUTEN_SEARCH_ENDPOINT = 'https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20260401'
+RAKUTEN_ORIGIN = 'https://wp-manager.onrender.com'
 
 
-def rakuten_search(query, app_id, affiliate_id=None, limit=20, timeout=8):
+def rakuten_search(query, app_id, affiliate_id=None, access_key=None, limit=20, timeout=8):
     """楽天市場 商品検索 API を叩いて整形済みリストを返す。
+
+    v1.7.95: 新仕様（openapi.rakuten.co.jp）に対応。accessKey が必須になった。
 
     Returns: list[dict] with keys: name, price, url, image_url, shop_name,
              review_count, review_avg, item_caption.
@@ -1331,8 +1337,11 @@ def rakuten_search(query, app_id, affiliate_id=None, limit=20, timeout=8):
         return []
     if not str(app_id or '').strip():
         raise ValueError('楽天アプリケーションIDが未設定です')
+    if not str(access_key or '').strip():
+        raise ValueError('楽天アクセスキーが未設定です（新仕様で必須）')
     params = {
         'applicationId': app_id,
+        'accessKey': access_key,
         'keyword': query.strip(),
         'hits': max(1, min(30, int(limit) if str(limit).isdigit() else 20)),
         'format': 'json',
@@ -1341,7 +1350,8 @@ def rakuten_search(query, app_id, affiliate_id=None, limit=20, timeout=8):
     }
     if affiliate_id:
         params['affiliateId'] = affiliate_id
-    resp = requests.get(RAKUTEN_SEARCH_ENDPOINT, params=params, timeout=timeout)
+    headers = {'Origin': RAKUTEN_ORIGIN}
+    resp = requests.get(RAKUTEN_SEARCH_ENDPOINT, params=params, headers=headers, timeout=timeout)
     resp.raise_for_status()
     payload = resp.json()
     results = []
@@ -4560,8 +4570,9 @@ def fetch_product_context(article, settings, limit=15):
     if not query:
         return [], 'no_query'
 
-    rakuten_app_id = settings.get('rakuten_app_id') or ''
+    rakuten_app_id       = settings.get('rakuten_app_id') or ''
     rakuten_affiliate_id = settings.get('rakuten_affiliate_id') or ''
+    rakuten_access_key   = settings.get('rakuten_access_key') or ''  # v1.7.95: 新仕様で必須
     # v1.7.90: Amazon Creators API 認証（PA-API v5 廃止対応）
     amazon_client_id     = settings.get('amazon_creators_client_id') or ''
     amazon_client_secret = settings.get('amazon_creators_client_secret') or ''
@@ -4569,7 +4580,7 @@ def fetch_product_context(article, settings, limit=15):
     amazon_marketplace   = settings.get('amazon_marketplace') or AMAZON_MARKETPLACE_DEFAULT
 
     amazon_configured = bool(amazon_client_id and amazon_client_secret and amazon_partner_tag)
-    rakuten_configured = bool(rakuten_app_id)
+    rakuten_configured = bool(rakuten_app_id and rakuten_access_key)  # v1.7.95: accessKey も必須
 
     if not (amazon_configured or rakuten_configured):
         return [], 'no_provider'
@@ -4588,7 +4599,8 @@ def fetch_product_context(article, settings, limit=15):
     # フォールバック: Amazon設定無し or 検索結果ゼロの時だけ楽天を使う
     if rakuten_configured:
         try:
-            rakuten_items = rakuten_search(query, rakuten_app_id, rakuten_affiliate_id, limit=limit)
+            rakuten_items = rakuten_search(query, rakuten_app_id, rakuten_affiliate_id,
+                                           access_key=rakuten_access_key, limit=limit)
             if rakuten_items:
                 return [{'rakuten': item, 'amazon': None} for item in rakuten_items], 'ok'
         except Exception as e:
@@ -6407,9 +6419,9 @@ def favicon():
 PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugin-downloads')
 PLUGIN_DOWNLOADS = {
     'product-inserter': {
-        'file': 'affiros-product-inserter-1.9.30.zip',
+        'file': 'affiros-product-inserter-1.9.31.zip',
         'name': 'Affiros プロダクトインサーター',
-        'version': '1.9.30',
+        'version': '1.9.31',
     },
     'decoration': {
         'file': 'affiros-decoration-1.2.3.zip',
@@ -9888,6 +9900,7 @@ def get_settings():
         'amazon_secret_key': mask_secret(settings.get('amazon_secret_key', ''), 10),
         'amazon_partner_tag': settings.get('amazon_partner_tag', ''),
         'rakuten_app_id': mask_secret(settings.get('rakuten_app_id', ''), 10),
+        'rakuten_access_key': mask_secret(settings.get('rakuten_access_key', ''), 10),  # v1.7.95: 新仕様で必須
         'rakuten_affiliate_id': settings.get('rakuten_affiliate_id', ''),
     }
     return jsonify(safe)
@@ -9899,6 +9912,7 @@ REVEALABLE_SECRETS = (
     'amazon_creators_client_id', 'amazon_creators_client_secret',  # v1.7.90 Creators API
     'amazon_access_key', 'amazon_secret_key',                       # 旧 PA-API（互換）
     'rakuten_app_id',
+    'rakuten_access_key',  # v1.7.95 新仕様
 )
 
 
@@ -9945,7 +9959,7 @@ def update_settings():
     # v1.7.90: Creators API 認証を追加
     for key in ('amazon_access_key', 'amazon_secret_key',
                 'amazon_creators_client_id', 'amazon_creators_client_secret',
-                'rakuten_app_id'):
+                'rakuten_app_id', 'rakuten_access_key'):  # v1.7.95: 楽天 accessKey 追加
         if data.get(key) and not is_masked_value(data[key]):
             settings[key] = data[key].strip()
         elif data.get(key) == '':
@@ -10129,14 +10143,20 @@ def search_products():
     settings = load_settings()
     result = {'success': True, 'query': query, 'rakuten': [], 'amazon': [], 'errors': {}}
     if provider in ('rakuten', 'both'):
-        rakuten_app_id = settings.get('rakuten_app_id') or ''
-        if rakuten_app_id:
+        rakuten_app_id     = settings.get('rakuten_app_id') or ''
+        rakuten_access_key = settings.get('rakuten_access_key') or ''  # v1.7.95: 新仕様で必須
+        if rakuten_app_id and rakuten_access_key:
             try:
-                result['rakuten'] = rakuten_search(query, rakuten_app_id, settings.get('rakuten_affiliate_id') or '', limit=limit)
+                result['rakuten'] = rakuten_search(
+                    query, rakuten_app_id,
+                    settings.get('rakuten_affiliate_id') or '',
+                    access_key=rakuten_access_key,
+                    limit=limit,
+                )
             except Exception as e:
                 result['errors']['rakuten'] = str(e)[:200]
         elif provider == 'rakuten':
-            return jsonify({'error': '楽天アプリケーションIDが未設定です'}), 400
+            return jsonify({'error': '楽天アプリケーションID または アクセスキーが未設定です（新仕様で両方必須）'}), 400
     if provider in ('amazon', 'both'):
         # v1.7.90: Amazon Creators API 認証（PA-API v5 廃止対応）
         amazon_client_id     = settings.get('amazon_creators_client_id') or ''

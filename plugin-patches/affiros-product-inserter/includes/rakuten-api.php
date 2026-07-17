@@ -1,7 +1,20 @@
 <?php
 /**
- * 楽天市場API連携（IchibaItem Search API）
- * https://webservice.rakuten.co.jp/documentation/ichiba-item-search
+ * 楽天市場API連携（IchibaItem Search API - 新エンドポイント v1.9.31）
+ *
+ * v1.9.31 (2026-07-17): 楽天が 2026-05-14 に旧エンドポイントを廃止したため
+ * 全面移行。旧: app.rakuten.co.jp/services/api/IchibaItem/Search/20220601
+ * 新: openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20260401
+ *
+ * 変更点:
+ * - ドメイン変更: app.rakuten.co.jp → openapi.rakuten.co.jp
+ * - パス変更: /services/api/ → /ichibams/api/
+ * - バージョン: 20220601 → 20260401
+ * - 認証: applicationId のみ → applicationId + accessKey（両方必須）
+ * - Origin ヘッダー必須
+ *
+ * 認証情報の取得: https://webservice.rakuten.co.jp/app/create
+ * にて楽天アプリを再登録（旧アプリのままだと accessKey が発行されない）
  */
 
 if (!defined('ABSPATH')) exit;
@@ -9,13 +22,15 @@ if (!defined('ABSPATH')) exit;
 class AI_PI_Rakuten_API {
 
     private $app_id;
+    private $access_key;   // v1.9.31 新仕様で必須
     private $affiliate_id;
-    // v1.9.28 (2026-07-17): 20220601 は「メンテナンス中」応答を返すようになり
-    // 2026-08-17 に廃止予定。安定版の 20260401 に更新。
-    // レスポンス形状は formatVersion=2 でほぼ互換だが、
-    // parse_search_results 側で互換性維持のため itemName/itemPrice 等の
-    // 従来キーを引き続き参照している。
-    private $api_url = 'https://app.rakuten.co.jp/services/api/IchibaItem/Search/20260401';
+
+    // v1.9.31: 新エンドポイント
+    private $api_url = 'https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20260401';
+
+    // Origin ヘッダー（新エンドポイントで必須）
+    // WordPress サイト自身の origin を使う
+    private $origin;
 
     /**
      * @param array|null $config 指定時はこの配列を設定値として使う（接続テスト用）。
@@ -23,12 +38,19 @@ class AI_PI_Rakuten_API {
      */
     public function __construct($config = null) {
         $settings = is_array($config) ? $config : get_option('ai_pi_settings', []);
-        $this->app_id = $settings['rakuten_app_id'] ?? '';
+        $this->app_id       = $settings['rakuten_app_id']       ?? '';
+        $this->access_key   = $settings['rakuten_access_key']   ?? '';
         $this->affiliate_id = $settings['rakuten_affiliate_id'] ?? '';
+
+        // Origin はサイト URL の scheme+host
+        $site_url = get_site_url();
+        $parsed = wp_parse_url($site_url);
+        $this->origin = ($parsed['scheme'] ?? 'https') . '://' . ($parsed['host'] ?? 'example.com');
     }
 
     public function is_configured() {
-        return !empty($this->app_id);
+        // v1.9.31: accessKey も必須
+        return !empty($this->app_id) && !empty($this->access_key);
     }
 
     /**
@@ -36,17 +58,21 @@ class AI_PI_Rakuten_API {
      */
     public function search($keyword, $hits = 10) {
         if (!$this->is_configured()) {
-            return new WP_Error('not_configured', '楽天市場APIが未設定');
+            return new WP_Error(
+                'not_configured',
+                '楽天市場APIが未設定（applicationId と accessKey の両方が必要 - v1.9.31 新仕様）'
+            );
         }
 
         $params = [
             'applicationId' => $this->app_id,
-            'keyword' => $keyword,
-            'hits' => min($hits, 30),
-            'sort' => '-reviewAverage', // レビュー高評価順
-            'imageFlag' => 1, // 画像ありのみ
-            'availability' => 1, // 在庫ありのみ
-            'format' => 'json',
+            'accessKey'     => $this->access_key,  // v1.9.31 新仕様で必須
+            'keyword'       => $keyword,
+            'hits'          => min($hits, 30),
+            'sort'          => '-reviewAverage',   // レビュー高評価順
+            'imageFlag'     => 1,                   // 画像ありのみ
+            'availability'  => 1,                   // 在庫ありのみ
+            'format'        => 'json',
             'formatVersion' => 2,
         ];
 
@@ -58,6 +84,10 @@ class AI_PI_Rakuten_API {
 
         $response = wp_remote_get($url, [
             'timeout' => 30,
+            'headers' => [
+                'Origin' => $this->origin,  // v1.9.31: 必須
+                'Accept' => 'application/json',
+            ],
         ]);
 
         if (is_wp_error($response)) return $response;
@@ -67,7 +97,9 @@ class AI_PI_Rakuten_API {
         $data = json_decode($body, true);
 
         if ($code !== 200) {
-            $msg = $data['error_description'] ?? "楽天APIエラー (HTTP {$code})";
+            $msg = $data['error_description']
+                ?? $data['error']
+                ?? "楽天APIエラー (HTTP {$code})";
             return new WP_Error('rakuten_api_error', $msg);
         }
 
@@ -92,7 +124,6 @@ class AI_PI_Rakuten_API {
                 ?? $item['mediumImageUrls'][0]
                 ?? '';
 
-            // 画像URLのサイズ調整（_ex=128x128 → _ex=300x300）
             if (is_string($image)) {
                 $image = preg_replace('/_ex=\d+x\d+/', '_ex=300x300', $image);
             } else {
@@ -120,5 +151,12 @@ class AI_PI_Rakuten_API {
         }
 
         return $products;
+    }
+
+    /**
+     * 接続テスト用
+     */
+    public function test_connection() {
+        return $this->search('テスト', 1);
     }
 }

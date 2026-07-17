@@ -38,8 +38,10 @@ function ai_pi_sanitize_settings($input) {
     $output['amazon_creators_client_id']     = sanitize_text_field($input['amazon_creators_client_id']     ?? ($existing['amazon_creators_client_id']     ?? ''));
     $output['amazon_creators_client_secret'] = sanitize_text_field($input['amazon_creators_client_secret'] ?? ($existing['amazon_creators_client_secret'] ?? ''));
     $output['amazon_marketplace']            = sanitize_text_field($input['amazon_marketplace']            ?? ($existing['amazon_marketplace']            ?? 'www.amazon.co.jp'));
-    $output['rakuten_app_id']      = sanitize_text_field($input['rakuten_app_id'] ?? ($existing['rakuten_app_id'] ?? ''));
-    $output['rakuten_affiliate_id']= sanitize_text_field($input['rakuten_affiliate_id'] ?? ($existing['rakuten_affiliate_id'] ?? ''));
+    $output['rakuten_app_id']       = sanitize_text_field($input['rakuten_app_id']       ?? ($existing['rakuten_app_id']       ?? ''));
+    // v1.9.31: 楽天が 2026-05 に新エンドポイントへ移行。accessKey が必須になった
+    $output['rakuten_access_key']   = sanitize_text_field($input['rakuten_access_key']   ?? ($existing['rakuten_access_key']   ?? ''));
+    $output['rakuten_affiliate_id'] = sanitize_text_field($input['rakuten_affiliate_id'] ?? ($existing['rakuten_affiliate_id'] ?? ''));
 
     // 運用調整値（UIで編集可）
     $output['candidates_per_keyword'] = max(5, min(30, intval($input['candidates_per_keyword'] ?? ($existing['candidates_per_keyword'] ?? 10))));
@@ -162,10 +164,33 @@ function ai_pi_render_settings_page() {
                     </th>
                 </tr>
                 <tr>
+                    <th colspan="2" style="padding:16px 0 4px;">
+                        <div style="background:#fff3e0;border-left:4px solid #d97706;padding:10px 14px;font-size:13px;color:#000;">
+                            <strong>楽天市場API（v1.9.31 新エンドポイント）</strong><br>
+                            2026-05-14 に旧エンドポイント（<code>app.rakuten.co.jp</code>）は廃止されました。<br>
+                            新エンドポイント（<code>openapi.rakuten.co.jp/ichibams/</code>）では <strong>アプリID + アクセスキー</strong>の両方が必須です。<br>
+                            <a href="https://webservice.rakuten.co.jp/app/create" target="_blank" rel="noopener">楽天ウェブサービス</a> でアプリを再登録して両方取得してください。
+                        </div>
+                    </th>
+                </tr>
+                <tr>
                     <th><label>楽天 アプリID</label></th>
                     <td>
-                        <input type="text" name="ai_pi_settings[rakuten_app_id]" value="<?php echo esc_attr($settings['rakuten_app_id'] ?? ''); ?>" class="regular-text">
+                        <span class="ai-pi-secret-wrap">
+                            <input type="password" name="ai_pi_settings[rakuten_app_id]" value="<?php echo esc_attr($settings['rakuten_app_id'] ?? ''); ?>" class="regular-text ai-pi-secret" autocomplete="off">
+                            <button type="button" class="button ai-pi-secret-toggle">表示</button>
+                        </span>
                         <p class="description"><a href="https://webservice.rakuten.co.jp/" target="_blank">楽天ウェブサービス</a>で取得</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label>楽天 アクセスキー</label></th>
+                    <td>
+                        <span class="ai-pi-secret-wrap">
+                            <input type="password" name="ai_pi_settings[rakuten_access_key]" value="<?php echo esc_attr($settings['rakuten_access_key'] ?? ''); ?>" class="regular-text ai-pi-secret" autocomplete="off">
+                            <button type="button" class="button ai-pi-secret-toggle">表示</button>
+                        </span>
+                        <p class="description"><strong>v1.9.31 新仕様で必須</strong>。アプリを再登録すると発行される</p>
                     </td>
                 </tr>
                 <tr>

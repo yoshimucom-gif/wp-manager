@@ -1688,14 +1688,27 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             </details>
           </div>
           <div class="settings-section">
-            <div class="section-header">// 楽天市場API（フォールバック）</div>
-            <div class="form-help" style="margin-bottom:8px">楽天ウェブサービスの商品検索用。Amazonが未設定 or 検索失敗時のフォールバックとして使用。アフィリエイトIDを併設すると参照リンクが自動でアフィリエイト化されます。</div>
+            <div class="section-header">// 楽天市場API（v1.7.95 新仕様 / 2026-05-14〜）</div>
+            <div class="form-help" style="margin-bottom:8px">
+              <strong style="color:#ef6262">旧 app.rakuten.co.jp は 2026-05-14 に廃止済み</strong>。<br>
+              新エンドポイント <code>openapi.rakuten.co.jp/ichibams/api/</code> では <strong>アプリケーションID + アクセスキー</strong>の両方が必須です。<br>
+              <a href="https://webservice.rakuten.co.jp/app/create" target="_blank" rel="noopener">楽天ウェブサービス</a> でアプリを再登録して両方取得してください。<br>
+              Amazon が未設定 or 検索失敗時のフォールバックとして使用。
+            </div>
             <div class="form-group">
               <label class="form-label">アプリケーションID</label>
               <div style="position:relative">
                 <input type="password" id="s-rakuten-app-id" class="form-control" autocomplete="off" style="padding-right:62px" data-secret-field="rakuten_app_id">
                 <button type="button" onclick="toggleKeyVisibility(this)" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.12);border:none;color:var(--muted);font-size:11px;padding:4px 9px;border-radius:4px;cursor:pointer">表示</button>
               </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">アクセスキー（v1.7.95 新仕様で必須）</label>
+              <div style="position:relative">
+                <input type="password" id="s-rakuten-access-key" class="form-control" autocomplete="off" style="padding-right:62px" data-secret-field="rakuten_access_key">
+                <button type="button" onclick="toggleKeyVisibility(this)" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.12);border:none;color:var(--muted);font-size:11px;padding:4px 9px;border-radius:4px;cursor:pointer">表示</button>
+              </div>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">楽天ウェブサービスの新仕様（2026-05〜）で追加された認証キー</div>
             </div>
             <div class="form-group">
               <label class="form-label">アフィリエイトID（任意）</label>
@@ -2014,6 +2027,47 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
               <li><strong>取り消し機能</strong>: 実行前の <code>post_date</code> / <code>post_status</code> を投稿メタに退避し、「直前の実行を取り消す」ボタンで丸ごと復元（下書きは下書きに戻る）。取り消せるのは直近1回分のみ。</li>
               <li><strong>誤記修正</strong>: v1.0.0 の画面に「リビジョンから元の予約日時に戻せる」とあったが、WP のリビジョンは <code>post_title</code> / <code>post_content</code> / <code>post_excerpt</code> しか復元せず <code>post_date</code> と <code>post_status</code> は戻らない。この虚偽の説明を削除し、実際に戻せる取り消し機能に置き換えた。</li>
               <li><strong>修正</strong>: 実行時に対象記事が削除済みだと <code>$p-&gt;post_status</code> を null に対して読んでいた箇所をガード。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
+            <div class="section-header">// v1.7.95 / inserter v1.9.31 (2026-07-17) — 楽天 API 全面リニューアル対応（openapi.rakuten.co.jp 移行）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>症状</strong>: v1.7.89 でバージョンを <code>20260401</code> に上げたが、なお HTTP 400（"Bad Request"）が返る状態。UI から楽天 API 経由の商品検索が全滅。</li>
+              <li><strong>真因</strong>: 楽天ウェブサービスは 2026-05-14 に <strong>ドメイン・パス・認証方式まるごとリニューアル</strong>。バージョン番号だけ上げても旧ドメインでは処理されない。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>旧: <code>https://app.rakuten.co.jp/services/api/IchibaItem/Search/20220601</code></li>
+                  <li>新: <code>https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20260401</code></li>
+                  <li>認証: <code>applicationId</code> のみ → <strong><code>applicationId</code> + <code>accessKey</code>（両方必須）</strong></li>
+                  <li>ヘッダー: <code>Origin</code> ヘッダー必須</li>
+                </ul>
+              </li>
+              <li><strong>本体（app.py）の変更</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>RAKUTEN_SEARCH_ENDPOINT</code> を新ドメイン + 新パスに更新</li>
+                  <li><code>RAKUTEN_ORIGIN</code> 定数を追加（<code>Origin</code> ヘッダー用）</li>
+                  <li><code>rakuten_search()</code> シグネチャに <code>access_key</code> 引数を追加（未設定なら <code>ValueError</code>）</li>
+                  <li>設定 API に <code>rakuten_access_key</code> フィールドを追加（マスク・「表示」ボタン対応・秘匿更新ルート追加）</li>
+                  <li><code>rakuten_configured = bool(rakuten_app_id and rakuten_access_key)</code> — 両方揃わないと発動しない</li>
+                </ul>
+              </li>
+              <li><strong>プラグイン（product-inserter v1.9.31）の変更</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>AI_PI_Rakuten_API</code>: エンドポイント、<code>accessKey</code> 送信、<code>Origin</code> ヘッダーを追加</li>
+                  <li>設定画面に「楽天 アクセスキー」入力欄追加（旧「アプリID」の直後）</li>
+                  <li><code>is_configured()</code> は <code>app_id</code> と <code>access_key</code> の両方チェックに強化</li>
+                </ul>
+              </li>
+              <li><strong>UI 更新（Affiros9 API 設定タブ）</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>楽天セクションに「新エンドポイント / accessKey 必須 / アプリ再登録が必要」のアラート追加</li>
+                  <li>「アクセスキー」入力欄（password 型 + 表示トグル）追加</li>
+                  <li><code>collectSettingsFormData()</code> / <code>loadSettings()</code> に <code>rakuten_access_key</code> 反映</li>
+                </ul>
+              </li>
+              <li><strong>吉村さんが行うこと</strong>: <a href="https://webservice.rakuten.co.jp/app/create" target="_blank" rel="noopener">楽天ウェブサービス</a> で楽天アプリを再登録し、新しく発行される <strong>アクセスキー</strong>を Affiros9 の設定画面に貼り付け。旧アプリのままでは accessKey が取得できないので新規登録が必要。</li>
+              <li><strong>既存の商品カード（静的HTML）は影響なし</strong>: 既に投稿済みの商品カードは表示そのまま。新規挿入・再挿入だけが新エンドポイント経由になる。</li>
+              <li><strong>バージョン同期</strong>: <code>AI_PI_VERSION</code> 1.9.30 → 1.9.31 / <code>affiros-product-inserter-1.9.31.zip</code> 生成 / <code>PLUGIN_DOWNLOADS['product-inserter']</code> 追従 / <code>APP_VERSION</code> 1.7.94 → 1.7.95。</li>
             </ul>
           </div>
 
@@ -7897,6 +7951,7 @@ function collectSettingsFormData() {
     amazon_secret_key: document.getElementById('s-amazon-secret-key').value,
     amazon_partner_tag: document.getElementById('s-amazon-partner-tag').value,
     rakuten_app_id: document.getElementById('s-rakuten-app-id').value,
+    rakuten_access_key: document.getElementById('s-rakuten-access-key').value,  // v1.7.95 新仕様
     rakuten_affiliate_id: document.getElementById('s-rakuten-affiliate-id').value,
   };
 }
@@ -8117,6 +8172,7 @@ async function loadSettings() {
   document.getElementById('s-amazon-secret-key').value = s.amazon_secret_key || '';
   document.getElementById('s-amazon-partner-tag').value = s.amazon_partner_tag || '';
   document.getElementById('s-rakuten-app-id').value = s.rakuten_app_id || '';
+  document.getElementById('s-rakuten-access-key').value = s.rakuten_access_key || '';  // v1.7.95 新仕様
   document.getElementById('s-rakuten-affiliate-id').value = s.rakuten_affiliate_id || '';
   // 秘匿フィールドは再読み込み時に「隠す」状態へ戻す（表示中だった欄の取り残しを防ぐ）
   document.querySelectorAll('input[data-secret-field]').forEach(inp => {
