@@ -1,19 +1,37 @@
 <?php
 /**
- * Amazon PA-API v5 連携
- * https://webservices.amazon.co.jp/paapi5/
+ * Amazon Creators API 連携（v3.x LWA OAuth 2.0）
+ *
+ * v1.9.29 (2026-07-17): Amazon が PA-API v5 を完全終了したため Creators API に移行。
+ * - 認証: AWS Signature V4 → OAuth 2.0 (Login with Amazon)
+ * - トークンエンドポイント: https://api.amazon.com/auth/o2/token
+ * - API エンドポイント: https://creatorsapi.amazon/catalog/v1/
+ * - レスポンス形式: PascalCase → lowerCamelCase
+ *
+ * 認証情報の取得: Amazon Associates Central → Tools → Creators API
+ * 要件: アソシエイト承認済 + 直近30日で 10 件以上の適格売上
+ *
+ * 旧 access_key / secret_key の設定は廃止（削除はしないが使わない）。
+ * 新設定: client_id / client_secret / marketplace（既定 www.amazon.co.jp）
  */
 
 if (!defined('ABSPATH')) exit;
 
 class AI_PI_Amazon_API {
 
-    private $access_key;
-    private $secret_key;
+    private $client_id;
+    private $client_secret;
     private $partner_tag;
-    private $host = 'webservices.amazon.co.jp';
-    private $region = 'us-west-2';
-    private $marketplace = 'www.amazon.co.jp';
+    private $marketplace;
+
+    // v1.9.29: エンドポイント
+    const TOKEN_URL   = 'https://api.amazon.com/auth/o2/token';
+    const API_HOST    = 'creatorsapi.amazon';
+    const API_BASE    = 'https://creatorsapi.amazon/catalog/v1';
+    const OAUTH_SCOPE = 'creatorsapi::default';
+
+    // トークンキャッシュ用 transient キー
+    const TOKEN_CACHE_KEY = 'ai_pi_amazon_creators_token';
 
     /**
      * @param array|null $config 指定時はこの配列を設定値として使う（接続テスト用）。
@@ -21,205 +39,176 @@ class AI_PI_Amazon_API {
      */
     public function __construct($config = null) {
         $settings = is_array($config) ? $config : get_option('ai_pi_settings', []);
-        $this->access_key = $settings['amazon_access_key'] ?? '';
-        $this->secret_key = $settings['amazon_secret_key'] ?? '';
-        $this->partner_tag = $settings['amazon_partner_tag'] ?? '';
+        $this->client_id     = $settings['amazon_creators_client_id']     ?? '';
+        $this->client_secret = $settings['amazon_creators_client_secret'] ?? '';
+        $this->partner_tag   = $settings['amazon_partner_tag']            ?? '';
+        $this->marketplace   = $settings['amazon_marketplace']            ?? 'www.amazon.co.jp';
     }
 
     public function is_configured() {
-        return !empty($this->access_key) && !empty($this->secret_key) && !empty($this->partner_tag);
+        return !empty($this->client_id)
+            && !empty($this->client_secret)
+            && !empty($this->partner_tag);
     }
 
     /**
-     * キーワード検索
+     * OAuth 2.0 access_token を取得（キャッシュ有）
+     * @return string|WP_Error
      */
-    public function search($keyword, $item_count = 10) {
-        if (!$this->is_configured()) {
-            return new WP_Error('not_configured', 'Amazon PA-APIが未設定');
+    private function get_access_token() {
+        // 接続テスト等で config を渡した場合はキャッシュ無視で新規取得
+        // （通常運用はキャッシュ利用）
+        $cached = get_transient(self::TOKEN_CACHE_KEY);
+        if (!empty($cached) && is_string($cached)) {
+            return $cached;
         }
 
-        // CustomerReviews は 2020 年以降ほとんどのアカウントで制限されており、
-        // 含めると Offers ごとレスポンスから消える既知バグがあるため除外する。
-        $payload = [
-            'Keywords' => $keyword,
-            'Resources' => [
-                'Images.Primary.Large',
-                'Images.Primary.Medium',
-                'ItemInfo.Title',
-                'ItemInfo.ByLineInfo',
-                'ItemInfo.Features',
-                'Offers.Listings.Price',
-                'Offers.Listings.SavingBasis',
-                'Offers.Listings.Availability.Message',
-                'Offers.Summaries.LowestPrice',
-                'Offers.Summaries.OfferCount',
+        $body = wp_json_encode([
+            'grant_type'    => 'client_credentials',
+            'client_id'     => $this->client_id,
+            'client_secret' => $this->client_secret,
+            'scope'         => self::OAUTH_SCOPE,
+        ]);
+
+        $response = wp_remote_post(self::TOKEN_URL, [
+            'timeout' => 15,
+            'headers' => [
+                'Content-Type' => 'application/json',
+                'Accept'       => 'application/json',
             ],
-            'PartnerTag' => $this->partner_tag,
-            'PartnerType' => 'Associates',
-            'Marketplace' => $this->marketplace,
-            'ItemCount' => min($item_count, 10),
-        ];
-
-        $result = $this->call_api('SearchItems', $payload);
-        if (is_wp_error($result)) return $result;
-
-        // デバッグ: 最初の商品の生レスポンスを保存（設定画面で表示用）
-        $first_item = $result['SearchResult']['Items'][0] ?? null;
-        if ($first_item) {
-            set_transient('ai_pi_last_amazon_raw_sample', [
-                'keyword' => $keyword,
-                'asin' => $first_item['ASIN'] ?? '',
-                'has_offers' => isset($first_item['Offers']),
-                'has_listings' => isset($first_item['Offers']['Listings']),
-                'has_summaries' => isset($first_item['Offers']['Summaries']),
-                'has_reviews' => isset($first_item['CustomerReviews']),
-                'raw_first_item' => wp_json_encode($first_item, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT),
-                'fetched_at' => current_time('mysql'),
-            ], 30 * MINUTE_IN_SECONDS);
-        }
-
-        return $this->parse_search_results($result);
-    }
-
-    /**
-     * ASIN直接取得
-     */
-    public function get_items($asins) {
-        if (!$this->is_configured()) {
-            return new WP_Error('not_configured', 'Amazon PA-APIが未設定');
-        }
-
-        $asins = is_array($asins) ? $asins : [$asins];
-        $asins = array_slice($asins, 0, 10);
-
-        // CustomerReviews は制限により Offers を巻き込んで消えるため除外
-        $payload = [
-            'ItemIds' => $asins,
-            'Resources' => [
-                'Images.Primary.Large',
-                'ItemInfo.Title',
-                'ItemInfo.ByLineInfo',
-                'Offers.Listings.Price',
-                'Offers.Summaries.LowestPrice',
-            ],
-            'PartnerTag' => $this->partner_tag,
-            'PartnerType' => 'Associates',
-            'Marketplace' => $this->marketplace,
-        ];
-
-        $result = $this->call_api('GetItems', $payload);
-        if (is_wp_error($result)) return $result;
-
-        return $this->parse_search_results($result);
-    }
-
-    /**
-     * PA-API v5を呼び出し（AWS Signature V4）
-     */
-    private function call_api($operation, $payload) {
-        $path = '/paapi5/' . strtolower($operation);
-        $target = "com.amazon.paapi5.v1.ProductAdvertisingAPIv1." . $operation;
-
-        $payload_json = wp_json_encode($payload);
-        $now = gmdate('Ymd\THis\Z');
-        $today = gmdate('Ymd');
-
-        $headers = [
-            'host' => $this->host,
-            'content-type' => 'application/json; charset=utf-8',
-            'x-amz-date' => $now,
-            'x-amz-target' => $target,
-            'content-encoding' => 'amz-1.0',
-        ];
-
-        // Canonical request
-        ksort($headers);
-        $canonical_headers = '';
-        $signed_headers_list = [];
-        foreach ($headers as $k => $v) {
-            $canonical_headers .= $k . ':' . $v . "\n";
-            $signed_headers_list[] = $k;
-        }
-        $signed_headers = implode(';', $signed_headers_list);
-
-        $payload_hash = hash('sha256', $payload_json);
-        $canonical_request = "POST\n{$path}\n\n{$canonical_headers}\n{$signed_headers}\n{$payload_hash}";
-
-        // String to sign
-        $credential_scope = "{$today}/{$this->region}/ProductAdvertisingAPI/aws4_request";
-        $string_to_sign = "AWS4-HMAC-SHA256\n{$now}\n{$credential_scope}\n" . hash('sha256', $canonical_request);
-
-        // Signature
-        $k_date = hash_hmac('sha256', $today, 'AWS4' . $this->secret_key, true);
-        $k_region = hash_hmac('sha256', $this->region, $k_date, true);
-        $k_service = hash_hmac('sha256', 'ProductAdvertisingAPI', $k_region, true);
-        $k_signing = hash_hmac('sha256', 'aws4_request', $k_service, true);
-        $signature = hash_hmac('sha256', $string_to_sign, $k_signing);
-
-        $authorization = "AWS4-HMAC-SHA256 Credential={$this->access_key}/{$credential_scope}, SignedHeaders={$signed_headers}, Signature={$signature}";
-
-        $request_headers = [
-            'Host' => $this->host,
-            'Content-Type' => 'application/json; charset=utf-8',
-            'X-Amz-Date' => $now,
-            'X-Amz-Target' => $target,
-            'Content-Encoding' => 'amz-1.0',
-            'Authorization' => $authorization,
-        ];
-
-        $response = wp_remote_post('https://' . $this->host . $path, [
-            'timeout' => 30,
-            'headers' => $request_headers,
-            'body' => $payload_json,
+            'body' => $body,
         ]);
 
         if (is_wp_error($response)) return $response;
 
         $code = wp_remote_retrieve_response_code($response);
-        $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
+        $raw  = wp_remote_retrieve_body($response);
+        $data = json_decode($raw, true);
 
-        if ($code !== 200) {
-            $msg = $data['Errors'][0]['Message'] ?? "Amazon PA-APIエラー (HTTP {$code})";
-            return new WP_Error('amazon_api_error', $msg);
+        if ($code !== 200 || empty($data['access_token'])) {
+            $msg = $data['error_description']
+                ?? ($data['error'] ?? "Amazon OAuth トークン取得失敗 (HTTP {$code})");
+            return new WP_Error('amazon_oauth_error', $msg);
         }
 
-        return $data;
+        // expires_in - 60秒 バッファでキャッシュ（デフォルト 3600 秒）
+        $expires_in = intval($data['expires_in'] ?? 3600);
+        $ttl = max(60, $expires_in - 60);
+        set_transient(self::TOKEN_CACHE_KEY, $data['access_token'], $ttl);
+
+        return $data['access_token'];
     }
 
     /**
-     * レスポンス解析
+     * キーワード検索（Creators API SearchItems）
+     */
+    public function search($keyword, $item_count = 10) {
+        if (!$this->is_configured()) {
+            return new WP_Error('not_configured', 'Amazon Creators API が未設定（Client ID / Client Secret / Partner Tag）');
+        }
+
+        $token = $this->get_access_token();
+        if (is_wp_error($token)) return $token;
+
+        // Creators API リクエスト（lowerCamelCase）
+        $payload = [
+            'keywords'    => (string)$keyword,
+            'searchIndex' => 'All',
+            'itemCount'   => min(10, max(1, intval($item_count))),
+            'partnerTag'  => $this->partner_tag,
+            'partnerType' => 'Associates',
+            'resources'   => [
+                'images.primary.large',
+                'images.primary.medium',
+                'itemInfo.title',
+                'itemInfo.byLineInfo',
+                'itemInfo.features',
+                'offers.listings.price',
+                'offers.summaries.lowestPrice',
+            ],
+        ];
+
+        $response = wp_remote_post(self::API_BASE . '/searchItems', [
+            'timeout' => 30,
+            'headers' => [
+                'Authorization' => 'Bearer ' . $token,
+                'Content-Type'  => 'application/json',
+                'Accept'        => 'application/json',
+                'x-marketplace' => $this->marketplace,
+            ],
+            'body' => wp_json_encode($payload),
+        ]);
+
+        if (is_wp_error($response)) return $response;
+
+        $code = wp_remote_retrieve_response_code($response);
+        $raw  = wp_remote_retrieve_body($response);
+        $data = json_decode($raw, true);
+
+        // 401 の時はキャッシュされたトークンが失効した可能性 → 一度だけリトライ
+        if ($code === 401) {
+            delete_transient(self::TOKEN_CACHE_KEY);
+            $token2 = $this->get_access_token();
+            if (is_wp_error($token2)) return $token2;
+            $response = wp_remote_post(self::API_BASE . '/searchItems', [
+                'timeout' => 30,
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $token2,
+                    'Content-Type'  => 'application/json',
+                    'Accept'        => 'application/json',
+                    'x-marketplace' => $this->marketplace,
+                ],
+                'body' => wp_json_encode($payload),
+            ]);
+            if (is_wp_error($response)) return $response;
+            $code = wp_remote_retrieve_response_code($response);
+            $raw  = wp_remote_retrieve_body($response);
+            $data = json_decode($raw, true);
+        }
+
+        if ($code !== 200) {
+            $msg = $data['errors'][0]['message']
+                ?? $data['message']
+                ?? "Amazon Creators API エラー (HTTP {$code})";
+            return new WP_Error('amazon_api_error', $msg);
+        }
+
+        return $this->parse_search_results($data);
+    }
+
+    /**
+     * レスポンス解析（Creators API は lowerCamelCase）
      */
     private function parse_search_results($data) {
-        $items = $data['SearchResult']['Items'] ?? $data['ItemsResult']['Items'] ?? [];
+        $items = $data['searchResult']['items'] ?? $data['itemsResult']['items'] ?? [];
         $products = [];
 
         foreach ($items as $item) {
-            $asin = $item['ASIN'] ?? '';
+            $asin = $item['asin'] ?? '';
             if (empty($asin)) continue;
 
-            $title = $item['ItemInfo']['Title']['DisplayValue'] ?? '';
-            $brand = $item['ItemInfo']['ByLineInfo']['Brand']['DisplayValue']
-                ?? $item['ItemInfo']['ByLineInfo']['Manufacturer']['DisplayValue']
+            $title = $item['itemInfo']['title']['displayValue'] ?? '';
+            $brand = $item['itemInfo']['byLineInfo']['brand']['displayValue']
+                ?? $item['itemInfo']['byLineInfo']['manufacturer']['displayValue']
                 ?? '';
-            // 価格抽出: Listings → Summaries → SavingBasis の順にフォールバック
+
             $price_amount = 0;
             $price_display = '';
-            if (!empty($item['Offers']['Listings'][0]['Price']['Amount'])) {
-                $price_amount = $item['Offers']['Listings'][0]['Price']['Amount'];
-                $price_display = $item['Offers']['Listings'][0]['Price']['DisplayAmount'] ?? '';
-            } elseif (!empty($item['Offers']['Summaries'][0]['LowestPrice']['Amount'])) {
-                $price_amount = $item['Offers']['Summaries'][0]['LowestPrice']['Amount'];
-                $price_display = $item['Offers']['Summaries'][0]['LowestPrice']['DisplayAmount'] ?? '';
-            } elseif (!empty($item['Offers']['Listings'][0]['SavingBasis']['Amount'])) {
-                $price_amount = $item['Offers']['Listings'][0]['SavingBasis']['Amount'];
-                $price_display = $item['Offers']['Listings'][0]['SavingBasis']['DisplayAmount'] ?? '';
+            if (!empty($item['offers']['listings'][0]['price']['amount'])) {
+                $price_amount = $item['offers']['listings'][0]['price']['amount'];
+                $price_display = $item['offers']['listings'][0]['price']['displayAmount'] ?? '';
+            } elseif (!empty($item['offers']['summaries'][0]['lowestPrice']['amount'])) {
+                $price_amount = $item['offers']['summaries'][0]['lowestPrice']['amount'];
+                $price_display = $item['offers']['summaries'][0]['lowestPrice']['displayAmount'] ?? '';
+            } elseif (!empty($item['offers']['listings'][0]['savingBasis']['amount'])) {
+                $price_amount = $item['offers']['listings'][0]['savingBasis']['amount'];
+                $price_display = $item['offers']['listings'][0]['savingBasis']['displayAmount'] ?? '';
             }
-            $image_large = $item['Images']['Primary']['Large']['URL'] ?? '';
-            $image_medium = $item['Images']['Primary']['Medium']['URL'] ?? '';
-            $rating = $item['CustomerReviews']['StarRating']['Value'] ?? 0;
-            $review_count = $item['CustomerReviews']['Count']['Value'] ?? 0;
-            $detail_url = $item['DetailPageURL'] ?? '';
+            $image_large = $item['images']['primary']['large']['url'] ?? '';
+            $image_medium = $item['images']['primary']['medium']['url'] ?? '';
+            $rating = $item['customerReviews']['starRating']['value'] ?? 0;
+            $review_count = $item['customerReviews']['count']['value'] ?? 0;
+            $detail_url = $item['detailPageUrl'] ?? '';
 
             $products[] = [
                 'source' => 'amazon',
@@ -228,7 +217,6 @@ class AI_PI_Amazon_API {
                 'title' => $title,
                 'brand' => $brand,
                 'price' => floatval($price_amount),
-                // 価格が取得できない場合は空文字（テンプレ側で非表示）
                 'price_display' => $price_display ?: ($price_amount > 0 ? ('¥' . number_format($price_amount)) : ''),
                 'image' => $image_large ?: $image_medium,
                 'rating' => floatval($rating),
@@ -239,5 +227,12 @@ class AI_PI_Amazon_API {
         }
 
         return $products;
+    }
+
+    /**
+     * 接続テスト用: 1件だけ取ってみる
+     */
+    public function test_connection() {
+        return $this->search('テスト', 1);
     }
 }

@@ -29,9 +29,15 @@ function ai_pi_sanitize_settings($input) {
     // API系（UIで編集可）
     $output['claude_api_key']      = sanitize_text_field($input['claude_api_key'] ?? ($existing['claude_api_key'] ?? ''));
     $output['claude_model']        = sanitize_text_field($input['claude_model'] ?? ($existing['claude_model'] ?? 'claude-haiku-4-5-20251001'));
+    // v1.9.29: PA-API v5 は 2026-05 に廃止済み。access_key/secret_key は互換のため
+    // 保持のみ。実際は下の creators_client_id/secret を使う。
     $output['amazon_access_key']   = sanitize_text_field($input['amazon_access_key'] ?? ($existing['amazon_access_key'] ?? ''));
     $output['amazon_secret_key']   = sanitize_text_field($input['amazon_secret_key'] ?? ($existing['amazon_secret_key'] ?? ''));
     $output['amazon_partner_tag']  = sanitize_text_field($input['amazon_partner_tag'] ?? ($existing['amazon_partner_tag'] ?? ''));
+    // Creators API 認証（v1.9.29 で追加）
+    $output['amazon_creators_client_id']     = sanitize_text_field($input['amazon_creators_client_id']     ?? ($existing['amazon_creators_client_id']     ?? ''));
+    $output['amazon_creators_client_secret'] = sanitize_text_field($input['amazon_creators_client_secret'] ?? ($existing['amazon_creators_client_secret'] ?? ''));
+    $output['amazon_marketplace']            = sanitize_text_field($input['amazon_marketplace']            ?? ($existing['amazon_marketplace']            ?? 'www.amazon.co.jp'));
     $output['rakuten_app_id']      = sanitize_text_field($input['rakuten_app_id'] ?? ($existing['rakuten_app_id'] ?? ''));
     $output['rakuten_affiliate_id']= sanitize_text_field($input['rakuten_affiliate_id'] ?? ($existing['rakuten_affiliate_id'] ?? ''));
 
@@ -101,21 +107,39 @@ function ai_pi_render_settings_page() {
                     </td>
                 </tr>
                 <tr>
-                    <th><label>Amazon Access Key</label></th>
+                    <th colspan="2" style="padding:16px 0 4px;">
+                        <div style="background:#e7f3ff;border-left:4px solid #2271b1;padding:10px 14px;font-size:13px;color:#000;">
+                            <strong>Amazon Creators API（推奨・v3.x LWA）</strong><br>
+                            2026-04-30 に PA-API v5 は廃止されました。<br>
+                            <a href="https://affiliate-program.amazon.com/creatorsapi/docs/en-us/introduction" target="_blank" rel="noopener">Amazon Associates Central → Tools → Creators API</a> で Client ID / Client Secret を発行してください。
+                        </div>
+                    </th>
+                </tr>
+                <tr>
+                    <th><label>Amazon Client ID</label></th>
                     <td>
                         <span class="ai-pi-secret-wrap">
-                            <input type="password" name="ai_pi_settings[amazon_access_key]" value="<?php echo esc_attr($settings['amazon_access_key'] ?? ''); ?>" class="regular-text ai-pi-secret" autocomplete="off">
+                            <input type="password" name="ai_pi_settings[amazon_creators_client_id]" value="<?php echo esc_attr($settings['amazon_creators_client_id'] ?? ''); ?>" class="regular-text ai-pi-secret" autocomplete="off">
                             <button type="button" class="button ai-pi-secret-toggle">表示</button>
                         </span>
+                        <p class="description">Creators API 用の Client ID（バージョン 3.x）</p>
                     </td>
                 </tr>
                 <tr>
-                    <th><label>Amazon Secret Key</label></th>
+                    <th><label>Amazon Client Secret</label></th>
                     <td>
                         <span class="ai-pi-secret-wrap">
-                            <input type="password" name="ai_pi_settings[amazon_secret_key]" value="<?php echo esc_attr($settings['amazon_secret_key'] ?? ''); ?>" class="regular-text ai-pi-secret" autocomplete="off">
+                            <input type="password" name="ai_pi_settings[amazon_creators_client_secret]" value="<?php echo esc_attr($settings['amazon_creators_client_secret'] ?? ''); ?>" class="regular-text ai-pi-secret" autocomplete="off">
                             <button type="button" class="button ai-pi-secret-toggle">表示</button>
                         </span>
+                        <p class="description">Creators API 用の Client Secret</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label>Amazon Marketplace</label></th>
+                    <td>
+                        <input type="text" name="ai_pi_settings[amazon_marketplace]" value="<?php echo esc_attr($settings['amazon_marketplace'] ?? 'www.amazon.co.jp'); ?>" class="regular-text">
+                        <p class="description">既定: <code>www.amazon.co.jp</code>（日本 Amazon）</p>
                     </td>
                 </tr>
                 <tr>
@@ -124,6 +148,18 @@ function ai_pi_render_settings_page() {
                         <input type="text" name="ai_pi_settings[amazon_partner_tag]" value="<?php echo esc_attr($settings['amazon_partner_tag'] ?? ''); ?>" class="regular-text">
                         <p class="description">例: yourname-22</p>
                     </td>
+                </tr>
+                <tr>
+                    <th colspan="2" style="padding:16px 0 4px;">
+                        <details style="background:#fef8e7;border-left:4px solid #a06000;padding:8px 14px;font-size:12px;color:#4a3800;">
+                            <summary style="cursor:pointer;font-weight:600;">旧 Access Key / Secret Key（廃止済・非表示クリックで開く）</summary>
+                            <p style="margin:8px 0;">
+                                PA-API v5 用の設定。<strong>2026-04-30 に廃止済み</strong>。値を残しても使われません。削除しても影響ありません。
+                            </p>
+                            <p><label>Access Key: <input type="text" name="ai_pi_settings[amazon_access_key]" value="<?php echo esc_attr($settings['amazon_access_key'] ?? ''); ?>" class="regular-text" style="background:#f5f5f5;"></label></p>
+                            <p><label>Secret Key: <input type="text" name="ai_pi_settings[amazon_secret_key]" value="<?php echo esc_attr($settings['amazon_secret_key'] ?? ''); ?>" class="regular-text" style="background:#f5f5f5;"></label></p>
+                        </details>
+                    </th>
                 </tr>
                 <tr>
                     <th><label>楽天 アプリID</label></th>

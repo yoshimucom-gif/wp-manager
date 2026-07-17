@@ -235,7 +235,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.89'
+APP_VERSION = '1.7.90'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -4334,128 +4334,160 @@ def build_article_completion_prompt(quality, article_type, has_decoration=False,
 """
 
 
-AMAZON_PAAPI_HOST = 'webservices.amazon.co.jp'
-AMAZON_PAAPI_PATH = '/paapi5/searchitems'
-AMAZON_PAAPI_REGION = 'us-west-2'
-AMAZON_PAAPI_SERVICE = 'ProductAdvertisingAPI'
-AMAZON_PAAPI_TARGET = 'com.amazon.paapi5.v1.ProductAdvertisingAPIv1.SearchItems'
+# v1.7.90 (2026-07-17): Amazon Creators API 移行
+# PA-API v5 は 2026-04-30 に廃止済み。旧署名系関連の定数は互換のため名前だけ残す。
+AMAZON_CREATORS_TOKEN_URL = 'https://api.amazon.com/auth/o2/token'
+AMAZON_CREATORS_API_BASE  = 'https://creatorsapi.amazon/catalog/v1'
+AMAZON_CREATORS_SCOPE     = 'creatorsapi::default'
+AMAZON_MARKETPLACE_DEFAULT = 'www.amazon.co.jp'
+
+# OAuth トークンキャッシュ（single-worker gunicorn 前提で module 変数）
+_AMAZON_TOKEN_CACHE = {'token': None, 'expires_at': 0.0, 'client_id': None}
 
 
-def amazon_search(query, access_key, secret_key, partner_tag, limit=10, timeout=10):
-    """Amazon PA-API v5 SearchItems を SigV4 署名付きで叩く。
+def _amazon_creators_get_token(client_id, client_secret, timeout=15):
+    """LWA v3.x OAuth 2.0 access_token を取得（キャッシュ有）。
 
-    Returns: list[dict] with keys: name, price, url, image_url, asin,
-             review_count, review_avg.
-    Raises: ValueError on missing config, requests.HTTPError on API failure.
+    Returns: str (access_token)
+    Raises: ValueError / requests.HTTPError
+    """
+    import time
+    now = time.time()
+    cache = _AMAZON_TOKEN_CACHE
+    if (cache['token']
+            and cache['client_id'] == client_id
+            and cache['expires_at'] > now + 30):
+        return cache['token']
+
+    resp = requests.post(
+        AMAZON_CREATORS_TOKEN_URL,
+        json={
+            'grant_type':    'client_credentials',
+            'client_id':     client_id,
+            'client_secret': client_secret,
+            'scope':         AMAZON_CREATORS_SCOPE,
+        },
+        headers={'Content-Type': 'application/json', 'Accept': 'application/json'},
+        timeout=timeout,
+    )
+    resp.raise_for_status()
+    data = resp.json() or {}
+    token = data.get('access_token')
+    if not token:
+        raise ValueError(f'Amazon OAuth トークン取得失敗: {data}')
+    expires_in = int(data.get('expires_in') or 3600)
+    cache['token'] = token
+    cache['expires_at'] = now + max(60, expires_in - 60)
+    cache['client_id'] = client_id
+    return token
+
+
+def amazon_search(query, client_id, client_secret, partner_tag,
+                  marketplace=None, limit=10, timeout=15):
+    """Amazon Creators API SearchItems を OAuth 2.0 で叩く。
+
+    v1.7.90: PA-API v5 廃止に伴い Creators API に移行。
+    署名引数の名前が access_key/secret_key → client_id/client_secret に変わった。
+
+    Returns: list[dict] with keys: name, price, price_display, url,
+             image_url, asin, review_count, review_avg.
     """
     if not str(query or '').strip():
         return []
-    if not (access_key and secret_key and partner_tag):
-        raise ValueError('Amazon PA-API の設定が不完全です（Access Key / Secret / Partner Tag が必要）')
+    if not (client_id and client_secret and partner_tag):
+        raise ValueError('Amazon Creators API の設定が不完全です（Client ID / Client Secret / Partner Tag が必要）')
 
-    body = json.dumps({
-        'Keywords': query.strip(),
-        'Resources': [
-            'Images.Primary.Medium',
-            'ItemInfo.Title',
-            'ItemInfo.Features',
-            'Offers.Listings.Price',
-            'Offers.Summaries.LowestPrice',
-            'CustomerReviews.StarRating',
-            'CustomerReviews.Count',
+    token = _amazon_creators_get_token(client_id, client_secret, timeout=timeout)
+    marketplace = marketplace or AMAZON_MARKETPLACE_DEFAULT
+
+    payload = {
+        'keywords':    query.strip(),
+        'searchIndex': 'All',
+        'itemCount':   max(1, min(10, int(limit) if str(limit).isdigit() else 10)),
+        'partnerTag':  partner_tag,
+        'partnerType': 'Associates',
+        'resources': [
+            'images.primary.medium',
+            'itemInfo.title',
+            'itemInfo.byLineInfo',
+            'itemInfo.features',
+            'offers.listings.price',
+            'offers.summaries.lowestPrice',
         ],
-        'PartnerTag': partner_tag,
-        'PartnerType': 'Associates',
-        'Marketplace': 'www.amazon.co.jp',
-        'ItemCount': max(1, min(10, int(limit) if str(limit).isdigit() else 10)),
-    }, separators=(',', ':'))
-    body_bytes = body.encode('utf-8')
-    body_hash = hashlib.sha256(body_bytes).hexdigest()
-
-    now = datetime.utcnow()
-    amz_date = now.strftime('%Y%m%dT%H%M%SZ')
-    date_stamp = now.strftime('%Y%m%d')
-
-    canonical_headers = (
-        f'content-encoding:amz-1.0\n'
-        f'host:{AMAZON_PAAPI_HOST}\n'
-        f'x-amz-date:{amz_date}\n'
-        f'x-amz-target:{AMAZON_PAAPI_TARGET}\n'
-    )
-    signed_headers = 'content-encoding;host;x-amz-date;x-amz-target'
-    canonical_request = f'POST\n{AMAZON_PAAPI_PATH}\n\n{canonical_headers}\n{signed_headers}\n{body_hash}'
-
-    credential_scope = f'{date_stamp}/{AMAZON_PAAPI_REGION}/{AMAZON_PAAPI_SERVICE}/aws4_request'
-    string_to_sign = (
-        f'AWS4-HMAC-SHA256\n{amz_date}\n{credential_scope}\n'
-        f'{hashlib.sha256(canonical_request.encode("utf-8")).hexdigest()}'
-    )
-
-    def hmac_sha256(key, msg):
-        return hmac.new(key, msg.encode('utf-8'), hashlib.sha256).digest()
-
-    k_date = hmac_sha256(('AWS4' + secret_key).encode('utf-8'), date_stamp)
-    k_region = hmac_sha256(k_date, AMAZON_PAAPI_REGION)
-    k_service = hmac_sha256(k_region, AMAZON_PAAPI_SERVICE)
-    k_signing = hmac_sha256(k_service, 'aws4_request')
-    signature = hmac.new(k_signing, string_to_sign.encode('utf-8'), hashlib.sha256).hexdigest()
-
+    }
     headers = {
-        'Content-Type': 'application/json; charset=UTF-8',
-        'Content-Encoding': 'amz-1.0',
-        'Host': AMAZON_PAAPI_HOST,
-        'X-Amz-Date': amz_date,
-        'X-Amz-Target': AMAZON_PAAPI_TARGET,
-        'Authorization': (
-            f'AWS4-HMAC-SHA256 Credential={access_key}/{credential_scope}, '
-            f'SignedHeaders={signed_headers}, Signature={signature}'
-        ),
+        'Authorization': f'Bearer {token}',
+        'Content-Type':  'application/json',
+        'Accept':        'application/json',
+        'x-marketplace': marketplace,
     }
 
-    resp = requests.post(f'https://{AMAZON_PAAPI_HOST}{AMAZON_PAAPI_PATH}', data=body_bytes, headers=headers, timeout=timeout)
+    resp = requests.post(
+        f'{AMAZON_CREATORS_API_BASE}/searchItems',
+        json=payload,
+        headers=headers,
+        timeout=timeout,
+    )
+    # 401 は token 失効 → キャッシュを消して1回だけリトライ
+    if resp.status_code == 401:
+        _AMAZON_TOKEN_CACHE['token'] = None
+        _AMAZON_TOKEN_CACHE['expires_at'] = 0.0
+        token = _amazon_creators_get_token(client_id, client_secret, timeout=timeout)
+        headers['Authorization'] = f'Bearer {token}'
+        resp = requests.post(
+            f'{AMAZON_CREATORS_API_BASE}/searchItems',
+            json=payload,
+            headers=headers,
+            timeout=timeout,
+        )
     resp.raise_for_status()
-    payload = resp.json()
+    data = resp.json() or {}
 
+    # Creators API は lowerCamelCase。
+    # searchResult.items / itemsResult.items の両方をチェック（documented alias）
+    items = (
+        (data.get('searchResult') or {}).get('items')
+        or (data.get('itemsResult') or {}).get('items')
+        or []
+    )
     results = []
-    for item in (payload.get('SearchResult') or {}).get('Items') or []:
-        title = ((item.get('ItemInfo') or {}).get('Title') or {}).get('DisplayValue') or ''
-        offers = item.get('Offers') or {}
-        listings = offers.get('Listings') or []
-        summaries = offers.get('Summaries') or []
+    for item in items:
+        title = ((item.get('itemInfo') or {}).get('title') or {}).get('displayValue') or ''
+        offers = item.get('offers') or {}
+        listings = offers.get('listings') or []
+        summaries = offers.get('summaries') or []
         price_amount = None
         price_display = ''
-        # まず Listings から取得
         if listings:
-            price_obj = (listings[0] or {}).get('Price') or {}
-            price_amount = price_obj.get('Amount')
-            price_display = price_obj.get('DisplayAmount') or ''
-        # Listings に無ければ Summaries.LowestPrice にフォールバック
+            price_obj = (listings[0] or {}).get('price') or {}
+            price_amount = price_obj.get('amount')
+            price_display = price_obj.get('displayAmount') or ''
         if not price_amount and not price_display and summaries:
             for summary in summaries:
-                low = (summary or {}).get('LowestPrice') or {}
-                if low.get('Amount') or low.get('DisplayAmount'):
-                    price_amount = price_amount or low.get('Amount')
-                    price_display = price_display or low.get('DisplayAmount') or ''
+                low = (summary or {}).get('lowestPrice') or {}
+                if low.get('amount') or low.get('displayAmount'):
+                    price_amount = price_amount or low.get('amount')
+                    price_display = price_display or low.get('displayAmount') or ''
                     break
-        image_url = (((item.get('Images') or {}).get('Primary') or {}).get('Medium') or {}).get('URL', '')
-        reviews = item.get('CustomerReviews') or {}
-        review_count_raw = reviews.get('Count')
+        image_url = (((item.get('images') or {}).get('primary') or {}).get('medium') or {}).get('url', '')
+        reviews = item.get('customerReviews') or {}
+        review_count_raw = reviews.get('count')
         if isinstance(review_count_raw, dict):
-            review_count = review_count_raw.get('Value') or 0
+            review_count = review_count_raw.get('value') or 0
         else:
             review_count = review_count_raw or 0
-        review_avg_raw = reviews.get('StarRating')
+        review_avg_raw = reviews.get('starRating')
         if isinstance(review_avg_raw, dict):
-            review_avg = review_avg_raw.get('Value') or 0
+            review_avg = review_avg_raw.get('value') or 0
         else:
             review_avg = review_avg_raw or 0
         results.append({
             'name': title.strip(),
             'price': price_amount,
             'price_display': price_display,
-            'url': item.get('DetailPageURL') or '',
+            'url': item.get('detailPageUrl') or '',
             'image_url': image_url,
-            'asin': item.get('ASIN') or '',
+            'asin': item.get('asin') or '',
             'review_count': review_count,
             'review_avg': review_avg,
         })
@@ -4519,11 +4551,13 @@ def fetch_product_context(article, settings, limit=15):
 
     rakuten_app_id = settings.get('rakuten_app_id') or ''
     rakuten_affiliate_id = settings.get('rakuten_affiliate_id') or ''
-    amazon_access_key = settings.get('amazon_access_key') or ''
-    amazon_secret_key = settings.get('amazon_secret_key') or ''
-    amazon_partner_tag = settings.get('amazon_partner_tag') or ''
+    # v1.7.90: Amazon Creators API 認証（PA-API v5 廃止対応）
+    amazon_client_id     = settings.get('amazon_creators_client_id') or ''
+    amazon_client_secret = settings.get('amazon_creators_client_secret') or ''
+    amazon_partner_tag   = settings.get('amazon_partner_tag') or ''
+    amazon_marketplace   = settings.get('amazon_marketplace') or AMAZON_MARKETPLACE_DEFAULT
 
-    amazon_configured = bool(amazon_access_key and amazon_secret_key and amazon_partner_tag)
+    amazon_configured = bool(amazon_client_id and amazon_client_secret and amazon_partner_tag)
     rakuten_configured = bool(rakuten_app_id)
 
     if not (amazon_configured or rakuten_configured):
@@ -4532,7 +4566,9 @@ def fetch_product_context(article, settings, limit=15):
     # Amazon優先: 設定があれば最初に試す
     if amazon_configured:
         try:
-            amazon_items = amazon_search(query, amazon_access_key, amazon_secret_key, amazon_partner_tag, limit=min(10, limit))
+            amazon_items = amazon_search(query, amazon_client_id, amazon_client_secret,
+                                         amazon_partner_tag, marketplace=amazon_marketplace,
+                                         limit=min(10, limit))
             if amazon_items:
                 return [{'amazon': item, 'rakuten': None} for item in amazon_items], 'ok'
         except Exception as e:
@@ -6360,9 +6396,9 @@ def favicon():
 PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugin-downloads')
 PLUGIN_DOWNLOADS = {
     'product-inserter': {
-        'file': 'affiros-product-inserter-1.9.28.zip',
+        'file': 'affiros-product-inserter-1.9.29.zip',
         'name': 'Affiros プロダクトインサーター',
-        'version': '1.9.28',
+        'version': '1.9.29',
     },
     'decoration': {
         'file': 'affiros-decoration-1.2.3.zip',
@@ -9832,6 +9868,11 @@ def get_settings():
         'claude_article_model': settings.get('claude_article_model', 'claude-sonnet-4-6'),
         'enable_prompt_cache': bool(settings.get('enable_prompt_cache', False)),
         'default_quality_id': settings.get('default_quality_id', 'default'),
+        # v1.7.90: Amazon Creators API 認証
+        'amazon_creators_client_id':     mask_secret(settings.get('amazon_creators_client_id', ''), 10),
+        'amazon_creators_client_secret': mask_secret(settings.get('amazon_creators_client_secret', ''), 10),
+        'amazon_marketplace': settings.get('amazon_marketplace', AMAZON_MARKETPLACE_DEFAULT),
+        # 旧 PA-API 認証（廃止済・互換のため保持）
         'amazon_access_key': mask_secret(settings.get('amazon_access_key', ''), 10),
         'amazon_secret_key': mask_secret(settings.get('amazon_secret_key', ''), 10),
         'amazon_partner_tag': settings.get('amazon_partner_tag', ''),
@@ -9842,7 +9883,12 @@ def get_settings():
 
 
 # 「表示」ボタンで全体を取得できる秘匿フィールドのホワイトリスト
-REVEALABLE_SECRETS = ('claude_api_key', 'amazon_access_key', 'amazon_secret_key', 'rakuten_app_id')
+REVEALABLE_SECRETS = (
+    'claude_api_key',
+    'amazon_creators_client_id', 'amazon_creators_client_secret',  # v1.7.90 Creators API
+    'amazon_access_key', 'amazon_secret_key',                       # 旧 PA-API（互換）
+    'rakuten_app_id',
+)
 
 
 @app.route('/api/settings/reveal-secret/<field>', methods=['GET'])
@@ -9884,12 +9930,17 @@ def update_settings():
         settings['enable_prompt_cache'] = bool(data.get('enable_prompt_cache'))
     if data.get('claude_api_key') and not is_masked_value(data['claude_api_key']):
         settings['claude_api_key'] = data['claude_api_key']
-    for key in ('amazon_access_key', 'amazon_secret_key', 'rakuten_app_id'):
+    # 秘匿フィールド（マスク値でない場合のみ更新、空文字は削除意味）
+    # v1.7.90: Creators API 認証を追加
+    for key in ('amazon_access_key', 'amazon_secret_key',
+                'amazon_creators_client_id', 'amazon_creators_client_secret',
+                'rakuten_app_id'):
         if data.get(key) and not is_masked_value(data[key]):
             settings[key] = data[key].strip()
         elif data.get(key) == '':
             settings[key] = ''
-    for key in ('amazon_partner_tag', 'rakuten_affiliate_id'):
+    # 非秘匿フィールド
+    for key in ('amazon_partner_tag', 'amazon_marketplace', 'rakuten_affiliate_id'):
         if key in data:
             settings[key] = str(data.get(key) or '').strip()
     # card_insertion_mode はUIから廃止。マーカー挿入固定なので保存しない
@@ -10076,16 +10127,20 @@ def search_products():
         elif provider == 'rakuten':
             return jsonify({'error': '楽天アプリケーションIDが未設定です'}), 400
     if provider in ('amazon', 'both'):
-        amazon_access_key = settings.get('amazon_access_key') or ''
-        amazon_secret_key = settings.get('amazon_secret_key') or ''
-        amazon_partner_tag = settings.get('amazon_partner_tag') or ''
-        if amazon_access_key and amazon_secret_key and amazon_partner_tag:
+        # v1.7.90: Amazon Creators API 認証（PA-API v5 廃止対応）
+        amazon_client_id     = settings.get('amazon_creators_client_id') or ''
+        amazon_client_secret = settings.get('amazon_creators_client_secret') or ''
+        amazon_partner_tag   = settings.get('amazon_partner_tag') or ''
+        amazon_marketplace   = settings.get('amazon_marketplace') or AMAZON_MARKETPLACE_DEFAULT
+        if amazon_client_id and amazon_client_secret and amazon_partner_tag:
             try:
-                result['amazon'] = amazon_search(query, amazon_access_key, amazon_secret_key, amazon_partner_tag, limit=min(10, limit))
+                result['amazon'] = amazon_search(query, amazon_client_id, amazon_client_secret,
+                                                 amazon_partner_tag, marketplace=amazon_marketplace,
+                                                 limit=min(10, limit))
             except Exception as e:
                 result['errors']['amazon'] = str(e)[:200]
         elif provider == 'amazon':
-            return jsonify({'error': 'Amazon PA-API の設定が不完全です'}), 400
+            return jsonify({'error': 'Amazon Creators API の設定が不完全です（Client ID / Client Secret / Partner Tag）'}), 400
     return jsonify(result)
 
 

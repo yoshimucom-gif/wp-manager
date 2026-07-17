@@ -1639,26 +1639,53 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             </div>
           </div>
           <div class="settings-section">
-            <div class="section-header">// Amazon PA-API v5（推奨・優先）</div>
-            <div class="form-help" style="margin-bottom:8px">Amazonアソシエイト商品検索用。<strong>設定するとAmazonが優先で使われます</strong>（CV率重視）。楽天はフォールバックとして使用。</div>
+            <div class="section-header">// Amazon Creators API（v1.7.90 / 2026-07-17〜）</div>
+            <div class="form-help" style="margin-bottom:8px">
+              <strong style="color:#ef6262">PA-API v5 は 2026-04-30 に廃止済み</strong>。Amazon Associates Central → Tools → Creators API で Client ID / Client Secret を発行してください。設定するとAmazonが優先で使われます（CV率重視）。楽天はフォールバック。
+            </div>
             <div class="form-group">
-              <label class="form-label">Access Key ID</label>
+              <label class="form-label">Client ID</label>
               <div style="position:relative">
-                <input type="password" id="s-amazon-access-key" class="form-control" autocomplete="off" style="padding-right:62px" data-secret-field="amazon_access_key">
+                <input type="password" id="s-amazon-creators-client-id" class="form-control" autocomplete="off" style="padding-right:62px" data-secret-field="amazon_creators_client_id">
                 <button type="button" onclick="toggleKeyVisibility(this)" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.12);border:none;color:var(--muted);font-size:11px;padding:4px 9px;border-radius:4px;cursor:pointer">表示</button>
               </div>
             </div>
             <div class="form-group">
-              <label class="form-label">Secret Access Key</label>
+              <label class="form-label">Client Secret</label>
               <div style="position:relative">
-                <input type="password" id="s-amazon-secret-key" class="form-control" autocomplete="off" style="padding-right:62px" data-secret-field="amazon_secret_key">
+                <input type="password" id="s-amazon-creators-client-secret" class="form-control" autocomplete="off" style="padding-right:62px" data-secret-field="amazon_creators_client_secret">
                 <button type="button" onclick="toggleKeyVisibility(this)" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.12);border:none;color:var(--muted);font-size:11px;padding:4px 9px;border-radius:4px;cursor:pointer">表示</button>
               </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Marketplace</label>
+              <input type="text" id="s-amazon-marketplace" class="form-control" placeholder="www.amazon.co.jp" autocomplete="off">
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">既定: <code>www.amazon.co.jp</code>（日本 Amazon）</div>
             </div>
             <div class="form-group">
               <label class="form-label">Partner Tag（アソシエイトID）</label>
               <input type="text" id="s-amazon-partner-tag" class="form-control" placeholder="例: yourname-22" autocomplete="off">
             </div>
+            <details style="margin-top:10px;padding:8px 12px;background:rgba(160,96,0,0.08);border-left:3px solid #a06000;border-radius:3px;font-size:12px;color:var(--muted)">
+              <summary style="cursor:pointer;font-weight:600;color:#a06000">旧 PA-API v5 認証（廃止済 / 互換のため保持）</summary>
+              <div style="margin-top:8px;line-height:1.7">
+                2026-04-30 に廃止。値を残しても使われません。削除しても影響ありません。
+              </div>
+              <div class="form-group" style="margin-top:10px">
+                <label class="form-label">Access Key ID（旧）</label>
+                <div style="position:relative">
+                  <input type="password" id="s-amazon-access-key" class="form-control" autocomplete="off" style="padding-right:62px;opacity:0.6" data-secret-field="amazon_access_key">
+                  <button type="button" onclick="toggleKeyVisibility(this)" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.12);border:none;color:var(--muted);font-size:11px;padding:4px 9px;border-radius:4px;cursor:pointer">表示</button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Secret Access Key（旧）</label>
+                <div style="position:relative">
+                  <input type="password" id="s-amazon-secret-key" class="form-control" autocomplete="off" style="padding-right:62px;opacity:0.6" data-secret-field="amazon_secret_key">
+                  <button type="button" onclick="toggleKeyVisibility(this)" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.12);border:none;color:var(--muted);font-size:11px;padding:4px 9px;border-radius:4px;cursor:pointer">表示</button>
+                </div>
+              </div>
+            </details>
           </div>
           <div class="settings-section">
             <div class="section-header">// 楽天市場API（フォールバック）</div>
@@ -1987,6 +2014,51 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
               <li><strong>取り消し機能</strong>: 実行前の <code>post_date</code> / <code>post_status</code> を投稿メタに退避し、「直前の実行を取り消す」ボタンで丸ごと復元（下書きは下書きに戻る）。取り消せるのは直近1回分のみ。</li>
               <li><strong>誤記修正</strong>: v1.0.0 の画面に「リビジョンから元の予約日時に戻せる」とあったが、WP のリビジョンは <code>post_title</code> / <code>post_content</code> / <code>post_excerpt</code> しか復元せず <code>post_date</code> と <code>post_status</code> は戻らない。この虚偽の説明を削除し、実際に戻せる取り消し機能に置き換えた。</li>
               <li><strong>修正</strong>: 実行時に対象記事が削除済みだと <code>$p-&gt;post_status</code> を null に対して読んでいた箇所をガード。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
+            <div class="section-header">// v1.7.90 / inserter v1.9.29 (2026-07-17) — Amazon Creators API 移行（PA-API v5 廃止対応）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: Amazon PA-API v5 は 2026-04-30 に公式廃止、2026-05-15 にエンドポイント OFF、2026-07-13 頃から実運用でハード拒否（HTTP エラー）開始。本プロジェクト作成時に既に廃止告知が出ていたにも関わらず PA-API v5 で実装してしまった初期選定ミス。今回 Creators API に移行してこれを補填する。</li>
+              <li><strong>認証方式の変更</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>旧: AWS Signature V4（Access Key ID + Secret Access Key）</li>
+                  <li>新: OAuth 2.0 client_credentials（Client ID + Client Secret、LWA v3.x）</li>
+                  <li>トークンエンドポイント: <code>https://api.amazon.com/auth/o2/token</code></li>
+                  <li>スコープ: <code>creatorsapi::default</code></li>
+                  <li>API エンドポイント: <code>https://creatorsapi.amazon/catalog/v1/searchItems</code></li>
+                  <li>レスポンス形式: PascalCase → <strong>lowerCamelCase</strong></li>
+                </ul>
+              </li>
+              <li><strong>本体（app.py）の変更</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>amazon_search()</code> シグネチャ変更: <code>(query, access_key, secret_key, partner_tag, ...)</code> → <code>(query, client_id, client_secret, partner_tag, marketplace=..., ...)</code></li>
+                  <li>トークンキャッシュ: モジュールレベル <code>_AMAZON_TOKEN_CACHE</code>（single-worker gunicorn 前提）</li>
+                  <li>401 リトライ: 失効時にキャッシュ削除 → 1回だけ再試行</li>
+                  <li>設定 API に <code>amazon_creators_client_id</code> / <code>amazon_creators_client_secret</code> / <code>amazon_marketplace</code> 追加</li>
+                  <li>旧 <code>amazon_access_key</code> / <code>amazon_secret_key</code> は互換のため保持（削除はしない）</li>
+                </ul>
+              </li>
+              <li><strong>プラグイン（product-inserter v1.9.29）の変更</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>AI_PI_Amazon_API</code> クラスを Creators API 用に全書き換え</li>
+                  <li>トークンキャッシュ: <code>set_transient('ai_pi_amazon_creators_token', ...)</code></li>
+                  <li>設定画面に Client ID / Client Secret / Marketplace 入力欄追加、旧 Access Key/Secret は details 内に折りたたみ</li>
+                </ul>
+              </li>
+              <li><strong>UI 更新（Affiros9 API 設定タブ）</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>「Amazon PA-API v5」→「Amazon Creators API」セクション名変更</li>
+                  <li>Client ID / Client Secret / Marketplace 入力欄追加</li>
+                  <li>旧 Access Key/Secret Key は「廃止済」の警告付き details 内に格納</li>
+                  <li>ローカルバックアップ、マスクフィールドリスト、送受信 JSON に新フィールド追加</li>
+                </ul>
+              </li>
+              <li><strong>取得方法</strong>: Amazon Associates Central → Tools → Creators API で発行（要件: アソシエイト承認済 + 直近30日で 10件以上の適格売上）。バージョンは v3.x（LWA）を選択。</li>
+              <li><strong>既存の商品カード（静的HTML）は影響なし</strong>: 既に WP 記事に埋め込まれたカードはそのまま表示継続。新規挿入だけが Creators API 経由になる。</li>
+              <li><strong>実装時の未検証事項</strong>: エンドポイント URL の詳細（<code>creatorsapi.amazon</code> のホスト名解決）と、レスポンスの詳細スキーマは公式ドキュメントの部分情報から推定して実装。実際の認証情報でテストして必要なら追加調整する。</li>
+              <li><strong>バージョン同期</strong>: <code>AI_PI_VERSION</code> 1.9.28 → 1.9.29 / <code>affiros-product-inserter-1.9.29.zip</code> 生成 / <code>PLUGIN_DOWNLOADS['product-inserter']</code> 追従 / <code>APP_VERSION</code> 1.7.89 → 1.7.90。</li>
             </ul>
           </div>
 
@@ -7752,6 +7824,11 @@ const SETTINGS_BACKUP_KEY = 'affiros9.apiSettingsBackup.v1';
 const SETTINGS_BACKUP_FIELDS = [
   'claude_api_key',
   'default_quality_id',
+  // v1.7.90: Amazon Creators API
+  'amazon_creators_client_id',
+  'amazon_creators_client_secret',
+  'amazon_marketplace',
+  // 旧 PA-API（廃止済・互換のため保持）
   'amazon_access_key',
   'amazon_secret_key',
   'amazon_partner_tag',
@@ -7760,6 +7837,8 @@ const SETTINGS_BACKUP_FIELDS = [
 ];
 const MASKED_SETTING_FIELDS = new Set([
   'claude_api_key',
+  'amazon_creators_client_id',
+  'amazon_creators_client_secret',
   'amazon_access_key',
   'amazon_secret_key',
   'rakuten_app_id'
@@ -7809,6 +7888,11 @@ function collectSettingsFormData() {
     claude_article_model: document.getElementById('s-article-model').value,
     enable_prompt_cache: document.getElementById('s-enable-prompt-cache').checked,
     default_quality_id: document.getElementById('s-default-quality').value,
+    // v1.7.90: Amazon Creators API
+    amazon_creators_client_id: document.getElementById('s-amazon-creators-client-id').value,
+    amazon_creators_client_secret: document.getElementById('s-amazon-creators-client-secret').value,
+    amazon_marketplace: document.getElementById('s-amazon-marketplace').value,
+    // 旧 PA-API（廃止済・互換）
     amazon_access_key: document.getElementById('s-amazon-access-key').value,
     amazon_secret_key: document.getElementById('s-amazon-secret-key').value,
     amazon_partner_tag: document.getElementById('s-amazon-partner-tag').value,
@@ -8024,6 +8108,11 @@ async function loadSettings() {
   document.getElementById('s-article-model').value = s.claude_article_model || 'claude-sonnet-4-6';
   document.getElementById('s-enable-prompt-cache').checked = !!s.enable_prompt_cache;
   syncUsageEstimateConfigModel();   // 選択モデルに合わせてコスト単価を同期
+  // v1.7.90: Amazon Creators API 認証
+  document.getElementById('s-amazon-creators-client-id').value = s.amazon_creators_client_id || '';
+  document.getElementById('s-amazon-creators-client-secret').value = s.amazon_creators_client_secret || '';
+  document.getElementById('s-amazon-marketplace').value = s.amazon_marketplace || 'www.amazon.co.jp';
+  // 旧 PA-API（廃止済・互換）
   document.getElementById('s-amazon-access-key').value = s.amazon_access_key || '';
   document.getElementById('s-amazon-secret-key').value = s.amazon_secret_key || '';
   document.getElementById('s-amazon-partner-tag').value = s.amazon_partner_tag || '';
