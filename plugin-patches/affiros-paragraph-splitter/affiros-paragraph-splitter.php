@@ -2,14 +2,14 @@
 /**
  * Plugin Name: Affiros 段落整形
  * Description: 長すぎる段落を機械的に分割して読みやすくする単機能ツール。句点・接続詞・最大文字数で強制改行。Affiros9で生成した記事の段落が密になりがちな問題への確実な対策。リライター・インサーター・デコレーターと完全に独立。
- * Version: 1.1.2
+ * Version: 1.1.3
  * Author: Affiros
  * License: GPL v2 or later
  */
 
 if (!defined('ABSPATH')) exit;
 
-define('AFFIROS_PSPLIT_VERSION', '1.1.2');
+define('AFFIROS_PSPLIT_VERSION', '1.1.3');
 define('AFFIROS_PSPLIT_OPTION_KEY', 'affiros_psplit_settings');
 
 // 自動更新通知（Affiros9 サーバーから定期チェック）
@@ -567,7 +567,10 @@ function affiros_psplit_process_strong_list_inner($list_inner, $list_tag, $list_
             $content_html = trim($sm[2]);
             $content_plain = trim(preg_replace('/<[^>]+>/u', '', $content_html));
 
-            if ($label !== '' && mb_strlen($content_plain) > $min_content) {
+            // v1.1.3: stats 側は >= min_content で数えるので split 側も揃える。
+            //         off-by-one で境界の1件が「検出はする、分割しない」
+            //         状態になっていた。
+            if ($label !== '' && mb_strlen($content_plain) >= $min_content) {
                 // 変換対象 → 直前までの list_items を flush
                 if (!empty($current_items)) {
                     $segments[] = ['type' => 'list', 'items' => $current_items];
@@ -1069,6 +1072,7 @@ function affiros_psplit_render_page() {
             }
         }
 
+        // v1.1.3: applyOne は {ok, changed, deltaTotal, remainingTotal} を返す
         async function applyOne(id, btn) {
             if (btn) btn.prop('disabled', true).text('適用中...');
             try {
@@ -1078,10 +1082,27 @@ function affiros_psplit_render_page() {
                     post_id: id,
                 });
                 if (res && res.success) {
+                    const data = res.data || {};
+                    const changed = !!data.changed;
+                    const delta = data.delta || {};
+                    const deltaTotal = (delta.over_200_resolved || 0) + (delta.heading_promoted || 0) + (delta.strong_label_split || 0);
+                    const remainingTotal = data.remaining_total || 0;
                     if (btn) {
-                        btn.replaceWith('<span style="color:#16a34a;font-weight:600">✓ 適用済</span>');
+                        let label;
+                        if (deltaTotal > 0) {
+                            label = `<span style="color:#16a34a;font-weight:600">✓ 変換 ${deltaTotal}カ所</span>`;
+                        } else if (changed) {
+                            // 内容は変わったが検出済みカウンタは動いていない（見出し前後の空段落など）
+                            label = `<span style="color:#d97706;font-weight:600" title="整形はしたが検出済みパターンは分割できず">△ 整形のみ</span>`;
+                        } else {
+                            label = `<span style="color:#6b7280;font-weight:600">＝ 無変更</span>`;
+                        }
+                        if (remainingTotal > 0) {
+                            label += ` <span style="color:#dc2626;font-size:11px">残 ${remainingTotal}件</span>`;
+                        }
+                        btn.replaceWith(label);
                     }
-                    return true;
+                    return { ok: true, changed, deltaTotal, remainingTotal };
                 }
                 alert('適用失敗: ' + (res && res.data ? res.data : ''));
             } catch (e) {
@@ -1089,22 +1110,37 @@ function affiros_psplit_render_page() {
             } finally {
                 if (btn && btn.prop) btn.prop('disabled', false);
             }
-            return false;
+            return { ok: false, changed: false, deltaTotal: 0, remainingTotal: 0 };
         }
 
         async function applyAll() {
             if (!posts.length) { alert('対象がありません'); return; }
             if (!confirm(`${posts.length} 件に整形を適用します。リビジョンが自動保存されるので元に戻せます。よろしいですか？`)) return;
             $('#aps-apply-all-btn').prop('disabled', true);
-            let done = 0, failed = 0;
+            let done = 0, failed = 0, actuallyConverted = 0, noChange = 0, stillRemaining = 0;
             for (const p of posts) {
                 $('#aps-apply-status').text(`適用中... ${done + failed}/${posts.length}件`);
                 const btn = $(`tr[data-id="${p.id}"] .aps-apply`);
-                const ok = await applyOne(p.id, btn.length ? btn : null);
-                if (ok) done++; else failed++;
+                const r = await applyOne(p.id, btn.length ? btn : null);
+                if (r.ok) {
+                    done++;
+                    if (r.deltaTotal > 0) actuallyConverted++;
+                    else noChange++;
+                    if (r.remainingTotal > 0) stillRemaining++;
+                } else {
+                    failed++;
+                }
             }
-            $('#aps-apply-status').text(`完了: 成功 ${done}件 / 失敗 ${failed}件`);
+            $('#aps-apply-status').html(
+                `完了: 成功 ${done}件 (実変換 ${actuallyConverted}件 / 変換なし ${noChange}件) / 失敗 ${failed}件` +
+                (stillRemaining > 0 ? ` — <span style="color:#dc2626">検出済みパターンが残る記事 ${stillRemaining}件（下記スキャンで再確認）</span>` : '')
+            );
             $('#aps-apply-all-btn').prop('disabled', false);
+            // v1.1.3: 適用後に自動で再スキャンして表を最新化する。
+            // 従来は表がそのまま残り「27件成功したのにまだ27件ある」ように見えた。
+            setTimeout(function () {
+                $('#aps-scan-btn').trigger('click');
+            }, 500);
         }
 
         function esc(s) {
@@ -1192,16 +1228,50 @@ add_action('wp_ajax_affiros_psplit_apply', function () {
     $post = get_post($post_id);
     if (!$post) wp_send_json_error('記事が見つかりません');
 
-    $new = affiros_psplit_process_content($post->post_content);
+    // v1.1.3: 変換前後の stats を取ることで、何が実際に変換されたか報告する。
+    // これまでは「$new !== $original」だけを見ていたので、例えば見出し前後の
+    // 空段落追加(step 4/5)だけで「成功」扱いになり、strong ラベルは分割されず
+    // 残り続けても気付けなかった。
+    $settings = affiros_psplit_get_settings();
+    $before_stats = affiros_psplit_stats($post->post_content, $settings);
+    $new = affiros_psplit_process_content($post->post_content, $settings);
+    $after_stats = affiros_psplit_stats($new, $settings);
+
+    $delta = [
+        'over_200_resolved' => max(0, $before_stats['over_200'] - $after_stats['over_200']),
+        'heading_promoted'  => max(0, ($before_stats['heading_candidates'] ?? 0) - ($after_stats['heading_candidates'] ?? 0)),
+        'strong_label_split'=> max(0, ($before_stats['strong_label_candidates'] ?? 0) - ($after_stats['strong_label_candidates'] ?? 0)),
+    ];
+    $delta_total = array_sum($delta);
+    $remaining_after = [
+        'over_200'                => $after_stats['over_200'],
+        'heading_candidates'      => $after_stats['heading_candidates'] ?? 0,
+        'strong_label_candidates' => $after_stats['strong_label_candidates'] ?? 0,
+    ];
+    $remaining_total = array_sum($remaining_after);
+
     if ($new === $post->post_content) {
-        wp_send_json_success(['changed' => false, 'message' => '変更なし']);
+        wp_send_json_success([
+            'changed'         => false,
+            'message'         => '変更なし',
+            'delta'           => $delta,
+            'remaining'       => $remaining_after,
+            'remaining_total' => $remaining_total,
+        ]);
     }
 
     set_transient('affiros_psplit_skip_' . $post_id, 1, 30);
     $result = wp_update_post(['ID' => $post_id, 'post_content' => $new], true);
     delete_transient('affiros_psplit_skip_' . $post_id);
     if (is_wp_error($result)) wp_send_json_error($result->get_error_message());
-    wp_send_json_success(['changed' => true]);
+
+    wp_send_json_success([
+        'changed'         => true,
+        'delta'           => $delta,
+        'delta_total'     => $delta_total,
+        'remaining'       => $remaining_after,
+        'remaining_total' => $remaining_total,
+    ]);
 });
 
 // =============================================================================

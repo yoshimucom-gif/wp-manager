@@ -2031,6 +2031,30 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.96 / paragraph-splitter v1.1.3 (2026-07-17) — 「成功27件」なのに整形対象が減らないバグ修正</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>症状</strong>: WP 段落整形プラグインの「✨ 全件に適用」実行後、「完了: 成功 27件 / 失敗 0件」と表示されるが、下の整形対象リストは <strong>まったく減らず</strong>、同じ 27件がそのまま残る。</li>
+              <li><strong>真因（2層）</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><strong>① 表示層</strong>: <code>applyAll()</code> がループ後に <strong>再スキャンをしない</strong>。表と件数はスキャン時点の値のまま残り「27件成功なのに27件表示」の錯覚を発生させる。</li>
+                  <li><strong>② ロジック層</strong>: <code>applyOne</code> が <code>changed: false</code>（内容変更なし）も <code>changed: true</code>（実際に整形した）も両方「✓ 適用済」と同じ扱いにする。<code>process_content</code> が step 4/5（見出し・画像前後の空段落挿入）だけで content を書き換えると <code>$new !== $original</code> になり、「strong ラベル 3件」が実際には分割されずに残っても「成功」扱いされる。</li>
+                  <li><strong>境界バグ</strong>: stats は <code>strong ラベル content ≥ 25字</code>でカウント、split は <code>&gt; 25字</code>で変換していた off-by-one。ちょうど25字の1件は「検出はする、分割しない」状態。</li>
+                </ul>
+              </li>
+              <li><strong>修正</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><code>apply</code> エンドポイントが <strong>変換前後の stats を取って delta</strong>を返すように変更。「over_200_resolved / heading_promoted / strong_label_split」の実際の変換数と、残存パターン数(remaining)を報告。</li>
+                  <li><code>applyOne</code> UI: 実変換が0件なら「＝ 無変更」、変換が起きたなら「✓ 変換 Nカ所」、内容は変わったが検出パターンが分割できていない場合は「△ 整形のみ」と明示。残存パターンがあれば「残 N件」を赤字で追記。</li>
+                  <li><code>applyAll</code> UI: 完了時に「成功 N件 (実変換 M件 / 変換なし K件)」と内訳を明示。<strong>500ms 後に自動で再スキャン</strong>を実行して表と件数を最新化。</li>
+                  <li>境界バグ: <code>&gt; min_content</code> → <code>&gt;= min_content</code> に修正して stats と split の判定基準を揃える。</li>
+                </ul>
+              </li>
+              <li><strong>期待動作</strong>: 全件適用直後に自動再スキャンが走り「スキャン完了: 150件チェック / 整形対象 0件」となる（もしくは残った件数だけ表示）。もし残る場合、各行の「残 N件」表示で「どの検出タイプが分割できていないか」が一目でわかる。</li>
+              <li><strong>バージョン同期</strong>: <code>AFFIROS_PSPLIT_VERSION</code> 1.1.2 → 1.1.3 / <code>affiros-paragraph-splitter-1.1.3.zip</code> 生成 / <code>PLUGIN_DOWNLOADS['paragraph-splitter']</code> 追従 / <code>APP_VERSION</code> 1.7.95 → 1.7.96。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.95 / inserter v1.9.31 (2026-07-17) — 楽天 API 全面リニューアル対応（openapi.rakuten.co.jp 移行）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>症状</strong>: v1.7.89 でバージョンを <code>20260401</code> に上げたが、なお HTTP 400（"Bad Request"）が返る状態。UI から楽天 API 経由の商品検索が全滅。</li>
