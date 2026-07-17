@@ -1824,29 +1824,29 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             </a>
           </div>
 
-          <!-- ❸ リライト -->
+          <!-- ❸ ポストプロセッサー（旧: リライター） -->
           <div class="settings-section" style="margin:0">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
               <div style="font-size:22px">✏️</div>
               <div style="flex:1">
-                <div style="font-weight:700;font-size:14px">❸ Affiros リライター</div>
-                <div style="font-size:11px;color:var(--muted)">リライト / 既存記事の AI 再生成</div>
+                <div style="font-weight:700;font-size:14px">❸ Affiros ポストプロセッサー</div>
+                <div style="font-size:11px;color:var(--muted)">生成記事の後工程を全部やる: リライト / 広告削除&挿入 / 章入れ替え / 段落整形</div>
               </div>
               <div style="font-size:11px;background:rgba(102,210,255,0.18);color:#66d2ff;padding:2px 8px;border-radius:10px">v{{ plugin_downloads['rewrite'].version }}</div>
             </div>
             <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:10px">
-              WordPress 管理画面の投稿一覧から、既存記事を Claude API で
-              リライトできるプラグイン。wp_manager の品質定義を引き継ぎ、
-              文体・構成・キーワード密度をリフレッシュします。下書き保存 →
-              本人確認 → 公開の安全フロー。
+              Affiros9 で生成した記事の後工程を1プラグインに集約した統合ツール。<strong>4つのタブ</strong>で機能切替:
+              <strong>✍ リライト</strong>（Claude API で本文書き直し）/ <strong>📢 広告削除&挿入</strong>（既存カード除去・マーカー再配置）/
+              <strong>🔀 章入れ替え</strong>（H2 章順を SEO 最適に並び替え）/ <strong>📝 段落整形</strong>（長段落を句読点で機械分割・見出し昇格）。
+              WP_Query 内部処理でホスティング WAF の影響を受けません（403 回避）。
             </div>
             <div style="font-size:11px;color:var(--muted);background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:6px;margin-bottom:8px">
               <div>📂 配布物: <code>{{ plugin_downloads['rewrite'].file }}</code></div>
-              <div>🔧 設定: WP管理画面 →「Affiros リライト」</div>
-              <div>📝 必要キー: Claude API キー</div>
+              <div>🔧 設定: WP管理画面 →「Affiros ポストプロセッサー」</div>
+              <div>📝 必要キー: Claude API キー（リライト機能を使うときだけ。他3機能は API 不要）</div>
             </div>
             <div style="font-size:11px;color:var(--muted);margin-bottom:12px">
-              主要機能: 単体リライト / 一括リライト / 品質プリセット適用 / 差分プレビュー
+              主要機能: 単体/一括リライト / 差分プレビュー / 品質プリセット適用 / 商品カード削除&挿入 / H2 章の SEO 順並び替え / 長段落自動分割 / strong ラベル昇格 / 保存時自動整形 hook
             </div>
             <a href="/download/plugin/rewrite" class="btn btn-primary" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;text-decoration:none">
               ⬇ ダウンロード（v{{ plugin_downloads['rewrite'].version }}）
@@ -1911,40 +1911,12 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             </a>
           </div>
 
-          <!-- ❻ 段落整形 -->
-          <div class="settings-section" style="margin:0">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-              <div style="font-size:22px">📝</div>
-              <div style="flex:1">
-                <div style="font-weight:700;font-size:14px">❻ Affiros 段落整形</div>
-                <div style="font-size:11px;color:var(--muted)">長すぎる段落を句点・接続詞・最大文字数で機械的に分割</div>
-              </div>
-              <div style="font-size:11px;background:rgba(102,210,255,0.18);color:#66d2ff;padding:2px 8px;border-radius:10px">v{{ plugin_downloads['paragraph-splitter'].version }}</div>
-            </div>
-            <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:10px">
-              Affiros9 本体側でも段落分割はやってるが、Claude が読点で繋いだ長文や接続詞ベタ詰めの長段落は捕まえきれない。
-              この WP プラグインは <strong>WP 側で機械的に強制分割</strong>。句点・接続詞・最大文字数の3層で確実に区切る。
-              プレビュー付きで適用前後の比較が可能、リビジョン自動保存でロールバックも可能。
-            </div>
-            <div style="font-size:11px;color:var(--muted);background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:6px;margin-bottom:8px">
-              <div>📂 配布物: <code>{{ plugin_downloads['paragraph-splitter'].file }}</code></div>
-              <div>🔧 設定: WP管理画面 → ツール → 📝 段落整形</div>
-              <div>📝 必要キー: なし（API不要、機械処理）</div>
-            </div>
-            <div style="font-size:11px;color:var(--muted);margin-bottom:12px">
-              主要機能: 長段落自動分割 / 句点・接続詞・読点での3層分割 / 全記事一括スキャン+プレビュー / 編集画面サイドバーから即整形 / 保存時自動 hook / H2/H3 前後の余白 / 句読点正規化
-            </div>
-            <a href="/download/plugin/paragraph-splitter" class="btn btn-primary" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;text-decoration:none">
-              ⬇ ダウンロード（v{{ plugin_downloads['paragraph-splitter'].version }}）
-            </a>
-          </div>
-
-          <!-- ❼ 予約再スケジュール -->
+          <!-- ❻ 予約再スケジュール（旧:❼、段落整形を❸に統合したため繰り上げ） -->
           <div class="settings-section" style="margin:0">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
               <div style="font-size:22px">📅</div>
               <div style="flex:1">
-                <div style="font-weight:700;font-size:14px">❼ Affiros 予約再スケジュール</div>
+                <div style="font-weight:700;font-size:14px">❻ Affiros 予約再スケジュール</div>
                 <div style="font-size:11px;color:var(--muted)">予約投稿の投稿頻度を一括変更（1日N件で振り直し）</div>
               </div>
               <div style="font-size:11px;background:rgba(102,210,255,0.18);color:#66d2ff;padding:2px 8px;border-radius:10px">v{{ plugin_downloads['reschedule'].version }}</div>
@@ -1967,12 +1939,12 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             </a>
           </div>
 
-          <!-- ❽ 黄色マーカー削除 -->
+          <!-- ❼ 黄色マーカー削除（旧:❽） -->
           <div class="settings-section" style="margin:0">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
               <div style="font-size:22px">🟡</div>
               <div style="flex:1">
-                <div style="font-weight:700;font-size:14px">❽ Affiros 黄色マーカー削除</div>
+                <div style="font-weight:700;font-size:14px">❼ Affiros 黄色マーカー削除</div>
                 <div style="font-size:11px;color:var(--muted)">過去に挿入された <code>&lt;mark&gt;</code> 黄色マーカーを一括削除</div>
               </div>
               <div style="font-size:11px;background:rgba(102,210,255,0.18);color:#66d2ff;padding:2px 8px;border-radius:10px">v{{ plugin_downloads['mark-stripper'].version }}</div>
