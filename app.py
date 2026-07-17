@@ -235,7 +235,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.88'
+APP_VERSION = '1.7.89'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -1314,7 +1314,10 @@ def fetch_url_text(url, max_chars=2500, timeout=5):
     return p.text()[:max_chars]
 
 
-RAKUTEN_SEARCH_ENDPOINT = 'https://app.rakuten.co.jp/services/api/IchibaItem/Search/20220601'
+# v1.7.89 (2026-07-17): 20220601 は「メンテナンス中」応答を返すようになり
+# 2026-08-17 に廃止予定。安定版の 20260401 に更新。
+# レスポンス形状は formatVersion=2 でほぼ互換。
+RAKUTEN_SEARCH_ENDPOINT = 'https://app.rakuten.co.jp/services/api/IchibaItem/Search/20260401'
 
 
 def rakuten_search(query, app_id, affiliate_id=None, limit=20, timeout=8):
@@ -6357,9 +6360,9 @@ def favicon():
 PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugin-downloads')
 PLUGIN_DOWNLOADS = {
     'product-inserter': {
-        'file': 'affiros-product-inserter-1.9.27.zip',
+        'file': 'affiros-product-inserter-1.9.28.zip',
         'name': 'Affiros プロダクトインサーター',
-        'version': '1.9.27',
+        'version': '1.9.28',
     },
     'decoration': {
         'file': 'affiros-decoration-1.2.3.zip',

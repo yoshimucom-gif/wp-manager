@@ -1991,6 +1991,30 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.89 / inserter v1.9.28 (2026-07-17) — 楽天 API のバージョン更新（20220601 → 20260401）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>症状</strong>: プラグインの一括処理で「[楽天] IchibaItem/Search/20220601 is under maintenance」エラー多発。</li>
+              <li><strong>真因</strong>: 楽天 API のバージョン <code>20220601</code>（2022年6月版）が「メンテナンス中」応答を返すようになり、<strong>2026-08-17 に完全廃止</strong>予定。</li>
+              <li><strong>修正</strong>: 本体・プラグイン両方の URL を安定版 <code>20260401</code> に更新。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>本体: <code>app.py:1317</code> の <code>RAKUTEN_SEARCH_ENDPOINT</code></li>
+                  <li>プラグイン: <code>plugin-patches/affiros-product-inserter/includes/rakuten-api.php:13</code></li>
+                  <li>レスポンス形状は <code>formatVersion=2</code> でほぼ互換のため <code>parse_search_results</code> は変更不要</li>
+                </ul>
+              </li>
+              <li><strong>Amazon PA-API v5 は別途対応中</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>Amazon は 2026-04-30 に deprecated、2026-05-15 にエンドポイント OFF 予告</li>
+                  <li>2026-07-13 頃から実運用でハード拒否（HTTP エラー）開始が確認</li>
+                  <li>Creators API（OAuth 2.0）への移行が必要 — 別 push で対応予定</li>
+                  <li>既存の商品カード（静的HTML）は継続表示。Amazon リンクの計上も継続</li>
+                </ul>
+              </li>
+              <li><strong>バージョン同期</strong>: <code>AI_PI_VERSION</code> 1.9.27 → 1.9.28 / <code>affiros-product-inserter-1.9.28.zip</code> 生成 / <code>PLUGIN_DOWNLOADS['product-inserter']</code> 追従 / <code>APP_VERSION</code> 1.7.88 → 1.7.89。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.88 / rewrite v0.4.49 (2026-07-13) — Pre_Cleanup と existing_markers 検出の regex 齟齬を修正</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>症状</strong>: karenai-green.com の実測で「🗑 マーカー消す → 保存 → 🎯 マーカー挿入」の順に実行しても「既存の商品カード 0 個 / マーカー 1 個が検出されました。先に🗑を実行して除去してから挿入してください。」のエラーで詰み。</li>

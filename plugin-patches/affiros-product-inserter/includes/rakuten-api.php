@@ -10,7 +10,12 @@ class AI_PI_Rakuten_API {
 
     private $app_id;
     private $affiliate_id;
-    private $api_url = 'https://app.rakuten.co.jp/services/api/IchibaItem/Search/20220601';
+    // v1.9.28 (2026-07-17): 20220601 は「メンテナンス中」応答を返すようになり
+    // 2026-08-17 に廃止予定。安定版の 20260401 に更新。
+    // レスポンス形状は formatVersion=2 でほぼ互換だが、
+    // parse_search_results 側で互換性維持のため itemName/itemPrice 等の
+    // 従来キーを引き続き参照している。
+    private $api_url = 'https://app.rakuten.co.jp/services/api/IchibaItem/Search/20260401';
 
     /**
      * @param array|null $config 指定時はこの配列を設定値として使う（接続テスト用）。
