@@ -2031,6 +2031,38 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.7.97 / rewrite v0.5.0 / paragraph-splitter v1.1.4 (2026-07-17) — 段落整形をリライタープラグインに統合</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: 「章入れ替え / 広告削除&挿入 / リライト / 段落整形」の4つはどれも「Affiros9 で生成した記事の HTML 品質を機械的に整える」系機能。これまで段落整形だけ独立プラグイン affiros-paragraph-splitter になっていて、ユーザー的には「同じ目的のプラグインを2個管理する」手間があった。統合してリライタープラグイン1個に集約。</li>
+              <li><strong>UI 変更</strong>: リライタープラグインの管理画面に <strong>4つ目のタブ「📝 段落整形」</strong>を追加。中身は旧プラグインの管理画面と完全に同じ（設定 + スキャン + 全件適用）。投稿編集画面のメタボックス（右カラムの即整形ボタン）もそのまま提供。</li>
+              <li><strong>技術構成</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>旧プラグインの 1300 行をそのまま <code>plugin-patches/affiros-rewrite/includes/paragraph-splitter.php</code> にコピー</li>
+                  <li>削除: プラグインヘッダー / plugin-updater include / <code>add_management_page</code>（メニュー登録）</li>
+                  <li>変更: <code>admin_enqueue_scripts</code> を affiros-rewrite 管理画面と投稿編集画面で発火するように</li>
+                  <li>追加: タブ埋め込み用に <code>affiros_psplit_render_tab_body()</code>（<code>&lt;div class="wrap"&gt;&lt;h1&gt;</code> なしの本体版）</li>
+                  <li>設定オプションキー <code>affiros_psplit_settings</code> はそのまま流用 → 既存ユーザーの設定はゼロ移行で引き継がれる</li>
+                </ul>
+              </li>
+              <li><strong>共存ガード（3層）</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>統合版 (rewrite/includes/paragraph-splitter.php): 先頭で <code>defined('AFFIROS_PSPLIT_VERSION')</code> をチェックし、旧プラグインが先にロード済みなら統合版側は何もしない</li>
+                  <li>旧プラグイン v1.1.4 (affiros-paragraph-splitter): 先頭で <code>defined('AFFIROS_PSPLIT_INTEGRATED_LOADED')</code> をチェックし、統合版がロード済みなら旧プラグイン側は何もしない</li>
+                  <li>両方に admin notice: 「旧プラグインは無効化して構いません」を表示</li>
+                </ul>
+              </li>
+              <li><strong>移行手順</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>① 各 WP サイトで Affiros リライター v0.5.0 に更新（自動更新で通知）</li>
+                  <li>② 「Affiros リライト」→ 4つ目のタブ「📝 段落整形」で動作確認</li>
+                  <li>③ 旧プラグイン「Affiros 段落整形」を無効化・削除。データ・設定は完全に引き継がれる</li>
+                </ul>
+              </li>
+              <li><strong>バージョン同期</strong>: <code>AFFIROS_REWRITE_VERSION</code> 0.4.49 → 0.5.0 / <code>AFFIROS_PSPLIT_VERSION</code> 1.1.3 → 1.1.4（旧プラグイン側の移行版）/ <code>affiros-rewrite-0.5.0.zip</code> + <code>affiros-paragraph-splitter-1.1.4.zip</code> 生成 / <code>PLUGIN_DOWNLOADS</code> 追従 / <code>APP_VERSION</code> 1.7.96 → 1.7.97。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.7.96 / paragraph-splitter v1.1.3 (2026-07-17) — 「成功27件」なのに整形対象が減らないバグ修正</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>症状</strong>: WP 段落整形プラグインの「✨ 全件に適用」実行後、「完了: 成功 27件 / 失敗 0件」と表示されるが、下の整形対象リストは <strong>まったく減らず</strong>、同じ 27件がそのまま残る。</li>

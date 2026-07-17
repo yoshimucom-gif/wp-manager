@@ -1,38 +1,39 @@
 <?php
 /**
- * Plugin Name: Affiros 段落整形
- * Description: 【統合済】affiros-rewrite v0.5.0 に統合されました。affiros-rewrite プラグインをインストールしていればこのプラグインは無効化して構いません。
- * Version: 1.1.4
- * Author: Affiros
- * License: GPL v2 or later
+ * 段落整形モジュール（affiros-rewrite v0.5.0 で統合）
+ *
+ * 元は独立プラグイン affiros-paragraph-splitter だったが、
+ * 章入れ替え/広告削除挿入/リライトと同じ「生成済み記事のHTML品質を機械的に整える」
+ * 系機能なので affiros-rewrite に統合した。
+ *
+ * 共存ガード:
+ * - 旧 affiros-paragraph-splitter プラグインが有効な環境では
+ *   AFFIROS_PSPLIT_VERSION が先に define されている可能性があるので、
+ *   このモジュールは何もせず終了する。
+ * - 旧プラグイン側 v1.1.4 以降は逆に、統合版が読まれていたら自分は skip する
+ *   (AFFIROS_PSPLIT_INTEGRATED_LOADED 定数で判定)
  */
 
 if (!defined('ABSPATH')) exit;
 
-// v1.1.4: affiros-rewrite v0.5.0 以降が有効な環境では、
-// 統合版の paragraph-splitter が既にロードされている可能性がある。
-// 二重ロードを避けるため、統合版マーカーが定義されていたら
-// このプラグインは初期化をスキップして admin notice だけ出す。
-if (defined('AFFIROS_PSPLIT_INTEGRATED_LOADED')) {
+if (defined('AFFIROS_PSPLIT_INTEGRATED_LOADED')) return; // 二重ロード防止
+if (defined('AFFIROS_PSPLIT_VERSION')) {
+    // 旧スタンドアロン版が先にロードされている場合、統合版はスキップ。
+    // 旧を優先させて衝突を避ける（機能は同じ、ただし旧版は個別プラグイン更新が必要）
     add_action('admin_notices', function () {
         if (!current_user_can('manage_options')) return;
         echo '<div class="notice notice-warning is-dismissible"><p>'
-            . '<strong>Affiros 段落整形</strong> は Affiros リライター v0.5.0 に統合されました。'
-            . 'このプラグインは <strong>無効化・削除して構いません</strong>（機能は統合版でそのまま提供され、設定・データも引き継がれます）。'
+            . '<strong>Affiros:</strong> 「Affiros 段落整形」プラグインは Affiros リライター v0.5.0 に統合されました。'
+            . '<strong>プラグイン一覧で旧「Affiros 段落整形」を無効化・削除</strong>してください。設定と挙動は完全に引き継がれます。'
             . '</p></div>';
     });
     return;
 }
-
-define('AFFIROS_PSPLIT_VERSION', '1.1.4');
-define('AFFIROS_PSPLIT_OPTION_KEY', 'affiros_psplit_settings');
-
-// 自動更新通知（Affiros9 サーバーから定期チェック）
-require_once __DIR__ . '/includes/plugin-updater.php';
-add_action('init', function () {
-    $host = defined('AFFIROS_UPDATE_HOST') ? AFFIROS_UPDATE_HOST : 'https://wp-manager.onrender.com';
-    new Affiros_Plugin_Updater(__FILE__, rtrim($host, '/') . '/api/plugin-update/paragraph-splitter');
-});
+define('AFFIROS_PSPLIT_INTEGRATED_LOADED', true);
+define('AFFIROS_PSPLIT_VERSION', '1.1.3'); // 統合版が保有するバージョン
+if (!defined('AFFIROS_PSPLIT_OPTION_KEY')) {
+    define('AFFIROS_PSPLIT_OPTION_KEY', 'affiros_psplit_settings');
+}
 
 // =============================================================================
 // 設定
@@ -778,18 +779,8 @@ function affiros_psplit_on_save($post_id, $post, $update) {
 }
 
 // =============================================================================
-// 管理画面: メニュー登録
+// 管理画面: 設定登録（メニューは affiros-rewrite の「📝 段落整形」タブに統合）
 // =============================================================================
-
-add_action('admin_menu', function () {
-    add_management_page(
-        '段落整形ツール',
-        '📝 段落整形',
-        'manage_options',
-        'affiros-psplit',
-        'affiros_psplit_render_page'
-    );
-});
 
 add_action('admin_init', function () {
     register_setting('affiros_psplit_group', AFFIROS_PSPLIT_OPTION_KEY, [
@@ -819,7 +810,9 @@ function affiros_psplit_sanitize($input) {
 }
 
 add_action('admin_enqueue_scripts', function ($hook) {
-    if ($hook !== 'tools_page_affiros-psplit') return;
+    // affiros-rewrite の管理画面全般で AffirosPsplit を利用可能にする
+    // （タブ「📝 段落整形」および投稿編集画面のメタボックスで使用）
+    if (strpos($hook, 'affiros-rewrite') === false && $hook !== 'post.php' && $hook !== 'post-new.php') return;
     wp_localize_script('jquery', 'AffirosPsplit', [
         'ajaxUrl' => admin_url('admin-ajax.php'),
         'nonce'   => wp_create_nonce('affiros_psplit_nonce'),
@@ -830,13 +823,16 @@ add_action('admin_enqueue_scripts', function ($hook) {
 // 管理画面: メインページ
 // =============================================================================
 
-function affiros_psplit_render_page() {
+/**
+ * v0.5.0 統合版: タブ埋め込み用にラッパーの div.wrap と h1 を除去した本体。
+ * affiros-rewrite の「📝 段落整形」タブから呼び出す。
+ */
+function affiros_psplit_render_tab_body() {
     if (!current_user_can('manage_options')) return;
     $settings = affiros_psplit_get_settings();
     $defaults = affiros_psplit_default_settings();
     ?>
-    <div class="wrap">
-        <h1>📝 Affiros 段落整形</h1>
+    <div class="affiros-psplit-tab-body">
         <p style="font-size:13px;line-height:1.7">
             長すぎる段落を句点・接続詞・最大文字数で機械的に分割し、視覚的に読みやすくします。<br>
             画像・表・リストを含む段落は壊さないようスキップ。WP リビジョンが自動保存されるので<strong>適用後でも元に戻せます</strong>。

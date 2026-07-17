@@ -20,10 +20,12 @@ function affiros_rewrite_render_rewrite_page() {
         </p>
 
         <!-- v0.4.47: タブナビゲーション（機能ごとに UI を切替） -->
+        <!-- v0.5.0: 4つ目に「段落整形」タブを追加（旧 affiros-paragraph-splitter を統合） -->
         <h2 class="nav-tab-wrapper" style="margin-top:18px;">
             <a href="#" class="nav-tab nav-tab-active affiros-tab-nav" data-tab="rewrite">✍ リライト</a>
             <a href="#" class="nav-tab affiros-tab-nav" data-tab="ads">📢 広告削除&amp;挿入</a>
             <a href="#" class="nav-tab affiros-tab-nav" data-tab="reorder">🔀 章入れ替え</a>
+            <a href="#" class="nav-tab affiros-tab-nav" data-tab="psplit">📝 段落整形</a>
         </h2>
         <div class="affiros-tab-desc" data-tab="rewrite" style="margin:8px 0 12px;padding:8px 12px;background:#f0f6fc;border-left:3px solid #2271b1;font-size:13px;">
             <strong>✍ リライト</strong>: Claude API で記事本文を書き直します。料金あり（¥数十/記事）。マーカー挿入も同時実行可（オプション参照）。
@@ -33,6 +35,9 @@ function affiros_rewrite_render_rewrite_page() {
         </div>
         <div class="affiros-tab-desc" data-tab="reorder" style="display:none;margin:8px 0 12px;padding:8px 12px;background:#f0f6fc;border-left:3px solid #2271b1;font-size:13px;">
             <strong>🔀 章入れ替え</strong>: H2 章の順序を SEO 最適（選定基準→ランキング→選び方→FAQ→まとめ）に並び替え。本文自体は変更しない。Claude 呼ばず料金ゼロ。
+        </div>
+        <div class="affiros-tab-desc" data-tab="psplit" style="display:none;margin:8px 0 12px;padding:8px 12px;background:#f0f6fc;border-left:3px solid #2271b1;font-size:13px;">
+            <strong>📝 段落整形</strong>: 長すぎる段落を句読点・接続詞で機械分割 / 見出しっぽい段落を h3/h4 に昇格 / <code>&lt;li&gt;&lt;strong&gt;ラベル&lt;/strong&gt;：長文</code>を見出し+段落に分解。Claude 呼ばず料金ゼロ。
         </div>
 
         <?php if (!$has_api_key): ?>
@@ -53,6 +58,20 @@ function affiros_rewrite_render_rewrite_page() {
                 </p>
             </div>
         <?php endif; ?>
+
+        <!-- v0.5.0: 段落整形タブ本体（旧 affiros-paragraph-splitter を統合） -->
+        <div class="affiros-tab-only" data-tab="psplit" style="display:none;">
+            <?php
+            if (function_exists('affiros_psplit_render_tab_body')) {
+                affiros_psplit_render_tab_body();
+            } else {
+                echo '<div class="notice notice-error"><p>段落整形モジュールが読み込まれていません。プラグインファイルが破損している可能性があります。</p></div>';
+            }
+            ?>
+        </div>
+
+        <!-- rewrite / ads / reorder タブ本体（従来のツールバー・結果表・モーダル） -->
+        <div class="affiros-tab-only affiros-non-psplit-wrap" data-tab="rewrite ads reorder">
 
         <div class="affiros-rewrite-toolbar" style="display:flex;gap:10px;align-items:center;margin:18px 0;flex-wrap:wrap;">
             <input type="text" id="affiros-search" placeholder="タイトル・本文を検索..." style="flex:1;min-width:240px;padding:6px 10px;">
@@ -209,6 +228,8 @@ function affiros_rewrite_render_rewrite_page() {
         </div>
 
         <div id="affiros-pagination" style="margin-top:12px;text-align:center;"></div>
+
+        </div><!-- /.affiros-non-psplit-wrap -->
     </div>
 
     <!-- リライト結果モーダル（単記事用） -->

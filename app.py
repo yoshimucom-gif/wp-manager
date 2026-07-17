@@ -235,7 +235,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.96'
+APP_VERSION = '1.7.97'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -6429,9 +6429,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.2.3',
     },
     'rewrite': {
-        'file': 'affiros-rewrite-0.4.49.zip',
+        'file': 'affiros-rewrite-0.5.0.zip',
         'name': 'Affiros リライター',
-        'version': '0.4.49',
+        'version': '0.5.0',
     },
     'categorizer': {
         'file': 'affiros-categorizer-0.1.1.zip',
@@ -6444,9 +6444,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.0.1',
     },
     'paragraph-splitter': {
-        'file': 'affiros-paragraph-splitter-1.1.3.zip',
-        'name': 'Affiros 段落整形',
-        'version': '1.1.3',
+        'file': 'affiros-paragraph-splitter-1.1.4.zip',
+        'name': 'Affiros 段落整形 (統合済・移行用)',
+        'version': '1.1.4',
     },
     'reschedule': {
         'file': 'affiros-reschedule-1.1.0.zip',

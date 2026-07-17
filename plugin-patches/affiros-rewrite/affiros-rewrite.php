@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros リライター
  * Description: WordPress記事をClaude APIでリライトする。WP_Queryで内部処理するためホスティングWAFの影響を受けない（403回避）。
- * Version: 0.4.49
+ * Version: 0.5.0
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-rewrite
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('AFFIROS_REWRITE_VERSION', '0.4.49');
+define('AFFIROS_REWRITE_VERSION', '0.5.0');
 define('AFFIROS_REWRITE_PATH', plugin_dir_path(__FILE__));
 define('AFFIROS_REWRITE_URL', plugin_dir_url(__FILE__));
 
@@ -31,6 +31,9 @@ require_once AFFIROS_REWRITE_PATH . 'includes/gutenberg-converter.php';
 require_once AFFIROS_REWRITE_PATH . 'includes/pre-cleanup.php';
 require_once AFFIROS_REWRITE_PATH . 'includes/section-reorder.php';
 require_once AFFIROS_REWRITE_PATH . 'includes/revision-restorer.php';
+// v0.5.0: 旧独立プラグイン affiros-paragraph-splitter を統合。
+// 旧プラグインが有効な環境では自動でスキップして共存する（読み込み側の guard 参照）。
+require_once AFFIROS_REWRITE_PATH . 'includes/paragraph-splitter.php';
 require_once AFFIROS_REWRITE_PATH . 'includes/plugin-updater.php';
 require_once AFFIROS_REWRITE_PATH . 'admin/settings-page.php';
 require_once AFFIROS_REWRITE_PATH . 'admin/rewrite-page.php';
