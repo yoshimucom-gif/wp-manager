@@ -235,7 +235,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.7.90'
+APP_VERSION = '1.7.91'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -4440,7 +4440,13 @@ def amazon_search(query, client_id, client_secret, partner_tag,
             headers=headers,
             timeout=timeout,
         )
-    resp.raise_for_status()
+    # v1.7.91: エラー時は body も詳細ログとして拾う（原因特定用）
+    if resp.status_code != 200:
+        body_snippet = (resp.text or '')[:800]
+        raise ValueError(
+            f'Amazon Creators API SearchItems 失敗 (HTTP {resp.status_code}): '
+            f'{body_snippet} / sent_payload={json.dumps(payload, ensure_ascii=False)[:300]}'
+        )
     data = resp.json() or {}
 
     # Creators API は lowerCamelCase。
