@@ -110,21 +110,24 @@ class AI_PI_Amazon_API {
         $token = $this->get_access_token();
         if (is_wp_error($token)) return $token;
 
-        // Creators API リクエスト（lowerCamelCase）
+        // v1.9.30: 公式ドキュメント（api-reference の SearchItems 章）に基づく正しい payload。
+        // 学び:
+        //   - PA-API v5 の 'Offers' は 'offersV2' に改称された
+        //   - partnerType, searchIndex はデフォルトで OK なので省略
+        //   - resources 値は lowerCamelCase
+        //   - offers.summaries.lowestPrice は Creators API に存在しない
+        //     （listings のみ）
         $payload = [
-            'keywords'    => (string)$keyword,
-            'searchIndex' => 'All',
-            'itemCount'   => min(10, max(1, intval($item_count))),
-            'partnerTag'  => $this->partner_tag,
-            'partnerType' => 'Associates',
-            'resources'   => [
-                'images.primary.large',
+            'keywords'   => (string)$keyword,
+            'itemCount'  => min(10, max(1, intval($item_count))),
+            'partnerTag' => $this->partner_tag,
+            'resources'  => [
                 'images.primary.medium',
+                'images.primary.large',
                 'itemInfo.title',
                 'itemInfo.byLineInfo',
                 'itemInfo.features',
-                'offers.listings.price',
-                'offers.summaries.lowestPrice',
+                'offersV2.listings.price',
             ],
         ];
 
@@ -177,10 +180,16 @@ class AI_PI_Amazon_API {
     }
 
     /**
-     * レスポンス解析（Creators API は lowerCamelCase）
+     * レスポンス解析（Creators API 公式仕様準拠）
+     *
+     * v1.9.30 (2026-07-17): 公式ドキュメントに基づく正しい parser。
+     * - offers → offersV2
+     * - price は listings[0].price.money.amount / displayAmount
+     * - detailPageURL の URL は大文字（公式レスポンス例より）
+     * - customerReviews は Creators API で提供されない
      */
     private function parse_search_results($data) {
-        $items = $data['searchResult']['items'] ?? $data['itemsResult']['items'] ?? [];
+        $items = $data['searchResult']['items'] ?? [];
         $products = [];
 
         foreach ($items as $item) {
@@ -192,23 +201,23 @@ class AI_PI_Amazon_API {
                 ?? $item['itemInfo']['byLineInfo']['manufacturer']['displayValue']
                 ?? '';
 
+            // 価格は offersV2.listings[0].price.money.amount
             $price_amount = 0;
             $price_display = '';
-            if (!empty($item['offers']['listings'][0]['price']['amount'])) {
-                $price_amount = $item['offers']['listings'][0]['price']['amount'];
-                $price_display = $item['offers']['listings'][0]['price']['displayAmount'] ?? '';
-            } elseif (!empty($item['offers']['summaries'][0]['lowestPrice']['amount'])) {
-                $price_amount = $item['offers']['summaries'][0]['lowestPrice']['amount'];
-                $price_display = $item['offers']['summaries'][0]['lowestPrice']['displayAmount'] ?? '';
-            } elseif (!empty($item['offers']['listings'][0]['savingBasis']['amount'])) {
-                $price_amount = $item['offers']['listings'][0]['savingBasis']['amount'];
-                $price_display = $item['offers']['listings'][0]['savingBasis']['displayAmount'] ?? '';
+            $listings = $item['offersV2']['listings'] ?? [];
+            if (!empty($listings[0]['price']['money'])) {
+                $money = $listings[0]['price']['money'];
+                $price_amount = $money['amount'] ?? 0;
+                $price_display = $money['displayAmount'] ?? '';
             }
-            $image_large = $item['images']['primary']['large']['url'] ?? '';
+
             $image_medium = $item['images']['primary']['medium']['url'] ?? '';
-            $rating = $item['customerReviews']['starRating']['value'] ?? 0;
-            $review_count = $item['customerReviews']['count']['value'] ?? 0;
-            $detail_url = $item['detailPageUrl'] ?? '';
+            $image_large  = $item['images']['primary']['large']['url'] ?? '';
+
+            // detailPageURL は URL 大文字が公式（fallback で detailPageUrl も見る）
+            $detail_url = $item['detailPageURL']
+                ?? $item['detailPageUrl']
+                ?? '';
 
             $products[] = [
                 'source' => 'amazon',
@@ -219,8 +228,9 @@ class AI_PI_Amazon_API {
                 'price' => floatval($price_amount),
                 'price_display' => $price_display ?: ($price_amount > 0 ? ('¥' . number_format($price_amount)) : ''),
                 'image' => $image_large ?: $image_medium,
-                'rating' => floatval($rating),
-                'review_count' => intval($review_count),
+                // Creators API はレビュー情報を返さない
+                'rating' => 0,
+                'review_count' => 0,
                 'url' => $detail_url,
                 'fetched_at' => current_time('mysql'),
             ];
