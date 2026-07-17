@@ -1853,70 +1853,12 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             </a>
           </div>
 
-          <!-- ❹ カテゴリー自動設定 -->
-          <div class="settings-section" style="margin:0">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-              <div style="font-size:22px">🗂️</div>
-              <div style="flex:1">
-                <div style="font-weight:700;font-size:14px">❹ Affiros カテゴライザー</div>
-                <div style="font-size:11px;color:var(--muted)">カテゴリー / 投稿時の自動分類</div>
-              </div>
-              <div style="font-size:11px;background:rgba(102,210,255,0.18);color:#66d2ff;padding:2px 8px;border-radius:10px">v{{ plugin_downloads['categorizer'].version }}</div>
-            </div>
-            <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:10px">
-              記事の公開時に Claude API で本文を解析し、適切なカテゴリーを
-              自動で紐付ける WordPress 側プラグイン。分類表は持たず、
-              インストール先サイトの<strong>実カテゴリーを動的に読み取る</strong>ため、
-              どのサイトでもそのまま動作します。
-            </div>
-            <div style="font-size:11px;color:var(--muted);background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:6px;margin-bottom:8px">
-              <div>📂 配布物: <code>{{ plugin_downloads['categorizer'].file }}</code></div>
-              <div>🔧 設定: WP管理画面 →「Affiros カテゴライザー」</div>
-              <div>📝 必要キー: Claude API キー</div>
-            </div>
-            <div style="font-size:11px;color:var(--muted);margin-bottom:12px">
-              主要機能: 公開時の自動分類 / 一括分類（未分類の解消）/ 実カテゴリー動的取得 / 親子カテゴリー判定
-            </div>
-            <a href="/download/plugin/categorizer" class="btn btn-primary" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;text-decoration:none">
-              ⬇ ダウンロード（v{{ plugin_downloads['categorizer'].version }}）
-            </a>
-          </div>
-
-          <!-- ❺ 重複投稿クリーンアップ -->
-          <div class="settings-section" style="margin:0">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-              <div style="font-size:22px">🧹</div>
-              <div style="flex:1">
-                <div style="font-weight:700;font-size:14px">❺ Affiros 重複投稿クリーンアップ</div>
-                <div style="font-size:11px;color:var(--muted)">同タイトルで重複投稿された記事の検出・削除（単機能）</div>
-              </div>
-              <div style="font-size:11px;background:rgba(102,210,255,0.18);color:#66d2ff;padding:2px 8px;border-radius:10px">v{{ plugin_downloads['dup-cleaner'].version }}</div>
-            </div>
-            <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:10px">
-              Affiros9 本体 v1.7.27 以前の予約投稿バグ（重複送信）で WP に
-              作られてしまった重複記事を片付けるための<strong>単機能ツール</strong>。
-              スキャン → プレビュー → 削除、だけ。リライター・インサーターと完全に独立。
-              <strong>普段は不要、片付け時だけ入れて使ったら削除して OK</strong>。
-            </div>
-            <div style="font-size:11px;color:var(--muted);background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:6px;margin-bottom:8px">
-              <div>📂 配布物: <code>{{ plugin_downloads['dup-cleaner'].file }}</code></div>
-              <div>🔧 設定: WP管理画面 → ツール → 🧹 重複投稿クリーンアップ</div>
-              <div>📝 必要キー: なし（API不要）</div>
-            </div>
-            <div style="font-size:11px;color:var(--muted);margin-bottom:12px">
-              主要機能: post_title でグルーピング / 最古1件を保持 / 残りをゴミ箱送り（または永久削除）/ 個別 or 一括削除
-            </div>
-            <a href="/download/plugin/dup-cleaner" class="btn btn-primary" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;text-decoration:none">
-              ⬇ ダウンロード（v{{ plugin_downloads['dup-cleaner'].version }}）
-            </a>
-          </div>
-
-          <!-- ❻ 予約再スケジュール（旧:❼、段落整形を❸に統合したため繰り上げ） -->
+          <!-- ❹ 予約再スケジュール（カテゴライザー/重複投稿/黄色マーカー削除の3つは配布ページから外した） -->
           <div class="settings-section" style="margin:0">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
               <div style="font-size:22px">📅</div>
               <div style="flex:1">
-                <div style="font-weight:700;font-size:14px">❻ Affiros 予約再スケジュール</div>
+                <div style="font-weight:700;font-size:14px">❹ Affiros 予約再スケジュール</div>
                 <div style="font-size:11px;color:var(--muted)">予約投稿の投稿頻度を一括変更（1日N件で振り直し）</div>
               </div>
               <div style="font-size:11px;background:rgba(102,210,255,0.18);color:#66d2ff;padding:2px 8px;border-radius:10px">v{{ plugin_downloads['reschedule'].version }}</div>
@@ -1936,34 +1878,6 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             </div>
             <a href="/download/plugin/reschedule" class="btn btn-primary" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;text-decoration:none">
               ⬇ ダウンロード（v{{ plugin_downloads['reschedule'].version }}）
-            </a>
-          </div>
-
-          <!-- ❼ 黄色マーカー削除（旧:❽） -->
-          <div class="settings-section" style="margin:0">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-              <div style="font-size:22px">🟡</div>
-              <div style="flex:1">
-                <div style="font-weight:700;font-size:14px">❼ Affiros 黄色マーカー削除</div>
-                <div style="font-size:11px;color:var(--muted)">過去に挿入された <code>&lt;mark&gt;</code> 黄色マーカーを一括削除</div>
-              </div>
-              <div style="font-size:11px;background:rgba(102,210,255,0.18);color:#66d2ff;padding:2px 8px;border-radius:10px">v{{ plugin_downloads['mark-stripper'].version }}</div>
-            </div>
-            <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:10px">
-              過去に AI 装飾で挿入された <code>&lt;mark&gt;...&lt;/mark&gt;</code> の黄色マーカーを記事から一括削除。
-              <strong>中身のテキストは残す</strong>のでタグだけ剥がす。
-              publish / future / draft / private 全てが対象、ステータス・カテゴリで絞り込み可能、リビジョン自動保存で元に戻せる。
-            </div>
-            <div style="font-size:11px;color:var(--muted);background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:6px;margin-bottom:8px">
-              <div>📂 配布物: <code>{{ plugin_downloads['mark-stripper'].file }}</code></div>
-              <div>🔧 設定: WP管理画面 → ツール → 🟡 黄色マーカー削除</div>
-              <div>📝 必要キー: なし（WP内で完結、API不要）</div>
-            </div>
-            <div style="font-size:11px;color:var(--muted);margin-bottom:12px">
-              主要機能: 全記事スキャン（4ステータス対応）/ カテゴリフィルタ / マーカー件数表示 / 個別 or 一括削除 / リビジョン自動保存
-            </div>
-            <a href="/download/plugin/mark-stripper" class="btn btn-primary" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;text-decoration:none">
-              ⬇ ダウンロード（v{{ plugin_downloads['mark-stripper'].version }}）
             </a>
           </div>
 
@@ -1999,6 +1913,29 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
               <li><strong>取り消し機能</strong>: 実行前の <code>post_date</code> / <code>post_status</code> を投稿メタに退避し、「直前の実行を取り消す」ボタンで丸ごと復元（下書きは下書きに戻る）。取り消せるのは直近1回分のみ。</li>
               <li><strong>誤記修正</strong>: v1.0.0 の画面に「リビジョンから元の予約日時に戻せる」とあったが、WP のリビジョンは <code>post_title</code> / <code>post_content</code> / <code>post_excerpt</code> しか復元せず <code>post_date</code> と <code>post_status</code> は戻らない。この虚偽の説明を削除し、実際に戻せる取り消し機能に置き換えた。</li>
               <li><strong>修正</strong>: 実行時に対象記事が削除済みだと <code>$p-&gt;post_status</code> を null に対して読んでいた箇所をガード。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
+            <div class="section-header">// v1.8.1 (2026-07-17) — プラグイン配布ページから3つのカードを削除</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>変更</strong>: 「プラグインダウンロード」ページから以下の3カードを削除。7枚 → 4枚にスリム化。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>❹ Affiros カテゴライザー</li>
+                  <li>❺ Affiros 重複投稿クリーンアップ (ポストプロセッサーの「📦 重複投稿削除」で代替可能)</li>
+                  <li>❼ Affiros 黄色マーカー削除</li>
+                </ul>
+              </li>
+              <li><strong>据置き（互換性のため）</strong>: <code>PLUGIN_DOWNLOADS</code> の <code>categorizer / dup-cleaner / mark-stripper</code> エントリは残す。既に WP にインストール済みのサイトが自動更新経路でファイルを取りに来ても 404 にならないように。エンドポイント <code>/download/plugin/*</code> も動作継続。</li>
+              <li><strong>残った配布ラインナップ (4枚)</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>❶ Affiros プロダクトインサーター</li>
+                  <li>❷ Affiros デコレーター</li>
+                  <li>❸ Affiros ポストプロセッサー (4機能統合)</li>
+                  <li>❹ Affiros 予約再スケジュール</li>
+                </ul>
+              </li>
+              <li><strong>バージョン同期</strong>: <code>APP_VERSION</code> 1.8.0 → 1.8.1。プラグイン側の変更なし。</li>
             </ul>
           </div>
 
