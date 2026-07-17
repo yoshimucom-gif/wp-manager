@@ -29,8 +29,10 @@ class AI_PI_Rakuten_API {
     private $api_url = 'https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20260401';
 
     // Origin ヘッダー（新エンドポイントで必須）
-    // WordPress サイト自身の origin を使う
-    private $origin;
+    // 楽天アプリの Allowed websites 登録を1つに集約するため、
+    // 全プラグイン共通で Affiros9 本体の URL を送る。
+    // これにより WordPress サイトを新規追加しても楽天側の再登録は不要。
+    const ORIGIN = 'https://wp-manager.onrender.com';
 
     /**
      * @param array|null $config 指定時はこの配列を設定値として使う（接続テスト用）。
@@ -41,11 +43,6 @@ class AI_PI_Rakuten_API {
         $this->app_id       = $settings['rakuten_app_id']       ?? '';
         $this->access_key   = $settings['rakuten_access_key']   ?? '';
         $this->affiliate_id = $settings['rakuten_affiliate_id'] ?? '';
-
-        // Origin はサイト URL の scheme+host
-        $site_url = get_site_url();
-        $parsed = wp_parse_url($site_url);
-        $this->origin = ($parsed['scheme'] ?? 'https') . '://' . ($parsed['host'] ?? 'example.com');
     }
 
     public function is_configured() {
@@ -85,7 +82,7 @@ class AI_PI_Rakuten_API {
         $response = wp_remote_get($url, [
             'timeout' => 30,
             'headers' => [
-                'Origin' => $this->origin,  // v1.9.31: 必須
+                'Origin' => self::ORIGIN,  // v1.9.31: 必須（Affiros9 本体URLに集約）
                 'Accept' => 'application/json',
             ],
         ]);
