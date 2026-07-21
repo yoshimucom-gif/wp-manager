@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros ポストプロセッサー
  * Description: Affiros9 で生成した記事の後工程を全部やる統合ツール。Claude API リライト / 商品カード・マーカーの削除&挿入 / H2 章の並び替え / 段落整形。WP_Query 内部処理でホスティング WAF の影響を受けない（403 回避）。
- * Version: 0.5.8
+ * Version: 0.5.9
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-rewrite
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('AFFIROS_REWRITE_VERSION', '0.5.8');
+define('AFFIROS_REWRITE_VERSION', '0.5.9');
 define('AFFIROS_REWRITE_PATH', plugin_dir_path(__FILE__));
 define('AFFIROS_REWRITE_URL', plugin_dir_url(__FILE__));
 
@@ -109,6 +109,31 @@ function affiros_rewrite_get_settings() {
 }
 
 /**
+ * v0.5.9: 段落整形の独立ページ。旧 rewrite-page.php 内のタブ埋め込みを
+ *   撤廃したため、専用ページに切り分けた。中身は既存の render_tab_body を
+ *   `<div class="wrap"><h1>...</h1>` で包むだけ。
+ */
+function affiros_rewrite_render_psplit_page() {
+    if (!current_user_can('manage_options')) return;
+    ?>
+    <div class="wrap affiros-wrap">
+        <h1>📝 Affiros 段落整形</h1>
+        <?php
+        if (function_exists('affiros_psplit_render_tab_body')) {
+            try {
+                affiros_psplit_render_tab_body();
+            } catch (\Throwable $e) {
+                echo '<div class="notice notice-error"><p><strong>段落整形モジュールでエラー:</strong> ' . esc_html($e->getMessage()) . '</p></div>';
+            }
+        } else {
+            echo '<div class="notice notice-error"><p>段落整形モジュールが読み込まれていません。プラグインファイルの再インストールをお試しください。</p></div>';
+        }
+        ?>
+    </div>
+    <?php
+}
+
+/**
  * 管理メニュー登録
  */
 add_action('admin_menu', function () {
@@ -134,6 +159,15 @@ add_action('admin_menu', function () {
         'manage_options',
         'affiros-rewrite',
         'affiros_rewrite_render_rewrite_page'
+    );
+    // v0.5.9: 段落整形は別ページに分離（旧 rewrite-page.php 内タブ埋め込みは撤廃）
+    add_submenu_page(
+        'affiros-rewrite',
+        '段落整形',
+        '📝 段落整形',
+        'manage_options',
+        'affiros-rewrite-psplit',
+        'affiros_rewrite_render_psplit_page'
     );
     add_submenu_page(
         'affiros-rewrite',

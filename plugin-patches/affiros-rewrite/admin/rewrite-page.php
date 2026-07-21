@@ -21,12 +21,13 @@ function affiros_rewrite_render_rewrite_page() {
         </p>
 
         <!-- v0.4.47: タブナビゲーション（機能ごとに UI を切替） -->
-        <!-- v0.5.0: 4つ目に「段落整形」タブを追加（旧 affiros-paragraph-splitter を統合） -->
+        <!-- v0.5.9: 段落整形は別ページ (admin.php?page=affiros-rewrite-psplit) に分離。
+             ここに埋め込むと render_tab_body が失敗した時に本体まで巻き添えで死ぬ実測。 -->
         <h2 class="nav-tab-wrapper" style="margin-top:18px;">
             <a href="#" class="nav-tab nav-tab-active affiros-tab-nav" data-tab="rewrite">✍ リライト</a>
             <a href="#" class="nav-tab affiros-tab-nav" data-tab="ads">📢 広告削除&amp;挿入</a>
             <a href="#" class="nav-tab affiros-tab-nav" data-tab="reorder">🔀 章入れ替え</a>
-            <a href="#" class="nav-tab affiros-tab-nav" data-tab="psplit">📝 段落整形</a>
+            <a href="<?php echo esc_url(admin_url('admin.php?page=affiros-rewrite-psplit')); ?>" class="nav-tab">📝 段落整形</a>
         </h2>
         <div class="affiros-tab-desc" data-tab="rewrite" style="margin:8px 0 12px;padding:8px 12px;background:#f0f6fc;border-left:3px solid #2271b1;font-size:13px;">
             <strong>✍ リライト</strong>: Claude API で記事本文を書き直します。料金あり（¥数十/記事）。マーカー挿入も同時実行可（オプション参照）。
@@ -37,10 +38,6 @@ function affiros_rewrite_render_rewrite_page() {
         <div class="affiros-tab-desc" data-tab="reorder" style="display:none;margin:8px 0 12px;padding:8px 12px;background:#f0f6fc;border-left:3px solid #2271b1;font-size:13px;">
             <strong>🔀 章入れ替え</strong>: H2 章の順序を SEO 最適（選定基準→ランキング→選び方→FAQ→まとめ）に並び替え。本文自体は変更しない。Claude 呼ばず料金ゼロ。
         </div>
-        <div class="affiros-tab-desc" data-tab="psplit" style="display:none;margin:8px 0 12px;padding:8px 12px;background:#f0f6fc;border-left:3px solid #2271b1;font-size:13px;">
-            <strong>📝 段落整形</strong>: 長すぎる段落を句読点・接続詞で機械分割 / 見出しっぽい段落を h3/h4 に昇格 / <code>&lt;li&gt;&lt;strong&gt;ラベル&lt;/strong&gt;：長文</code>を見出し+段落に分解。Claude 呼ばず料金ゼロ。
-        </div>
-
         <?php if (!$has_api_key): ?>
             <!-- v0.5.5: Claude APIキー未設定の警告はリライトタブでのみ表示。
                  他タブ（広告削除&挿入・章入れ替え・段落整形）は Claude 不要なので
@@ -66,19 +63,8 @@ function affiros_rewrite_render_rewrite_page() {
             </div>
         <?php endif; ?>
 
-        <!-- v0.5.0: 段落整形タブ本体（旧 affiros-paragraph-splitter を統合） -->
-        <div class="affiros-tab-only" data-tab="psplit" style="display:none;">
-            <?php
-            if (function_exists('affiros_psplit_render_tab_body')) {
-                affiros_psplit_render_tab_body();
-            } else {
-                echo '<div class="notice notice-error"><p>段落整形モジュールが読み込まれていません。プラグインファイルが破損している可能性があります。</p></div>';
-            }
-            ?>
-        </div>
-
-        <!-- rewrite / ads / reorder タブ本体（従来のツールバー・結果表・モーダル） -->
-        <div class="affiros-tab-only affiros-non-psplit-wrap" data-tab="rewrite ads reorder">
+        <!-- v0.5.9: 段落整形は別ページに分離したためここに psplit 埋め込みはナシ。
+             rewrite/ads/reorder の3タブが直接下に続く。ラッパー div も撤廃。 -->
 
         <div class="affiros-rewrite-toolbar" style="display:flex;gap:10px;align-items:center;margin:18px 0;flex-wrap:wrap;">
             <input type="text" id="affiros-search" placeholder="タイトル・本文を検索..." style="flex:1;min-width:240px;padding:6px 10px;">
@@ -235,8 +221,6 @@ function affiros_rewrite_render_rewrite_page() {
         </div>
 
         <div id="affiros-pagination" style="margin-top:12px;text-align:center;"></div>
-
-        </div><!-- /.affiros-non-psplit-wrap -->
     </div>
 
     <!-- リライト結果モーダル（単記事用） -->
@@ -892,59 +876,30 @@ function affiros_rewrite_render_rewrite_page() {
             $('#affiros-bulk-log').append('<div style="color:' + c + ';">' + escapeHtml(msg) + '</div>').scrollTop(99999);
         }
 
-        // --- v0.4.47: タブナビゲーション ---
-        //
-        // v0.5.8: 実測でラッパー div が隠れっぱなしになる事象があった。
-        //         .affiros-tab-only の汎用ループはやめ、各タブの主コンテンツを
-        //         **明示的な ID/セレクタ** で直接切り替える単純な方式に変更。
-        //         (以前の each ループはどこかで .show() が失敗しても検知できず)
+        // --- v0.5.9: タブナビゲーション（超単純化） ---
+        // psplit は別ページに分離したので、ここは rewrite/ads/reorder の3タブのみ。
+        // 表示切替は data-tab をキーに .affiros-tab-only を素直に show/hide するだけ。
         let currentTab = localStorage.getItem('affiros_rewrite_tab') || 'rewrite';
-
-        // 各タブの「メインコンテンツ」を明示。ここに書かないと表示切替の対象外。
-        const TAB_MAIN_SELECTORS = {
-            rewrite: '.affiros-non-psplit-wrap',
-            ads:     '.affiros-non-psplit-wrap',
-            reorder: '.affiros-non-psplit-wrap',
-            psplit:  '.affiros-tab-only[data-tab="psplit"]',
-        };
+        if (currentTab !== 'rewrite' && currentTab !== 'ads' && currentTab !== 'reorder') currentTab = 'rewrite';
 
         function applyTab(tab) {
             try {
-                if (!TAB_MAIN_SELECTORS[tab]) tab = 'rewrite'; // 未知のタブなら rewrite に fallback
                 currentTab = tab;
                 try { localStorage.setItem('affiros_rewrite_tab', tab); } catch (_) {}
-
-                // タブナビの active 表示切替
                 $('.affiros-tab-nav').removeClass('nav-tab-active');
                 $('.affiros-tab-nav[data-tab="' + tab + '"]').addClass('nav-tab-active');
-
-                // タブ説明の切替
                 $('.affiros-tab-desc').hide();
                 $('.affiros-tab-desc[data-tab="' + tab + '"]').show();
-
-                // メインコンテンツ切替（明示的セレクタで直接制御）
-                // 1) 全メインコンテンツを非表示
-                Object.values(TAB_MAIN_SELECTORS).forEach(function (sel) {
-                    $(sel).css('display', 'none');
-                });
-                // 2) 現在タブのメインコンテンツだけを block で表示
-                $(TAB_MAIN_SELECTORS[tab]).css('display', 'block');
-
-                // タブ内の細かい要素 (.affiros-tab-only) は data-tab で個別制御
-                // (span/label 等の inline 要素は show/hide でなく空文字列で default 復元)
                 $('.affiros-tab-only').each(function () {
-                    // 上でメインコンテンツをすでに css で制御した div は除外
                     const $el = $(this);
-                    if ($el.is('.affiros-non-psplit-wrap') || $el.attr('data-tab') === 'psplit') return;
                     const raw = $el.attr('data-tab') || '';
                     const allowed = String(raw).trim().split(/\s+/);
                     if (allowed.indexOf(tab) !== -1) {
-                        $el.css('display', ''); // default に戻す
+                        $el.css('display', '');
                     } else {
                         $el.css('display', 'none');
                     }
                 });
-
                 if ($('#affiros-bulk-modal').length) $('#affiros-bulk-modal').hide();
                 if (typeof closeResultModal === 'function') closeResultModal();
             } catch (err) {
@@ -952,14 +907,12 @@ function affiros_rewrite_render_rewrite_page() {
             }
         }
 
-        // document delegation でタブクリックを捕捉
         $(document).on('click.affirostab', '.affiros-tab-nav', function (e) {
             e.preventDefault();
             const tab = $(this).attr('data-tab');
             if (tab) applyTab(tab);
         });
 
-        // ページロード時に前回タブを適用
         applyTab(currentTab);
 
         // --- イベントバインド ---

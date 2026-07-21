@@ -1917,6 +1917,30 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.8.7 / rewrite v0.5.9 (2026-07-17) — 🚨 段落整形を別ページに分離（rewrite-page.php を巻き添えにさせない）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>症状</strong>: 実測 (bousui-goods.com) で「Affiros ポストプロセッサー画面のタブが全部反応せず、中身も真っ白」。ブラウザコンソールで <code>jQuery('.affiros-non-psplit-wrap').length</code> = <strong>0</strong> = そのラッパー div 自体が DOM に存在していないことが判明。PHP の <code>affiros_psplit_render_tab_body()</code> 呼び出しでコケてページ全体の出力が途中で止まっていた模様。</li>
+              <li><strong>調査で分かったこと</strong>: v0.5.0 で段落整形を「タブ埋め込み方式」で統合したが、<strong>rewrite-page.php の PHP 実行中に render_tab_body でエラーが起きると、それ以降の toolbar/results/modal 全部が出力されない</strong>設計欠陥。試行錯誤で複数の防御パッチを重ねたが本質を潰せなかった。</li>
+              <li><strong>根本修正</strong>: 段落整形を「タブ内埋め込み」から「<strong>独立サブメニューページ</strong>」に分離。rewrite-page.php は psplit の PHP を一切呼ばない構造にした。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>affiros-rewrite.php: 新規サブメニュー <code>admin.php?page=affiros-rewrite-psplit</code> を追加、<code>affiros_rewrite_render_psplit_page()</code> 関数で <code>affiros_psplit_render_tab_body()</code> を <code>try/catch (\Throwable)</code> でラップして呼ぶ</li>
+                  <li>rewrite-page.php: タブナビの「📝 段落整形」を通常タブから <strong>href リンクに変更</strong>。psplit タブ本体・非-psplit ラッパー div を全撤廃</li>
+                  <li>JS applyTab: psplit を選択肢から除去、rewrite/ads/reorder の3タブだけ扱うシンプル版に</li>
+                </ul>
+              </li>
+              <li><strong>効果</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>rewrite-page.php は psplit と物理的に切り離されたので、段落整形側で何が起きても本体ページは絶対に落ちない</li>
+                  <li>段落整形ページで PHP エラーが起きても <code>try/catch</code> で捕まえてエラーメッセージだけ表示、そのページ内に閉じる</li>
+                  <li>タブ切替の JS も余計なラッパー処理を消してシンプルに</li>
+                </ul>
+              </li>
+              <li><strong>UX への影響</strong>: 段落整形にアクセスするとき「タブクリックで即切替」から「別ページに遷移」になる (URL が変わる)。ワンクリックで届くのは変わらない。</li>
+              <li><strong>バージョン同期</strong>: <code>AFFIROS_REWRITE_VERSION</code> 0.5.8 → 0.5.9 / <code>affiros-rewrite-0.5.9.zip</code> 生成 / <code>PLUGIN_DOWNLOADS['rewrite']</code> 追従 / <code>APP_VERSION</code> 1.8.6 → 1.8.7。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.8.6 / rewrite v0.5.8 (2026-07-17) — タブ切替で中身のラッパーが隠れっぱなしになるバグを修正</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>症状</strong>: 実測 (karenai-green.com) で「リライトタブが active になっていて説明文も出ているのに、ツールバーや投稿一覧など<strong>中身のラッパーだけ隠れっぱなし</strong>で真っ白」。他タブをクリックしても切り替わらず、リライトタブに戻しても中身が出ない。</li>
