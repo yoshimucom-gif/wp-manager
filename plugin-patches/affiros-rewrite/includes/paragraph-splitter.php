@@ -23,13 +23,21 @@ if (!defined('ABSPATH')) exit;
 // 旧プラグインが先にロードされていたら、統合版は一切何もせず終了する。
 if (defined('AFFIROS_PSPLIT_INTEGRATED_LOADED')) return;
 if (function_exists('affiros_psplit_default_settings') || defined('AFFIROS_PSPLIT_VERSION')) {
-    add_action('admin_notices', function () {
-        if (!current_user_can('manage_options')) return;
-        echo '<div class="notice notice-warning is-dismissible"><p>'
-            . '<strong>Affiros:</strong> 「Affiros 段落整形」プラグインは Affiros ポストプロセッサー (v0.5.0〜) に統合されました。'
-            . '<strong>プラグイン一覧で旧「Affiros 段落整形」を無効化・削除</strong>してください。設定と挙動は完全に引き継がれます。'
-            . '</p></div>';
-    });
+    // v0.5.6: 通知は「旧プラグインのファイルが実際に存在する時だけ」出す。
+    // 実測 (karenai-green.com) で「旧プラグイン削除済みなのに通知が消えない」
+    // 事象があった。opcache や double-include の可能性がゼロではないため、
+    // 通知条件を「実ファイルが存在する」に厳しくする（旧が本当に消えていれば無音）。
+    $legacy_path = (defined('WP_PLUGIN_DIR') ? WP_PLUGIN_DIR : WP_CONTENT_DIR . '/plugins')
+        . '/affiros-paragraph-splitter/affiros-paragraph-splitter.php';
+    if (file_exists($legacy_path)) {
+        add_action('admin_notices', function () {
+            if (!current_user_can('manage_options')) return;
+            echo '<div class="notice notice-warning is-dismissible"><p>'
+                . '<strong>Affiros:</strong> 「Affiros 段落整形」プラグインは Affiros ポストプロセッサー (v0.5.0〜) に統合されました。'
+                . '<strong>プラグイン一覧で旧「Affiros 段落整形」を無効化・削除</strong>してください。設定と挙動は完全に引き継がれます。'
+                . '</p></div>';
+        });
+    }
     return;
 }
 define('AFFIROS_PSPLIT_INTEGRATED_LOADED', true);

@@ -1917,6 +1917,23 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.8.4 / rewrite v0.5.6 (2026-07-17) — 「旧プラグイン削除済みなのに通知が消えない」を修正</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>症状</strong>: 旧 <code>affiros-paragraph-splitter</code> プラグインを削除したのに、「統合されたので削除してください」の admin notice が消えない (実測 karenai-green.com)。</li>
+              <li><strong>推定原因</strong>: 統合版の共存ガードは <code>function_exists</code> / <code>defined</code> で判定していたが、以下の可能性で誤発火:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>PHP opcache が古いバイトコードを配信</li>
+                  <li>WP 内部で plugin file が double-include されてる可能性</li>
+                  <li>ホスティング側の PHP-FPM プロセスに古い定義が残ってる</li>
+                </ul>
+              </li>
+              <li><strong>修正</strong>: 通知条件を「実ファイルが存在する時だけ」に厳しくする。<code>WP_PLUGIN_DIR . '/affiros-paragraph-splitter/affiros-paragraph-splitter.php'</code> を <code>file_exists()</code> でチェック → 存在しなければ無音 (ガードは動くが通知は出さない)。</li>
+              <li><strong>効果</strong>: 旧プラグイン本当に消えていれば file_exists は false → 通知消滅。opcache/double-include の誤発火をトラップしても通知は出ない。</li>
+              <li><strong>バージョン同期</strong>: <code>AFFIROS_REWRITE_VERSION</code> 0.5.5 → 0.5.6 / <code>affiros-rewrite-0.5.6.zip</code> 生成 / <code>PLUGIN_DOWNLOADS['rewrite']</code> 追従 / <code>APP_VERSION</code> 1.8.3 → 1.8.4。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.8.3 / rewrite v0.5.5 (2026-07-17) — Claude API 未設定警告をリライトタブ限定に</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>症状</strong>: Claude API キー未設定の警告バナーが全4タブで出るせいで、Claude 不要の3タブ（広告削除&挿入・章入れ替え・段落整形）が「何も使えない」ように錯覚する。</li>
