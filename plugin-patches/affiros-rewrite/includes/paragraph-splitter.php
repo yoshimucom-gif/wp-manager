@@ -1026,7 +1026,8 @@ function affiros_psplit_render_tab_body() {
                 render();
                 if (posts.length) $('#aps-result').show();
             } catch (e) {
-                alert('通信エラー: ' + (e.responseText || e.statusText));
+                alert('通信エラー\nstatus=' + (e && e.status) + ' statusText=' + (e && e.statusText) + '\nresponseText=' + ((e && e.responseText) ? String(e.responseText).slice(0, 500) : '(empty)'));
+                if (window.console) console.error('[psplit scan] AJAX failed:', e);
             } finally {
                 $('#aps-scan-btn').prop('disabled', false);
             }
@@ -1092,7 +1093,8 @@ function affiros_psplit_render_tab_body() {
                 `);
                 w.document.close();
             } catch (e) {
-                alert('通信エラー: ' + (e.responseText || ''));
+                alert('通信エラー\nstatus=' + (e && e.status) + ' statusText=' + (e && e.statusText) + '\nresponseText=' + ((e && e.responseText) ? String(e.responseText).slice(0, 500) : '(empty)'));
+                if (window.console) console.error('[psplit ajax] failed:', e);
             }
         }
 
@@ -1130,7 +1132,8 @@ function affiros_psplit_render_tab_body() {
                 }
                 alert('適用失敗: ' + (res && res.data ? res.data : ''));
             } catch (e) {
-                alert('通信エラー: ' + (e.responseText || ''));
+                alert('通信エラー\nstatus=' + (e && e.status) + ' statusText=' + (e && e.statusText) + '\nresponseText=' + ((e && e.responseText) ? String(e.responseText).slice(0, 500) : '(empty)'));
+                if (window.console) console.error('[psplit ajax] failed:', e);
             } finally {
                 if (btn && btn.prop) btn.prop('disabled', false);
             }
