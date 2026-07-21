@@ -1013,7 +1013,10 @@ function affiros_psplit_render_tab_body() {
             $('#aps-result-tbody').empty();
             $('#aps-scan-status').text('スキャン中...');
             try {
-                const res = await $.post(ajaxUrl, {
+                // v0.5.12: action を URL クエリにも入れる（POST body から
+                // action を消すキャッシュ/セキュリティプラグイン対策。
+                // 実測 karada-thermo.com で「status=400 responseText=0」発生）
+                const res = await $.post(ajaxUrl + (ajaxUrl.indexOf('?') === -1 ? '?' : '&') + 'action=affiros_psplit_scan', {
                     action: 'affiros_psplit_scan',
                     nonce: nonce,
                 });
@@ -1067,7 +1070,8 @@ function affiros_psplit_render_tab_body() {
 
         async function previewOne(id) {
             try {
-                const res = await $.post(ajaxUrl, {
+                // v0.5.12: action は URL クエリにも入れる（POST body 加工対策）
+                const res = await $.post(ajaxUrl + (ajaxUrl.indexOf('?') === -1 ? '?' : '&') + 'action=affiros_psplit_preview', {
                     action: 'affiros_psplit_preview',
                     nonce: nonce,
                     post_id: id,
@@ -1102,7 +1106,8 @@ function affiros_psplit_render_tab_body() {
         async function applyOne(id, btn) {
             if (btn) btn.prop('disabled', true).text('適用中...');
             try {
-                const res = await $.post(ajaxUrl, {
+                // v0.5.12: action は URL クエリにも入れる（POST body 加工対策）
+                const res = await $.post(ajaxUrl + (ajaxUrl.indexOf('?') === -1 ? '?' : '&') + 'action=affiros_psplit_apply', {
                     action: 'affiros_psplit_apply',
                     nonce: nonce,
                     post_id: id,
