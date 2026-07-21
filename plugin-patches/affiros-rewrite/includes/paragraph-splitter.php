@@ -29,23 +29,42 @@ if (!defined('AFFIROS_PSPLIT_OPTION_KEY')) {
     define('AFFIROS_PSPLIT_OPTION_KEY', 'affiros_psplit_settings');
 }
 
-// v0.5.1: 二重ロード防止 & 旧独立プラグイン (affiros-paragraph-splitter) との共存ガード
+// v0.5.13: 旧独立プラグインとの共存ガード。
+//
+// 【重要】v0.5.12 まで `function_exists('affiros_psplit_default_settings')` で
+// 判定していたが、PHP の**関数ホイスティング**により、この判定は
+// このファイル自身の後方で宣言している関数でも true を返してしまう。
+// 結果としてガードが常に発火し、add_action(...)群 (admin_init /
+// wp_ajax_* / admin_enqueue_scripts) が一切登録されず:
+//   - 設定保存が「許可されたオプションリスト内にありません」で失敗
+//   - AJAX が 400 status body="0" で失敗
+//   - 表示だけは動く (関数はホイストされるので render_tab_body は呼べる)
+// を引き起こしていた (karada-thermo.com 実測)。
+//
+// 修正: function_exists ではなく WordPress の active_plugins オプションを
+// 直接見て、旧独立プラグインがアクティブかどうかを判定する。これなら
+// ホイスティングの影響を受けない。
 if (defined('AFFIROS_PSPLIT_INTEGRATED_LOADED')) return;
-if (function_exists('affiros_psplit_default_settings')) {
-    // 旧プラグイン(既に関数宣言済)と衝突するのでスキップ。通知は実ファイルがある時だけ。
-    $legacy_path = (defined('WP_PLUGIN_DIR') ? WP_PLUGIN_DIR : WP_CONTENT_DIR . '/plugins')
-        . '/affiros-paragraph-splitter/affiros-paragraph-splitter.php';
-    if (file_exists($legacy_path)) {
-        add_action('admin_notices', function () {
-            if (!current_user_can('manage_options')) return;
-            echo '<div class="notice notice-warning is-dismissible"><p>'
-                . '<strong>Affiros:</strong> 「Affiros 段落整形」プラグインは Affiros ポストプロセッサー (v0.5.0〜) に統合されました。'
-                . '<strong>プラグイン一覧で旧「Affiros 段落整形」を無効化・削除</strong>してください。設定と挙動は完全に引き継がれます。'
-                . '</p></div>';
-        });
-    }
+
+$__affiros_psplit_standalone_slug = 'affiros-paragraph-splitter/affiros-paragraph-splitter.php';
+$__affiros_psplit_active_plugins  = (array) get_option('active_plugins', []);
+$__affiros_psplit_standalone_path = (defined('WP_PLUGIN_DIR') ? WP_PLUGIN_DIR : WP_CONTENT_DIR . '/plugins')
+    . '/' . $__affiros_psplit_standalone_slug;
+
+if (in_array($__affiros_psplit_standalone_slug, $__affiros_psplit_active_plugins, true)
+    && file_exists($__affiros_psplit_standalone_path)) {
+    // 旧独立プラグインが active かつファイル存在 → そちらに任せる
+    add_action('admin_notices', function () {
+        if (!current_user_can('manage_options')) return;
+        echo '<div class="notice notice-warning is-dismissible"><p>'
+            . '<strong>Affiros:</strong> 「Affiros 段落整形」プラグインは Affiros ポストプロセッサー (v0.5.0〜) に統合されました。'
+            . '<strong>プラグイン一覧で旧「Affiros 段落整形」を無効化・削除</strong>してください。設定と挙動は完全に引き継がれます。'
+            . '</p></div>';
+    });
+    unset($__affiros_psplit_standalone_slug, $__affiros_psplit_active_plugins, $__affiros_psplit_standalone_path);
     return;
 }
+unset($__affiros_psplit_standalone_slug, $__affiros_psplit_active_plugins, $__affiros_psplit_standalone_path);
 define('AFFIROS_PSPLIT_INTEGRATED_LOADED', true);
 
 // =============================================================================
