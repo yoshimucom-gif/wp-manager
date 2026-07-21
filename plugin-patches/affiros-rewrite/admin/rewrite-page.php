@@ -893,18 +893,24 @@ function affiros_rewrite_render_rewrite_page() {
         }
 
         // --- v0.4.47: タブナビゲーション ---
-        // localStorage で選択タブを永続化。次回開いた時に前回のタブを復元。
         //
-        // v0.5.7: 実測 (karenai-green.com) で「タブをクリックしても切り替わらない」
-        //         事象があったため、以下を防御的に強化:
-        //         (1) 内部エラーで applyTab が途中で止まらないよう try/catch でラップ
-        //         (2) クリックハンドラを個別バインドではなく document delegation に
-        //             (後から生成される .affiros-tab-nav でも自動で拾えるように)
-        //         (3) closeResultModal 等の依存関数が未定義でも動くよう typeof チェック
+        // v0.5.8: 実測でラッパー div が隠れっぱなしになる事象があった。
+        //         .affiros-tab-only の汎用ループはやめ、各タブの主コンテンツを
+        //         **明示的な ID/セレクタ** で直接切り替える単純な方式に変更。
+        //         (以前の each ループはどこかで .show() が失敗しても検知できず)
         let currentTab = localStorage.getItem('affiros_rewrite_tab') || 'rewrite';
+
+        // 各タブの「メインコンテンツ」を明示。ここに書かないと表示切替の対象外。
+        const TAB_MAIN_SELECTORS = {
+            rewrite: '.affiros-non-psplit-wrap',
+            ads:     '.affiros-non-psplit-wrap',
+            reorder: '.affiros-non-psplit-wrap',
+            psplit:  '.affiros-tab-only[data-tab="psplit"]',
+        };
 
         function applyTab(tab) {
             try {
+                if (!TAB_MAIN_SELECTORS[tab]) tab = 'rewrite'; // 未知のタブなら rewrite に fallback
                 currentTab = tab;
                 try { localStorage.setItem('affiros_rewrite_tab', tab); } catch (_) {}
 
@@ -916,28 +922,37 @@ function affiros_rewrite_render_rewrite_page() {
                 $('.affiros-tab-desc').hide();
                 $('.affiros-tab-desc[data-tab="' + tab + '"]').show();
 
-                // タブ限定要素の表示切替
+                // メインコンテンツ切替（明示的セレクタで直接制御）
+                // 1) 全メインコンテンツを非表示
+                Object.values(TAB_MAIN_SELECTORS).forEach(function (sel) {
+                    $(sel).css('display', 'none');
+                });
+                // 2) 現在タブのメインコンテンツだけを block で表示
+                $(TAB_MAIN_SELECTORS[tab]).css('display', 'block');
+
+                // タブ内の細かい要素 (.affiros-tab-only) は data-tab で個別制御
+                // (span/label 等の inline 要素は show/hide でなく空文字列で default 復元)
                 $('.affiros-tab-only').each(function () {
-                    const raw = $(this).attr('data-tab') || '';
+                    // 上でメインコンテンツをすでに css で制御した div は除外
+                    const $el = $(this);
+                    if ($el.is('.affiros-non-psplit-wrap') || $el.attr('data-tab') === 'psplit') return;
+                    const raw = $el.attr('data-tab') || '';
                     const allowed = String(raw).trim().split(/\s+/);
                     if (allowed.indexOf(tab) !== -1) {
-                        $(this).show();
+                        $el.css('display', ''); // default に戻す
                     } else {
-                        $(this).hide();
+                        $el.css('display', 'none');
                     }
                 });
 
-                // タブ切替時にモーダルを閉じる（別タブの操作が残ってると混乱するので）
                 if ($('#affiros-bulk-modal').length) $('#affiros-bulk-modal').hide();
                 if (typeof closeResultModal === 'function') closeResultModal();
             } catch (err) {
-                // タブ切替の失敗はコンソールに残しつつ、他の JS を止めない
                 if (window.console && console.error) console.error('[Affiros] applyTab failed:', err);
             }
         }
 
-        // v0.5.7: document delegation でタブクリックを捕捉
-        //   (直接 bind だと DOM 再描画・遅延ロード時に取りこぼす可能性)
+        // document delegation でタブクリックを捕捉
         $(document).on('click.affirostab', '.affiros-tab-nav', function (e) {
             e.preventDefault();
             const tab = $(this).attr('data-tab');

@@ -1917,6 +1917,23 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.8.6 / rewrite v0.5.8 (2026-07-17) — タブ切替で中身のラッパーが隠れっぱなしになるバグを修正</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>症状</strong>: 実測 (karenai-green.com) で「リライトタブが active になっていて説明文も出ているのに、ツールバーや投稿一覧など<strong>中身のラッパーだけ隠れっぱなし</strong>で真っ白」。他タブをクリックしても切り替わらず、リライトタブに戻しても中身が出ない。</li>
+              <li><strong>真因</strong>: v0.5.0 で <code>.affiros-non-psplit-wrap</code> と <code>.affiros-tab-only[data-tab="psplit"]</code> の切替を、汎用の <code>.affiros-tab-only</code> 一括ループに任せていた。<code>.each()</code> ループの中で一度でも例外が起きたり <code>.data('tab')</code> が想定外の値を返すと、ループが途中で止まってラッパー div の <code>.show()</code> が実行されず<strong>display:none のまま残る</strong>状態が発生。</li>
+              <li><strong>修正</strong>: メインコンテンツ (非-psplit ラッパー / psplit ラッパー) の切替を汎用ループから切り離し、<strong>明示的な TAB_MAIN_SELECTORS マップ</strong>で直接 <code>.css('display', ...)</code> する専用ロジックに変更。ループが壊れてもメインコンテンツは必ず切り替わる。
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>rewrite/ads/reorder → <code>.affiros-non-psplit-wrap</code> を display:block</li>
+                  <li>psplit → <code>.affiros-tab-only[data-tab="psplit"]</code> を display:block</li>
+                  <li>それ以外はもう一方を display:none</li>
+                </ul>
+              </li>
+              <li><strong>タブ内の細かい要素</strong>: label / span 等の inline 要素は <code>.show()</code> ではなく <code>.css('display', '')</code> で default 復元 (jQuery の <code>.show()</code> は inline 要素に <code>display:block</code> を当ててしまう既知の癖を避ける)。</li>
+              <li><strong>バージョン同期</strong>: <code>AFFIROS_REWRITE_VERSION</code> 0.5.7 → 0.5.8 / <code>affiros-rewrite-0.5.8.zip</code> 生成 / <code>PLUGIN_DOWNLOADS['rewrite']</code> 追従 / <code>APP_VERSION</code> 1.8.5 → 1.8.6。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.8.5 / rewrite v0.5.7 (2026-07-17) — タブが切り替わらない事象を防御的に修正</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>症状</strong>: リライトタブ以外 (広告削除&挿入・章入れ替え・段落整形) をクリックしても切り替わらない (実測 karenai-green.com)。</li>
