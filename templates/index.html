@@ -1917,6 +1917,22 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.8.3 / rewrite v0.5.5 (2026-07-17) — Claude API 未設定警告をリライトタブ限定に</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>症状</strong>: Claude API キー未設定の警告バナーが全4タブで出るせいで、Claude 不要の3タブ（広告削除&挿入・章入れ替え・段落整形）が「何も使えない」ように錯覚する。</li>
+              <li><strong>真因</strong>: API 未設定警告に <code>affiros-tab-only</code> のスコープが付いてなかったので、タブ切替と関係なく常時表示になっていた。統合前は「リライトのみ」のプラグインだったので全画面表示で問題なかったが、4機能化した v0.5.0 以降は tab スコープ必須だった。</li>
+              <li><strong>修正</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>Claude API 未設定警告 → <code>data-tab="rewrite"</code>（リライトタブでのみ表示）</li>
+                  <li>警告文に「他3機能は Claude 不要でそのまま使える」と明記</li>
+                  <li>WP_POST_REVISIONS 無効警告 → 全4タブで表示（各タブとも書き込みが起きるので）</li>
+                </ul>
+              </li>
+              <li><strong>バージョン同期</strong>: <code>AFFIROS_REWRITE_VERSION</code> 0.5.4 → 0.5.5 / <code>affiros-rewrite-0.5.5.zip</code> 生成 / <code>PLUGIN_DOWNLOADS['rewrite']</code> 追従 / <code>APP_VERSION</code> 1.8.2 → 1.8.3。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.8.2 / rewrite v0.5.4 (2026-07-17) — ポストプロセッサー内部の相互干渉ガード追加</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>対応した潜在バグ</strong>: 段落整形の <code>auto_on_save</code> を ON にすると、リライトタブ・章入れ替えタブ・広告削除挿入タブ・テーブル修復ページからの <code>wp_update_post()</code> にも <code>save_post_post</code> フックが発火し、段落整形が結果を再処理して上書きしてしまう。</li>

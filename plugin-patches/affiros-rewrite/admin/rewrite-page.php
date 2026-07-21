@@ -42,20 +42,26 @@ function affiros_rewrite_render_rewrite_page() {
         </div>
 
         <?php if (!$has_api_key): ?>
-            <div class="notice notice-warning">
+            <!-- v0.5.5: Claude APIキー未設定の警告はリライトタブでのみ表示。
+                 他タブ（広告削除&挿入・章入れ替え・段落整形）は Claude 不要なので
+                 警告を出すと「何も使えない」ように錯覚してしまう。 -->
+            <div class="notice notice-warning affiros-tab-only" data-tab="rewrite">
                 <p>
                     Claude APIキーが未設定です。
                     <a href="<?php echo esc_url(admin_url('admin.php?page=affiros-rewrite-settings')); ?>">設定画面</a>
                     で入力してください。
+                    <br><small style="color:#666">※ この警告はリライト機能に対してだけ出ています。広告削除&挿入・章入れ替え・段落整形の3機能は Claude 不要でそのまま使えます。</small>
                 </p>
             </div>
         <?php endif; ?>
 
         <?php if (defined('WP_POST_REVISIONS') && WP_POST_REVISIONS === false): ?>
-            <div class="notice notice-warning">
+            <!-- v0.5.5: リビジョン無効の警告もリライト/章入れ替え/広告削除&挿入タブでのみ。
+                 段落整形は auto_on_save 時のみ書き込みするので、段落整形タブでも出す。 -->
+            <div class="notice notice-warning affiros-tab-only" data-tab="rewrite ads reorder psplit">
                 <p>
                     このサイトはリビジョンが無効（<code>WP_POST_REVISIONS</code> が <code>false</code>）です。
-                    リライトで上書きした記事は<strong>元に戻せません</strong>。実行前に必ずバックアップしてください。
+                    上書き系の操作を実行した記事は<strong>元に戻せません</strong>。実行前に必ずバックアップしてください。
                 </p>
             </div>
         <?php endif; ?>
