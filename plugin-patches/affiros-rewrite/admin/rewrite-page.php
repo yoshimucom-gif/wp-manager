@@ -894,38 +894,54 @@ function affiros_rewrite_render_rewrite_page() {
 
         // --- v0.4.47: タブナビゲーション ---
         // localStorage で選択タブを永続化。次回開いた時に前回のタブを復元。
+        //
+        // v0.5.7: 実測 (karenai-green.com) で「タブをクリックしても切り替わらない」
+        //         事象があったため、以下を防御的に強化:
+        //         (1) 内部エラーで applyTab が途中で止まらないよう try/catch でラップ
+        //         (2) クリックハンドラを個別バインドではなく document delegation に
+        //             (後から生成される .affiros-tab-nav でも自動で拾えるように)
+        //         (3) closeResultModal 等の依存関数が未定義でも動くよう typeof チェック
         let currentTab = localStorage.getItem('affiros_rewrite_tab') || 'rewrite';
 
         function applyTab(tab) {
-            currentTab = tab;
-            localStorage.setItem('affiros_rewrite_tab', tab);
+            try {
+                currentTab = tab;
+                try { localStorage.setItem('affiros_rewrite_tab', tab); } catch (_) {}
 
-            // タブナビの active 表示切替
-            $('.affiros-tab-nav').removeClass('nav-tab-active');
-            $('.affiros-tab-nav[data-tab="' + tab + '"]').addClass('nav-tab-active');
+                // タブナビの active 表示切替
+                $('.affiros-tab-nav').removeClass('nav-tab-active');
+                $('.affiros-tab-nav[data-tab="' + tab + '"]').addClass('nav-tab-active');
 
-            // タブ説明の切替
-            $('.affiros-tab-desc').hide();
-            $('.affiros-tab-desc[data-tab="' + tab + '"]').show();
+                // タブ説明の切替
+                $('.affiros-tab-desc').hide();
+                $('.affiros-tab-desc[data-tab="' + tab + '"]').show();
 
-            // タブ限定要素の表示切替
-            $('.affiros-tab-only').each(function() {
-                const allowed = ($(this).data('tab') || '').toString().split(/\s+/);
-                if (allowed.includes(tab)) {
-                    $(this).show();
-                } else {
-                    $(this).hide();
-                }
-            });
+                // タブ限定要素の表示切替
+                $('.affiros-tab-only').each(function () {
+                    const raw = $(this).attr('data-tab') || '';
+                    const allowed = String(raw).trim().split(/\s+/);
+                    if (allowed.indexOf(tab) !== -1) {
+                        $(this).show();
+                    } else {
+                        $(this).hide();
+                    }
+                });
 
-            // タブ切替時にモーダルを閉じる（別タブの操作が残ってると混乱するので）
-            $('#affiros-bulk-modal').hide();
-            closeResultModal();
+                // タブ切替時にモーダルを閉じる（別タブの操作が残ってると混乱するので）
+                if ($('#affiros-bulk-modal').length) $('#affiros-bulk-modal').hide();
+                if (typeof closeResultModal === 'function') closeResultModal();
+            } catch (err) {
+                // タブ切替の失敗はコンソールに残しつつ、他の JS を止めない
+                if (window.console && console.error) console.error('[Affiros] applyTab failed:', err);
+            }
         }
 
-        $('.affiros-tab-nav').on('click', function(e) {
+        // v0.5.7: document delegation でタブクリックを捕捉
+        //   (直接 bind だと DOM 再描画・遅延ロード時に取りこぼす可能性)
+        $(document).on('click.affirostab', '.affiros-tab-nav', function (e) {
             e.preventDefault();
-            applyTab($(this).data('tab'));
+            const tab = $(this).attr('data-tab');
+            if (tab) applyTab(tab);
         });
 
         // ページロード時に前回タブを適用

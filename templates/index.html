@@ -1917,6 +1917,23 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.8.5 / rewrite v0.5.7 (2026-07-17) — タブが切り替わらない事象を防御的に修正</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>症状</strong>: リライトタブ以外 (広告削除&挿入・章入れ替え・段落整形) をクリックしても切り替わらない (実測 karenai-green.com)。</li>
+              <li><strong>調査結果</strong>: ローカルで再現不能。ZIP 内の JS を Node で syntax 検証しても両方の inline script は valid。ブラウザ側で何らかの JS 例外が applyTab の途中でスローされて、タブ切替が中断されていた可能性が高い。</li>
+              <li><strong>修正 (防御的3層)</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><strong>① try/catch でラップ</strong>: <code>applyTab</code> 全体を <code>try/catch</code> で包み、内部エラーが起きても console.error に残しつつ他の JS を止めない。<code>localStorage.setItem</code> も個別に try/catch (プライベートブラウジング等での例外対策)</li>
+                  <li><strong>② event delegation に切替</strong>: 直接 <code>$('.affiros-tab-nav').on(...)</code> ではなく <code>$(document).on('click.affirostab', '.affiros-tab-nav', ...)</code>。DOM 再描画や遅延ロードの取りこぼしがなくなる</li>
+                  <li><strong>③ 依存関数の typeof チェック</strong>: <code>closeResultModal</code> 等が未定義でも AT で止まらないよう <code>typeof === 'function'</code> チェックしてから呼ぶ</li>
+                </ul>
+              </li>
+              <li><strong>効果</strong>: 何か例外が起きても他タブへの遷移は必ず成立する。開発者ツールの Console にエラーが残るので、真因の特定にも役立つ。</li>
+              <li><strong>バージョン同期</strong>: <code>AFFIROS_REWRITE_VERSION</code> 0.5.6 → 0.5.7 / <code>affiros-rewrite-0.5.7.zip</code> 生成 / <code>PLUGIN_DOWNLOADS['rewrite']</code> 追従 / <code>APP_VERSION</code> 1.8.4 → 1.8.5。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.8.4 / rewrite v0.5.6 (2026-07-17) — 「旧プラグイン削除済みなのに通知が消えない」を修正</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>症状</strong>: 旧 <code>affiros-paragraph-splitter</code> プラグインを削除したのに、「統合されたので削除してください」の admin notice が消えない (実測 karenai-green.com)。</li>
