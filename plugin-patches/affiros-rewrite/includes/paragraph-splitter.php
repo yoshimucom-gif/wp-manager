@@ -16,17 +16,23 @@
 
 if (!defined('ABSPATH')) exit;
 
+// v0.5.10: 定数は**ガードより先に**無条件で定義する。
+// これまで「function_exists 系ガードが発火 → return → 定数が定義されない」
+// 状態で render_tab_body が別経路から呼ばれた時に PHP 8+ が
+// "Undefined constant AFFIROS_PSPLIT_OPTION_KEY" Fatal error を出していた
+// (bousui-goods.com 実測、段落整形ページで発生)。
+// 定数はどのフローでも必ず存在するようにガードから外す。
+if (!defined('AFFIROS_PSPLIT_VERSION')) {
+    define('AFFIROS_PSPLIT_VERSION', '1.1.3');
+}
+if (!defined('AFFIROS_PSPLIT_OPTION_KEY')) {
+    define('AFFIROS_PSPLIT_OPTION_KEY', 'affiros_psplit_settings');
+}
+
 // v0.5.1: 二重ロード防止 & 旧独立プラグイン (affiros-paragraph-splitter) との共存ガード
-//
-// 判定は「関数がすでに宣言されているか」で行う（defined チェックだけだと
-// タイミング問題で漏れることがあった実測: kabe-deco.com で Fatal error）。
-// 旧プラグインが先にロードされていたら、統合版は一切何もせず終了する。
 if (defined('AFFIROS_PSPLIT_INTEGRATED_LOADED')) return;
-if (function_exists('affiros_psplit_default_settings') || defined('AFFIROS_PSPLIT_VERSION')) {
-    // v0.5.6: 通知は「旧プラグインのファイルが実際に存在する時だけ」出す。
-    // 実測 (karenai-green.com) で「旧プラグイン削除済みなのに通知が消えない」
-    // 事象があった。opcache や double-include の可能性がゼロではないため、
-    // 通知条件を「実ファイルが存在する」に厳しくする（旧が本当に消えていれば無音）。
+if (function_exists('affiros_psplit_default_settings')) {
+    // 旧プラグイン(既に関数宣言済)と衝突するのでスキップ。通知は実ファイルがある時だけ。
     $legacy_path = (defined('WP_PLUGIN_DIR') ? WP_PLUGIN_DIR : WP_CONTENT_DIR . '/plugins')
         . '/affiros-paragraph-splitter/affiros-paragraph-splitter.php';
     if (file_exists($legacy_path)) {
@@ -41,12 +47,6 @@ if (function_exists('affiros_psplit_default_settings') || defined('AFFIROS_PSPLI
     return;
 }
 define('AFFIROS_PSPLIT_INTEGRATED_LOADED', true);
-if (!defined('AFFIROS_PSPLIT_VERSION')) {
-    define('AFFIROS_PSPLIT_VERSION', '1.1.3');
-}
-if (!defined('AFFIROS_PSPLIT_OPTION_KEY')) {
-    define('AFFIROS_PSPLIT_OPTION_KEY', 'affiros_psplit_settings');
-}
 
 // =============================================================================
 // 設定

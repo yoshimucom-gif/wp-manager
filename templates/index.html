@@ -1917,6 +1917,25 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.8.8 / rewrite v0.5.10 (2026-07-17) — 🎯 真犯人特定: PHP 8+ Undefined constant AFFIROS_PSPLIT_OPTION_KEY</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>真犯人</strong>: v0.5.9 で追加した try/catch(Throwable) がついにキャッチ:<br>
+                <code style="background:#ffe0e0;padding:2px 6px;border-radius:3px;">段落整形モジュールでエラー: Undefined constant "AFFIROS_PSPLIT_OPTION_KEY"</code><br>
+                PHP 8+ では未定義定数を参照するだけで Fatal Error になる仕様。</li>
+              <li><strong>なぜ未定義になったか</strong>: paragraph-splitter.php の共存ガード内で「関数がすでに宣言されていたら (旧プラグインとの衝突)」 <code>return</code> するが、その return が <strong>定数の <code>define()</code> より先に走る</strong>コード配置になっていた。結果として:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>関数 <code>affiros_psplit_render_tab_body</code> はどこか (opcache キャッシュ / 別経路の require / MU プラグイン等) で宣言済み</li>
+                  <li>だがガードが発火して <code>return</code> したせいで定数だけ未定義</li>
+                  <li>render_tab_body 内で定数を参照 → Fatal error</li>
+                </ul>
+              </li>
+              <li><strong>修正</strong>: 定数 <code>AFFIROS_PSPLIT_VERSION</code> と <code>AFFIROS_PSPLIT_OPTION_KEY</code> を <strong>ガードチェックより先</strong>に無条件で <code>defined()</code> ガード付きで定義するように変更。どのフローを通っても定数は必ず存在する。</li>
+              <li><strong>v0.5.9 の分離設計の恩恵</strong>: 「段落整形ページで Fatal」でも「本体の記事整備ページは無傷」で回避できた。この構造がなかったら今回もページ全体が真っ白のままで真因が特定できなかった。分離設計は失敗ではなく必要な足場だった。</li>
+              <li><strong>バージョン同期</strong>: <code>AFFIROS_REWRITE_VERSION</code> 0.5.9 → 0.5.10 / <code>affiros-rewrite-0.5.10.zip</code> 生成 / <code>PLUGIN_DOWNLOADS['rewrite']</code> 追従 / <code>APP_VERSION</code> 1.8.7 → 1.8.8。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.8.7 / rewrite v0.5.9 (2026-07-17) — 🚨 段落整形を別ページに分離（rewrite-page.php を巻き添えにさせない）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>症状</strong>: 実測 (bousui-goods.com) で「Affiros ポストプロセッサー画面のタブが全部反応せず、中身も真っ白」。ブラウザコンソールで <code>jQuery('.affiros-non-psplit-wrap').length</code> = <strong>0</strong> = そのラッパー div 自体が DOM に存在していないことが判明。PHP の <code>affiros_psplit_render_tab_body()</code> 呼び出しでコケてページ全体の出力が途中で止まっていた模様。</li>
