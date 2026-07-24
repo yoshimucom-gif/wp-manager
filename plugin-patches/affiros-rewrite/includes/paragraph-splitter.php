@@ -832,6 +832,20 @@ function affiros_psplit_stats($html, $settings = null) {
         }
     }
 
+    // v1.1.6: 句点2つ以上を含む <p> をカウント (縦読みモード対象数)
+    //         画像・表・リスト・見出しを含む段落はスキップ (split_every_period と同じ条件)
+    $period_splittable = 0;
+    if (isset($m[1])) {
+        foreach ($m[1] as $inner) {
+            if (preg_match('/<(img|table|ul|ol|div|figure|iframe|hr|blockquote|h[1-6])\b/i', $inner)) continue;
+            $plain = trim(preg_replace('/<[^>]+>/u', '', $inner));
+            if ($plain === '') continue;
+            if (preg_match_all('/[。！？!?]/u', $plain, $pm) && count($pm[0]) >= 2) {
+                $period_splittable++;
+            }
+        }
+    }
+
     if (empty($lens)) {
         return [
             'count'              => 0,
@@ -840,6 +854,7 @@ function affiros_psplit_stats($html, $settings = null) {
             'over_200'           => 0,
             'heading_candidates' => $heading_candidates,
             'strong_label_candidates' => $strong_label_candidates,
+            'period_splittable'  => $period_splittable,
         ];
     }
 
@@ -850,6 +865,7 @@ function affiros_psplit_stats($html, $settings = null) {
         'over_200'           => count(array_filter($lens, function ($l) { return $l > 200; })),
         'heading_candidates' => $heading_candidates,
         'strong_label_candidates' => $strong_label_candidates,
+        'period_splittable'  => $period_splittable,
     ];
 }
 
@@ -1092,6 +1108,7 @@ function affiros_psplit_render_tab_body() {
                         <th style="width:120px">200字超</th>
                         <th style="width:140px">見出し昇格候補</th>
                         <th style="width:140px" title="&lt;li&gt;&lt;strong&gt;ラベル&lt;/strong&gt;：長文 パターン">strongラベル</th>
+                        <th style="width:140px" title="縦読みモード ON 時、句点2つ以上を含む段落">句点分割</th>
                         <th style="width:220px">アクション</th>
                     </tr>
                 </thead>
@@ -1144,6 +1161,7 @@ function affiros_psplit_render_tab_body() {
                 const editUrl = `${location.origin}/wp-admin/post.php?post=${p.id}&action=edit`;
                 const hc = p.heading_candidates || 0;
                 const slc = p.strong_label_candidates || 0;
+                const ps = p.period_splittable || 0;
                 tbody.append(`
                     <tr data-id="${p.id}">
                         <td>${p.id}</td>
@@ -1153,6 +1171,7 @@ function affiros_psplit_render_tab_body() {
                         <td style="color:${p.over_200 > 0 ? '#dc2626' : '#6b7280'};font-weight:600">${p.over_200}件</td>
                         <td style="color:${hc > 0 ? '#d97706' : '#6b7280'};font-weight:600">${hc}件</td>
                         <td style="color:${slc > 0 ? '#2563eb' : '#6b7280'};font-weight:600">${slc}件</td>
+                        <td style="color:${ps > 0 ? '#7c3aed' : '#6b7280'};font-weight:600">${ps}件</td>
                         <td>
                             <button type="button" class="button button-small aps-preview" data-id="${p.id}">👁 プレビュー</button>
                             <button type="button" class="button button-primary button-small aps-apply" data-id="${p.id}">✨ 適用</button>
@@ -1309,13 +1328,20 @@ add_action('wp_ajax_affiros_psplit_scan', function () {
     );
     $rows = $wpdb->get_results($query);
 
+    // v1.1.6: 縦読みモードが ON なら period_splittable も対象条件に加える
+    $split_every_period_on = ($settings['split_every_period'] ?? 'no') === 'yes';
+
     $targets = [];
     foreach ($rows as $r) {
         $stats = affiros_psplit_stats($r->post_content, $settings);
-        // v1.1.2: 「長段落」「見出し昇格候補」「strong+コロン <li>」のいずれかで対象に
-        if ($stats['over_200'] <= 0
-            && ($stats['heading_candidates'] ?? 0) <= 0
-            && ($stats['strong_label_candidates'] ?? 0) <= 0) continue;
+        $is_target = $stats['over_200'] > 0
+            || ($stats['heading_candidates'] ?? 0) > 0
+            || ($stats['strong_label_candidates'] ?? 0) > 0;
+        // v1.1.6: 縦読みモード ON なら「句点2つ以上を含む段落があれば対象」
+        if ($split_every_period_on && ($stats['period_splittable'] ?? 0) > 0) {
+            $is_target = true;
+        }
+        if (!$is_target) continue;
         $targets[] = [
             'id'                       => (int)$r->ID,
             'title'                    => $r->post_title,
@@ -1324,11 +1350,13 @@ add_action('wp_ajax_affiros_psplit_scan', function () {
             'over_200'                 => $stats['over_200'],
             'heading_candidates'       => $stats['heading_candidates'] ?? 0,
             'strong_label_candidates'  => $stats['strong_label_candidates'] ?? 0,
+            'period_splittable'        => $stats['period_splittable'] ?? 0,
         ];
     }
     wp_send_json_success([
         'scanned' => count($rows),
         'posts'   => $targets,
+        'split_every_period_on' => $split_every_period_on,
     ]);
 });
 
