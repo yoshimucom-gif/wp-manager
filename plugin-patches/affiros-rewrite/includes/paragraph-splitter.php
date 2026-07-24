@@ -684,8 +684,10 @@ function affiros_psplit_process_strong_list_inner($list_inner, $list_tag, $list_
  * - 画像・表・リスト・見出しを含む <p> (壊れるため)
  * - 句点が1つ以下 (分割不要)
  *
- * タグをまたいだ分割は避けるためプレースホルダー方式で
- * 「タグを一時退避 → plain text で句点分割 → タグを戻す」を採用。
+ * v1.1.7 修正: <a>...</a> 等の**タグ内テキストに含まれる句点**で分割すると
+ * タグが半端に切れて Gutenberg「無効なコンテンツ」エラーになる。
+ * 分割後の各 piece について**タグの開閉バランス**をチェックし、
+ * アンバランスなら次の piece と結合する (=タグ内の句点では分割しない)。
  */
 function affiros_psplit_split_every_period($html) {
     return preg_replace_callback(
@@ -711,21 +713,42 @@ function affiros_psplit_split_every_period($html) {
             );
 
             // 句点 (。！？!?) 直後で分割
-            $pieces = preg_split('/(?<=[。！？!?])/u', $plain_template);
-            if (!$pieces || count($pieces) < 2) return $m[0];
+            $raw_pieces = preg_split('/(?<=[。！？!?])/u', $plain_template);
+            if (!$raw_pieces || count($raw_pieces) < 2) return $m[0];
+
+            // 各 piece のタグを復元
+            $restored = [];
+            foreach ($raw_pieces as $rp) {
+                $restored[] = preg_replace_callback(
+                    '/\x02TAG(\d+)\x03/u',
+                    function ($t) use ($tags) { return $tags[intval($t[1])] ?? ''; },
+                    $rp
+                );
+            }
+
+            // v1.1.7: タグ開閉のバランスをチェック。アンバランスな piece は次と結合。
+            //         (例: <a>...。 で切れて </a> が次に残るケースを潰す)
+            $balanced = [];
+            $buffer = '';
+            foreach ($restored as $piece) {
+                $buffer .= $piece;
+                if (affiros_psplit_is_tag_balanced($buffer)) {
+                    $balanced[] = $buffer;
+                    $buffer = '';
+                }
+            }
+            if ($buffer !== '') {
+                // 最後まで解決しなかった残骸は前の piece にくっつける
+                if (!empty($balanced)) $balanced[count($balanced) - 1] .= $buffer;
+                else $balanced[] = $buffer;
+            }
+            if (count($balanced) < 2) return $m[0];
 
             $out = '';
             $emitted = 0;
-            foreach ($pieces as $piece) {
-                // タグを戻す
-                $piece = preg_replace_callback(
-                    '/\x02TAG(\d+)\x03/u',
-                    function ($t) use ($tags) { return $tags[intval($t[1])] ?? ''; },
-                    $piece
-                );
+            foreach ($balanced as $piece) {
                 $piece = trim($piece);
                 if ($piece === '') continue;
-                // plain text が空なら (タグだけ) スキップ
                 $plain = trim(preg_replace('/<[^>]+>/u', '', $piece));
                 if ($plain === '') continue;
                 $out .= '<p' . $attr . '>' . $piece . '</p>';
@@ -735,6 +758,32 @@ function affiros_psplit_split_every_period($html) {
         },
         $html
     );
+}
+
+/**
+ * v1.1.7: 指定 HTML 断片の開/閉タグバランスを検証。
+ * 自己閉じタグ (<br>, <img>, <hr>, <input>, <meta>, <link>, <br/>, <img/> 等) は
+ * 開でも閉でもカウントしない。全体で depth == 0 かつ途中で depth < 0 にならなければ balanced。
+ */
+function affiros_psplit_is_tag_balanced($html) {
+    static $self_closing = ['br', 'img', 'hr', 'input', 'meta', 'link', 'area', 'base', 'col', 'embed', 'source', 'track', 'wbr'];
+    if (!preg_match_all('/<(\/?)([a-zA-Z][a-zA-Z0-9]*)\b[^>]*?(\/)?>/i', $html, $matches, PREG_SET_ORDER)) {
+        return true; // タグなしなら balanced
+    }
+    $depth = 0;
+    foreach ($matches as $m) {
+        $is_close = $m[1] === '/';
+        $tag_name = strtolower($m[2]);
+        $is_self  = (isset($m[3]) && $m[3] === '/') || in_array($tag_name, $self_closing, true);
+        if ($is_self) continue;
+        if ($is_close) {
+            $depth--;
+            if ($depth < 0) return false;
+        } else {
+            $depth++;
+        }
+    }
+    return $depth === 0;
 }
 
 function affiros_psplit_add_heading_spacing($html) {
@@ -1237,7 +1286,7 @@ function affiros_psplit_render_tab_body() {
                     const data = res.data || {};
                     const changed = !!data.changed;
                     const delta = data.delta || {};
-                    const deltaTotal = (delta.over_200_resolved || 0) + (delta.heading_promoted || 0) + (delta.strong_label_split || 0);
+                    const deltaTotal = (delta.over_200_resolved || 0) + (delta.heading_promoted || 0) + (delta.strong_label_split || 0) + (delta.period_split || 0);
                     const remainingTotal = data.remaining_total || 0;
                     if (btn) {
                         let label;
@@ -1403,12 +1452,14 @@ add_action('wp_ajax_affiros_psplit_apply', function () {
         'over_200_resolved' => max(0, $before_stats['over_200'] - $after_stats['over_200']),
         'heading_promoted'  => max(0, ($before_stats['heading_candidates'] ?? 0) - ($after_stats['heading_candidates'] ?? 0)),
         'strong_label_split'=> max(0, ($before_stats['strong_label_candidates'] ?? 0) - ($after_stats['strong_label_candidates'] ?? 0)),
+        'period_split'      => max(0, ($before_stats['period_splittable'] ?? 0) - ($after_stats['period_splittable'] ?? 0)),
     ];
     $delta_total = array_sum($delta);
     $remaining_after = [
         'over_200'                => $after_stats['over_200'],
         'heading_candidates'      => $after_stats['heading_candidates'] ?? 0,
         'strong_label_candidates' => $after_stats['strong_label_candidates'] ?? 0,
+        'period_splittable'       => $after_stats['period_splittable'] ?? 0,
     ];
     $remaining_total = array_sum($remaining_after);
 

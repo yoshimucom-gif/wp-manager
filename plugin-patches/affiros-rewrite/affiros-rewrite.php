@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros ポストプロセッサー
  * Description: Affiros9 で生成した記事の後工程を全部やる統合ツール。Claude API リライト / 商品カード・マーカーの削除&挿入 / H2 章の並び替え / 段落整形。WP_Query 内部処理でホスティング WAF の影響を受けない（403 回避）。
- * Version: 0.5.15
+ * Version: 0.5.16
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-rewrite
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('AFFIROS_REWRITE_VERSION', '0.5.15');
+define('AFFIROS_REWRITE_VERSION', '0.5.16');
 define('AFFIROS_REWRITE_PATH', plugin_dir_path(__FILE__));
 define('AFFIROS_REWRITE_URL', plugin_dir_url(__FILE__));
 
