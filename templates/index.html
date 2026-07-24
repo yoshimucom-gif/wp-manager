@@ -1853,12 +1853,42 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             </a>
           </div>
 
-          <!-- ❹ 予約再スケジュール（カテゴライザー/重複投稿/黄色マーカー削除の3つは配布ページから外した） -->
+          <!-- ❹ オートインサーター (新設 v0.1.0) -->
+          <div class="settings-section" style="margin:0">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <div style="font-size:22px">🛒</div>
+              <div style="flex:1">
+                <div style="font-weight:700;font-size:14px">❹ Affiros オートインサーター</div>
+                <div style="font-size:11px;color:var(--muted)">マーカー不要。Claude Haiku が本文を読んで Amazon+楽天から3商品を自動挿入</div>
+              </div>
+              <div style="font-size:11px;background:rgba(102,210,255,0.18);color:#66d2ff;padding:2px 8px;border-radius:10px">v{{ plugin_downloads['auto-inserter'].version }}</div>
+            </div>
+            <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:10px">
+              Affiros9 でリッチな商品マーカー入り記事を作らなくても、
+              <strong>プレーンなSEO記事だけを Claude で書いて、公開時に WP プラグイン側で商品カードを自動挿入</strong>する新方式。
+              Claude Haiku が本文からキーワード抽出 → Amazon Creators API + 楽天 API から3商品を取得
+              → 「最初のH2直前」「まとめ直後」に比較カード挿入。ランキング記事はタイトル判定で自動スキップ。
+              <br>1記事あたり Claude Haiku ¥0.3 のみ。Amazon/楽天 API は無料。
+            </div>
+            <div style="font-size:11px;color:var(--muted);background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:6px;margin-bottom:8px">
+              <div>📂 配布物: <code>{{ plugin_downloads['auto-inserter'].file }}</code></div>
+              <div>🔧 設定: WP管理画面 →「Affiros オート挿入」</div>
+              <div>📝 必要キー: Claude API キー + Amazon Creators API + 楽天API</div>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:12px">
+              主要機能: Claude Haiku で本文→検索KW自動抽出 / Amazon+楽天から3商品検索 / 比較3列カード自動挿入 (最初のH2前+まとめ後) / ランキング記事自動スキップ / 公開時自動挿入 / 週次リフレッシュ / 一括スキャン&適用 / 除外チェックボックス
+            </div>
+            <a href="/download/plugin/auto-inserter" class="btn btn-primary" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;text-decoration:none">
+              ⬇ ダウンロード（v{{ plugin_downloads['auto-inserter'].version }}）
+            </a>
+          </div>
+
+          <!-- ❺ 予約再スケジュール -->
           <div class="settings-section" style="margin:0">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
               <div style="font-size:22px">📅</div>
               <div style="flex:1">
-                <div style="font-weight:700;font-size:14px">❹ Affiros 予約再スケジュール</div>
+                <div style="font-weight:700;font-size:14px">❺ Affiros 予約再スケジュール</div>
                 <div style="font-size:11px;color:var(--muted)">予約投稿の投稿頻度を一括変更（1日N件で振り直し）</div>
               </div>
               <div style="font-size:11px;background:rgba(102,210,255,0.18);color:#66d2ff;padding:2px 8px;border-radius:10px">v{{ plugin_downloads['reschedule'].version }}</div>
@@ -1913,6 +1943,34 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
               <li><strong>取り消し機能</strong>: 実行前の <code>post_date</code> / <code>post_status</code> を投稿メタに退避し、「直前の実行を取り消す」ボタンで丸ごと復元（下書きは下書きに戻る）。取り消せるのは直近1回分のみ。</li>
               <li><strong>誤記修正</strong>: v1.0.0 の画面に「リビジョンから元の予約日時に戻せる」とあったが、WP のリビジョンは <code>post_title</code> / <code>post_content</code> / <code>post_excerpt</code> しか復元せず <code>post_date</code> と <code>post_status</code> は戻らない。この虚偽の説明を削除し、実際に戻せる取り消し機能に置き換えた。</li>
               <li><strong>修正</strong>: 実行時に対象記事が削除済みだと <code>$p-&gt;post_status</code> を null に対して読んでいた箇所をガード。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
+            <div class="section-header">// v1.9.0 / auto-inserter v0.1.0 (2026-07-21) — 🆕 新プラグイン「オートインサーター」を追加</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: Affiros9 でマーカー付き記事を作らせるとプロンプト複雑化で不安定 + Sonnet コストがかさむ。「プレーンな SEO 記事だけ Claude で書いて、商品挿入は WP プラグイン側で全部やる」新方式で <strong>コスト 1/10 + 安定性向上</strong>を狙う。</li>
+              <li><strong>新プラグイン</strong>: <code>affiros-auto-inserter</code> v0.1.0 (Affiros オートインサーター)
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li><strong>Claude Haiku で本文→検索キーワード自動抽出</strong> (¥0.3/記事)</li>
+                  <li><strong>Amazon Creators API + 楽天 API から3商品を取得</strong> (RINKER スタイル)</li>
+                  <li><strong>比較3列カードを「最初のH2直前」「まとめ直後」に自動挿入</strong> (SEO 最適位置)</li>
+                  <li><strong>ランキング記事はタイトル判定で自動スキップ</strong> (「〜選」「ランキング」等)</li>
+                  <li>公開時自動 (WP Cron 経由で60秒遅延) + 週次リフレッシュ (価格・在庫更新)</li>
+                  <li>投稿編集画面のメタボックス: 除外チェック / 手動実行 / カード削除</li>
+                  <li>管理画面「Affiros オート挿入」で全記事一括スキャン&適用</li>
+                </ul>
+              </li>
+              <li><strong>既存 product-inserter との棲み分け</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>コラム型 (症状/悩み系, ハウツー系) = <strong>新プラグイン</strong>で自動</li>
+                  <li>ランキング型 (〜おすすめN選) = <strong>従来の product-inserter</strong> (マーカー方式) のまま</li>
+                  <li>両プラグインは完全独立。名前空間分離 (<code>Affiros_AI_*</code> vs <code>AI_PI_*</code>)</li>
+                </ul>
+              </li>
+              <li><strong>コスト試算</strong>: 100件のコラム記事を新方式で書くと Claude Sonnet (旧) ¥3,000 → Claude Haiku (新) ¥30。約100分の1。</li>
+              <li><strong>アーキテクチャの学び</strong>: v0.5.10-0.5.13 で発覚した PHP 関数ホイスティングによる共存ガード誤発火バグを踏まえて、新プラグインは共存ガード自体を持たない (完全独立設計)。API 名前空間 <code>Affiros_AI_*</code> で衝突ゼロ。</li>
+              <li><strong>バージョン同期</strong>: 新プラグイン <code>AFFIROS_AI_VERSION</code> 0.1.0 / <code>affiros-auto-inserter-0.1.0.zip</code> 生成 / <code>PLUGIN_DOWNLOADS['auto-inserter']</code> + <code>PLUGIN_UPDATE_META</code> 追加 / build-all.py 追従 / 配布ページに❹として追加 / <code>APP_VERSION</code> 1.8.11 → 1.9.0 (新機能なので minor 上げ)。</li>
             </ul>
           </div>
 

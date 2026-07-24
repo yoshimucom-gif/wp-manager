@@ -235,7 +235,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.8.11'
+APP_VERSION = '1.9.0'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -6448,6 +6448,11 @@ PLUGIN_DOWNLOADS = {
         'name': 'Affiros 段落整形 (統合済・移行用)',
         'version': '1.1.5',
     },
+    'auto-inserter': {
+        'file': 'affiros-auto-inserter-0.1.0.zip',
+        'name': 'Affiros オートインサーター',
+        'version': '0.1.0',
+    },
     'reschedule': {
         'file': 'affiros-reschedule-1.1.0.zip',
         'name': 'Affiros 予約再スケジュール',
@@ -6532,6 +6537,13 @@ PLUGIN_UPDATE_META = {
     },
     'mark-stripper': {
         'plugin_basename': 'affiros-mark-stripper/affiros-mark-stripper.php',
+        'tested':   '6.6',
+        'requires': '5.8',
+        'requires_php': '7.4',
+        'author':   'Affiros',
+    },
+    'auto-inserter': {
+        'plugin_basename': 'affiros-auto-inserter/affiros-auto-inserter.php',
         'tested':   '6.6',
         'requires': '5.8',
         'requires_php': '7.4',

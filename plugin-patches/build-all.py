@@ -37,6 +37,8 @@ SPECS = [
      'affiros-reschedule', 'affiros-reschedule-1.1.0.zip'),
     (os.path.join(ROOT, 'affiros-mark-stripper'),
      'affiros-mark-stripper', 'affiros-mark-stripper-1.0.0.zip'),
+    (os.path.join(ROOT, 'affiros-auto-inserter'),
+     'affiros-auto-inserter', 'affiros-auto-inserter-0.1.0.zip'),
 ]
 
 
