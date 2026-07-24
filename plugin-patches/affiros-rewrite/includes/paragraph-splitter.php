@@ -87,6 +87,7 @@ function affiros_psplit_default_settings() {
         'heading_max_chars'    => 60,     // 段落が何文字以下なら見出し候補にするか
         'split_strong_label_list' => 'yes',  // <li><strong>ラベル</strong>：内容 を見出し+段落に分割
         'split_min_content_chars' => 25,     // 説明文がこの文字数を超えるときだけ分割対象
+        'split_every_period'   => 'no',   // v1.1.6: 句点(。！？) 毎に1段落 (縦読み感重視モード)
         'target_statuses'      => 'publish,future,draft',
     ];
 }
@@ -170,6 +171,13 @@ function affiros_psplit_process_content($content, $settings = null) {
     //      親見出しレベルを検出して、その +1 を子見出しレベルに使う（context-aware）
     if (($settings['split_strong_label_list'] ?? 'yes') === 'yes') {
         $work = affiros_psplit_split_strong_label_list($work, $settings);
+    }
+
+    // 3.8) v1.1.6: 句点 (。！？) 毎に強制的に1段落にする「縦読みモード」
+    //     min_paragraph_chars や min_sentence_chars を無視して、全ての段落を
+    //     句点で機械的に区切る。1文=1段落。読みやすさ最優先。
+    if (($settings['split_every_period'] ?? 'no') === 'yes') {
+        $work = affiros_psplit_split_every_period($work);
     }
 
     // 4) H2/H3 前後の余白（空段落）
@@ -666,6 +674,69 @@ function affiros_psplit_process_strong_list_inner($list_inner, $list_tag, $list_
     return $out;
 }
 
+/**
+ * v1.1.6: 句点 (。！？) ごとに <p> を強制分割する「縦読みモード」
+ *
+ * 通常の分割ロジック (min_paragraph_chars / min_sentence_chars で蓄積) を
+ * 無視して、全ての <p> を機械的に句点で切る。1文=1段落。
+ *
+ * スキップ条件:
+ * - 画像・表・リスト・見出しを含む <p> (壊れるため)
+ * - 句点が1つ以下 (分割不要)
+ *
+ * タグをまたいだ分割は避けるためプレースホルダー方式で
+ * 「タグを一時退避 → plain text で句点分割 → タグを戻す」を採用。
+ */
+function affiros_psplit_split_every_period($html) {
+    return preg_replace_callback(
+        '/<p\b([^>]*)>([\s\S]*?)<\/p>/i',
+        function ($m) {
+            $attr = $m[1];
+            $inner = $m[2];
+
+            // 特殊要素を含む段落はスキップ
+            if (preg_match('/<(img|table|ul|ol|div|figure|iframe|hr|blockquote|h[1-6])\b/i', $inner)) {
+                return $m[0];
+            }
+
+            // タグをプレースホルダーに退避 (タグの中身を句点で切らないため)
+            $tags = [];
+            $plain_template = preg_replace_callback(
+                '/<[^>]+>/u',
+                function ($tag) use (&$tags) {
+                    $tags[] = $tag[0];
+                    return "\x02TAG" . (count($tags) - 1) . "\x03";
+                },
+                $inner
+            );
+
+            // 句点 (。！？!?) 直後で分割
+            $pieces = preg_split('/(?<=[。！？!?])/u', $plain_template);
+            if (!$pieces || count($pieces) < 2) return $m[0];
+
+            $out = '';
+            $emitted = 0;
+            foreach ($pieces as $piece) {
+                // タグを戻す
+                $piece = preg_replace_callback(
+                    '/\x02TAG(\d+)\x03/u',
+                    function ($t) use ($tags) { return $tags[intval($t[1])] ?? ''; },
+                    $piece
+                );
+                $piece = trim($piece);
+                if ($piece === '') continue;
+                // plain text が空なら (タグだけ) スキップ
+                $plain = trim(preg_replace('/<[^>]+>/u', '', $piece));
+                if ($plain === '') continue;
+                $out .= '<p' . $attr . '>' . $piece . '</p>';
+                $emitted++;
+            }
+            return $emitted > 0 ? $out : $m[0];
+        },
+        $html
+    );
+}
+
 function affiros_psplit_add_heading_spacing($html) {
     // H2/H3 ブロックの直前に空 <p> が無ければ入れる
     return preg_replace_callback(
@@ -837,6 +908,7 @@ function affiros_psplit_sanitize($input) {
     $output['heading_max_chars']       = max(20, min(200, intval($input['heading_max_chars'] ?? 60)));
     $output['split_strong_label_list'] = ($input['split_strong_label_list'] ?? 'yes') === 'yes' ? 'yes' : 'no';
     $output['split_min_content_chars'] = max(10, min(500, intval($input['split_min_content_chars'] ?? 25)));
+    $output['split_every_period']      = ($input['split_every_period'] ?? 'no') === 'yes' ? 'yes' : 'no';
     $output['target_statuses']         = sanitize_text_field($input['target_statuses'] ?? 'publish,future,draft');
     return $output;
 }
@@ -961,6 +1033,17 @@ function affiros_psplit_render_tab_body() {
                     <td>
                         <input type="number" name="<?php echo AFFIROS_PSPLIT_OPTION_KEY; ?>[split_min_content_chars]" value="<?php echo esc_attr($settings['split_min_content_chars'] ?? 25); ?>" min="10" max="500" style="width:80px"> 字超
                         <p class="description">コロン直後の説明文がこの文字数を超える時だけ分割対象。既定 25 字。短い「<code>長所：軽い</code>」みたいなのは触らない。</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th>「。」ごとに1段落 (縦読みモード)</th>
+                    <td>
+                        <label><input type="checkbox" name="<?php echo AFFIROS_PSPLIT_OPTION_KEY; ?>[split_every_period]" value="yes" <?php checked($settings['split_every_period'] ?? 'no', 'yes'); ?>> <strong>全ての段落を句点 (。！？) ごとに1文=1段落に強制分割する</strong></label>
+                        <p class="description">
+                            ONにすると <code>min_paragraph_chars</code> や <code>min_sentence_chars</code> の設定を無視して、<strong>すべての <code>&lt;p&gt;</code> を句点で機械分割</strong>します。<br>
+                            スマホでの読みやすさ重視・縦にスクロールする印象を強めたい記事向け。<br>
+                            画像・表・リスト・見出しを含む段落はスキップ。
+                        </p>
                     </td>
                 </tr>
                 <tr>

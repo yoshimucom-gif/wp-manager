@@ -1947,6 +1947,16 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.1 / rewrite v0.5.14 (2026-07-24) — 段落整形に「。ごとに1段落」モード追加</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>追加機能</strong>: ポストプロセッサーの「📝 段落整形」設定に「<strong>「。」ごとに1段落 (縦読みモード)</strong>」チェックボックスを追加。ONにすると <code>min_paragraph_chars</code> / <code>min_sentence_chars</code> を無視して、全ての <code>&lt;p&gt;</code> を句点 (。！？) ごとに強制分割する。</li>
+              <li><strong>用途</strong>: スマホでの読みやすさ重視・縦にスクロールする印象を強めたい記事向け。1文=1段落で改行される。</li>
+              <li><strong>実装</strong>: <code>affiros_psplit_split_every_period()</code> 関数を新設。process_content の step 3.8 として、既存の見出し昇格・strong ラベル分割の後に走る。画像・表・リスト・見出しを含む段落はスキップ。タグをまたぐ分割は避けるためプレースホルダー方式。</li>
+              <li><strong>バージョン同期</strong>: <code>AFFIROS_REWRITE_VERSION</code> 0.5.13 → 0.5.14 / <code>affiros-rewrite-0.5.14.zip</code> 生成 / <code>APP_VERSION</code> 1.9.0 → 1.9.1。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.0 / auto-inserter v0.1.0 (2026-07-21) — 🆕 新プラグイン「オートインサーター」を追加</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: Affiros9 でマーカー付き記事を作らせるとプロンプト複雑化で不安定 + Sonnet コストがかさむ。「プレーンな SEO 記事だけ Claude で書いて、商品挿入は WP プラグイン側で全部やる」新方式で <strong>コスト 1/10 + 安定性向上</strong>を狙う。</li>
