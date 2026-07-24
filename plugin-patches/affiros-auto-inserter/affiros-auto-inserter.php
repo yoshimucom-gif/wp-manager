@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros オートインサーター
  * Description: マーカー不要。Claude Haiku が本文から検索キーワードを自動抽出し、Amazon + 楽天から関連商品3件を引っ張って「最初のH2直前」「まとめ直後」の2箇所に比較カードを自動挿入する。ランキング記事は自動判定して除外。既存の affiros-product-inserter とは独立して動作。
- * Version: 0.1.0
+ * Version: 0.2.0
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-auto-inserter
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('AFFIROS_AI_VERSION',      '0.1.0');
+define('AFFIROS_AI_VERSION',      '0.2.0');
 define('AFFIROS_AI_PATH',         plugin_dir_path(__FILE__));
 define('AFFIROS_AI_URL',          plugin_dir_url(__FILE__));
 define('AFFIROS_AI_OPTION_KEY',   'affiros_ai_settings');
@@ -34,6 +34,7 @@ require_once AFFIROS_AI_PATH . 'includes/inserter.php';
 require_once AFFIROS_AI_PATH . 'admin/settings.php';
 require_once AFFIROS_AI_PATH . 'admin/bulk-page.php';
 require_once AFFIROS_AI_PATH . 'admin/metabox.php';
+require_once AFFIROS_AI_PATH . 'admin/design-preview.php';
 
 /**
  * 自動更新チェッカー登録
@@ -101,6 +102,14 @@ add_action('admin_menu', function () {
     );
     add_submenu_page(
         'affiros-ai',
+        'デザインプレビュー',
+        '🎨 デザインプレビュー',
+        'manage_options',
+        'affiros-ai-preview',
+        'affiros_ai_render_preview_page'
+    );
+    add_submenu_page(
+        'affiros-ai',
         '設定',
         '⚙️ 設定',
         'manage_options',
@@ -119,6 +128,10 @@ add_action('admin_enqueue_scripts', function ($hook) {
         'ajaxUrl' => admin_url('admin-ajax.php'),
         'nonce'   => wp_create_nonce('affiros_ai_nonce'),
     ]);
+    // デザインプレビューでフロントと同じカードCSSを使う
+    if (strpos($hook, 'affiros-ai-preview') !== false) {
+        wp_enqueue_style('affiros-ai-card', AFFIROS_AI_URL . 'assets/card.css', [], AFFIROS_AI_VERSION);
+    }
 });
 
 /**
