@@ -788,10 +788,13 @@ function affiros_psplit_is_tag_balanced($html) {
 
 function affiros_psplit_add_heading_spacing($html) {
     // H2/H3 ブロックの直前に空 <p> が無ければ入れる
+    // v1.1.8: wp:paragraph コメントは付けない。後で step 7 が全 <p> をラップする
+    //   ときに二重で <!-- wp:paragraph --> が入ってブロックネスト → Gutenberg
+    //   「無効なコンテンツ」エラーが起きていた (数珠メディア実測)
     return preg_replace_callback(
         '/(?<!<p><\/p>\s)(<!--\s*wp:heading\s*-->)/i',
         function ($m) {
-            return "<!-- wp:paragraph -->\n<p></p>\n<!-- /wp:paragraph -->\n\n" . $m[1];
+            return "<p></p>\n\n" . $m[1];
         },
         $html
     );
@@ -799,10 +802,12 @@ function affiros_psplit_add_heading_spacing($html) {
 
 function affiros_psplit_add_media_spacing($html) {
     // <figure> や <table> ブロックの前後に空 <p> 段落を入れる（簡易版）
+    // v1.1.8: wp:paragraph コメントは付けない（step 7 でラップされるため。
+    //   付けると二重ネストして Gutenberg「無効なコンテンツ」エラー）
     $html = preg_replace_callback(
         '/(<!--\s*wp:(?:image|table|gallery)[^>]*-->)/i',
         function ($m) {
-            return "<!-- wp:paragraph -->\n<p></p>\n<!-- /wp:paragraph -->\n\n" . $m[1];
+            return "<p></p>\n\n" . $m[1];
         },
         $html
     );

@@ -6429,9 +6429,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.2.3',
     },
     'rewrite': {
-        'file': 'affiros-rewrite-0.5.16.zip',
+        'file': 'affiros-rewrite-0.5.17.zip',
         'name': 'Affiros ポストプロセッサー',
-        'version': '0.5.16',
+        'version': '0.5.17',
     },
     'categorizer': {
         'file': 'affiros-categorizer-0.1.1.zip',
