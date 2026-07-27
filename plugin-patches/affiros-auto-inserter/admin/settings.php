@@ -18,9 +18,11 @@ function affiros_ai_sanitize_settings($input) {
     $secret_keys = ['claude_api_key', 'amazon_client_id', 'amazon_client_secret',
                     'rakuten_app_id', 'rakuten_access_key'];
     foreach ($secret_keys as $k) {
-        $val = sanitize_text_field($input[$k] ?? '');
-        // 空でない場合のみ更新 (マスク値でも空でも上書きしないため)
-        if ($val !== '') $output[$k] = $val;
+        $val = trim(sanitize_text_field($input[$k] ?? ''));
+        // 空・マスク値 (*のみ) は既存値を保持。実際の値が入力された時だけ更新
+        if ($val !== '' && !preg_match('/^\*+$/', $val)) $output[$k] = $val;
+        // 過去のバグでマスク値が保存されてしまっている場合は破棄 (invalid x-api-key の原因)
+        if (isset($output[$k]) && preg_match('/^\*+$/', (string)$output[$k])) unset($output[$k]);
     }
 
     $plain_keys = ['amazon_partner_tag', 'amazon_marketplace', 'rakuten_affiliate_id'];
@@ -42,6 +44,23 @@ function affiros_ai_sanitize_settings($input) {
     return $output;
 }
 
+// 秘密キーが「本物の値で」設定済みか (過去バグで保存されたマスク値は未設定扱い)
+function affiros_ai_secret_is_set($val) {
+    return $val !== '' && !preg_match('/^\*+$/', (string)$val);
+}
+
+// 秘密キー入力欄: 値は絶対に出力しない。placeholder で設定状態だけ伝える
+function affiros_ai_secret_field($key, $settings) {
+    $is_set = affiros_ai_secret_is_set($settings[$key] ?? '');
+    printf(
+        '<input type="password" name="%s[%s]" value="" placeholder="%s" class="regular-text" autocomplete="new-password"> %s',
+        esc_attr(AFFIROS_AI_OPTION_KEY),
+        esc_attr($key),
+        $is_set ? '設定済み（変更する場合のみ入力）' : '未設定',
+        $is_set ? '<span style="color:#00a32a">✓ 設定済み</span>' : '<span style="color:#d63638">未設定</span>'
+    );
+}
+
 function affiros_ai_render_settings_page() {
     if (!current_user_can('manage_options')) return;
     $settings = affiros_ai_get_settings();
@@ -61,10 +80,10 @@ function affiros_ai_render_settings_page() {
                 <tr>
                     <th>Claude API キー</th>
                     <td>
-                        <input type="password" name="<?php echo AFFIROS_AI_OPTION_KEY; ?>[claude_api_key]" value="<?php echo esc_attr($settings['claude_api_key'] ? str_repeat('*', 20) : ''); ?>" class="regular-text" autocomplete="off">
+                        <?php affiros_ai_secret_field('claude_api_key', $settings); ?>
                         <p class="description">
                             記事本文から検索キーワードを抽出する用。Haiku 使用でコスト 1記事あたり ¥0.3 程度。
-                            <br>入力欄が空だと保存時に既存値を保持。値を更新する場合は上書き入力。
+                            <br>入力欄が空のまま保存すると既存値を保持。値を更新する場合だけ入力。
                         </p>
                     </td>
                 </tr>
@@ -74,11 +93,11 @@ function affiros_ai_render_settings_page() {
             <table class="form-table">
                 <tr>
                     <th>Client ID</th>
-                    <td><input type="password" name="<?php echo AFFIROS_AI_OPTION_KEY; ?>[amazon_client_id]" value="<?php echo esc_attr($settings['amazon_client_id'] ? str_repeat('*', 20) : ''); ?>" class="regular-text" autocomplete="off"></td>
+                    <td><?php affiros_ai_secret_field('amazon_client_id', $settings); ?></td>
                 </tr>
                 <tr>
                     <th>Client Secret</th>
-                    <td><input type="password" name="<?php echo AFFIROS_AI_OPTION_KEY; ?>[amazon_client_secret]" value="<?php echo esc_attr($settings['amazon_client_secret'] ? str_repeat('*', 20) : ''); ?>" class="regular-text" autocomplete="off"></td>
+                    <td><?php affiros_ai_secret_field('amazon_client_secret', $settings); ?></td>
                 </tr>
                 <tr>
                     <th>Partner Tag (アソシエイトID)</th>
@@ -94,11 +113,11 @@ function affiros_ai_render_settings_page() {
             <table class="form-table">
                 <tr>
                     <th>アプリID</th>
-                    <td><input type="password" name="<?php echo AFFIROS_AI_OPTION_KEY; ?>[rakuten_app_id]" value="<?php echo esc_attr($settings['rakuten_app_id'] ? str_repeat('*', 20) : ''); ?>" class="regular-text" autocomplete="off"></td>
+                    <td><?php affiros_ai_secret_field('rakuten_app_id', $settings); ?></td>
                 </tr>
                 <tr>
                     <th>アクセスキー</th>
-                    <td><input type="password" name="<?php echo AFFIROS_AI_OPTION_KEY; ?>[rakuten_access_key]" value="<?php echo esc_attr($settings['rakuten_access_key'] ? str_repeat('*', 20) : ''); ?>" class="regular-text" autocomplete="off"><p class="description">2026-05〜 の新仕様。「アプリID + アクセスキー」両方必須。</p></td>
+                    <td><?php affiros_ai_secret_field('rakuten_access_key', $settings); ?><p class="description">2026-05〜 の新仕様。「アプリID + アクセスキー」両方必須。</p></td>
                 </tr>
                 <tr>
                     <th>アフィリエイトID</th>

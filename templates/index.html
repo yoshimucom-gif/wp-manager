@@ -1923,6 +1923,23 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.5 / auto-inserter v0.2.1 (2026-07-27) — 🐛 設定保存でAPIキーがマスク値に化けるバグを修正</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>症状</strong>: 「キーワード抽出失敗: invalid x-api-key」。Claude APIキーを正しく設定していても発生。</li>
+              <li><strong>原因</strong>: 設定画面が保存済みキーを入力欄に <code>********************</code>（マスク値）で表示していた。設定を再保存すると、そのマスク値が本物のキーとして上書き保存され、以降のAPI呼び出しが全滅。Amazon・楽天のキーも同じ経路で壊れる。</li>
+              <li><strong>修正（3層）</strong>:
+                <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px;line-height:1.7">
+                  <li>① 根本: 秘密キー欄はマスク値を出力せず常に空欄＋placeholder「設定済み（変更する場合のみ入力）」。「✓ 設定済み / 未設定」バッジで状態を表示</li>
+                  <li>② ガード: sanitize で「*のみの値」は既存値保持扱いに。既に保存済みのマスク値も保存時に自動破棄</li>
+                  <li>③ 読み出し: <code>affiros_ai_get_settings()</code> がマスク値を未設定に正規化。エラーが「invalid x-api-key」でなく「キー未設定」と正しく出る</li>
+                </ul>
+              </li>
+              <li><strong>⚠️ 要対応</strong>: 既にマスク値で上書きされたキー（Claude / Amazon / 楽天）は復元不可能。v0.2.1 更新後に設定画面で「未設定」表示のキーを再入力すること。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.2.0 → 0.2.1 / <code>APP_VERSION</code> 1.9.4 → 1.9.5。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.4 / auto-inserter v0.2.0 (2026-07-24) — オートインサーターにデザインプレビュー画面を追加</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>追加機能</strong>: WP管理画面「Affiros オート挿入」に <strong>🎨 デザインプレビュー</strong> サブメニューを新設。実際の <code>Affiros_AI_Card_Renderer</code> ＋ ダミー商品データで比較カードの見た目を確認できる。</li>
