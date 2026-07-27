@@ -1923,6 +1923,17 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.8 / auto-inserter v0.4.0 (2026-07-27) — 全カード2ボタン統一 + 楽天は一覧フォールバック + 画像被り修正</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>ボタン統一</strong>: 対応する楽天商品がないカードはAmazonボタン1個だけで高さ・位置がバラバラだった。全カードに Amazon / 楽天 の2ボタンを必ず表示（Amazon上・楽天下の順で固定）。</li>
+              <li><strong>楽天一覧フォールバック</strong>: 対応商品がない楽天ボタンは、抽出キーワードの<strong>楽天市場検索結果一覧</strong>に飛ばす。<code>hb.afl.rakuten.co.jp</code> のアフィリエイトラッパー付き（一覧から購入されても成果になる。RINKERと同方式）。楽天主軸でAmazon商品がない場合も同様に <code>amazon.co.jp/s?k=KW&amp;tag=</code> のアソシエイトタグ付き検索一覧へ。</li>
+              <li><strong>画像と文字の被り修正</strong>: テーマCSSが <code>img</code> の height を強制拡大して画像がタイトルに被っていた。画像コンテナに <code>overflow:hidden</code> を付けて物理的にはみ出し不可能に。</li>
+              <li><strong>検証</strong>: 敵対CSS（<code>img{height:400px!important}</code>）を再現したテストページで、デスクトップ3カラムのボタン整列・スマホの縦長画像クリップを確認済み。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.3.1 → 0.4.0 / <code>APP_VERSION</code> 1.9.7 → 1.9.8。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.7 / auto-inserter v0.3.1 (2026-07-27) — 手動実行時はキーワードも再抽出するように</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>問題</strong>: v0.3.0 のプロンプト改善は、既にキーワードがキャッシュ済みの記事に反映されなかった（手動再実行が <code>force_refresh_products</code> のみで、古いキーワードを使い回していた）。</li>

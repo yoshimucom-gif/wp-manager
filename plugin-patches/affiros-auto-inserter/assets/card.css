@@ -89,12 +89,23 @@
 
 .affiros-ai-img {
     height: 150px;
+    flex: none;
     display: flex;
     align-items: center;
     justify-content: center;
     margin-bottom: 12px;
+    /* テーマが img の height を上書きしても文字に被らないよう物理的に切る */
+    overflow: hidden !important;
+}
+.affiros-ai-img a {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
 }
 .affiros-ai-img img {
+    display: block !important;
     max-height: 100% !important;
     max-width: 100% !important;
     width: auto !important;

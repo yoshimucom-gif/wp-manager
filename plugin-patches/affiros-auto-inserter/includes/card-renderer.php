@@ -31,8 +31,24 @@ class Affiros_AI_Card_Renderer {
         $primary = !empty($amazon_products) ? array_slice($amazon_products, 0, $count) : array_slice($rakuten_products, 0, $count);
         $secondary_map = !empty($amazon_products) ? self::map_rakuten_to_amazon($primary, $rakuten_products) : [];
 
-        $keyword    = esc_html($meta['keyword'] ?? '');
+        $keyword_raw = trim((string)($meta['keyword'] ?? ''));
+        $keyword    = esc_html($keyword_raw);
         $updated_at = esc_html($meta['updated_at'] ?? current_time('mysql'));
+
+        // 対応商品がない側のボタンは検索結果一覧に飛ばす (一覧経由でもアフィ成果になる)
+        $ctx = ['amazon_search_url' => '', 'rakuten_search_url' => ''];
+        if ($keyword_raw !== '') {
+            $tag = trim((string)($meta['amazon_partner_tag'] ?? ''));
+            $q = ['k' => $keyword_raw];
+            if ($tag !== '') $q['tag'] = $tag;
+            $ctx['amazon_search_url'] = 'https://www.amazon.co.jp/s?' . http_build_query($q);
+
+            $raw = 'https://search.rakuten.co.jp/search/mall/' . rawurlencode($keyword_raw) . '/';
+            $aff = trim((string)($meta['rakuten_affiliate_id'] ?? ''));
+            $ctx['rakuten_search_url'] = $aff !== ''
+                ? 'https://hb.afl.rakuten.co.jp/hgc/' . rawurlencode($aff) . '/?pc=' . rawurlencode($raw) . '&m=' . rawurlencode($raw)
+                : $raw;
+        }
 
         $html  = '<!-- affiros-ai-card-start -->' . "\n";
         $html .= '<div class="affiros-ai-compare-card" data-affiros-ai="1">' . "\n";
@@ -41,7 +57,7 @@ class Affiros_AI_Card_Renderer {
 
         foreach ($primary as $idx => $p) {
             $rakuten_partner = $secondary_map[$idx] ?? null;
-            $html .= self::render_one_card($p, $rakuten_partner, $idx + 1);
+            $html .= self::render_one_card($p, $rakuten_partner, $idx + 1, $ctx);
         }
 
         $html .= '  </div>' . "\n";
@@ -53,11 +69,14 @@ class Affiros_AI_Card_Renderer {
 
     /**
      * 各カード(1商品)のHTML
+     * 全カードに Amazon / 楽天 の2ボタンを必ず並べる (高さ・位置を揃えるため)。
+     * 対応商品がない側は検索結果一覧へのリンクにフォールバック。
      * @param array $primary Amazon or 楽天の商品
      * @param array|null $rakuten_partner primary が Amazon の時、対応する楽天
      * @param int $rank
+     * @param array $ctx amazon_search_url / rakuten_search_url
      */
-    private static function render_one_card($primary, $rakuten_partner, $rank) {
+    private static function render_one_card($primary, $rakuten_partner, $rank, $ctx = []) {
         $title = esc_html(mb_substr($primary['title'] ?? '', 0, 60));
         $image = esc_url($primary['image'] ?? '');
         $price = esc_html($primary['price_display'] ?? '');
@@ -65,17 +84,22 @@ class Affiros_AI_Card_Renderer {
         $primary_url = esc_url($primary['url'] ?? '');
         $is_amazon = ($primary['source'] ?? '') === 'amazon';
 
-        $primary_btn = '';
         if ($is_amazon) {
-            $primary_btn = '<a href="' . $primary_url . '" target="_blank" rel="nofollow noopener sponsored" class="affiros-ai-btn affiros-ai-btn-amazon">Amazonで見る</a>';
+            $amazon_url  = $primary_url;
+            $rakuten_url = ($rakuten_partner && !empty($rakuten_partner['url']))
+                ? esc_url($rakuten_partner['url'])
+                : esc_url($ctx['rakuten_search_url'] ?? '');
         } else {
-            $primary_btn = '<a href="' . $primary_url . '" target="_blank" rel="nofollow noopener sponsored" class="affiros-ai-btn affiros-ai-btn-rakuten">楽天市場で見る</a>';
+            $rakuten_url = $primary_url;
+            $amazon_url  = esc_url($ctx['amazon_search_url'] ?? '');
         }
 
-        $secondary_btn = '';
-        if ($rakuten_partner && !empty($rakuten_partner['url'])) {
-            $secondary_btn = '<a href="' . esc_url($rakuten_partner['url']) . '" target="_blank" rel="nofollow noopener sponsored" class="affiros-ai-btn affiros-ai-btn-rakuten">楽天市場で見る</a>';
-        }
+        $primary_btn = $amazon_url
+            ? '<a href="' . $amazon_url . '" target="_blank" rel="nofollow noopener sponsored" class="affiros-ai-btn affiros-ai-btn-amazon">Amazonで見る</a>'
+            : '';
+        $secondary_btn = $rakuten_url
+            ? '<a href="' . $rakuten_url . '" target="_blank" rel="nofollow noopener sponsored" class="affiros-ai-btn affiros-ai-btn-rakuten">楽天市場で見る</a>'
+            : '';
 
         $html  = '    <div class="affiros-ai-item">' . "\n";
         $html .= '      <div class="affiros-ai-rank">' . intval($rank) . '</div>' . "\n";

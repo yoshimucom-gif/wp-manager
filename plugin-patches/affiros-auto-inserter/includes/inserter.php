@@ -112,6 +112,9 @@ class Affiros_AI_Inserter {
                 'keyword'    => $keyword,
                 'updated_at' => $products_data['fetched_at'] ?? current_time('mysql'),
                 'count'      => $count,
+                // 対応商品がない側のボタンを検索一覧に飛ばすためのアフィリエイト情報
+                'amazon_partner_tag'   => $settings['amazon_partner_tag']   ?? '',
+                'rakuten_affiliate_id' => $settings['rakuten_affiliate_id'] ?? '',
             ]
         );
 
