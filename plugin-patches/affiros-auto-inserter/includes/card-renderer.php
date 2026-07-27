@@ -5,10 +5,10 @@
  * 入力: Amazon商品リスト + 楽天商品リスト (同じキーワードで検索した結果)
  * 出力: 3列比較カード HTML (画像・タイトル・価格・ボタン)
  *
- * マッチング戦略:
- *   Amazon の上位3件を主軸に。同じキーワードで楽天も検索し、
- *   タイトル類似度で対応する楽天商品を各カードに紐付ける。
- *   楽天の対応商品が見つからなければ Amazon ボタンのみ。
+ * ボタン方針 (v0.5.0〜):
+ *   Amazon 主軸のカードの楽天ボタンは、常にキーワードの検索結果一覧に飛ばす
+ *   (アフィリエイトラッパー付き)。タイトル類似度による「同一商品」マッチングは
+ *   日本語だと精度が出ず、別商品に誤誘導する事故が起きたため廃止した。
  */
 
 if (!defined('ABSPATH')) exit;
@@ -29,7 +29,6 @@ class Affiros_AI_Card_Renderer {
         // Amazon 主軸で組む。Amazon 商品がなければ楽天だけで組む。
         $count = max(1, min(5, intval($meta['count'] ?? 3)));
         $primary = !empty($amazon_products) ? array_slice($amazon_products, 0, $count) : array_slice($rakuten_products, 0, $count);
-        $secondary_map = !empty($amazon_products) ? self::map_rakuten_to_amazon($primary, $rakuten_products) : [];
 
         $keyword_raw = trim((string)($meta['keyword'] ?? ''));
         $keyword    = esc_html($keyword_raw);
@@ -56,8 +55,7 @@ class Affiros_AI_Card_Renderer {
         $html .= '  <div class="affiros-ai-card-grid">' . "\n";
 
         foreach ($primary as $idx => $p) {
-            $rakuten_partner = $secondary_map[$idx] ?? null;
-            $html .= self::render_one_card($p, $rakuten_partner, $idx + 1, $ctx);
+            $html .= self::render_one_card($p, $idx + 1, $ctx);
         }
 
         $html .= '  </div>' . "\n";
@@ -70,13 +68,12 @@ class Affiros_AI_Card_Renderer {
     /**
      * 各カード(1商品)のHTML
      * 全カードに Amazon / 楽天 の2ボタンを必ず並べる (高さ・位置を揃えるため)。
-     * 対応商品がない側は検索結果一覧へのリンクにフォールバック。
+     * 主軸でない側のボタンは検索結果一覧へのリンク (誤商品への誘導をしない)。
      * @param array $primary Amazon or 楽天の商品
-     * @param array|null $rakuten_partner primary が Amazon の時、対応する楽天
      * @param int $rank
      * @param array $ctx amazon_search_url / rakuten_search_url
      */
-    private static function render_one_card($primary, $rakuten_partner, $rank, $ctx = []) {
+    private static function render_one_card($primary, $rank, $ctx = []) {
         $title = esc_html(mb_substr($primary['title'] ?? '', 0, 60));
         $image = esc_url($primary['image'] ?? '');
         $price = esc_html($primary['price_display'] ?? '');
@@ -86,9 +83,7 @@ class Affiros_AI_Card_Renderer {
 
         if ($is_amazon) {
             $amazon_url  = $primary_url;
-            $rakuten_url = ($rakuten_partner && !empty($rakuten_partner['url']))
-                ? esc_url($rakuten_partner['url'])
-                : esc_url($ctx['rakuten_search_url'] ?? '');
+            $rakuten_url = esc_url($ctx['rakuten_search_url'] ?? '');
         } else {
             $rakuten_url = $primary_url;
             $amazon_url  = esc_url($ctx['amazon_search_url'] ?? '');
@@ -121,36 +116,6 @@ class Affiros_AI_Card_Renderer {
         $html .= '      </div>' . "\n";
         $html .= '    </div>' . "\n";
         return $html;
-    }
-
-    /**
-     * Amazon 各商品に楽天の似た商品を紐付ける。タイトルの共通語トークンで簡易マッチ。
-     * 完璧なマッチングは不要 — マッチしなければ Amazon ボタンだけ表示すればいい。
-     */
-    private static function map_rakuten_to_amazon($amazon_products, $rakuten_products) {
-        $map = [];
-        if (empty($rakuten_products)) return $map;
-
-        $used_rakuten = [];
-        foreach ($amazon_products as $i => $a) {
-            $a_tokens = self::tokenize($a['title'] ?? '');
-            $best_score = 0;
-            $best_j = -1;
-            foreach ($rakuten_products as $j => $r) {
-                if (in_array($j, $used_rakuten, true)) continue;
-                $r_tokens = self::tokenize($r['title'] ?? '');
-                $score = count(array_intersect($a_tokens, $r_tokens));
-                if ($score > $best_score) {
-                    $best_score = $score;
-                    $best_j = $j;
-                }
-            }
-            if ($best_score >= 2 && $best_j >= 0) {
-                $map[$i] = $rakuten_products[$best_j];
-                $used_rakuten[] = $best_j;
-            }
-        }
-        return $map;
     }
 
     public static function tokenize($str) {

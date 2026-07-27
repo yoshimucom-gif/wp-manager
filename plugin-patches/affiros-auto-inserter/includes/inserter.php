@@ -84,11 +84,12 @@ class Affiros_AI_Inserter {
                 if (is_wp_error($res)) $errors[] = 'Amazon: ' . $res->get_error_message();
                 else $amazon_products = self::diversify($res, $count);
             }
-            if ($rakuten_api->is_configured()) {
+            // 楽天は Amazon 商品が取れなかった時だけ主軸として使う
+            // (Amazon 主軸カードの楽天ボタンは検索一覧リンクなので商品データ不要)
+            if (empty($amazon_products) && $rakuten_api->is_configured()) {
                 $res = $rakuten_api->search($keyword, 10);
                 if (is_wp_error($res)) $errors[] = '楽天: ' . $res->get_error_message();
-                // Amazon 主軸ならボタン紐付け候補として全件保持。楽天主軸なら多様化して絞る
-                else $rakuten_products = empty($amazon_products) ? self::diversify($res, $count) : $res;
+                else $rakuten_products = self::diversify($res, $count);
             }
 
             if (empty($amazon_products) && empty($rakuten_products)) {

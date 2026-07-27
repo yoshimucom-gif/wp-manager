@@ -1923,6 +1923,16 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.9 / auto-inserter v0.5.0 (2026-07-27) — 楽天の商品マッチング廃止、楽天ボタンは常に検索一覧へ</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>問題</strong>: タイトル類似度で Amazon 商品に楽天の「同一商品」を紐付ける方式は日本語だと精度が出ず、全く別の商品（別店舗の別物）に誤誘導する実害が出た。</li>
+              <li><strong>変更</strong>: マッチングを廃止。Amazon 主軸カードの楽天ボタンは<strong>常にキーワードの楽天市場検索結果一覧</strong>（<code>hb.afl.rakuten.co.jp</code> ラッパー付き）に飛ばす。誤商品への誘導がゼロになり、一覧経由の購入は成果対象のまま。</li>
+              <li><strong>クリーンアップ</strong>: <code>map_rakuten_to_amazon()</code> を削除。Amazon 商品が取れた場合は楽天APIを呼ばなくなった（API呼び出し削減）。楽天主軸（Amazon 0件時）の動作は従来どおり。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.4.0 → 0.5.0 / <code>APP_VERSION</code> 1.9.8 → 1.9.9。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.8 / auto-inserter v0.4.0 (2026-07-27) — 全カード2ボタン統一 + 楽天は一覧フォールバック + 画像被り修正</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>ボタン統一</strong>: 対応する楽天商品がないカードはAmazonボタン1個だけで高さ・位置がバラバラだった。全カードに Amazon / 楽天 の2ボタンを必ず表示（Amazon上・楽天下の順で固定）。</li>

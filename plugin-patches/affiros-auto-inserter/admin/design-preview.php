@@ -82,20 +82,14 @@ function affiros_ai_render_preview_page() {
             マーカー記法は不要 — このカードが「最初のH2直前」「まとめ直後」に自動で入ります。
         </p>
 
-        <h2 style="margin-top:28px">① Amazon + 楽天 両方設定時（標準）</h2>
-        <p class="description">Amazon 3商品を主軸に、タイトルが似ている楽天商品を自動で紐付けて2ボタン表示。</p>
-        <div style="max-width:900px;background:#fff;border:1px solid #ccd0d4;border-radius:4px;padding:8px 24px">
-            <?php echo Affiros_AI_Card_Renderer::render($amazon_products, $rakuten_products, $meta); ?>
-        </div>
-
-        <h2 style="margin-top:28px">② Amazon のみ設定時</h2>
-        <p class="description">楽天の対応商品が見つからない場合もこの表示（Amazonボタンのみ）。</p>
+        <h2 style="margin-top:28px">① Amazon 主軸（標準）</h2>
+        <p class="description">Amazonボタン＝商品ページ、楽天ボタン＝キーワードの検索結果一覧（アフィリエイトラッパー付き）。タイトル類似での商品マッチングは誤誘導するため行わない。</p>
         <div style="max-width:900px;background:#fff;border:1px solid #ccd0d4;border-radius:4px;padding:8px 24px">
             <?php echo Affiros_AI_Card_Renderer::render($amazon_products, [], $meta); ?>
         </div>
 
-        <h2 style="margin-top:28px">③ 楽天のみ設定時</h2>
-        <p class="description">Amazon 未設定なら楽天商品3件を主軸に組む（楽天ボタンのみ）。</p>
+        <h2 style="margin-top:28px">② 楽天主軸（Amazon 未設定 / 0件時）</h2>
+        <p class="description">楽天ボタン＝商品ページ、Amazonボタン＝アソシエイトタグ付きの検索結果一覧。</p>
         <div style="max-width:900px;background:#fff;border:1px solid #ccd0d4;border-radius:4px;padding:8px 24px">
             <?php echo Affiros_AI_Card_Renderer::render([], $rakuten_products, $meta); ?>
         </div>
