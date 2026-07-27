@@ -4,12 +4,16 @@
  */
 
 .affiros-ai-compare-card,
-.affiros-ai-compare-card * {
+.affiros-ai-compare-card *,
+.affiros-ai-side-card,
+.affiros-ai-side-card * {
     box-sizing: border-box;
 }
 /* テーマが a::after 等で付ける装飾 (外部リンクアイコン・下線バー) を遮断 */
 .affiros-ai-compare-card *::before,
-.affiros-ai-compare-card *::after {
+.affiros-ai-compare-card *::after,
+.affiros-ai-side-card *::before,
+.affiros-ai-side-card *::after {
     content: none !important;
 }
 
@@ -198,3 +202,27 @@
     color: #8a94a3;
 }
 .affiros-ai-card-foot small { font-size: 11px; }
+
+/* ── サイドバー用コンパクトカード ([affiros_ai_top]) ── */
+.affiros-ai-side-card {
+    background: #fff;
+    border: 1px solid #e5e9ef;
+    border-radius: 12px;
+    padding: 16px 14px;
+    margin: 0 0 24px;
+    text-align: center;
+    box-shadow: 0 2px 12px rgba(20, 40, 80, 0.06);
+}
+.affiros-ai-side-head {
+    margin: 0 0 12px;
+    padding: 0 0 8px 10px;
+    border-left: 4px solid #2271b1;
+    border-bottom: 1px solid #eef1f5;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.4;
+    color: #1a1a1a;
+    text-align: left;
+}
+.affiros-ai-side-card .affiros-ai-img { height: 160px; }
+.affiros-ai-side-card .affiros-ai-title { min-height: 0; }

@@ -35,19 +35,7 @@ class Affiros_AI_Card_Renderer {
         $updated_at = esc_html($meta['updated_at'] ?? current_time('mysql'));
 
         // 対応商品がない側のボタンは検索結果一覧に飛ばす (一覧経由でもアフィ成果になる)
-        $ctx = ['amazon_search_url' => '', 'rakuten_search_url' => ''];
-        if ($keyword_raw !== '') {
-            $tag = trim((string)($meta['amazon_partner_tag'] ?? ''));
-            $q = ['k' => $keyword_raw];
-            if ($tag !== '') $q['tag'] = $tag;
-            $ctx['amazon_search_url'] = 'https://www.amazon.co.jp/s?' . http_build_query($q);
-
-            $raw = 'https://search.rakuten.co.jp/search/mall/' . rawurlencode($keyword_raw) . '/';
-            $aff = trim((string)($meta['rakuten_affiliate_id'] ?? ''));
-            $ctx['rakuten_search_url'] = $aff !== ''
-                ? 'https://hb.afl.rakuten.co.jp/hgc/' . rawurlencode($aff) . '/?pc=' . rawurlencode($raw) . '&m=' . rawurlencode($raw)
-                : $raw;
-        }
+        $ctx = self::build_search_urls($keyword_raw, $meta);
 
         $html  = '<!-- affiros-ai-card-start -->' . "\n";
         $html .= '<div class="affiros-ai-compare-card" data-affiros-ai="1">' . "\n";
@@ -62,6 +50,78 @@ class Affiros_AI_Card_Renderer {
         $html .= '  <div class="affiros-ai-card-foot"><small>' . $updated_at . ' 時点。価格・在庫は変動します。</small></div>' . "\n";
         $html .= '</div>' . "\n";
         $html .= '<!-- affiros-ai-card-end -->' . "\n";
+        return $html;
+    }
+
+    /**
+     * キーワードの検索結果一覧URL (アフィリエイト付き) を組み立てる
+     * @return array amazon_search_url / rakuten_search_url (キーワード空なら両方 '')
+     */
+    public static function build_search_urls($keyword_raw, $meta = []) {
+        $ctx = ['amazon_search_url' => '', 'rakuten_search_url' => ''];
+        if ($keyword_raw === '') return $ctx;
+
+        $tag = trim((string)($meta['amazon_partner_tag'] ?? ''));
+        $q = ['k' => $keyword_raw];
+        if ($tag !== '') $q['tag'] = $tag;
+        $ctx['amazon_search_url'] = 'https://www.amazon.co.jp/s?' . http_build_query($q);
+
+        $raw = 'https://search.rakuten.co.jp/search/mall/' . rawurlencode($keyword_raw) . '/';
+        $aff = trim((string)($meta['rakuten_affiliate_id'] ?? ''));
+        $ctx['rakuten_search_url'] = $aff !== ''
+            ? 'https://hb.afl.rakuten.co.jp/hgc/' . rawurlencode($aff) . '/?pc=' . rawurlencode($raw) . '&m=' . rawurlencode($raw)
+            : $raw;
+        return $ctx;
+    }
+
+    /**
+     * サイドバー用: 商品1件のコンパクトカード
+     * ショートコード [affiros_ai_top] から呼ばれる。in-content カードとは違い
+     * post_content には保存されない動的出力なので start/end マーカーは付けない。
+     * @param array $product 商品1件
+     * @param array $meta keyword / title(見出し) / amazon_partner_tag / rakuten_affiliate_id
+     */
+    public static function render_single($product, $meta = []) {
+        if (empty($product) || !is_array($product)) return '';
+
+        $keyword_raw = trim((string)($meta['keyword'] ?? ''));
+        $ctx = self::build_search_urls($keyword_raw, $meta);
+
+        $heading = trim((string)($meta['title'] ?? ''));
+        $title = esc_html(mb_substr($product['title'] ?? '', 0, 60));
+        $image = esc_url($product['image'] ?? '');
+        $price = esc_html($product['price_display'] ?? '');
+        $product_url = esc_url($product['url'] ?? '');
+        $is_amazon = ($product['source'] ?? '') === 'amazon';
+
+        if ($is_amazon) {
+            $amazon_url  = $product_url;
+            $rakuten_url = esc_url($ctx['rakuten_search_url']);
+        } else {
+            $rakuten_url = $product_url;
+            $amazon_url  = esc_url($ctx['amazon_search_url']);
+        }
+
+        $html  = '<div class="affiros-ai-side-card">' . "\n";
+        if ($heading !== '') {
+            $html .= '  <div class="affiros-ai-side-head">' . esc_html($heading) . '</div>' . "\n";
+        }
+        if ($image) {
+            $html .= '  <div class="affiros-ai-img"><a href="' . $product_url . '" target="_blank" rel="nofollow noopener sponsored"><img src="' . $image . '" alt="' . $title . '" loading="lazy"></a></div>' . "\n";
+        }
+        $html .= '  <div class="affiros-ai-title"><a href="' . $product_url . '" target="_blank" rel="nofollow noopener sponsored">' . $title . '</a></div>' . "\n";
+        if ($price) {
+            $html .= '  <div class="affiros-ai-price">' . $price . '</div>' . "\n";
+        }
+        $html .= '  <div class="affiros-ai-btns">' . "\n";
+        if ($amazon_url) {
+            $html .= '    <a href="' . $amazon_url . '" target="_blank" rel="nofollow noopener sponsored" class="affiros-ai-btn affiros-ai-btn-amazon">Amazonで見る</a>' . "\n";
+        }
+        if ($rakuten_url) {
+            $html .= '    <a href="' . $rakuten_url . '" target="_blank" rel="nofollow noopener sponsored" class="affiros-ai-btn affiros-ai-btn-rakuten">楽天市場で見る</a>' . "\n";
+        }
+        $html .= '  </div>' . "\n";
+        $html .= '</div>' . "\n";
         return $html;
     }
 

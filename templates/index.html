@@ -1923,6 +1923,18 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.10 / auto-inserter v0.6.0 (2026-07-27) — サイドバー用ショートコード [affiros_ai_top] を追加</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>追加機能</strong>: 表示中の記事に挿入済みの1位商品をコンパクトカードで表示するショートコード <code>[affiros_ai_top]</code>。サイドバーのウィジェット（ショートコードブロック）に1回置くだけで、記事ごとに自動でその記事の商品が出る。</li>
+              <li><strong>属性</strong>: <code>rank="2"</code> で2位を表示、<code>title="..."</code> で見出し変更（既定「この記事のイチオシ」、<code>title=""</code> で見出しなし）。</li>
+              <li><strong>仕様</strong>: 商品データは post_meta のキャッシュを読むだけ（API・AI呼び出しゼロ）。データがないページ（固定ページ・アーカイブ・未挿入記事・ランキング記事）では何も出力しない。ボタンは記事内カードと同方針（主軸=商品ページ、他方=検索一覧アフィリンク）。</li>
+              <li><strong>実装</strong>: <code>includes/shortcode.php</code> 新設、<code>Affiros_AI_Card_Renderer::render_single()</code> / <code>build_search_urls()</code> 共通化、<code>.affiros-ai-side-card</code> CSS追加（ボタン強制表示・画像クリップは既存の対策をそのまま継承）。</li>
+              <li><strong>検証</strong>: 敵対CSS下・幅300pxでボタン高42px表示・画像160pxクリップ・タイトル被りなしを computed style で確認済み。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.5.0 → 0.6.0 / <code>APP_VERSION</code> 1.9.9 → 1.9.10。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.9 / auto-inserter v0.5.0 (2026-07-27) — 楽天の商品マッチング廃止、楽天ボタンは常に検索一覧へ</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>問題</strong>: タイトル類似度で Amazon 商品に楽天の「同一商品」を紐付ける方式は日本語だと精度が出ず、全く別の商品（別店舗の別物）に誤誘導する実害が出た。</li>

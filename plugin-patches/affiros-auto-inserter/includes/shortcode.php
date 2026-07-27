@@ -1,0 +1,43 @@
+<?php
+/**
+ * サイドバー用ショートコード
+ *
+ * [affiros_ai_top]                                — 表示中の記事の1位商品をコンパクト表示
+ * [affiros_ai_top rank="2"]                       — 2位を表示
+ * [affiros_ai_top title="この記事のイチオシ"]     — 見出しを変更 (title="" で見出しなし)
+ *
+ * 使い方: 外観 → ウィジェット → サイドバーに「ショートコード」ブロックを置いて
+ * [affiros_ai_top] と書くだけ。記事ごとにその記事のキャッシュ済み商品を表示する。
+ * 商品データがないページ (固定ページ・アーカイブ・未挿入記事・ランキング記事) では
+ * 何も出力しない。
+ */
+
+if (!defined('ABSPATH')) exit;
+
+add_shortcode('affiros_ai_top', function ($atts) {
+    $atts = shortcode_atts([
+        'rank'  => 1,
+        'title' => 'この記事のイチオシ',
+    ], $atts, 'affiros_ai_top');
+
+    // サイドバーはループ外で描画されるので queried object から記事IDを取る
+    $post_id = is_singular('post') ? get_queried_object_id() : (get_the_ID() ?: 0);
+    if (!$post_id) return '';
+
+    $data = get_post_meta($post_id, AFFIROS_AI_META_PRODUCTS, true);
+    if (!is_array($data)) $data = json_decode((string)$data, true);
+    if (empty($data)) return '';
+
+    // in-content カードと同じ優先順: Amazon 主軸、なければ楽天
+    $list = !empty($data['amazon']) ? $data['amazon'] : ($data['rakuten'] ?? []);
+    $idx = max(1, intval($atts['rank'])) - 1;
+    if (empty($list[$idx])) return '';
+
+    $settings = affiros_ai_get_settings();
+    return Affiros_AI_Card_Renderer::render_single($list[$idx], [
+        'keyword' => $data['keyword'] ?? get_post_meta($post_id, AFFIROS_AI_META_KEYWORD, true),
+        'title'   => $atts['title'],
+        'amazon_partner_tag'   => $settings['amazon_partner_tag']   ?? '',
+        'rakuten_affiliate_id' => $settings['rakuten_affiliate_id'] ?? '',
+    ]);
+});
