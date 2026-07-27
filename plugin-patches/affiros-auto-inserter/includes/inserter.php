@@ -69,8 +69,8 @@ class Affiros_AI_Inserter {
         if (!empty($cached_products) && empty($opts['force_refresh_products'])) {
             $products_data = is_array($cached_products) ? $cached_products : json_decode($cached_products, true);
         }
+        $count = max(1, min(5, intval($settings['products_count'] ?? 3)));
         if (empty($products_data) || empty($products_data['amazon']) && empty($products_data['rakuten'])) {
-            $count = max(3, intval($settings['products_count'] ?? 3));
             $amazon_api  = new Affiros_AI_Amazon_API($settings);
             $rakuten_api = new Affiros_AI_Rakuten_API($settings);
 
@@ -78,15 +78,17 @@ class Affiros_AI_Inserter {
             $rakuten_products = [];
             $errors = [];
 
+            // 多めに取ってから多様性フィルタで絞る (同一ブランド・類似商品の並びを防ぐ)
             if ($amazon_api->is_configured()) {
-                $res = $amazon_api->search($keyword, $count);
+                $res = $amazon_api->search($keyword, 10);
                 if (is_wp_error($res)) $errors[] = 'Amazon: ' . $res->get_error_message();
-                else $amazon_products = $res;
+                else $amazon_products = self::diversify($res, $count);
             }
             if ($rakuten_api->is_configured()) {
-                $res = $rakuten_api->search($keyword, $count);
+                $res = $rakuten_api->search($keyword, 10);
                 if (is_wp_error($res)) $errors[] = '楽天: ' . $res->get_error_message();
-                else $rakuten_products = $res;
+                // Amazon 主軸ならボタン紐付け候補として全件保持。楽天主軸なら多様化して絞る
+                else $rakuten_products = empty($amazon_products) ? self::diversify($res, $count) : $res;
             }
 
             if (empty($amazon_products) && empty($rakuten_products)) {
@@ -109,6 +111,7 @@ class Affiros_AI_Inserter {
             [
                 'keyword'    => $keyword,
                 'updated_at' => $products_data['fetched_at'] ?? current_time('mysql'),
+                'count'      => $count,
             ]
         );
 
@@ -164,6 +167,35 @@ class Affiros_AI_Inserter {
             'amazon_count' => count($products_data['amazon'] ?? []),
             'rakuten_count' => count($products_data['rakuten'] ?? []),
         ]);
+    }
+
+    /**
+     * 検索結果から「ブランドが被らず・タイトルが似すぎない」商品を上から選ぶ。
+     * 同じ店の色違い3枚が並ぶのを防ぐ。厳選で $n 件に満たなければ残りから順に補充。
+     */
+    public static function diversify($products, $n) {
+        $picked = [];
+        foreach ($products as $p) {
+            if (count($picked) >= $n) break;
+            $brand  = mb_strtolower(trim($p['brand'] ?? ''));
+            $tokens = Affiros_AI_Card_Renderer::tokenize($p['title'] ?? '');
+            $dup = false;
+            foreach ($picked as $q) {
+                if ($brand !== '' && $brand === mb_strtolower(trim($q['brand'] ?? ''))) { $dup = true; break; }
+                $overlap = count(array_intersect($tokens, Affiros_AI_Card_Renderer::tokenize($q['title'] ?? '')));
+                $min_len = max(1, min(count($tokens), count(Affiros_AI_Card_Renderer::tokenize($q['title'] ?? ''))));
+                if ($overlap >= 4 || $overlap / $min_len >= 0.6) { $dup = true; break; }
+            }
+            if (!$dup) $picked[] = $p;
+        }
+        // 厳選で足りなければ未選択の商品を上から補充
+        if (count($picked) < $n) {
+            foreach ($products as $p) {
+                if (count($picked) >= $n) break;
+                if (!in_array($p, $picked, true)) $picked[] = $p;
+            }
+        }
+        return $picked;
     }
 
     /**

@@ -26,8 +26,9 @@ class Affiros_AI_Card_Renderer {
     public static function render($amazon_products, $rakuten_products = [], $meta = []) {
         if (empty($amazon_products) && empty($rakuten_products)) return '';
 
-        // Amazon 主軸で3枚組む。Amazon 商品がなければ楽天だけで3枚。
-        $primary = !empty($amazon_products) ? array_slice($amazon_products, 0, 3) : array_slice($rakuten_products, 0, 3);
+        // Amazon 主軸で組む。Amazon 商品がなければ楽天だけで組む。
+        $count = max(1, min(5, intval($meta['count'] ?? 3)));
+        $primary = !empty($amazon_products) ? array_slice($amazon_products, 0, $count) : array_slice($rakuten_products, 0, $count);
         $secondary_map = !empty($amazon_products) ? self::map_rakuten_to_amazon($primary, $rakuten_products) : [];
 
         $keyword    = esc_html($meta['keyword'] ?? '');
@@ -128,7 +129,7 @@ class Affiros_AI_Card_Renderer {
         return $map;
     }
 
-    private static function tokenize($str) {
+    public static function tokenize($str) {
         $str = mb_strtolower((string)$str);
         // 記号を空白に
         $str = preg_replace('/[「」【】\[\]\(\)（）,、。・\/\-_]+/u', ' ', $str);

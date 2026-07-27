@@ -1923,6 +1923,18 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.6 / auto-inserter v0.3.0 (2026-07-27) — 商品選定の精度改善 + スマホでボタンが潰れる崩れを修正</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>精度① キーワード抽出の根本修正</strong>: 旧プロンプトの「商品カテゴリ＋特徴語1〜2個」指示が原因で、Haiku が「保管」「収納」等の<strong>用途語</strong>を足し、検索が別商品に流れていた（実例: 数珠掛けの記事で「数珠掛け 保管 収納」→ 数珠袋がヒット）。用途語を明示的に禁止し、「ニッチ商品はカテゴリ名単体」をルール化。最短文字数も4→2文字に緩和（「枕」等の単体カテゴリ名を許容）。</li>
+              <li><strong>精度② 多様性フィルタ</strong>: 検索を10件取得に増やし、同一ブランド・タイトル類似（共通トークン4個以上 or 6割以上）の商品を除外してから表示件数分を選ぶ。同じ店の色違い3枚が並ぶのを防止。厳選で足りなければ上位から補充。</li>
+              <li><strong>CSS① ボタン潰れ対策</strong>: テーマCSSが <code>a</code> の display/height/padding を上書きしてボタンが不可視になる事故に対し、表示に関わる全プロパティを <code>!important</code> で強制。テーマの <code>::before/::after</code> 装飾（矢印アイコン・下線バー）もカード内では遮断。</li>
+              <li><strong>CSS② デザイン調整</strong>: カードに角丸12px＋淡い影、ホバーで浮き上がり、ボタンをグラデーション化、見出しを青アクセントバー付きに、価格を18pxに拡大。スマホは1カラム・画像180px・タッチしやすい高さのボタン。</li>
+              <li><strong>検証</strong>: 敵対的テーマCSS（a{height:0;display:inline} 等）を再現したテストページで、デスクトップ3カラム/スマホ1カラムともボタン表示を確認済み。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.2.1 → 0.3.0 / <code>APP_VERSION</code> 1.9.5 → 1.9.6。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.5 / auto-inserter v0.2.1 (2026-07-27) — 🐛 設定保存でAPIキーがマスク値に化けるバグを修正</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>症状</strong>: 「キーワード抽出失敗: invalid x-api-key」。Claude APIキーを正しく設定していても発生。</li>
