@@ -260,7 +260,12 @@ add_action('wp_ajax_affiros_ai_apply', function () {
     $post_id = intval($_POST['post_id'] ?? 0);
     if (!$post_id) wp_send_json_error('post_id 不正');
 
-    $res = Affiros_AI_Inserter::process($post_id, ['force_refresh_products' => true]);
+    // 手動実行 = 「今の結果をやり直したい」なのでキーワードも再抽出する
+    // (プロンプト改善を既存記事のキャッシュ済みKWにも反映させる。Haiku ¥0.3/回)
+    $res = Affiros_AI_Inserter::process($post_id, [
+        'force_refresh_keyword'  => true,
+        'force_refresh_products' => true,
+    ]);
     if (!$res['success']) wp_send_json_error($res['message'] ?? 'unknown');
     wp_send_json_success($res);
 });

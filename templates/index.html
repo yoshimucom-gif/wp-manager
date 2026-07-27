@@ -1923,6 +1923,15 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.7 / auto-inserter v0.3.1 (2026-07-27) — 手動実行時はキーワードも再抽出するように</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>問題</strong>: v0.3.0 のプロンプト改善は、既にキーワードがキャッシュ済みの記事に反映されなかった（手動再実行が <code>force_refresh_products</code> のみで、古いキーワードを使い回していた）。</li>
+              <li><strong>修正</strong>: メタボックス「この記事に今すぐ挿入」と一括挿入ページの実行時は <code>force_refresh_keyword</code> も有効化。手動実行＝やり直したい場面なのでキーワードから再抽出する（Haiku ¥0.3/回）。公開時自動挿入・週次cronは従来どおりキャッシュ利用。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.3.0 → 0.3.1 / <code>APP_VERSION</code> 1.9.6 → 1.9.7。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.6 / auto-inserter v0.3.0 (2026-07-27) — 商品選定の精度改善 + スマホでボタンが潰れる崩れを修正</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>精度① キーワード抽出の根本修正</strong>: 旧プロンプトの「商品カテゴリ＋特徴語1〜2個」指示が原因で、Haiku が「保管」「収納」等の<strong>用途語</strong>を足し、検索が別商品に流れていた（実例: 数珠掛けの記事で「数珠掛け 保管 収納」→ 数珠袋がヒット）。用途語を明示的に禁止し、「ニッチ商品はカテゴリ名単体」をルール化。最短文字数も4→2文字に緩和（「枕」等の単体カテゴリ名を許容）。</li>
