@@ -1951,6 +1951,16 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.13 / auto-inserter v0.7.2 (2026-07-28) — 🐛 ショートコードがトップページにも表示されるバグを修正</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>症状</strong>: <code>[affiros_ai_top]</code> がトップページ・アーカイブのサイドバーにも商品を表示していた（一覧最後の記事の商品）。</li>
+              <li><strong>原因</strong>: 記事ページ判定に外れた場合の保険 <code>get_the_ID()</code> フォールバックが裏目。トップでは一覧ループ終了後のグローバル $post（＝一覧最後の記事）を拾っていた。</li>
+              <li><strong>修正</strong>: フォールバック撤去。<code>is_singular('post')</code> でなければ即 return で、個別記事ページ以外には一切出力しない。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.7.1 → 0.7.2 / <code>APP_VERSION</code> 1.9.12 → 1.9.13。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.12 / auto-inserter v0.7.1 (2026-07-28) — 設定画面にショートコードの使い方を掲載</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>追加</strong>: <code>[affiros_ai_top]</code> の使い方がWP画面のどこにも書かれていなかった（改修履歴とソースコメントのみ）。設定ページ末尾に「⑦ サイドバー用ショートコード」セクションを追加し、設置手順・rank/title 属性の一覧表・動作仕様（キャッシュ読みのみ/データなしページは無出力/ボタン飛び先）を記載。</li>

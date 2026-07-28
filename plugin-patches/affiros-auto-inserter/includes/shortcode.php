@@ -20,8 +20,11 @@ add_shortcode('affiros_ai_top', function ($atts) {
         'title' => 'この記事のイチオシ',
     ], $atts, 'affiros_ai_top');
 
-    // サイドバーはループ外で描画されるので queried object から記事IDを取る
-    $post_id = is_singular('post') ? get_queried_object_id() : (get_the_ID() ?: 0);
+    // 個別記事ページ以外では絶対に出さない。
+    // (get_the_ID() のフォールバックはトップ/アーカイブで「一覧最後の記事」の
+    //  商品が漏れて表示されるバグになったため撤去。v0.7.2)
+    if (!is_singular('post')) return '';
+    $post_id = get_queried_object_id();
     if (!$post_id) return '';
 
     $data = get_post_meta($post_id, AFFIROS_AI_META_PRODUCTS, true);
