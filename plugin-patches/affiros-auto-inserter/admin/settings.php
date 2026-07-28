@@ -45,6 +45,10 @@ function affiros_ai_sanitize_settings($input) {
     $output['skip_ranking_articles']  = ($input['skip_ranking_articles'] ?? 'no') === 'yes' ? 'yes' : 'no';
     $output['ranking_title_patterns'] = sanitize_textarea_field($input['ranking_title_patterns'] ?? '');
 
+    // 除外カテゴリー/タグ (チェック0個 = 除外なし、なので毎回上書き)
+    $output['exclude_category_ids'] = array_values(array_filter(array_map('intval', (array)($input['exclude_category_ids'] ?? []))));
+    $output['exclude_tags']         = sanitize_text_field($input['exclude_tags'] ?? '');
+
     $output['auto_on_publish']        = ($input['auto_on_publish'] ?? 'no') === 'yes' ? 'yes' : 'no';
     // v0.7.0 で週次リフレッシュ廃止。旧設定が残っていたら捨てる
     unset($output['cron_refresh']);
@@ -172,7 +176,42 @@ function affiros_ai_render_settings_page() {
                 </tr>
             </table>
 
-            <h2>⑤ ランキング記事判定 (自動挿入対象外)</h2>
+            <h2>⑤ 挿入しないカテゴリー・タグ</h2>
+            <table class="form-table">
+                <tr>
+                    <th>除外カテゴリー</th>
+                    <td>
+                        <?php
+                        $excl_cats = array_map('intval', (array)($settings['exclude_category_ids'] ?? []));
+                        $all_cats = get_categories(['hide_empty' => false, 'orderby' => 'name']);
+                        if (empty($all_cats)) {
+                            echo '<p class="description">カテゴリーがありません。</p>';
+                        } else {
+                            foreach ($all_cats as $cat) {
+                                printf(
+                                    '<label style="display:inline-block;margin:0 16px 6px 0;white-space:nowrap"><input type="checkbox" name="%s[exclude_category_ids][]" value="%d" %s> %s <span style="color:#999">(%d)</span></label>',
+                                    esc_attr(AFFIROS_AI_OPTION_KEY),
+                                    $cat->term_id,
+                                    checked(in_array($cat->term_id, $excl_cats, true), true, false),
+                                    esc_html($cat->name),
+                                    $cat->count
+                                );
+                            }
+                        }
+                        ?>
+                        <p class="description">チェックしたカテゴリーの記事には挿入しない（一括・個別・公開時自動すべて対象外）。</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th>除外タグ</th>
+                    <td>
+                        <input type="text" name="<?php echo AFFIROS_AI_OPTION_KEY; ?>[exclude_tags]" value="<?php echo esc_attr($settings['exclude_tags']); ?>" class="regular-text" placeholder="例: 広告なし, no-ads">
+                        <p class="description">カンマ区切りでタグ名またはスラッグ。付いている記事には挿入しない。</p>
+                    </td>
+                </tr>
+            </table>
+
+            <h2>⑥ ランキング記事判定 (自動挿入対象外)</h2>
             <table class="form-table">
                 <tr>
                     <th>ランキング記事はスキップ</th>
@@ -187,7 +226,7 @@ function affiros_ai_render_settings_page() {
                 </tr>
             </table>
 
-            <h2>⑥ 自動化</h2>
+            <h2>⑦ 自動化</h2>
             <table class="form-table">
                 <tr>
                     <th>公開時に自動挿入</th>
@@ -198,7 +237,7 @@ function affiros_ai_render_settings_page() {
             <?php submit_button(); ?>
         </form>
 
-        <h2>⑦ サイドバー用ショートコード</h2>
+        <h2>⑧ サイドバー用ショートコード</h2>
         <div style="max-width:680px;background:#fff;border:1px solid #ccd0d4;border-radius:4px;padding:16px 20px;font-size:13px;line-height:1.9">
             <p style="margin-top:0">
                 表示中の記事に挿入済みの商品をコンパクトカード（画像・商品名・価格・Amazon/楽天ボタン）で表示します。<br>

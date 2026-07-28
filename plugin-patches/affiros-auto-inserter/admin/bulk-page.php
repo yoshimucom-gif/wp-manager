@@ -92,7 +92,7 @@ function affiros_ai_render_bulk_page() {
                     posts = res.data.posts || [];
                     const stats = res.data.stats || {};
                     $('#ai-scan-status').html(
-                        `スキャン完了: ${res.data.scanned}件 / 未挿入 <strong>${stats.pending || 0}</strong>件 / 挿入済 ${stats.done || 0}件 / 除外 ${stats.excluded || 0}件`
+                        `スキャン完了: ${res.data.scanned}件 / 未挿入 <strong>${stats.pending || 0}</strong>件 / 挿入済 ${stats.done || 0}件 / 除外 ${stats.excluded || 0}件 / 除外(分類) ${stats.taxonomy || 0}件 / ランキング ${stats.ranking || 0}件`
                     );
                     render();
                     $('#ai-result').show();
@@ -134,6 +134,7 @@ function affiros_ai_render_bulk_page() {
                     pending:  ['#c62828', '未挿入'],
                     done:     ['#0a7a2f', '挿入済'],
                     excluded: ['#666',    '除外'],
+                    taxonomy: ['#666',    '除外(分類)'],
                     ranking:  ['#a06000', 'ランキング'],
                 };
                 const [c, label] = styles[state] || ['#999', state];
@@ -221,7 +222,7 @@ add_action('wp_ajax_affiros_ai_scan', function () {
     ));
 
     $posts = [];
-    $stats = ['pending' => 0, 'done' => 0, 'excluded' => 0, 'ranking' => 0];
+    $stats = ['pending' => 0, 'done' => 0, 'excluded' => 0, 'ranking' => 0, 'taxonomy' => 0];
     foreach ($rows as $r) {
         $post_id = intval($r->ID);
         $post_obj = get_post($post_id);
@@ -233,6 +234,8 @@ add_action('wp_ajax_affiros_ai_scan', function () {
             $state = 'excluded'; $stats['excluded']++;
         } elseif (Affiros_AI_Ranking_Detector::is_ranking($post_obj)) {
             $state = 'ranking'; $stats['ranking']++;
+        } elseif (affiros_ai_taxonomy_excluded($post_id, $settings)) {
+            $state = 'taxonomy'; $stats['taxonomy']++;
         } elseif (!empty($last_insert)) {
             $state = 'done'; $stats['done']++;
         } else {

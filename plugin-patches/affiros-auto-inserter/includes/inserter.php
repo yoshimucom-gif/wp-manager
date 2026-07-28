@@ -43,6 +43,12 @@ class Affiros_AI_Inserter {
 
         $settings = affiros_ai_get_settings();
 
+        // 除外カテゴリー/タグ判定
+        if (affiros_ai_taxonomy_excluded($post_id, $settings)) {
+            self::clear_last_error($post_id);
+            return self::result(true, '除外カテゴリー/タグのためスキップ', ['skipped' => true, 'reason' => 'taxonomy']);
+        }
+
         // ステータスチェック
         $allowed_statuses = array_filter(array_map('trim', explode(',', $settings['target_statuses'] ?? 'publish,future,draft')));
         if (!in_array($post->post_status, $allowed_statuses, true)) {

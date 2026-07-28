@@ -1951,6 +1951,17 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.19 / auto-inserter v0.9.0 (2026-07-28) — 挿入しないカテゴリー・タグを設定可能に</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>追加</strong>: 設定「⑤ 挿入しないカテゴリー・タグ」。カテゴリーはチェックボックス（記事数付き）、タグはカンマ区切り（名前/スラッグ）で指定。</li>
+              <li><strong>根本ガード</strong>: 判定は <code>process()</code> の入口（<code>affiros_ai_taxonomy_excluded()</code>）に実装。一括挿入・個別「今すぐ挿入」・公開時自動挿入のすべてで効く（UIだけの制御にしない）。</li>
+              <li><strong>一括ページ</strong>: スキャンで該当記事は「除外(分類)」表示になり、一括適用/再挿入の対象から自動で外れる。スキャン統計に除外(分類)・ランキング件数を追加。</li>
+              <li><strong>注意</strong>: 既に挿入済みの記事を除外カテゴリーに入れてもカードは自動では消えない（今後の挿入・再挿入がスキップされるだけ）。消す場合は記事編集画面の「🗑 挿入済みカードを削除」。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.8.2 → 0.9.0 / <code>APP_VERSION</code> 1.9.18 → 1.9.19。設定セクション番号を採番し直し（⑤除外分類/⑥ランキング/⑦自動化/⑧ショートコード）。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.18 / auto-inserter v0.8.2 (2026-07-28) — 記事内カード見出しの既定を「超売れ筋のおすすめTOP3」に変更</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>変更</strong>: 既定「おすすめ商品比較」→「<strong>超売れ筋のおすすめTOP3</strong>」。設定未入力でも最初からこの見出しになる（レンダラー・表示時差し替えフィルタ・設定画面placeholderの3箇所を同期）。</li>

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros オートインサーター
  * Description: マーカー不要。Claude Haiku が本文から検索キーワードを自動抽出し、Amazon + 楽天から関連商品3件を引っ張って「最初のH2直前」「まとめ直後」の2箇所に比較カードを自動挿入する。ランキング記事は自動判定して除外。既存の affiros-product-inserter とは独立して動作。
- * Version: 0.8.2
+ * Version: 0.9.0
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-auto-inserter
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('AFFIROS_AI_VERSION',      '0.8.2');
+define('AFFIROS_AI_VERSION',      '0.9.0');
 define('AFFIROS_AI_PATH',         plugin_dir_path(__FILE__));
 define('AFFIROS_AI_URL',          plugin_dir_url(__FILE__));
 define('AFFIROS_AI_OPTION_KEY',   'affiros_ai_settings');
@@ -72,6 +72,9 @@ function affiros_ai_default_settings() {
         // ランキング検出
         'skip_ranking_articles'  => 'yes',
         'ranking_title_patterns' => "選\nランキング\nおすすめ.*位\nベスト\\d+",
+        // 挿入しないカテゴリー・タグ
+        'exclude_category_ids'   => [],  // カテゴリーID配列
+        'exclude_tags'           => '',  // カンマ区切り (タグ名 or スラッグ)
         // 挿入動作
         'auto_on_publish'        => 'yes', // 公開時自動挿入
     ];
@@ -86,6 +89,19 @@ function affiros_ai_get_settings() {
         if (preg_match('/^\*+$/', (string)($merged[$k] ?? ''))) $merged[$k] = '';
     }
     return $merged;
+}
+
+/**
+ * 記事が除外カテゴリー/タグに属しているか
+ * process() (一括・個別・公開時自動挿入すべての入口) から呼ばれる根本ガード
+ */
+function affiros_ai_taxonomy_excluded($post_id, $settings = null) {
+    if (!$settings) $settings = affiros_ai_get_settings();
+    $cat_ids = array_filter(array_map('intval', (array)($settings['exclude_category_ids'] ?? [])));
+    if ($cat_ids && has_category($cat_ids, $post_id)) return true;
+    $tags = array_filter(array_map('trim', explode(',', (string)($settings['exclude_tags'] ?? ''))));
+    if ($tags && has_tag($tags, $post_id)) return true;
+    return false;
 }
 
 /**
