@@ -39,7 +39,8 @@ function affiros_ai_sanitize_settings($input) {
     $output['ranking_title_patterns'] = sanitize_textarea_field($input['ranking_title_patterns'] ?? '');
 
     $output['auto_on_publish']        = ($input['auto_on_publish'] ?? 'no') === 'yes' ? 'yes' : 'no';
-    $output['cron_refresh']           = ($input['cron_refresh']    ?? 'no') === 'yes' ? 'yes' : 'no';
+    // v0.7.0 で週次リフレッシュ廃止。旧設定が残っていたら捨てる
+    unset($output['cron_refresh']);
 
     return $output;
 }
@@ -170,10 +171,6 @@ function affiros_ai_render_settings_page() {
                 <tr>
                     <th>公開時に自動挿入</th>
                     <td><label><input type="checkbox" name="<?php echo AFFIROS_AI_OPTION_KEY; ?>[auto_on_publish]" value="yes" <?php checked($settings['auto_on_publish'], 'yes'); ?>> 記事公開時に自動で商品カードを挿入する</label><p class="description">公開の60秒後に WP Cron 経由で実行 (公開自体を遅らせない)</p></td>
-                </tr>
-                <tr>
-                    <th>週次リフレッシュ</th>
-                    <td><label><input type="checkbox" name="<?php echo AFFIROS_AI_OPTION_KEY; ?>[cron_refresh] " value="yes" <?php checked($settings['cron_refresh'], 'yes'); ?>> 週1回、既存記事の商品情報を再取得して価格・在庫を最新化</label></td>
                 </tr>
             </table>
 

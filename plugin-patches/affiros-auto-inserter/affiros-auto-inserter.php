@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros オートインサーター
  * Description: マーカー不要。Claude Haiku が本文から検索キーワードを自動抽出し、Amazon + 楽天から関連商品3件を引っ張って「最初のH2直前」「まとめ直後」の2箇所に比較カードを自動挿入する。ランキング記事は自動判定して除外。既存の affiros-product-inserter とは独立して動作。
- * Version: 0.6.0
+ * Version: 0.7.0
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-auto-inserter
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('AFFIROS_AI_VERSION',      '0.6.0');
+define('AFFIROS_AI_VERSION',      '0.7.0');
 define('AFFIROS_AI_PATH',         plugin_dir_path(__FILE__));
 define('AFFIROS_AI_URL',          plugin_dir_url(__FILE__));
 define('AFFIROS_AI_OPTION_KEY',   'affiros_ai_settings');
@@ -71,7 +71,6 @@ function affiros_ai_default_settings() {
         'ranking_title_patterns' => "選\nランキング\nおすすめ.*位\nベスト\\d+",
         // 挿入動作
         'auto_on_publish'        => 'yes', // 公開時自動挿入
-        'cron_refresh'           => 'yes', // 週次リフレッシュ
     ];
 }
 
@@ -155,12 +154,12 @@ register_activation_hook(__FILE__, function () {
     if (!get_option(AFFIROS_AI_OPTION_KEY)) {
         update_option(AFFIROS_AI_OPTION_KEY, affiros_ai_default_settings());
     }
-    // 週次 cron 登録
-    if (!wp_next_scheduled('affiros_ai_weekly_refresh')) {
-        wp_schedule_event(time() + 3600, 'weekly', 'affiros_ai_weekly_refresh');
-    }
 });
 
-register_deactivation_hook(__FILE__, function () {
-    wp_clear_scheduled_hook('affiros_ai_weekly_refresh');
+// v0.7.0 で週次リフレッシュを廃止。旧バージョンが登録した cron イベントを掃除する
+// (更新では activation hook が走らないため init で1回チェック)
+add_action('init', function () {
+    if (wp_next_scheduled('affiros_ai_weekly_refresh')) {
+        wp_clear_scheduled_hook('affiros_ai_weekly_refresh');
+    }
 });

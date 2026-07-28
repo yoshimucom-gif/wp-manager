@@ -310,7 +310,7 @@ class Affiros_AI_Inserter {
 }
 
 // =============================================================================
-// 公開時自動挿入 + 週次リフレッシュ
+// 公開時自動挿入
 // =============================================================================
 
 add_action('transition_post_status', function ($new_status, $old_status, $post) {
@@ -327,29 +327,6 @@ add_action('transition_post_status', function ($new_status, $old_status, $post) 
 
 add_action('affiros_ai_delayed_process', function ($post_id) {
     Affiros_AI_Inserter::process(intval($post_id));
-});
-
-// 週次リフレッシュ (価格・在庫更新)
-add_action('affiros_ai_weekly_refresh', function () {
-    $settings = affiros_ai_get_settings();
-    if (($settings['cron_refresh'] ?? 'yes') !== 'yes') return;
-
-    $allowed = array_filter(array_map('trim', explode(',', $settings['target_statuses'] ?? 'publish,future,draft')));
-    if (empty($allowed)) $allowed = ['publish'];
-
-    global $wpdb;
-    $placeholders = implode(',', array_fill(0, count($allowed), '%s'));
-    $rows = $wpdb->get_col($wpdb->prepare(
-        "SELECT p.ID FROM {$wpdb->posts} p
-         INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
-             AND pm.meta_key = %s
-         WHERE p.post_type = 'post' AND p.post_status IN ($placeholders)
-         LIMIT 100",
-        AFFIROS_AI_META_LAST_INSERT_AT, ...$allowed
-    ));
-    foreach ($rows as $pid) {
-        Affiros_AI_Inserter::process(intval($pid), ['force_refresh_products' => true]);
-    }
 });
 
 endif;

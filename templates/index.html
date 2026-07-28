@@ -1951,6 +1951,16 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.11 / auto-inserter v0.7.0 (2026-07-28) — 週次リフレッシュ機能を廃止</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>廃止理由</strong>: 週1回全記事の <code>post_content</code> を書き換える設計はリビジョン肥大＋<code>post_modified</code> が毎週全記事同日に動く（バックデート運用と相性最悪）。カードに「◯◯時点」表記があるため価格が多少古くても誤認リスクは低く、商品販売終了でもAmazonページは残る。価格を最新化したければ一括挿入ページから手動再実行で足りる（KW再抽出付きでむしろ高精度）。</li>
+              <li><strong>削除内容</strong>: 週次cronハンドラ・cron登録/解除・設定「週次リフレッシュ」チェックボックス・<code>cron_refresh</code> 設定キー。</li>
+              <li><strong>移行処理</strong>: 旧バージョンが登録済みの cron イベントは init で自動掃除。保存済みの <code>cron_refresh</code> 設定値も次回保存時に破棄。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.6.0 → 0.7.0 / <code>APP_VERSION</code> 1.9.10 → 1.9.11。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.10 / auto-inserter v0.6.0 (2026-07-27) — サイドバー用ショートコード [affiros_ai_top] を追加</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>追加機能</strong>: 表示中の記事に挿入済みの1位商品をコンパクトカードで表示するショートコード <code>[affiros_ai_top]</code>。サイドバーのウィジェット（ショートコードブロック）に1回置くだけで、記事ごとに自動でその記事の商品が出る。</li>
