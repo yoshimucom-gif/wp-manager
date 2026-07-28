@@ -37,9 +37,12 @@ class Affiros_AI_Card_Renderer {
         // 対応商品がない側のボタンは検索結果一覧に飛ばす (一覧経由でもアフィ成果になる)
         $ctx = self::build_search_urls($keyword_raw, $meta);
 
+        $heading = trim((string)($meta['card_heading'] ?? ''));
+        if ($heading === '') $heading = 'おすすめ商品比較';
+
         $html  = '<!-- affiros-ai-card-start -->' . "\n";
         $html .= '<div class="affiros-ai-compare-card" data-affiros-ai="1">' . "\n";
-        $html .= '  <div class="affiros-ai-card-head">おすすめ商品比較' . ($keyword ? ' <span class="affiros-ai-kw">「' . $keyword . '」で厳選</span>' : '') . '</div>' . "\n";
+        $html .= '  <div class="affiros-ai-card-head">' . esc_html($heading) . ($keyword ? ' <span class="affiros-ai-kw">「' . $keyword . '」で厳選</span>' : '') . '</div>' . "\n";
         $html .= '  <div class="affiros-ai-card-grid">' . "\n";
 
         foreach ($primary as $idx => $p) {

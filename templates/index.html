@@ -1951,6 +1951,15 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.16 / auto-inserter v0.8.0 (2026-07-28) — カード見出しを設定画面から変更可能に</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>追加</strong>: 設定「④ 挿入設定」に見出し2項目。<strong>記事内カードの見出し</strong>（既定「おすすめ商品比較」→「超売れ筋のおすすめTOP3」等に変更可）と<strong>サイドバーカードの見出し</strong>（既定「この記事のイチオシ」）。空で保存すると既定に戻る。</li>
+              <li><strong>優先順位</strong>: サイドバーはショートコードの <code>title="..."</code> 属性が最優先、未指定なら設定値。サイドバーは動的表示なので保存すれば即反映。記事内カードはHTML焼き込みのため既存記事への反映は一括再挿入（v0.7.4のボタン）が必要。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.7.4 → 0.8.0 / <code>APP_VERSION</code> 1.9.15 → 1.9.16。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.15 / auto-inserter v0.7.4 (2026-07-28) — 一括ページに「挿入済の一括再挿入」ボタンを追加</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>問題</strong>: 一括ボタンが「未挿入の記事に一括適用」しかなく、v0.7.3 の位置変更やキーワード精度改善を挿入済111件に反映する手段が1件ずつの「適用」ボタン連打しかなかった。</li>

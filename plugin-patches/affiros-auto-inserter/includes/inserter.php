@@ -116,6 +116,7 @@ class Affiros_AI_Inserter {
                 // 対応商品がない側のボタンを検索一覧に飛ばすためのアフィリエイト情報
                 'amazon_partner_tag'   => $settings['amazon_partner_tag']   ?? '',
                 'rakuten_affiliate_id' => $settings['rakuten_affiliate_id'] ?? '',
+                'card_heading'         => $settings['card_heading']         ?? '',
             ]
         );
 
