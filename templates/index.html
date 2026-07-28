@@ -1951,6 +1951,15 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.18 / auto-inserter v0.8.2 (2026-07-28) — 記事内カード見出しの既定を「超売れ筋のおすすめTOP3」に変更</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>変更</strong>: 既定「おすすめ商品比較」→「<strong>超売れ筋のおすすめTOP3</strong>」。設定未入力でも最初からこの見出しになる（レンダラー・表示時差し替えフィルタ・設定画面placeholderの3箇所を同期）。</li>
+              <li><strong>注意</strong>: v0.8.0/0.8.1 で設定を一度でも保存していた場合、DBに旧既定「おすすめ商品比較」が保存されているため、その値が優先される。その場合は設定欄を空にして保存すれば新既定に切り替わる。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.8.1 → 0.8.2 / <code>APP_VERSION</code> 1.9.17 → 1.9.18。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.17 / auto-inserter v0.8.1 (2026-07-28) — 見出しを表示時差し替えに変更（再挿入不要に）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>改善</strong>: v0.8.0 では記事内カードの見出し変更に一括再挿入が必要だった。<code>the_content</code> フィルタで表示時に現在の設定値へ差し替える方式に変更し、<strong>設定を保存するだけで既存記事にも即反映</strong>。キーワードの「◯◯で厳選」表示は保持。</li>

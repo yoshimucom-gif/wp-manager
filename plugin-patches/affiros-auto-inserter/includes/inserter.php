@@ -297,7 +297,7 @@ add_filter('the_content', function ($content) {
 
     $settings = affiros_ai_get_settings();
     $heading = trim((string)($settings['card_heading'] ?? ''));
-    if ($heading === '') $heading = 'おすすめ商品比較';
+    if ($heading === '') $heading = '超売れ筋のおすすめTOP3';
 
     // 開始divタグ直後〜次のタグまで (見出しテキスト部分) を差し替え。
     // キーワードの <span class="affiros-ai-kw"> は保持される

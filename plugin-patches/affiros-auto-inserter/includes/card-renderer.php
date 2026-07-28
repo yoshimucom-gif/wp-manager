@@ -38,7 +38,7 @@ class Affiros_AI_Card_Renderer {
         $ctx = self::build_search_urls($keyword_raw, $meta);
 
         $heading = trim((string)($meta['card_heading'] ?? ''));
-        if ($heading === '') $heading = 'おすすめ商品比較';
+        if ($heading === '') $heading = '超売れ筋のおすすめTOP3';
 
         $html  = '<!-- affiros-ai-card-start -->' . "\n";
         $html .= '<div class="affiros-ai-compare-card" data-affiros-ai="1">' . "\n";
