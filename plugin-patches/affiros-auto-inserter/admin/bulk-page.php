@@ -42,10 +42,12 @@ function affiros_ai_render_bulk_page() {
         <div id="ai-result" style="display:none">
             <div style="margin:0 0 12px">
                 <button type="button" id="ai-apply-all-btn" class="button button-primary">✨ 未挿入の記事に一括適用</button>
+                <button type="button" id="ai-reapply-all-btn" class="button" style="margin-left:8px">🔄 挿入済の記事に一括再挿入</button>
                 <span id="ai-apply-status" style="margin-left:12px;font-size:13px"></span>
                 <div style="font-size:12px;color:#666;margin-top:6px">
                     ⚠️ 適用にはブラウザタブを開いたままにする必要があります (JS ループ方式)。
                     ・100件処理 ≒ 10〜20分 ・¥30程度
+                    <br>🔄 再挿入は既存カードを削除して入れ直します (位置ルール変更やキーワード精度改善を既存記事に反映する用。重複しません)
                 </div>
             </div>
             <table class="wp-list-table widefat striped">
@@ -71,7 +73,8 @@ function affiros_ai_render_bulk_page() {
             let abort = false;
 
             $('#ai-scan-btn').on('click', scan);
-            $('#ai-apply-all-btn').on('click', applyAll);
+            $('#ai-apply-all-btn').on('click', () => applyBatch('pending', '挿入'));
+            $('#ai-reapply-all-btn').on('click', () => applyBatch('done', '再挿入'));
 
             async function scan() {
                 $('#ai-scan-btn').prop('disabled', true);
@@ -165,17 +168,17 @@ function affiros_ai_render_bulk_page() {
                 }
             }
 
-            async function applyAll() {
-                const targets = posts.filter(p => p.state === 'pending');
-                if (!targets.length) { alert('未挿入の対象がありません'); return; }
-                if (!confirm(`${targets.length} 件に順次挿入します。想定コスト: ¥${(targets.length * 0.3).toFixed(1)} 前後。よろしいですか？`)) return;
+            async function applyBatch(targetState, verb) {
+                const targets = posts.filter(p => p.state === targetState);
+                if (!targets.length) { alert(`${targetState === 'pending' ? '未挿入' : '挿入済'}の対象がありません`); return; }
+                if (!confirm(`${targets.length} 件に順次${verb}します。想定コスト: ¥${(targets.length * 0.3).toFixed(1)} 前後。よろしいですか？`)) return;
 
                 abort = false;
-                $('#ai-apply-all-btn').prop('disabled', true);
+                $('#ai-apply-all-btn, #ai-reapply-all-btn').prop('disabled', true);
                 let done = 0, failed = 0;
                 for (const p of targets) {
                     if (abort) break;
-                    $('#ai-apply-status').text(`適用中 ${done + failed + 1}/${targets.length}... #${p.id}`);
+                    $('#ai-apply-status').text(`${verb}中 ${done + failed + 1}/${targets.length}... #${p.id}`);
                     const btn = $(`tr[data-id="${p.id}"] .ai-apply-one`);
                     const r = await applyOne(p.id, btn.length ? btn : null);
                     if (r.ok && r.changed) done++;
@@ -183,7 +186,7 @@ function affiros_ai_render_bulk_page() {
                     await sleep(300); // API連続叩き回避
                 }
                 $('#ai-apply-status').html(`完了: 成功 <strong>${done}</strong>件 / 失敗 ${failed}件`);
-                $('#ai-apply-all-btn').prop('disabled', false);
+                $('#ai-apply-all-btn, #ai-reapply-all-btn').prop('disabled', false);
             }
 
             function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
