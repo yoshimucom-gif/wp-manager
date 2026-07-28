@@ -1951,6 +1951,16 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.17 / auto-inserter v0.8.1 (2026-07-28) — 見出しを表示時差し替えに変更（再挿入不要に）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>改善</strong>: v0.8.0 では記事内カードの見出し変更に一括再挿入が必要だった。<code>the_content</code> フィルタで表示時に現在の設定値へ差し替える方式に変更し、<strong>設定を保存するだけで既存記事にも即反映</strong>。キーワードの「◯◯で厳選」表示は保持。</li>
+              <li><strong>フォールバック</strong>: HTMLへの焼き込み自体は継続（挿入時点の見出しが入る）。フィルタが効かない場面でも挿入時の見出しが表示される。</li>
+              <li><strong>検証</strong>: 差し替えロジックを4ケース（キーワードspan付き/無し/カード2枚/カード無し記事）のシミュレーションで確認。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.8.0 → 0.8.1 / <code>APP_VERSION</code> 1.9.16 → 1.9.17。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.16 / auto-inserter v0.8.0 (2026-07-28) — カード見出しを設定画面から変更可能に</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>追加</strong>: 設定「④ 挿入設定」に見出し2項目。<strong>記事内カードの見出し</strong>（既定「おすすめ商品比較」→「超売れ筋のおすすめTOP3」等に変更可）と<strong>サイドバーカードの見出し</strong>（既定「この記事のイチオシ」）。空で保存すると既定に戻る。</li>

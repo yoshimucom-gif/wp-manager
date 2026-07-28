@@ -285,6 +285,32 @@ class Affiros_AI_Inserter {
 }
 
 // =============================================================================
+// カード見出しの動的差し替え (v0.8.1)
+// =============================================================================
+// 見出しはHTMLに焼き込まれているが、表示時に現在の設定値へ差し替える。
+// これにより設定変更が再挿入なしで全記事に即反映される。
+// (焼き込み側も current 設定で入れているので、フィルタが効かない場面でも
+//  挿入時点の見出しは表示される = フォールバック)
+
+add_filter('the_content', function ($content) {
+    if (strpos($content, 'affiros-ai-card-head') === false) return $content;
+
+    $settings = affiros_ai_get_settings();
+    $heading = trim((string)($settings['card_heading'] ?? ''));
+    if ($heading === '') $heading = 'おすすめ商品比較';
+
+    // 開始divタグ直後〜次のタグまで (見出しテキスト部分) を差し替え。
+    // キーワードの <span class="affiros-ai-kw"> は保持される
+    return preg_replace_callback(
+        '/(<div class="affiros-ai-card-head">)[^<]*/u',
+        function ($m) use ($heading) {
+            return $m[1] . esc_html($heading) . ' ';
+        },
+        $content
+    );
+}, 20);
+
+// =============================================================================
 // 公開時自動挿入
 // =============================================================================
 

@@ -160,7 +160,7 @@ function affiros_ai_render_settings_page() {
                     <th>記事内カードの見出し</th>
                     <td>
                         <input type="text" name="<?php echo AFFIROS_AI_OPTION_KEY; ?>[card_heading]" value="<?php echo esc_attr($settings['card_heading']); ?>" class="regular-text" placeholder="おすすめ商品比較">
-                        <p class="description">例: <code>超売れ筋のおすすめTOP3</code>。空で保存すると既定「おすすめ商品比較」に戻る。<br>⚠️ 記事内カードはHTMLに焼き込まれるため、変更を既存記事に反映するには一括再挿入が必要。</p>
+                        <p class="description">例: <code>超売れ筋のおすすめTOP3</code>。空で保存すると既定「おすすめ商品比較」に戻る。<br>表示時に差し替える方式なので、保存すれば既存記事にも即反映（再挿入不要）。</p>
                     </td>
                 </tr>
                 <tr>
