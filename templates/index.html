@@ -1951,6 +1951,14 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.12 / auto-inserter v0.7.1 (2026-07-28) — 設定画面にショートコードの使い方を掲載</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>追加</strong>: <code>[affiros_ai_top]</code> の使い方がWP画面のどこにも書かれていなかった（改修履歴とソースコメントのみ）。設定ページ末尾に「⑦ サイドバー用ショートコード」セクションを追加し、設置手順・rank/title 属性の一覧表・動作仕様（キャッシュ読みのみ/データなしページは無出力/ボタン飛び先）を記載。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.7.0 → 0.7.1 / <code>APP_VERSION</code> 1.9.11 → 1.9.12。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.11 / auto-inserter v0.7.0 (2026-07-28) — 週次リフレッシュ機能を廃止</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>廃止理由</strong>: 週1回全記事の <code>post_content</code> を書き換える設計はリビジョン肥大＋<code>post_modified</code> が毎週全記事同日に動く（バックデート運用と相性最悪）。カードに「◯◯時点」表記があるため価格が多少古くても誤認リスクは低く、商品販売終了でもAmazonページは残る。価格を最新化したければ一括挿入ページから手動再実行で足りる（KW再抽出付きでむしろ高精度）。</li>

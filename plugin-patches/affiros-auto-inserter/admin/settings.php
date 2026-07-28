@@ -176,6 +176,28 @@ function affiros_ai_render_settings_page() {
 
             <?php submit_button(); ?>
         </form>
+
+        <h2>⑦ サイドバー用ショートコード</h2>
+        <div style="max-width:680px;background:#fff;border:1px solid #ccd0d4;border-radius:4px;padding:16px 20px;font-size:13px;line-height:1.9">
+            <p style="margin-top:0">
+                表示中の記事に挿入済みの商品をコンパクトカード（画像・商品名・価格・Amazon/楽天ボタン）で表示します。<br>
+                <strong>外観 → ウィジェット</strong> でサイドバーに「ショートコード」ブロックを追加して、以下を書くだけ。設置は1回、記事ごとに自動でその記事の商品に切り替わります。
+            </p>
+            <table class="widefat striped" style="max-width:640px">
+                <thead><tr><th style="width:280px">書き方</th><th>動作</th></tr></thead>
+                <tbody>
+                    <tr><td><code>[affiros_ai_top]</code></td><td>その記事の1位商品を表示</td></tr>
+                    <tr><td><code>[affiros_ai_top rank="2"]</code></td><td>2位を表示（1位の下にもう1ブロック置けば2枚並ぶ）</td></tr>
+                    <tr><td><code>[affiros_ai_top title="今日のイチオシ"]</code></td><td>見出しを変更（既定「この記事のイチオシ」）</td></tr>
+                    <tr><td><code>[affiros_ai_top title=""]</code></td><td>見出しなし</td></tr>
+                </tbody>
+            </table>
+            <p style="margin-bottom:0" class="description">
+                商品データはこのプラグインが記事に挿入した時のキャッシュを読むだけ（API・AI呼び出しゼロ、表示速度に影響なし）。<br>
+                データがないページ（トップ・固定ページ・アーカイブ・未挿入記事・ランキング記事）では何も出力しないので、全ページ共通のサイドバーに置いて安全です。<br>
+                ボタンの飛び先は記事内カードと同じ（主軸=商品ページ、他方=検索一覧のアフィリエイトリンク）。記事のカードを再挿入すればサイドバーも自動で追従します。
+            </p>
+        </div>
     </div>
     <?php
 }
