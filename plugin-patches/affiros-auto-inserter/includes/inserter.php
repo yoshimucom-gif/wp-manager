@@ -225,53 +225,27 @@ class Affiros_AI_Inserter {
     }
 
     /**
-     * まとめの直後に挿入
-     * 「まとめ」を含む H2 (or wp:heading level=2) を探し、その次のH2の直前 (or 記事末尾) に挿入
+     * まとめ見出しの直下に挿入
+     * 「まとめ」を含む H2 の </h2> 直後 (Gutenberg の <!-- /wp:heading --> があれば
+     * その後) にカードを入れる。まとめ本文より前に商品が目に入る位置。
+     * (v0.7.3 以前は「次のH2直前 or 記事末尾」= まとめ本文の後だった)
      */
     private static function insert_after_matome($content, $card_html) {
         // 「まとめ」を含む H2 を探す。Gutenberg / 生HTML 両対応
-        // wp:heading + h2 with matome text
         if (preg_match_all('/<h2\b[^>]*>([\s\S]*?)<\/h2>/i', $content, $m, PREG_OFFSET_CAPTURE)) {
-            $matome_end_pos = null;
             foreach ($m[0] as $i => $match) {
                 $text = wp_strip_all_tags($m[1][$i][0]);
                 if (mb_strpos($text, 'まとめ') !== false || mb_strpos($text, 'おわりに') !== false || mb_strpos($text, '最後に') !== false) {
-                    // まとめのH2 の開始位置
-                    $start = $match[1];
-                    // 次のH2 (or ドキュメント終端) を探す
-                    $next_h2_pos = false;
-                    for ($j = $i + 1; $j < count($m[0]); $j++) {
-                        $next_h2_pos = $m[0][$j][1];
-                        break;
+                    $pos = $match[1] + strlen($match[0]);
+                    // Gutenberg のブロック閉じコメントをまたいだ位置に入れる
+                    if (preg_match('/^\s*<!--\s*\/wp:heading\s*-->/i', substr($content, $pos, 60), $mm)) {
+                        $pos += strlen($mm[0]);
                     }
-                    if ($next_h2_pos === false) {
-                        // 記事末尾に挿入
-                        $matome_end_pos = strlen($content);
-                    } else {
-                        // 次のH2の直前 (直前の wp:heading コメントがあればその前)
-                        $matome_end_pos = self::back_up_to_wp_heading_open($content, $next_h2_pos);
-                    }
-                    break;
+                    return substr($content, 0, $pos) . "\n" . $card_html . "\n" . substr($content, $pos);
                 }
-            }
-            if ($matome_end_pos !== null) {
-                return substr($content, 0, $matome_end_pos) . "\n" . $card_html . "\n" . substr($content, $matome_end_pos);
             }
         }
         return null;
-    }
-
-    /**
-     * 指定 offset より前を遡って `<!-- wp:heading` の開始 offset を返す。
-     * なければ元の offset を返す。
-     */
-    private static function back_up_to_wp_heading_open($content, $offset) {
-        // offset から前方に最大 200 文字くらいの範囲で wp:heading を探す
-        $window = substr($content, max(0, $offset - 200), min($offset, 200));
-        if (preg_match('/<!--\s*wp:heading[^>]*-->\s*$/i', $window, $m, PREG_OFFSET_CAPTURE)) {
-            return max(0, $offset - 200) + $m[0][1];
-        }
-        return $offset;
     }
 
     /**

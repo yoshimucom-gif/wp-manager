@@ -132,7 +132,7 @@ function affiros_ai_render_settings_page() {
                     <th>挿入位置</th>
                     <td>
                         <label><input type="checkbox" name="<?php echo AFFIROS_AI_OPTION_KEY; ?>[insert_before_first_h2]" value="yes" <?php checked($settings['insert_before_first_h2'], 'yes'); ?>> 最初のH2の直前 (リード直後)</label><br>
-                        <label><input type="checkbox" name="<?php echo AFFIROS_AI_OPTION_KEY; ?>[insert_after_matome]" value="yes" <?php checked($settings['insert_after_matome'], 'yes'); ?>> 「まとめ」H2 の直後</label>
+                        <label><input type="checkbox" name="<?php echo AFFIROS_AI_OPTION_KEY; ?>[insert_after_matome]" value="yes" <?php checked($settings['insert_after_matome'], 'yes'); ?>> 「まとめ」H2見出しの直下 (まとめ本文の前)</label>
                         <p class="description">両方 ON で1記事に2枚。片方だけでも OK。</p>
                     </td>
                 </tr>

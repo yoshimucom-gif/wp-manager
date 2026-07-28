@@ -1951,6 +1951,18 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.14 / auto-inserter v0.7.3 (2026-07-28) — まとめカードの位置を「まとめ見出しの直下」に変更</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>指摘</strong>: 「まとめ直後」と言いつつ実際は「まとめセクションの終わり（次のH2直前 or 記事末尾）」に入っており、まとめ本文を全部読んだ後にしかカードが出なかった。</li>
+              <li><strong>変更</strong>: まとめH2の <code>&lt;/h2&gt;</code> 直後（Gutenberg の <code>&lt;!-- /wp:heading --&gt;</code> があればその後）に挿入。まとめ本文より先に商品が目に入る。</li>
+              <li><strong>検証</strong>: 挿入位置ロジックをシミュレーションで確認（Gutenberg / 生HTML / まとめ無し記事の3ケース）。</li>
+              <li><strong>クリーンアップ</strong>: 不要になった <code>back_up_to_wp_heading_open()</code> を削除。設定画面の文言も「まとめH2見出しの直下 (まとめ本文の前)」に修正。</li>
+              <li><strong>既存記事への反映</strong>: 挿入は冪等（既存カードを削除してから入れ直す）なので、一括挿入ページから再実行するだけで新しい位置に移動する。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.7.2 → 0.7.3 / <code>APP_VERSION</code> 1.9.13 → 1.9.14。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.13 / auto-inserter v0.7.2 (2026-07-28) — 🐛 ショートコードがトップページにも表示されるバグを修正</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>症状</strong>: <code>[affiros_ai_top]</code> がトップページ・アーカイブのサイドバーにも商品を表示していた（一覧最後の記事の商品）。</li>
