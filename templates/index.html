@@ -1951,6 +1951,16 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.26 / auto-inserter v0.10.3 (2026-07-29) — 検品に出品品質判定を追加（低品質マーケットプレイス出品を排除）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>実害</strong>: 「スクイーズペン」でレビュー0の低品質出品（機械翻訳調タイトル「陽気な偽スパイダーペン小道具、家族の集まり…」、ランダム英字ブランド sodeber / APGLSXY 等）がカードに並んだ。カテゴリ判定は通るため v0.10.0 の検品では防げない。</li>
+              <li><strong>制約</strong>: Amazon Creators API はレビュー数・星を返さないため「レビュー0を直接弾く」は不可能。代理として<strong>商品名・ブランド名の品質判定</strong>を検品ルールに追加（機械翻訳調/カンマ羅列タイトル・ランダム英字ブランドは不合格、自然な日本語タイトルを優先）。検品プロンプトにブランド名も渡すよう変更。</li>
+              <li><strong>追加コストほぼゼロ</strong>: 既存の検品呼び出しにルールを足しただけ。全滅時のメッセージも「別カテゴリ商品 or 低品質出品」に更新。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.10.2 → 0.10.3 / <code>APP_VERSION</code> 1.9.25 → 1.9.26。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.25 / auto-inserter v0.10.2 (2026-07-29) — コスト表記をv0.10系の実態に更新</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>更新箇所</strong>: 一括ページの説明（¥0.3/記事 → 約¥0.5/記事＋再抽出発動記事は約¥1.0〜1.4、100件で¥50〜60目安）、一括実行前のconfirmダイアログ（件数×¥0.5〜0.65のレンジ表示）、設定①Claude APIの説明（内訳: 抽出¥0.3＋検品¥0.1〜0.2）。</li>

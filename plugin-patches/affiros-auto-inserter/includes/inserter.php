@@ -227,7 +227,7 @@ class Affiros_AI_Inserter {
                 $before = count($res);
                 $res = $extractor->filter_relevant($keyword, $post_title, $res);
                 if (empty($res) && $before > 0) {
-                    $errors[] = "Amazon: 検索結果{$before}件は全て別カテゴリ商品 (カバー・付属品等) と判定";
+                    $errors[] = "Amazon: 検索結果{$before}件は全て不合格 (別カテゴリ商品 or 低品質出品) と判定";
                     $all_rejected = true;
                 }
                 $amazon_products = self::diversify($res, $count);
@@ -242,7 +242,7 @@ class Affiros_AI_Inserter {
                 $before = count($res);
                 $res = $extractor->filter_relevant($keyword, $post_title, $res);
                 if (empty($res) && $before > 0) {
-                    $errors[] = "楽天: 検索結果{$before}件は全て別カテゴリ商品と判定";
+                    $errors[] = "楽天: 検索結果{$before}件は全て不合格 (別カテゴリ商品 or 低品質出品) と判定";
                     $all_rejected = true;
                 }
                 $rakuten_products = self::diversify($res, $count);
