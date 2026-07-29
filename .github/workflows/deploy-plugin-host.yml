@@ -58,7 +58,7 @@ jobs:
       - name: 配信内容を検証
         run: |
           fail=0
-          for k in auto-inserter categorizer decoration decoration-formatter \
+          for k in auto-inserter cat-eyecatch categorizer decoration decoration-formatter \
                    dup-cleaner mark-stripper paragraph-splitter \
                    product-inserter reschedule rewrite; do
             live=$(curl -s -m 25 "https://ke-ys.co.jp/api/plugin-update/$k" \

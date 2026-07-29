@@ -1,0 +1,32 @@
+/* Affiros カテゴリーアイキャッチ — 管理画面 */
+
+.ace-field .ace-preview {
+    margin: 4px 0;
+    min-height: 0;
+}
+
+.ace-field .ace-preview img {
+    display: block;
+    max-width: 150px;
+    height: auto;
+    border: 1px solid #dcdcde;
+    border-radius: 3px;
+    background: #fff;
+}
+
+.ace-field .ace-buttons {
+    margin: 8px 0 0;
+}
+
+.ace-field .ace-buttons .button + .button {
+    margin-left: 6px;
+}
+
+/* タームの追加フォームは幅が狭いので詰める */
+#addtag .ace-field .ace-preview img {
+    max-width: 120px;
+}
+
+.column-affiros_cat_eyecatch {
+    width: 70px;
+}

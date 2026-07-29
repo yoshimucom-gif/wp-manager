@@ -1939,6 +1939,33 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             </a>
           </div>
 
+          <div class="settings-section" style="margin:0">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <div style="font-size:22px">🖼</div>
+              <div style="flex:1">
+                <div style="font-weight:700;font-size:14px">❼ Affiros カテゴリーアイキャッチ</div>
+                <div style="font-size:11px;color:var(--muted)">カテゴリーごとのアイキャッチを、未設定の記事に自動適用</div>
+              </div>
+              <div style="font-size:11px;background:rgba(102,210,255,0.18);color:#66d2ff;padding:2px 8px;border-radius:10px">v{{ plugin_downloads['cat-eyecatch'].version }}</div>
+            </div>
+            <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:10px">
+              カテゴリー編集画面で設定した画像を、<strong>アイキャッチ未設定の記事</strong>に自動で使う。
+              既定は<strong>仮想適用</strong>（記事のDBに書き込まない）なので、あとから記事側にアイキャッチを付ければそちらが優先され、プラグインを止めれば元通り。
+              量産サイトで「アイキャッチだけ空」を一掃する用途。
+            </div>
+            <div style="font-size:11px;color:var(--muted);background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:6px;margin-bottom:8px">
+              <div>📂 配布物: <code>{{ plugin_downloads['cat-eyecatch'].file }}</code></div>
+              <div>🔧 設定: WP管理画面 → 設定 → カテゴリーアイキャッチ／投稿 → カテゴリー編集画面</div>
+              <div>📝 必要キー: なし（WP内で完結、API不要）</div>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:12px">
+              主要機能: カテゴリーに画像設定 / 一覧にサムネイル列 / 優先順は 実アイキャッチ &gt; 主要カテゴリー(Yoast・RankMath) &gt; 他カテゴリー &gt; 親から継承 &gt; 全体デフォルト / テーマ改修不要（OGPにも乗る）/ 実アイキャッチとして一括書き込み・一括取り消し
+            </div>
+            <a href="/download/plugin/cat-eyecatch" class="btn btn-primary" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;text-decoration:none">
+              ⬇ ダウンロード（v{{ plugin_downloads['cat-eyecatch'].version }}）
+            </a>
+          </div>
+
         </div>
       </div>
 
@@ -1949,6 +1976,18 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <div class="page-subtitle">Affiros9 本体の更新ログ（現在: <strong>v{{ app_version }}</strong>）</div>
         </div>
         <div style="max-width:780px">
+
+          <div class="settings-section">
+            <div class="section-header">// v1.9.30 / cat-eyecatch v1.0.0 (2026-07-29) — 🖼 カテゴリーアイキャッチ プラグインを新設</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>新規プラグイン</strong>: <code>affiros-cat-eyecatch</code> v1.0.0 を新設。カテゴリー編集画面で設定した画像を、<strong>アイキャッチ未設定の記事</strong>に自動適用する。量産サイトで「アイキャッチだけ空」が残る問題への対処。</li>
+              <li><strong>仮想適用</strong>: <code>get_post_metadata</code> フィルタ1本で <code>_thumbnail_id</code> の読み出しに割り込む方式。記事のDBには書き込まないので、<code>has_post_thumbnail()</code> / <code>the_post_thumbnail()</code> / 各SEOプラグインのOGPがテーマ改修なしで追随し、プラグインを止めれば完全に元通り。</li>
+              <li><strong>優先順位</strong>: 記事の実アイキャッチ &gt; 主要カテゴリー（Yoast / Rank Math の primary term）&gt; 他カテゴリーを term_id 昇順 &gt; 親カテゴリーから継承 &gt; 全体デフォルト画像。</li>
+              <li><strong>🚨 焼き付き防止</strong>: 管理画面・REST・WP-CLI では仮想適用を<strong>無効</strong>。ブロックエディタは REST 経由で <code>featured_media</code> を読むため、そこで仮想値を返すと「記事を開いて保存しただけで実アイキャッチが焼き付く」事故になる。</li>
+              <li><strong>一括ツール</strong>: REST経由でも確実に持たせたい場合用に、実アイキャッチとしての一括書き込みを用意（設定 → カテゴリーアイキャッチ）。対象は未設定記事のみで既存アイキャッチは上書きしない。書き込んだ画像IDを目印に残し、<strong>一括取り消し</strong>で未設定へ戻せる（あとから手で差し替えた記事は巻き込まない）。スキャンで「画像が未設定のカテゴリー」も一覧表示。</li>
+              <li><strong>バージョン同期</strong>: cat-eyecatch 1.0.0 を <code>build-all.py</code> / <code>PLUGIN_DOWNLOADS</code> / <code>PLUGIN_UPDATE_META</code>（キー <code>cat-eyecatch</code>）に登録。<code>APP_VERSION</code> 1.9.29 → 1.9.30。</li>
+            </ul>
+          </div>
 
           <div class="settings-section">
             <div class="section-header">// v1.9.29 / auto-inserter v0.11.2 (2026-07-29) — 品質判定の主軸を「タイトルの日本語品質」に修正</div>
