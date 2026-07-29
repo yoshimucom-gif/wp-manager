@@ -109,12 +109,13 @@ function affiros_ai_render_bulk_page() {
                 const tbody = $('#ai-result-tbody').empty();
                 posts.forEach(p => {
                     const editUrl = `${location.origin}/wp-admin/post.php?post=${p.id}&action=edit`;
+                    const viewUrl = p.link || editUrl; // タイトル = 公開URL (確認用)
                     const stateBadge = badge(p.state);
                     const canApply = (p.state === 'pending' || p.state === 'done');
                     tbody.append(`
                         <tr data-id="${p.id}">
                             <td>${p.id}</td>
-                            <td><a href="${editUrl}" target="_blank">${esc(p.title)}</a></td>
+                            <td><a href="${viewUrl}" target="_blank">${esc(p.title)}</a> <a href="${editUrl}" target="_blank" style="font-size:11px;color:#999;text-decoration:none">[編集]</a></td>
                             <td>${stateBadge}</td>
                             <td>${esc(p.keyword || '')}</td>
                             <td>${esc(p.last_insert_at || '')}</td>
@@ -246,6 +247,7 @@ add_action('wp_ajax_affiros_ai_scan', function () {
         $posts[] = [
             'id' => $post_id,
             'title' => $r->post_title,
+            'link' => get_permalink($post_id),
             'state' => $state,
             'keyword' => $keyword,
             'last_insert_at' => $last_insert,
