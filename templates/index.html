@@ -1951,6 +1951,17 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.23 / auto-inserter v0.10.0 (2026-07-29) — 🎯 AI検品ゲート: 字面一致の別カテゴリ商品を除外</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>実害</strong>: 「スーツに合うコートの種類」の記事に防虫カバー・洋服カバーが3枚並んだ。キーワード「スーツ用コート」は正しいのに、Amazonの字面一致検索が「スーツ・コート用 防虫カバー」を上位に返すため（商品名にスーツ/コート/用が全部含まれる）。多様性フィルタでは防げない別ブランドの別商品。</li>
+              <li><strong>対策</strong>: 検索結果10件の商品名を Haiku に渡し「キーワードのカテゴリそのものの商品」だけ通す検品ゲートを追加（<code>filter_relevant()</code>）。カバー・ケース・収納用品・付属品・関連グッズは明示的に不合格。「迷ったら不合格」の保守判定。コスト +¥0.3/記事程度。</li>
+              <li><strong>可視性</strong>: 全滅した場合は「検索結果N件は全て別カテゴリ商品と判定」を結果メッセージに表示（v0.9.2の片側失敗表示と同枠）。検品APIエラー時は素通しで挿入自体は止めない。</li>
+              <li><strong>適用順</strong>: 検索10件 → AI検品 → 多様性フィルタ → 表示件数。Amazon/楽天両方に適用。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.9.3 → 0.10.0 / <code>APP_VERSION</code> 1.9.22 → 1.9.23。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.22 / auto-inserter v0.9.3 (2026-07-29) — 秘密キーに表示/非表示トグル + プレビューでポップアップが空になる問題を修正</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>UI改善</strong>: 秘密キー欄を product-inserter v1.9.27 と同じ方式に統一。実値を ●●● で表示し「表示/非表示」ボタンで確認できる。実値の再送信なのでマスク値上書き事故 (v0.2.1で修正した件) は構造的に起きない。</li>

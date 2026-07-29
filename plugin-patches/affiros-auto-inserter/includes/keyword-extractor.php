@@ -71,6 +71,73 @@ class Affiros_AI_Keyword_Extractor {
             . "## 記事本文 (先頭3000字)\n"
             . $plain;
 
+        $text = $this->call_api($prompt, 60);
+        if (is_wp_error($text)) return $text;
+        // 改行や引用符が混ざるケースを除去
+        $text = preg_replace('/^["「『【]+|["」』】]+$/u', '', $text);
+        $text = preg_replace('/[\r\n]+/', ' ', $text);
+        $text = trim($text);
+
+        // 短い商品カテゴリ名単体 (「枕」「数珠」等) も許容する
+        if (mb_strlen($text) < 2 || mb_strlen($text) > 60) {
+            return new WP_Error('bad_keyword', "抽出結果が異常 (長さ " . mb_strlen($text) . " 文字): {$text}");
+        }
+
+        return $text;
+    }
+
+    /**
+     * 検索結果の関連性フィルタ (v0.10.0)
+     *
+     * Amazonの検索は字面一致なので「スーツ用コート」で防虫カバーや洋服カバーが
+     * 返ってくる (商品名に スーツ/コート/用 が全部含まれるため)。
+     * 商品名リストを Haiku に渡し「キーワードのカテゴリそのものの商品」だけ残す。
+     *
+     * @param string $keyword 検索キーワード
+     * @param string $article_title 記事タイトル (文脈用)
+     * @param array $products 商品配列
+     * @return array 通過した商品のみ。API未設定・エラー時は元のまま返す (挿入は止めない)
+     */
+    public function filter_relevant($keyword, $article_title, $products) {
+        if (!$this->is_configured() || count($products) === 0) return $products;
+
+        $lines = [];
+        foreach (array_values($products) as $i => $p) {
+            $lines[] = ($i + 1) . '. ' . mb_substr((string)($p['title'] ?? ''), 0, 80);
+        }
+
+        $prompt = "記事の商品カードに載せる商品の検品をしてください。\n\n"
+            . "## 記事タイトル\n{$article_title}\n\n"
+            . "## 検索キーワード\n{$keyword}\n\n"
+            . "## 判定ルール\n"
+            . "- キーワードが指す商品カテゴリ**そのもの**である商品だけを合格にする\n"
+            . "- そのカテゴリの「カバー・ケース・収納用品・防虫剤・掃除用品・付属品・関連グッズ」は不合格\n"
+            . "  (字面が似ていても別商品。例: キーワード「スーツ用コート」→ チェスターコートは合格、\n"
+            . "   「スーツ・コート用 防虫カバー」「洋服カバー」は不合格)\n"
+            . "- 迷ったら不合格にする (間違った商品を載せる方が機会損失より害が大きい)\n\n"
+            . "## 商品リスト\n"
+            . implode("\n", $lines) . "\n\n"
+            . "## 出力形式\n"
+            . "合格した商品の番号だけをJSON配列で。例: [1,3,5]。全滅なら []。他の文字は出力しない";
+
+        $text = $this->call_api($prompt, 100);
+        if (is_wp_error($text)) return $products; // 検品失敗時は素通し (挿入自体は止めない)
+
+        if (!preg_match('/\[[\d,\s]*\]/', $text, $m)) return $products;
+        $keep = json_decode($m[0], true);
+        if (!is_array($keep)) return $products;
+
+        $values = array_values($products);
+        $filtered = [];
+        foreach ($keep as $n) {
+            $idx = intval($n) - 1;
+            if (isset($values[$idx])) $filtered[] = $values[$idx];
+        }
+        return $filtered;
+    }
+
+    /** Claude API 呼び出し共通部。成功時はテキスト、失敗時は WP_Error */
+    private function call_api($prompt, $max_tokens) {
         $response = wp_remote_post(self::API_URL, [
             'timeout' => 30,
             'headers' => [
@@ -80,7 +147,7 @@ class Affiros_AI_Keyword_Extractor {
             ],
             'body' => wp_json_encode([
                 'model'      => self::MODEL,
-                'max_tokens' => 60,
+                'max_tokens' => intval($max_tokens),
                 'messages'   => [
                     ['role' => 'user', 'content' => $prompt],
                 ],
@@ -98,19 +165,7 @@ class Affiros_AI_Keyword_Extractor {
             return new WP_Error('claude_error', $msg);
         }
 
-        $text = $data['content'][0]['text'] ?? '';
-        $text = trim($text);
-        // 改行や引用符が混ざるケースを除去
-        $text = preg_replace('/^["「『【]+|["」』】]+$/u', '', $text);
-        $text = preg_replace('/[\r\n]+/', ' ', $text);
-        $text = trim($text);
-
-        // 短い商品カテゴリ名単体 (「枕」「数珠」等) も許容する
-        if (mb_strlen($text) < 2 || mb_strlen($text) > 60) {
-            return new WP_Error('bad_keyword', "抽出結果が異常 (長さ " . mb_strlen($text) . " 文字): {$text}");
-        }
-
-        return $text;
+        return trim($data['content'][0]['text'] ?? '');
     }
 }
 

@@ -85,18 +85,36 @@ class Affiros_AI_Inserter {
             $rakuten_products = [];
             $errors = [];
 
-            // 多めに取ってから多様性フィルタで絞る (同一ブランド・類似商品の並びを防ぐ)
+            // 多めに取る → AI検品 (字面一致の別カテゴリ商品を除外) → 多様性フィルタ
+            // 検品の必要性: Amazon検索は「スーツ用コート」で防虫カバーを返す
+            // (商品名にスーツ/コート/用が全部含まれるため)。v0.10.0
+            $extractor = new Affiros_AI_Keyword_Extractor($settings);
+
             if ($amazon_api->is_configured()) {
                 $res = $amazon_api->search($keyword, 10);
                 if (is_wp_error($res)) $errors[] = 'Amazon: ' . $res->get_error_message();
-                else $amazon_products = self::diversify($res, $count);
+                else {
+                    $before = count($res);
+                    $res = $extractor->filter_relevant($keyword, $post->post_title, $res);
+                    if (empty($res) && $before > 0) {
+                        $errors[] = "Amazon: 検索結果{$before}件は全て別カテゴリ商品 (カバー・付属品等) と判定";
+                    }
+                    $amazon_products = self::diversify($res, $count);
+                }
             }
             // 楽天は Amazon 商品が取れなかった時だけ主軸として使う
             // (Amazon 主軸カードの楽天ボタンは検索一覧リンクなので商品データ不要)
             if (empty($amazon_products) && $rakuten_api->is_configured()) {
                 $res = $rakuten_api->search($keyword, 10);
                 if (is_wp_error($res)) $errors[] = '楽天: ' . $res->get_error_message();
-                else $rakuten_products = self::diversify($res, $count);
+                else {
+                    $before = count($res);
+                    $res = $extractor->filter_relevant($keyword, $post->post_title, $res);
+                    if (empty($res) && $before > 0) {
+                        $errors[] = "楽天: 検索結果{$before}件は全て別カテゴリ商品と判定";
+                    }
+                    $rakuten_products = self::diversify($res, $count);
+                }
             }
 
             if (empty($amazon_products) && empty($rakuten_products)) {
