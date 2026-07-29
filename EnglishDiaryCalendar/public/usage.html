@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>API Cost | English Diary Coach</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="app-topbar">
+      <a class="brand" href="/">English Diary Coach</a>
+      <nav class="topnav" aria-label="App navigation">
+        <a href="/">Diary</a>
+        <a href="/words.html">Words</a>
+        <a href="/usage.html">Cost</a>
+        <a href="/settings.html">Settings</a>
+      </nav>
+    </header>
+
+    <main class="usage-shell">
+      <header class="usage-header">
+        <div>
+          <p class="eyebrow">API Cost</p>
+          <h1>&#20170;&#26376;&#12398;&#21033;&#29992;&#26009;&#37329;</h1>
+        </div>
+        <a class="utility-link" href="/">Back</a>
+      </header>
+
+      <section class="cost-card">
+        <p class="cost-label">This month</p>
+        <p id="monthlyCost" class="cost-value">Loading...</p>
+        <p id="costRange" class="cost-range"></p>
+      </section>
+
+      <section class="side-panel">
+        <header class="panel-header">
+          <h2>&#26085;&#21029;&#12398;&#36027;&#29992;</h2>
+          <button id="refreshUsageButton" class="small-button">Refresh</button>
+        </header>
+        <div id="dailyCosts" class="daily-costs"></div>
+      </section>
+
+      <section class="side-panel">
+        <h2>&#12513;&#12514;</h2>
+        <p class="usage-note">
+          &#12371;&#12398;&#12506;&#12540;&#12472;&#12399;&#12289;&#23455;&#38555;&#12398;OpenAI&#35531;&#27714;&#38989;&#12391;&#12399;&#12394;&#12367;&#12289;
+          &#12371;&#12398;&#12450;&#12503;&#12522;&#20869;&#12398;&#20351;&#29992;&#22238;&#25968;&#12395;&#22522;&#12389;&#12367;&#30446;&#23433;&#26009;&#37329;&#12391;&#12377;&#12290;
+        </p>
+        <p id="usageStatus" class="status"></p>
+      </section>
+    </main>
+
+    <script src="/usage.js" type="module"></script>
+  </body>
+</html>

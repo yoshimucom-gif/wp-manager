@@ -1,0 +1,13 @@
+{
+  "name": "arealab",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "check": "node --check api/area.js",
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}

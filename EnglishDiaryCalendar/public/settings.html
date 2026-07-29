@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Settings | English Diary Coach</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="app-topbar">
+      <a class="brand" href="/">English Diary Coach</a>
+      <nav class="topnav" aria-label="App navigation">
+        <a href="/">Diary</a>
+        <a href="/words.html">Words</a>
+        <a href="/usage.html">Cost</a>
+        <a href="/settings.html">Settings</a>
+      </nav>
+    </header>
+
+    <main class="settings-shell">
+      <header class="usage-header">
+        <div>
+          <p class="eyebrow">Settings</p>
+          <h1>&#23398;&#32722;&#35373;&#23450;</h1>
+        </div>
+        <a class="utility-link" href="/">Back</a>
+      </header>
+
+      <section class="settings-card">
+        <div>
+          <h2>&#12487;&#12501;&#12457;&#12523;&#12488;&#12398;TOEIC&#30446;&#27161;</h2>
+          <p>&#26085;&#35352;&#30011;&#38754;&#12398;&#28155;&#21066;&#12392;&#33521;&#35379;&#12395;&#33258;&#21205;&#12391;&#20351;&#12358;&#12524;&#12505;&#12523;&#12391;&#12377;&#12290;</p>
+        </div>
+        <label class="select-field">
+          <span>&#30446;&#27161;&#12524;&#12505;&#12523;</span>
+          <select id="defaultLevelSelect">
+            <option value="toeic400">TOEIC 400&#28857;&#30446;&#23433;</option>
+            <option value="toeic600">TOEIC 600&#28857;&#30446;&#23433;</option>
+            <option value="toeic800">TOEIC 800&#28857;&#30446;&#23433;</option>
+            <option value="natural">TOEIC&#12395;&#12371;&#12384;&#12431;&#12425;&#12394;&#12356;&#33258;&#28982;&#12394;&#33521;&#35486;</option>
+          </select>
+        </label>
+        <button id="saveSettingsButton" class="primary-button">Save Settings</button>
+        <p id="settingsStatus" class="status"></p>
+      </section>
+    </main>
+
+    <script src="/settings.js" type="module"></script>
+  </body>
+</html>

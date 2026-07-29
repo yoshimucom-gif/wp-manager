@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>English Diary Coach</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="app-topbar">
+      <a class="brand" href="/">English Diary Coach</a>
+      <nav class="topnav" aria-label="App navigation">
+        <a href="/">Diary</a>
+        <a href="/words.html">Words</a>
+        <a href="/usage.html">Cost</a>
+        <a href="/settings.html">Settings</a>
+      </nav>
+    </header>
+
+    <main class="shell">
+      <section class="editor-pane" aria-label="Diary editor">
+        <header class="editor-header">
+          <div>
+            <p class="eyebrow">English Diary Coach</p>
+            <h1 id="selectedDateLabel"></h1>
+          </div>
+          <div class="actions">
+            <button id="saveButton">Save</button>
+            <button id="deleteButton" class="danger-button">Delete</button>
+          </div>
+        </header>
+
+        <section class="topic-box">
+          <div>
+            <p class="eyebrow">Prompt</p>
+            <p id="topicText" class="topic-text">&#26085;&#35352;&#12395;&#22256;&#12387;&#12383;&#12425;&#12289;&#12362;&#38988;&#12434;&#12418;&#12425;&#12360;&#12414;&#12377;&#12290;</p>
+          </div>
+          <button id="topicButton">&#12362;&#38988;&#12434;&#12418;&#12425;&#12358;</button>
+        </section>
+
+        <input id="targetLevelSelect" type="hidden" value="toeic600" />
+
+        <section class="work-section">
+          <div class="section-heading section-title-bar">
+            <p class="eyebrow">Write</p>
+            <h2>&#26085;&#35352;&#12392;&#33258;&#20998;&#12398;&#33521;&#25991;</h2>
+          </div>
+          <section class="writing-grid">
+          <label class="field">
+            <span>&#26085;&#26412;&#35486;&#12398;&#26085;&#35352;</span>
+            <textarea id="japaneseInput" rows="9" placeholder="&#20170;&#26085;&#12399;..."></textarea>
+          </label>
+
+          <label class="field">
+            <span>&#12414;&#12378;&#33258;&#20998;&#12391;&#33521;&#35486;&#12395;&#12377;&#12427;</span>
+            <textarea id="userEnglishInput" rows="9" placeholder="I ..."></textarea>
+          </label>
+        </section>
+        </section>
+
+        <section class="control-strip">
+          <p class="control-hint">&#33258;&#20998;&#12398;&#33521;&#25991;&#12434;&#20837;&#12428;&#12427;&#12392;&#12289;&#28155;&#21066;&#12513;&#12514;&#12364;&#12424;&#12426;&#20855;&#20307;&#30340;&#12395;&#12394;&#12426;&#12414;&#12377;&#12290;</p>
+          <div class="actions main-actions">
+            <button id="translateButton" class="primary-button">&#28155;&#21066;&#12392;&#32763;&#35379;</button>
+          </div>
+        </section>
+
+        <section class="work-section result-section">
+          <div class="section-heading section-title-bar">
+            <p class="eyebrow">Result</p>
+            <h2>&#28155;&#21066;&#12392;&#33521;&#35379;</h2>
+          </div>
+          <section class="result-block">
+          <label class="field">
+            <span>&#28155;&#21066;&#24460;&#12398;&#33521;&#25991;</span>
+            <textarea id="correctedInput" rows="4"></textarea>
+            <button id="speakCorrectedButton" class="listen-button">&#28155;&#21066;&#24460;&#12434;&#32862;&#12367;</button>
+          </label>
+          <label class="field">
+            <span>&#30446;&#27161;&#12524;&#12505;&#12523;&#12398;&#32763;&#35379;</span>
+            <textarea id="translationInput" rows="4"></textarea>
+            <button id="speakTranslationButton" class="listen-button">&#33521;&#35379;&#12434;&#32862;&#12367;</button>
+          </label>
+        </section>
+        </section>
+
+        <section class="study-grid">
+          <div>
+            <h3>&#20462;&#27491;&#12513;&#12514;</h3>
+            <ul id="correctionList" class="note-list"></ul>
+          </div>
+          <div>
+            <h3>&#23398;&#32722;&#12513;&#12514;</h3>
+            <ul id="notesList" class="note-list"></ul>
+          </div>
+        </section>
+
+        <section class="study-grid">
+          <div>
+            <h3>&#21336;&#35486;&#12539;&#34920;&#29694;</h3>
+            <div id="vocabList" class="vocab-list"></div>
+          </div>
+          <div>
+            <h3>&#38899;&#35501;&#12539;&#12471;&#12515;&#12489;&#12540;&#12452;&#12531;&#12464;</h3>
+            <ol id="shadowingList" class="shadowing-list"></ol>
+          </div>
+        </section>
+
+        <details class="detail-panel">
+          <summary>&#21029;&#12524;&#12505;&#12523;&#12418;&#35211;&#12427;</summary>
+          <div id="alternativesList" class="alternatives-list"></div>
+        </details>
+
+        <p id="status" class="status" role="status"></p>
+      </section>
+
+      <aside class="sidebar" aria-label="Study sidebar">
+        <section class="side-panel chat-panel">
+          <div class="sidebar-title">&#12394;&#12380;&#12434;&#32862;&#12367;</div>
+          <div id="chatLog" class="chat-log"></div>
+          <textarea id="chatInput" rows="3" placeholder="Why is this correction better?"></textarea>
+          <button id="chatSendButton" class="primary-button">&#36074;&#21839;&#12377;&#12427;</button>
+        </section>
+
+        <section class="calendar-pane">
+          <header class="calendar-header">
+            <div>
+              <div class="sidebar-title">Calendar</div>
+              <h2 id="monthLabel"></h2>
+            </div>
+            <div class="month-controls">
+              <button id="prevMonth" class="icon-button" aria-label="Previous month">&lt;</button>
+              <button id="todayButton">Today</button>
+              <button id="nextMonth" class="icon-button" aria-label="Next month">&gt;</button>
+            </div>
+          </header>
+          <div id="calendarGrid" class="calendar-stack"></div>
+        </section>
+
+        <section class="side-panel">
+          <header class="panel-header">
+            <div class="sidebar-title">&#20170;&#26085;&#12398;&#24489;&#32722;</div>
+            <button id="refreshReviewButton" class="small-button">Refresh</button>
+          </header>
+          <div id="reviewList" class="review-list"></div>
+        </section>
+      </aside>
+
+    </main>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

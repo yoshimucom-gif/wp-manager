@@ -1,0 +1,74 @@
+name: deploy-plugin-host
+
+# プラグイン配信ファイル（api/plugin-update/* と affiros-plugins/*.zip）を
+# ke-ys.co.jp へ自動アップロードする。
+#
+# 手動アップロードを無くすのが目的。main に push されたとき、
+# プラグイン関連ファイルが変わっていれば走る。
+#
+# 必要な Secrets（GitHub → Settings → Secrets and variables → Actions）:
+#   FTP_HOST      ConoHa WING の FTPサーバー名
+#   FTP_USER      FTPユーザー名
+#   FTP_PASSWORD  FTPパスワード
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'plugin-downloads/**'
+      - 'plugin-patches/**'
+      - 'app.py'
+  workflow_dispatch:        # 手動実行も可能
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 配信バンドルを生成
+        run: python plugin-patches/build-keys-host.py
+
+      - name: アップロード対象だけを payload に切り出す
+        # mu-plugin の PHP はサーバーに置くものではないので除外する
+        run: |
+          mkdir -p payload
+          cp -r ke-ys-plugin-host/api payload/
+          cp -r ke-ys-plugin-host/affiros-plugins payload/
+          find payload -type f | sort
+
+      - name: ke-ys.co.jp へ FTPS アップロード
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          local-dir: ./payload/
+          server-dir: /public_html/ke-ys.co.jp/
+          # 🚨 絶対に true にしないこと。
+          # true にすると server-dir 配下の「payload に無いファイル」を削除する。
+          # ここは WordPress 本体のドキュメントルートなので、サイトが消える。
+          dangerous-clean-slate: false
+
+      - name: 配信内容を検証
+        run: |
+          fail=0
+          for k in auto-inserter categorizer decoration decoration-formatter \
+                   dup-cleaner mark-stripper paragraph-splitter \
+                   product-inserter reschedule rewrite; do
+            live=$(curl -s -m 25 "https://ke-ys.co.jp/api/plugin-update/$k" \
+                   | python -c "import sys,json; print(json.load(sys.stdin)['version'])" 2>/dev/null)
+            want=$(python -c "import json; print(json.load(open('ke-ys-plugin-host/api/plugin-update/$k'))['version'])")
+            if [ "$live" = "$want" ]; then
+              echo "OK   $k = $live"
+            else
+              echo "NG   $k  サーバー=$live  期待=$want"
+              fail=1
+            fi
+          done
+          exit $fail

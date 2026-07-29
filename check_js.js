@@ -1,0 +1,3458 @@
+
+let allArticles = [];
+let qualityList = [];
+let siteList = [];
+let seoNewsList = [];
+let titleIdeaList = [];
+const usageEstimateConfig = {
+  model: 'claude-sonnet-4-6',
+  inputUsdPerMTok: 3,
+  outputUsdPerMTok: 15,
+  usdJpy: 155,
+  fallbackInputTokensPerArticle: 3500,
+  outputCharsPerToken: 2,
+};
+let batchPollTimer = null;
+let currentBatchTypeTab = ''; // 一括処理ページの記事種類タブ ('' | 'ranking' | 'brand' | 'column')
+// 一括処理の選択状態（記事ID）。DOMではなくここで一元管理するため、
+// タブを切り替えても選択が保持される。null = 未初期化（初回は全選択可能を選択）。
+let batchSelectedIds = null;
+
+function setBatchTypeTab(type) {
+  currentBatchTypeTab = type || '';
+  document.querySelectorAll('#batch-type-tabs .batch-tab').forEach(btn => {
+    btn.classList.toggle('active', (btn.dataset.type || '') === currentBatchTypeTab);
+  });
+  loadBatchArticles();
+}
+let currentGenArticleId = null;
+let currentArticleType = 'ranking';
+
+const pageUrlMap = {
+  home: '',
+  ranking: 'ranking',
+  brand: 'brand',
+  column: 'column',
+  'title-ideas': 'title-ideas',
+  batch: 'batch',
+  articles: 'history',
+  quality: 'quality',
+  'title-definition': 'title-definition',
+  'ad-insertion': 'ad-insertion',
+  sites: 'sites',
+  settings: 'api-settings',
+  plugins: 'plugins'
+};
+const urlPageMap = Object.entries(pageUrlMap).reduce((acc, [page, slug]) => {
+  acc[slug] = page;
+  return acc;
+}, { articles: 'articles', settings: 'settings', ranking: 'ranking' });
+
+function pageFromUrl() {
+  const slug = window.location.pathname.replace(/^\/+|\/+$/g, '');
+  if (!slug) return 'home';
+  return urlPageMap[slug] || null;
+}
+
+function pagePath(name) {
+  const slug = pageUrlMap[name] ?? pageUrlMap.ranking;
+  return slug ? '/' + slug : '/';
+}
+
+const articleTypeConfig = {
+  ranking: {
+    title: 'ランキング記事',
+    subtitle: 'おすすめ・比較を統合したランキング記事を生成',
+    label: 'ランキング記事（おすすめ・比較と統合）'
+  },
+  brand: {
+    title: '商標記事',
+    subtitle: '商品名・サービス名で検索する読者向けのレビュー記事を生成',
+    label: '商標記事（レビュー記事）'
+  },
+  column: {
+    title: 'コラム記事',
+    subtitle: '悩みや疑問に自然に答える読み物型の記事を生成',
+    label: 'コラム記事'
+  }
+};
+
+function articleTypeLabel(type) {
+  return {
+    common: '共通',
+    ranking: 'ランキング記事',
+    brand: '商標記事',
+    column: 'コラム記事'
+  }[type || 'common'] || '共通';
+}
+
+// ---- Navigation ----
+function normalizePageName(name) {
+  if (name === 'generate') return 'ranking';
+  if (articleTypeConfig[name]) return name;
+  return document.getElementById('page-' + name) ? name : 'ranking';
+}
+
+function showPage(name, opts = {}) {
+  name = normalizePageName(name);
+  const isArticleType = !!articleTypeConfig[name];
+  const pageName = isArticleType ? 'generate' : name;
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item,.nav-trigger,.nav-link').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + pageName)?.classList.add('active');
+  const nav = document.getElementById('nav-' + name);
+  if (nav) nav.classList.add('active');
+  if (isArticleType) document.getElementById('nav-create')?.classList.add('active');
+  if (['quality', 'title-definition', 'ad-insertion'].includes(name)) document.getElementById('nav-definitions')?.classList.add('active');
+  localStorage.setItem('currentPage', name);
+  if (isArticleType) {
+    currentArticleType = name;
+    updateArticleTypeUI();
+  }
+  if (!opts.skipLoad) {
+    if (pageName === 'articles') loadArticles();
+    if (pageName === 'generate') { loadQualitySelects(); updateSiteSelects(); populateGenSelect(); }
+    if (pageName === 'title-ideas') { updateSiteSelects(); renderTitleIdeas(); updateTitleKeywordCount(); loadKwStock(); updateKwStockDisplay(); }
+    if (pageName === 'batch') { batchSelectedIds = null; loadQualitySelects(); loadArticles(); loadLatestBatchJob(); }
+    if (pageName === 'quality') loadQuality();
+    if (pageName === 'title-definition') loadTitleDefinition();
+    if (pageName === 'ad-insertion') loadAdInsertion();
+    if (pageName === 'sites') loadSites();
+    if (pageName === 'settings') loadSettings();
+  }
+  if (opts.updateUrl !== false) {
+    const nextPath = pagePath(name);
+    const method = opts.replaceUrl ? 'replaceState' : 'pushState';
+    if (window.location.pathname !== nextPath) {
+      window.history[method]({ page: name }, '', nextPath);
+    } else {
+      window.history.replaceState({ page: name }, '', nextPath);
+    }
+  }
+}
+
+function goHome() {
+  showPage('home', { updateUrl: false });
+  window.history.pushState({ page: 'home' }, '', '/');
+  const main = document.querySelector('.main');
+  if (main) main.scrollTop = 0;
+}
+
+function updateArticleTypeUI() {
+  const cfg = articleTypeConfig[currentArticleType] || articleTypeConfig.ranking;
+  document.getElementById('gen-page-title').textContent = cfg.title;
+  document.getElementById('gen-page-subtitle').textContent = cfg.subtitle;
+  document.getElementById('gen-article-type-label').value = cfg.label;
+  updateDefinitionDefaultsForCurrentContext();
+}
+
+function updateDefinitionDefaultsForCurrentContext() {
+  updateQualityDefaultsForCurrentContext();
+}
+
+function updateQualityDefaultsForCurrentContext() {
+  // 品質定義は「自動」をデフォルトにする方針。ユーザーが明示的に選んだ値があれば残し、
+  // 何も選ばれていない場合は空（自動）のままにする。
+}
+
+// ---- Toast ----
+let toastTimer;
+function closeToast() {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  clearTimeout(toastTimer);
+  el.style.display = 'none';
+}
+
+function toast(msg, type = 'info') {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  clearTimeout(toastTimer);
+  el.innerHTML = '';
+  const message = document.createElement('div');
+  message.className = 'toast-message';
+  message.textContent = msg;
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'toast-close';
+  close.setAttribute('aria-label', '通知を閉じる');
+  close.textContent = '×';
+  close.onclick = closeToast;
+  el.appendChild(message);
+  el.appendChild(close);
+  el.className = type;
+  el.style.display = 'flex';
+  if (type !== 'error') {
+    toastTimer = setTimeout(closeToast, 4000);
+  }
+}
+
+// ---- Data durability ----
+const DATA_SNAPSHOT_KEY = 'affiros9.dataSnapshot.v1';
+let dataSnapshotTimer = null;
+
+function renderStorageStatus(storage) {
+  const el = document.getElementById('storage-alert');
+  if (!el || !storage || storage.persistent) {
+    if (el) el.style.display = 'none';
+    return;
+  }
+  el.innerHTML = `<strong>保存先の確認が必要です。</strong> ${esc(storage.warning || '保存先が永続化されていない可能性があります。')}<br>保存先: ${esc(storage.data_dir || '')}`;
+  el.style.display = 'block';
+}
+
+function snapshotHasUserData(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') return false;
+  const settings = snapshot.settings || {};
+  const quality = Array.isArray(snapshot.quality) ? snapshot.quality : [];
+  const nonDefaultQuality = quality.some(q => q.id !== 'default' || q.name !== '標準品質');
+  return Boolean(
+    (Array.isArray(snapshot.articles) && snapshot.articles.length) ||
+    nonDefaultQuality ||
+    (Array.isArray(settings.sites) && settings.sites.length) ||
+    settings.claude_api_key ||
+    settings.article_css ||
+    Object.values(settings.quality_style_references || {}).some(Boolean)
+  );
+}
+
+function readDataSnapshotBackup() {
+  try {
+    return JSON.parse(localStorage.getItem(DATA_SNAPSHOT_KEY) || '{}');
+  } catch (e) {
+    return {};
+  }
+}
+
+function writeDataSnapshotBackup(snapshot) {
+  if (!snapshotHasUserData(snapshot)) return;
+  try {
+    localStorage.setItem(DATA_SNAPSHOT_KEY, JSON.stringify({...snapshot, backed_up_at: new Date().toISOString()}));
+  } catch (e) {
+    console.warn('data snapshot backup failed', e);
+    toast('ブラウザ側バックアップの容量が不足しています。生成記事が多い場合は永続ディスク設定を確認してください。', 'error');
+  }
+}
+
+async function fetchDataSnapshot() {
+  const res = await fetch('/api/data-snapshot');
+  if (!res.ok) throw new Error('snapshot fetch failed');
+  return await res.json();
+}
+
+async function ensureDurableData() {
+  try {
+    const serverSnapshot = await fetchDataSnapshot();
+    renderStorageStatus(serverSnapshot.storage);
+    if (snapshotHasUserData(serverSnapshot)) {
+      writeDataSnapshotBackup(serverSnapshot);
+      return;
+    }
+    const backup = readDataSnapshotBackup();
+    const storageIsPersistent = !!serverSnapshot.storage?.persistent;
+    if (!storageIsPersistent && snapshotHasUserData(backup)) {
+      const res = await fetch('/api/data-snapshot', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(backup)
+      });
+      if (res.ok) {
+        toast('保存データを保護バックアップから戻しました', 'success');
+      }
+    }
+  } catch (e) {
+    console.warn('durability check failed', e);
+  }
+}
+
+function scheduleDataSnapshotBackup() {
+  clearTimeout(dataSnapshotTimer);
+  dataSnapshotTimer = setTimeout(async () => {
+    try {
+      const snapshot = await fetchDataSnapshot();
+      renderStorageStatus(snapshot.storage);
+      writeDataSnapshotBackup(snapshot);
+    } catch (e) {
+      console.warn('data snapshot backup failed', e);
+    }
+  }, 1200);
+}
+
+// ---- Sites ----
+async function loadSites() {
+  const res = await fetch('/api/sites');
+  siteList = await res.json();
+  renderSites();
+  updateSiteSelects();
+  scheduleDataSnapshotBackup();
+}
+
+function renderSites() {
+  const grid = document.getElementById('sites-grid');
+  if (!siteList.length) {
+    grid.innerHTML = '<div class="empty"><div class="empty-icon">🌐</div><div>サイトがありません。「+ サイト追加」から登録してください。</div></div>';
+    return;
+  }
+  grid.innerHTML = siteList.map(s => `
+    <div class="site-card">
+      <div class="site-name">${esc(s.name)}</div>
+      <div class="site-url" title="${esc(s.wp_url)}">${esc(s.wp_url)}</div>
+      <div class="site-user">👤 ${esc(s.wp_user)}</div>
+      <div class="site-actions">
+        <button class="btn btn-secondary btn-sm" onclick="editSite('${s.id}')">✏ 編集</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteSite('${s.id}')">🗑 削除</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function updateSiteSelects() {
+  // 対応履歴ページの site-filter は撤去済み（サイドバーで切替するため）。
+  // モーダル・フォーム類のサイトセレクタだけ更新する。
+  const modalOpts = '<option value="">-- サイトを選択 --</option>' +
+    siteList.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  const modalEl = document.getElementById('modal-site-id');
+  if (modalEl) modalEl.innerHTML = modalOpts;
+  const genEl = document.getElementById('gen-site');
+  if (genEl) { const v = genEl.value; genEl.innerHTML = modalOpts; genEl.value = v; }
+  const titleEl = document.getElementById('title-site');
+  if (titleEl) { const v = titleEl.value; titleEl.innerHTML = modalOpts; titleEl.value = v; }
+  // currentSiteId が設定済みなら option 投入後に自動選択 + 非表示
+  if (typeof applySiteSelectorAutoFill === 'function') {
+    applySiteSelectorAutoFill();
+  }
+}
+
+// サイト編集モーダルのWPパスワード欄を「隠す」初期状態に戻し、
+// 既存サイト編集時は実値取得URL(data-reveal-url)を設定する。
+function resetSitePasswordToggle(passwordEl, revealUrl) {
+  passwordEl.type = 'password';
+  delete passwordEl.dataset.masked;
+  if (revealUrl) passwordEl.dataset.revealUrl = revealUrl;
+  else delete passwordEl.dataset.revealUrl;
+  const btn = passwordEl.parentElement.querySelector('button');
+  if (btn) btn.textContent = '表示';
+}
+
+function openSiteModal() {
+  document.getElementById('site-edit-id').value = '';
+  document.getElementById('site-name').value = '';
+  document.getElementById('site-wp-url').value = '';
+  document.getElementById('site-wp-user').value = '';
+  const passwordEl = document.getElementById('site-wp-password');
+  passwordEl.value = '';
+  passwordEl.placeholder = 'xxxx xxxx xxxx xxxx xxxx xxxx';
+  resetSitePasswordToggle(passwordEl, null);  // 新規サイト: 復元URL無し
+  document.getElementById('site-password-help').textContent = 'WordPressのユーザー設定で発行したアプリケーションパスワードを入力してください。';
+  document.getElementById('site-modal-title').textContent = '// サイトを追加';
+  document.getElementById('site-modal').classList.add('open');
+}
+
+function editSite(id) {
+  const s = siteList.find(s => s.id === id);
+  if (!s) return;
+  document.getElementById('site-edit-id').value = id;
+  document.getElementById('site-name').value = s.name;
+  document.getElementById('site-wp-url').value = s.wp_url;
+  document.getElementById('site-wp-user').value = s.wp_user;
+  const passwordEl = document.getElementById('site-wp-password');
+  passwordEl.value = s.wp_password || '';
+  resetSitePasswordToggle(passwordEl, '/api/sites/' + id + '/reveal-password');
+  passwordEl.placeholder = '変更する場合のみ新しいパスワードを入力';
+  document.getElementById('site-password-help').textContent = '保存済みのパスワードは安全のため短く表示しています。変更しない場合はこのまま保存して大丈夫です。';
+  document.getElementById('site-modal-title').textContent = '// サイトを編集';
+  document.getElementById('site-modal').classList.add('open');
+}
+
+function closeSiteModal() {
+  document.getElementById('site-modal').classList.remove('open');
+}
+
+async function saveSite() {
+  const id = document.getElementById('site-edit-id').value;
+  const body = {
+    name: document.getElementById('site-name').value,
+    wp_url: document.getElementById('site-wp-url').value,
+    wp_user: document.getElementById('site-wp-user').value,
+    wp_password: document.getElementById('site-wp-password').value,
+  };
+  if (!body.name || !body.wp_url) { toast('サイト名とURLは必須です', 'error'); return; }
+  if (id) {
+    await fetch(`/api/sites/${id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  } else {
+    await fetch('/api/sites', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  }
+  toast('保存しました', 'success');
+  closeSiteModal();
+  await loadSites();
+}
+
+async function deleteSite(id) {
+  if (!confirm('このサイトを削除しますか?')) return;
+  await fetch(`/api/sites/${id}`, {method:'DELETE'});
+  toast('削除しました', 'success');
+  await loadSites();
+}
+
+// ---- Articles ----
+async function loadArticles() {
+  // 現在サイトでフィルタ（未選択 = 全件取得 = ダッシュボード表示用）
+  const siteParam = currentSiteId ? `?site_id=${encodeURIComponent(currentSiteId)}` : '';
+  const res = await fetch('/api/articles' + siteParam);
+  allArticles = await res.json();
+  updateStats();
+  updateCategorySelects();
+  filterArticles();
+  populateGenSelect();
+  loadBatchArticles();
+  renderDashboardCandidates();
+  renderMonthlyUsageEstimate();
+  scheduleDataSnapshotBackup();
+}
+
+function isArticleBusy(status) {
+  return ['queued', 'generating', 'publishing', 'repairing'].includes(status);
+}
+
+function setArticleLocalStatus(id, status, message = '') {
+  const article = allArticles.find(a => a.id === id);
+  if (!article) return;
+  article.status = status;
+  if (message) article.processing_message = message;
+  else delete article.processing_message;
+  updateStats();
+  filterArticles();
+  loadBatchArticles();
+}
+
+function setArticlesLocalStatus(ids, status, message = '') {
+  ids.forEach(id => {
+    const article = allArticles.find(a => a.id === id);
+    if (!article) return;
+    article.status = status;
+    if (message) article.processing_message = message;
+    else delete article.processing_message;
+  });
+  updateStats();
+  filterArticles();
+  loadBatchArticles();
+}
+
+function setArticleLocalMessage(id, message = '') {
+  const article = allArticles.find(a => a.id === id);
+  if (!article) return;
+  if (message) article.processing_message = message;
+  else delete article.processing_message;
+  filterArticles();
+  loadBatchArticles();
+}
+
+function setArticlesLocalMessage(ids, message = '') {
+  ids.forEach(id => {
+    const article = allArticles.find(a => a.id === id);
+    if (!article) return;
+    if (message) article.processing_message = message;
+    else delete article.processing_message;
+  });
+  filterArticles();
+  loadBatchArticles();
+}
+
+function updateStats() {
+  const pending = allArticles.filter(a => a.status === 'pending').length;
+  const generated = allArticles.filter(a => a.status === 'generated').length;
+  const published = allArticles.filter(a => a.status === 'published').length;
+  const lowScore = dashboardCandidates().length;
+  const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+  // 対応履歴ページの stat カード（TOTAL/PENDING/GENERATED/PUSHED）は撤去済み。
+  // ダッシュボード側のカードだけ更新する。
+  set('dash-total', allArticles.length);
+  set('dash-pending', pending);
+  set('dash-generated', generated);
+  set('dash-published', published);
+  set('dash-low-score', lowScore);
+}
+
+function dashboardCandidates() {
+  return allArticles.map(a => ({
+    id: a.id,
+    title: a.title || '(無題)',
+    score: Number(a.seo_score),
+    grade: a.score_grade || '',
+    siteName: getSitePlainName(a.site_id),
+    category: a.category || '',
+    suggestion: a.score_data?.suggestions?.[0] || '',
+    updatedAt: a.generated_at || a.published_at || a.created_at || ''
+  }))
+    .filter(item => Number.isFinite(item.score) && item.score < 70)
+    .sort((a, b) => a.score - b.score)
+    .slice(0, 8);
+}
+
+function renderDashboardCandidates() {
+  const el = document.getElementById('dashboard-candidate-list');
+  if (!el) return;
+  const candidates = dashboardCandidates();
+  if (!candidates.length) {
+    el.innerHTML = `
+      <div class="intel-empty">
+        まだ改善候補がありません。<br>
+        対応履歴でスコア再計算してください。
+      </div>`;
+    return;
+  }
+  el.innerHTML = candidates.map(item => `
+    <div class="dashboard-candidate" onclick="openDashboardCandidate('${encodeURIComponent(item.id)}')">
+      <div class="candidate-main">
+        <div class="candidate-title">${esc(item.title)}</div>
+        ${scoreBadge({seo_score: item.score, score_grade: item.grade})}
+      </div>
+      <div class="candidate-meta">
+        対応履歴${item.siteName ? ` / ${esc(item.siteName)}` : ''}${item.category ? ` / ${esc(item.category)}` : ''}
+      </div>
+      ${item.suggestion ? `<div class="candidate-reason">${esc(item.suggestion)}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+function openDashboardCandidate(encodedId) {
+  const id = decodeURIComponent(encodedId);
+  showPage('articles');
+  setTimeout(() => openArticleModal(id), 0);
+}
+
+function stripHtmlText(html) {
+  const div = document.createElement('div');
+  div.innerHTML = html || '';
+  return (div.textContent || div.innerText || '').replace(/\s+/g, '');
+}
+
+function isThisMonth(iso) {
+  if (!iso) return false;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return false;
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+}
+
+function estimateArticleUsage(article) {
+  const usage = article.usage || {};
+  const inputTokens = Number(usage.input_tokens) || usageEstimateConfig.fallbackInputTokensPerArticle;
+  const outputTokens = Number(usage.output_tokens) || Math.ceil(stripHtmlText(article.content || '').length / usageEstimateConfig.outputCharsPerToken);
+  const costUsd = Number(usage.cost_usd) || (
+    inputTokens / 1000000 * usageEstimateConfig.inputUsdPerMTok +
+    outputTokens / 1000000 * usageEstimateConfig.outputUsdPerMTok
+  );
+  return {
+    inputTokens,
+    outputTokens,
+    costUsd,
+    costYen: Number(usage.cost_yen) || costUsd * usageEstimateConfig.usdJpy,
+    estimated: usage.estimated !== false,
+  };
+}
+
+function estimateUsageRecord(article, usage = {}) {
+  const inputTokens = Number(usage.input_tokens) || usageEstimateConfig.fallbackInputTokensPerArticle;
+  const outputTokens = Number(usage.output_tokens) || Math.ceil(stripHtmlText(article.content || '').length / usageEstimateConfig.outputCharsPerToken);
+  const costUsd = Number(usage.cost_usd) || (
+    inputTokens / 1000000 * usageEstimateConfig.inputUsdPerMTok +
+    outputTokens / 1000000 * usageEstimateConfig.outputUsdPerMTok
+  );
+  return {
+    inputTokens,
+    outputTokens,
+    costUsd,
+    costYen: Number(usage.cost_yen) || costUsd * usageEstimateConfig.usdJpy,
+    estimated: usage.estimated !== false,
+  };
+}
+
+function monthlyUsageEvents() {
+  const events = [];
+  allArticles.forEach(article => {
+    const history = Array.isArray(article.usage_history) ? article.usage_history : [];
+    const monthlyHistory = history.filter(u => isThisMonth(u.created_at || article.generated_at || article.created_at));
+    if (monthlyHistory.length) {
+      monthlyHistory.forEach(u => events.push({article, usage: u}));
+      return;
+    }
+    if (article.content && isThisMonth(article.generated_at || article.created_at)) {
+      events.push({article, usage: article.usage || {}, fallback: true});
+    }
+  });
+  return events;
+}
+
+function renderMonthlyUsageEstimate() {
+  const el = document.getElementById('dashboard-usage-estimate');
+  if (!el) return;
+  const usageEvents = monthlyUsageEvents();
+  if (!usageEvents.length) {
+    el.innerHTML = `
+      <div class="intel-empty">
+        今月生成された記事はまだありません。<br>
+        記事を生成すると、ここに概算料金が表示されます。
+      </div>`;
+    return;
+  }
+  const totals = usageEvents.reduce((acc, event) => {
+    const usage = estimateUsageRecord(event.article, event.usage);
+    acc.inputTokens += usage.inputTokens;
+    acc.outputTokens += usage.outputTokens;
+    acc.costYen += usage.costYen;
+    acc.costUsd += usage.costUsd;
+    if (usage.estimated) acc.estimatedCount += 1;
+    return acc;
+  }, {inputTokens: 0, outputTokens: 0, costYen: 0, costUsd: 0, estimatedCount: 0});
+  const avgYen = totals.costYen / usageEvents.length;
+  const yen = Math.ceil(totals.costYen);
+  const monthLabel = new Date().toLocaleDateString('ja-JP', {year: 'numeric', month: 'long'});
+  const articleCount = new Set(usageEvents.map(e => e.article.id)).size;
+  el.innerHTML = `
+    <div class="usage-summary">
+      <div class="usage-total">
+        <div>
+          <div class="usage-total-label">${esc(monthLabel)} の概算</div>
+          <div class="usage-total-value">約 ${yen.toLocaleString()}円</div>
+        </div>
+        <span class="badge badge-generated">${usageEvents.length}回</span>
+      </div>
+      <div class="usage-grid">
+        <div class="usage-metric">
+          <div class="usage-metric-label">生成回数</div>
+          <div class="usage-metric-value">${usageEvents.length.toLocaleString()}回</div>
+        </div>
+        <div class="usage-metric">
+          <div class="usage-metric-label">平均/生成</div>
+          <div class="usage-metric-value">約 ${Math.ceil(avgYen).toLocaleString()}円</div>
+        </div>
+        <div class="usage-metric">
+          <div class="usage-metric-label">入力トークン</div>
+          <div class="usage-metric-value">${Math.round(totals.inputTokens).toLocaleString()}</div>
+        </div>
+        <div class="usage-metric">
+          <div class="usage-metric-label">出力トークン</div>
+          <div class="usage-metric-value">${Math.round(totals.outputTokens).toLocaleString()}</div>
+        </div>
+      </div>
+      <div class="usage-note">
+        ${usageEstimateConfig.model} を ${usageEstimateConfig.inputUsdPerMTok} USD/100万入力token・${usageEstimateConfig.outputUsdPerMTok} USD/100万出力token、1 USD=${usageEstimateConfig.usdJpy}円で換算した目安です。<br>
+        対象記事 ${articleCount.toLocaleString()}件。再生成も1回ごとに履歴へ積み、今月分の生成コストとして加算します。
+      </div>
+    </div>`;
+}
+
+async function loadSeoNews() {
+  const el = document.getElementById('dashboard-seo-news');
+  if (el) el.innerHTML = '<div class="intel-empty">SEO情報を取得中...</div>';
+  try {
+    const res = await fetch('/api/seo-news?limit=5');
+    const data = await res.json();
+    seoNewsList = data.items || [];
+    renderSeoNews(data);
+  } catch (e) {
+    seoNewsList = [];
+    renderSeoNews({success: false, items: []});
+  }
+}
+
+function renderSeoNews(data = {}) {
+  const el = document.getElementById('dashboard-seo-news');
+  if (!el) return;
+  const items = data.items || seoNewsList || [];
+  if (!items.length) {
+    el.innerHTML = '<div class="intel-empty">SEO情報を取得できませんでした。あとで再度更新してください。</div>';
+    return;
+  }
+  el.innerHTML = items.map(item => `
+    <div class="seo-news-item">
+      <div class="news-main">
+        <a class="news-title" href="${esc(item.link)}" target="_blank" rel="noopener">${esc(item.title)}</a>
+      </div>
+      <div class="news-meta">${esc(item.source || 'SEO News')}${item.published ? ` / ${esc(item.published)}` : ''}</div>
+      ${item.summary ? `<div class="news-summary">${esc(item.summary)}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+function filterArticles() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  const typeFilter = document.getElementById('article-type-filter')?.value || '';
+  const statusFilter = document.getElementById('article-status-filter')?.value || '';
+  const sortKey = document.getElementById('article-sort')?.value || 'generated_desc';
+
+  // 対応履歴ページは「やった結果」のみ。未生成系は常に除外（一括処理ページの担当）。
+  const inflightStatuses = ['pending', 'queued', 'generating', 'publishing', 'repairing'];
+  const pendingLike = allArticles.filter(a => ['pending', 'queued', 'generating'].includes(a.status));
+  let filtered = allArticles.filter(a => !inflightStatuses.includes(a.status));
+
+  // 未生成バナーの表示制御
+  const banner = document.getElementById('articles-pending-banner');
+  const bannerText = document.getElementById('articles-pending-banner-text');
+  if (banner && bannerText) {
+    if (pendingLike.length > 0) {
+      banner.style.display = '';
+      bannerText.textContent = `未生成 ${pendingLike.length}件があります`;
+    } else {
+      banner.style.display = 'none';
+    }
+  }
+
+  // 記事種別
+  if (typeFilter) filtered = filtered.filter(a => (a.article_type || 'ranking') === typeFilter);
+
+  // 状態（4択 - 未生成は除外済）
+  if (statusFilter === 'generated') {
+    filtered = filtered.filter(a => a.status === 'generated');
+  } else if (statusFilter === 'published') {
+    filtered = filtered.filter(a => ['published', 'scheduled', 'updated'].includes(a.status));
+  } else if (statusFilter === 'error') {
+    filtered = filtered.filter(a => a.status === 'error');
+  }
+
+  // 検索（タイトル / キーワード）
+  if (q) filtered = filtered.filter(a => a.title.toLowerCase().includes(q) || (a.keywords || '').toLowerCase().includes(q));
+
+  // ソート
+  const scoreOf = a => (typeof a.seo_score === 'number' ? a.seo_score : (parseInt(a.seo_score, 10) || -1));
+  const dateOf = a => a.generated_at || a.updated_at || a.created_at || '';
+  const titleOf = a => String(a.title || '');
+  filtered.sort((a, b) => {
+    switch (sortKey) {
+      case 'generated_asc': return dateOf(a).localeCompare(dateOf(b));
+      case 'score_desc':    return scoreOf(b) - scoreOf(a);
+      case 'score_asc':     return scoreOf(a) - scoreOf(b);
+      case 'title_asc':     return titleOf(a).localeCompare(titleOf(b), 'ja');
+      case 'generated_desc':
+      default:              return dateOf(b).localeCompare(dateOf(a));
+    }
+  });
+
+  renderArticles(filtered);
+}
+
+function getSiteName(site_id) {
+  if (!site_id) return '<span style="color:var(--muted);font-size:11px">—</span>';
+  const s = siteList.find(s => s.id === site_id);
+  return s ? `<span style="font-size:11px;color:var(--accent)">${esc(s.name)}</span>` : '<span style="color:var(--muted);font-size:11px">不明</span>';
+}
+
+function getSitePlainName(site_id) {
+  if (!site_id) return '';
+  const s = siteList.find(s => s.id === site_id);
+  return s ? s.name : '';
+}
+
+function categoryOptions(source) {
+  const categories = [...new Set(source.map(a => a.category).filter(Boolean))].sort();
+  return '<option value="">全カテゴリー</option>' + categories.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+}
+
+function updateCategorySelects() {
+  // 対応履歴の category-filter は撤去済み。一括処理の batch-category-filter のみ更新。
+  const articleOpts = categoryOptions(allArticles);
+  const el = document.getElementById('batch-category-filter');
+  if (el) { const v = el.value; el.innerHTML = articleOpts; el.value = v; }
+}
+
+function renderArticles(articles) {
+  const tbody = document.getElementById('articles-body');
+  const empty = document.getElementById('articles-empty');
+  if (!articles.length) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  // 書き換え前にチェック状態をキャプチャ（再レンダリングで選択が消えるのを防ぐ）
+  const previouslyChecked = new Set(
+    [...document.querySelectorAll('#articles-body .check-row')]
+      .filter(c => c.checked)
+      .map(c => c.value)
+  );
+  tbody.innerHTML = articles.map((a, i) => {
+    const busy = isArticleBusy(a.status);
+    const disabled = busy ? 'disabled' : '';
+    const publishLabel = a.status === 'publishing' ? '投稿中...' : 'WP投稿';
+    // 警告表示は「致命的なもの」だけ。成功している記事に非致命的な装飾スキップ警告
+    // （HTML整形をスキップ、本文後処理をスキップ等）を出すとノイズになるので隠す。
+    const isSuccessful = ['generated', 'published', 'scheduled', 'updated'].includes(a.status);
+    const nonCriticalPatterns = ['HTML整形をスキップ', '本文後処理をスキップ', 'AI返却が'];
+    let warningText = a.generation_warning || '';
+    if (isSuccessful && warningText && nonCriticalPatterns.some(p => warningText.includes(p))) {
+      warningText = '';
+    }
+    const statusDetailText = a.processing_message || warningText || (a.status === 'error' ? a.error : '');
+    const statusDetailColor = a.status === 'error' ? 'var(--danger)' : 'var(--muted)';
+    const statusDetail = statusDetailText
+      ? `<div style="font-size:10px;color:${statusDetailColor};margin-top:4px">${esc(statusDetailText)}</div>`
+      : '';
+    // 行アクションは固定2×2グリッド。出ないボタンは空スロットにして
+    // 他ボタンの位置が動かないようにする（並びのがちゃがちゃ防止）。
+    const _bs = 'style="font-size:11px;padding:3px 7px"';
+    const editBtn = `<button class="btn btn-secondary btn-sm" ${_bs} ${disabled} title="記事の内容・設定の確認／手直し保存／再生成" onclick="openArticleModal('${a.id}')">編集</button>`;
+    const brandBtn = ((a.article_type || 'ranking') === 'ranking' && a.content)
+      ? `<button class="btn btn-secondary btn-sm" ${_bs} ${disabled} title="ランキング記事から商標記事の下書きを作成" onclick="openBrandExpansionModal('${a.id}')">商標化</button>`
+      : '<span></span>';
+    const wpDraftBtn = (a.content && !a.wp_post_id)
+      ? `<button class="btn btn-success btn-sm" ${_bs} ${disabled} title="WordPressに下書き投稿" onclick="quickPublish('${a.id}')">${publishLabel}</button>`
+      : '<span></span>';
+    const openBtn = a.wp_url
+      ? `<a href="${esc(a.wp_url)}" target="_blank" class="btn btn-secondary btn-sm" ${_bs} title="投稿済み記事を開く">開く</a>`
+      : '<span></span>';
+    const rowClass = ['published', 'scheduled', 'updated'].includes(a.status) ? 'row-completed' : '';
+    const checkedAttr = previouslyChecked.has(a.id) ? 'checked' : '';
+    return `
+    <tr id="row-${a.id}" class="${rowClass}">
+      <td><input type="checkbox" class="check-row" value="${a.id}" ${checkedAttr}></td>
+      <td style="color:var(--muted);font-size:11px">${i + 1}</td>
+      <td style="font-size:11px;color:var(--accent);white-space:nowrap">${articleTypeLabel(a.article_type || 'ranking')}</td>
+      <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.title)}">${esc(a.title)}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)" title="${esc(a.keywords)}">${esc(a.keywords)}</td>
+      <td>${scoreBadge(a)}</td>
+      <td>${statusBadge(a.status)}${statusDetail}</td>
+      <td style="color:var(--muted);font-size:11px;white-space:nowrap">${a.generated_at ? fmtDate(a.generated_at) : '—'}</td>
+      <td>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;width:170px">
+          ${editBtn}${brandBtn}${wpDraftBtn}${openBtn}
+        </div>
+      </td>
+    </tr>
+  `;
+  }).join('');
+}
+
+function statusBadge(status) {
+  const map = {
+    pending: ['⊙', '未生成'],
+    queued: ['…', '待機中'],
+    generating: ['◌', '処理中'],
+    generated: ['✓', '生成済'],
+    publishing: ['◌', 'PUSH中'],
+    published: ['★', 'PUSH済'],
+    repairing: ['◌', 'WP送信中'],
+    updated: ['✓', '更新完了'],
+    scheduled: ['◷', '予約済'],
+    error: ['✗', 'エラー'],
+  };
+  const [icon, label] = map[status] || ['?', status];
+  return `<span class="badge badge-${status}">${icon} ${label}</span>`;
+}
+
+function scoreBadge(item) {
+  if (!item || item.seo_score === undefined || item.seo_score === null || item.seo_score === '') {
+    return '<span style="color:var(--muted);font-size:11px">—</span>';
+  }
+  const score = parseInt(item.seo_score, 10);
+  const grade = (item.score_grade || (score >= 85 ? 'A' : score >= 70 ? 'B' : score >= 55 ? 'C' : 'D')).toLowerCase();
+  const tip = item.score_data?.suggestions?.join(' / ') || '';
+  return `<span class="score-pill score-${grade}" title="${esc(tip)}">${score}</span>`;
+}
+
+function esc(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function fmtDate(iso) {
+  if (!iso) return '';
+  // 新形式: '2026-05-19T10:30:00+09:00' (JST aware) → そのまま正しく表示
+  // 旧形式: '2026-05-19T01:30:00' (Render UTC naive) → ブラウザがローカル時刻扱いで誤表示
+  //   → TZ情報が無い場合は UTC として補正（末尾に Z を付けて再パース）
+  const hasTZ = /[+\-]\d\d:?\d\d$/.test(iso) || /Z$/.test(iso);
+  const d = new Date(hasTZ ? iso : iso + 'Z');
+  // 出力は Asia/Tokyo で固定。ブラウザTZがどこにあろうとJSTで揃える。
+  return d.toLocaleString('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function toggleAll(cb) {
+  document.querySelectorAll('#articles-body .check-row').forEach(c => c.checked = cb.checked);
+}
+
+function getSelectedIds() {
+  return [...document.querySelectorAll('#articles-body .check-row:checked')].map(c => c.value);
+}
+
+
+  input.value = '';
+}
+
+async function rescoreArticles() {
+  const res = await fetch('/api/articles/score', {method:'POST'});
+  const data = await res.json();
+  if (data.success) {
+    toast(`${data.scored}件のスコアを再計算しました`, 'success');
+    await loadArticles();
+  } else {
+    toast(data.error || 'スコア再計算に失敗しました', 'error');
+  }
+}
+
+async function deleteSelected() {
+  const ids = getSelectedIds();
+  if (!ids.length) { toast('記事を選択してください', 'error'); return; }
+  if (!confirm(`${ids.length}件を削除しますか?`)) return;
+  await fetch('/api/articles/bulk-delete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids})});
+  toast(`${ids.length}件削除しました`, 'success');
+  loadArticles();
+}
+
+async function deleteBatchSelected() {
+  const ids = getBatchSelectedIds();
+  if (!ids.length) { toast('記事を選択してください', 'error'); return; }
+  if (!confirm(`選択した${ids.length}件を削除します。元に戻せません。実行しますか?`)) return;
+  await fetch('/api/articles/bulk-delete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids})});
+  toast(`${ids.length}件削除しました`, 'success');
+  await loadArticles();
+}
+
+function generateSelected() {
+  const ids = getSelectedIds();
+  if (!ids.length) { toast('記事を選択してください', 'error'); return; }
+  showPage('batch');
+  setTimeout(() => {
+    ids.forEach(id => {
+      const cb = document.querySelector(`#batch-body input[value="${id}"]`);
+      if (cb) cb.checked = true;
+    });
+  }, 300);
+}
+
+async function publishSelected() {
+  const ids = getSelectedIds();
+  if (!ids.length) { toast('記事を選択してください', 'error'); return; }
+  // 生成済み記事のみが対象。allArticles から content の有無で絞る。
+  const eligible = ids.filter(id => {
+    const a = allArticles.find(x => x.id === id);
+    return a && a.content;
+  });
+  if (!eligible.length) { toast('本文が生成済みの記事を選択してください', 'error'); return; }
+  const postStatus = document.getElementById('articles-post-status')?.value || 'draft';
+  const label = postStatus === 'publish' ? '公開' : '下書き';
+  if (!confirm(`${eligible.length}件をWordPressに${label}投稿しますか?`)) return;
+  const res = await fetch('/api/batch-publish', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({article_ids: eligible, post_status: postStatus})
+  });
+  const data = await res.json();
+  if (data.error && data.success === undefined) {
+    toast(data.error, 'error');
+    return;
+  }
+  toast(`成功: ${data.success}件 / エラー: ${data.error}件`, data.error ? 'error' : 'success');
+  await loadArticles();
+}
+
+async function repairSelected() {
+  const ids = getSelectedIds();
+  if (!ids.length) { toast('記事を選択してください', 'error'); return; }
+  const targets = ids
+    .map(id => allArticles.find(a => a.id === id))
+    .filter(a => a && a.content && a.wp_post_id);
+  if (!targets.length) {
+    toast('既存WP投稿IDがある生成済み記事を選択してください', 'error');
+    return;
+  }
+  if (!confirm(`${targets.length}件のAffiros9保存本文を、既存WordPress投稿へ上書き送信します。Claude生成やリライトは行いません。実行しますか?`)) return;
+  const targetIds = targets.map(a => a.id);
+  setArticlesLocalStatus(targetIds, 'repairing', 'WPへ上書き送信中です。完了後に記事一覧を更新します。');
+  try {
+    const res = await fetch('/api/articles/bulk-repair-posts', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ids: targetIds})
+    });
+    const data = await res.json();
+    if (data.success !== undefined) {
+      const note = data.unchanged ? ` / 変化なし ${data.unchanged}件` : '';
+      toast(`WP上書き送信完了: 成功 ${data.success}件${note} / エラー ${data.error}件`, data.error || data.unchanged ? 'error' : 'success');
+      await loadArticles();
+      setArticlesLocalMessage(targetIds, data.unchanged
+        ? 'WPへ送信しましたが、更新前後のWP本文が同じ投稿があります。Affiros9保存本文とWP本文がすでに同じ可能性があります。'
+        : 'WP更新完了しました。WordPress側の本文変更を確認済みです。');
+    } else {
+      toast(data.error || 'WP上書き送信に失敗しました', 'error');
+      await loadArticles();
+    }
+  } catch (e) {
+    toast('WP上書き送信エラー: ' + e.message, 'error');
+    await loadArticles();
+  }
+}
+
+async function quickGenerate(id) {
+  const article = allArticles.find(a => a.id === id);
+  if (!article) return;
+  showPage(article.article_type || 'ranking');
+  setTimeout(() => {
+    document.getElementById('gen-article-select').value = id;
+    onArticleSelect();
+    const main = document.querySelector('.main');
+    if (main) main.scrollTop = 0;
+    toast(article.content
+      ? '再生成画面を開きました。広告設定などを確認してから「再生成開始」を押してください。'
+      : '生成画面を開きました。広告設定などを確認してから「生成開始」を押してください。', 'info');
+  }, 100);
+}
+
+async function quickPublish(id) {
+  if (!confirm('WordPress下書きとして投稿しますか?')) return;
+  setArticleLocalStatus(id, 'publishing', 'WordPressへ下書き投稿中です。');
+  try {
+    const res = await fetch(`/api/publish/${id}`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({post_status: 'draft'})
+    });
+    const data = await res.json();
+    if (data.success) {
+      toast('投稿完了: ' + data.wp_url, 'success');
+      await loadArticles();
+      setArticleLocalMessage(id, '投稿完了しました。');
+    } else {
+      toast(data.error || '投稿失敗', 'error');
+      await loadArticles();
+    }
+  } catch (e) {
+    toast('投稿エラー: ' + e.message, 'error');
+    await loadArticles();
+  }
+}
+
+// ---- Schedule Publish ----
+let _scheduleTargetIds = [];
+
+function openSchedulePublishModal() {
+  const ids = getSelectedIds();
+  const targets = ids.filter(id => {
+    const a = allArticles.find(x => x.id === id);
+    return a && a.content;
+  });
+  if (!targets.length) {
+    toast('生成済み本文のある記事を選択してください', 'error');
+    return;
+  }
+  _scheduleTargetIds = targets;
+
+  // 開始日のデフォルト = 明日
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+  document.getElementById('sched-start-date').value = tomorrowStr;
+  document.getElementById('sched-start-time').value = '10:00';
+
+  // 1日上限を設定値から読む
+  const capEl = document.getElementById('s-schedule-daily-cap');
+  const cap = parseInt(capEl?.value, 10) || 20;
+  document.getElementById('sched-daily-cap').value = cap;
+
+  const summaryEl = document.getElementById('schedule-publish-summary');
+  summaryEl.textContent = `選択中: ${targets.length} 件（生成済み本文あり）`;
+
+  updateSchedPreview();
+  document.getElementById('schedule-publish-modal').classList.add('open');
+}
+
+function updateSchedPreview() {
+  const count = _scheduleTargetIds.length;
+  const cap = Math.max(1, parseInt(document.getElementById('sched-daily-cap').value, 10) || 20);
+  const days = Math.ceil(count / cap);
+  const startDate = document.getElementById('sched-start-date').value;
+  const startTime = document.getElementById('sched-start-time').value || '10:00';
+  const spacingMin = Math.max(5, Math.floor(720 / cap));
+
+  let preview = `${count} 件を ${days} 日間で投稿（1日最大 ${cap} 件）\n`;
+  preview += `開始: ${startDate} ${startTime} ／ 投稿間隔: 約 ${spacingMin} 分\n`;
+
+  // 終了日を計算
+  if (startDate) {
+    const endD = new Date(startDate);
+    endD.setDate(endD.getDate() + days - 1);
+    preview += `終了予定: ${endD.toISOString().slice(0, 10)}`;
+  }
+
+  document.getElementById('sched-preview').textContent = preview;
+}
+
+function closeSchedulePublishModal() {
+  document.getElementById('schedule-publish-modal').classList.remove('open');
+  _scheduleTargetIds = [];
+}
+
+async function execSchedulePublish() {
+  const startDate = document.getElementById('sched-start-date').value;
+  if (!startDate) { toast('開始日を入力してください', 'error'); return; }
+
+  const timeVal = document.getElementById('sched-start-time').value || '10:00';
+  const startHour = parseInt(timeVal.split(':')[0], 10) || 10;
+  const dailyCap = Math.max(1, parseInt(document.getElementById('sched-daily-cap').value, 10) || 20);
+  const count = _scheduleTargetIds.length;
+
+  if (!confirm(`${count} 件を ${startDate} から予約投稿として割り当てます。よろしいですか？`)) return;
+
+  const btn = document.getElementById('sched-exec-btn');
+  btn.disabled = true;
+  btn.textContent = '送信中...';
+
+  try {
+    const res = await fetch('/api/schedule-publish', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        article_ids: _scheduleTargetIds,
+        start_date: startDate,
+        start_hour: startHour,
+        daily_cap: dailyCap,
+      }),
+    });
+    const data = await res.json();
+    if (data.error && data.success === undefined) {
+      toast(data.error, 'error');
+    } else {
+      toast(`予約投稿完了: 成功 ${data.success} 件 / エラー ${data.error} 件`, data.error ? 'warning' : 'success');
+      closeSchedulePublishModal();
+      await loadArticles();
+    }
+    if (data.errors && data.errors.length) {
+      console.warn('スケジュール投稿エラー詳細:', data.errors);
+    }
+  } catch (e) {
+    toast('予約投稿エラー: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📅 予約投稿を実行';
+  }
+}
+
+async function quickRepair(id) {
+  const article = allArticles.find(a => a.id === id);
+  if (!article?.wp_post_id) {
+    toast('既存WP投稿IDがありません', 'error');
+    return;
+  }
+  if (!confirm('Affiros9に保存されている本文を、既存のWordPress投稿へ上書き送信します。Claude生成やリライトは行いません。実行しますか?')) return;
+  setArticleLocalStatus(id, 'repairing', 'WPへ上書き送信中です。完了後に記事一覧を更新します。');
+  try {
+    const res = await fetch(`/api/articles/${id}/repair-post`, {method: 'POST'});
+    const data = await res.json();
+    if (data.success) {
+      toast((data.wp_changed ? 'WP更新完了: ' : 'WP送信完了（本文変化なし）: ') + (data.wp_url || ''), data.wp_changed ? 'success' : 'error');
+      await loadArticles();
+      const chars = data.content_chars ? `${Number(data.content_chars).toLocaleString()}文字を` : '';
+      const info = data.repair_info || {};
+      const compare = `WP本文 ${Number(info.before_content_chars || 0).toLocaleString()}文字 → ${Number(info.after_content_chars || 0).toLocaleString()}文字`;
+      const detail = data.wp_changed
+        ? `WP更新完了しました。${chars}WordPressへ送信し、WordPress側の本文変更を確認しました（${compare}）。`
+        : `WPへ送信しましたが、WordPress側の本文は更新前と同じでした（${compare}）。Affiros9保存本文とWP本文がすでに同じ可能性があります。`;
+      setArticleLocalMessage(id, detail);
+    } else {
+      toast(data.error || 'WP上書き送信に失敗しました', 'error');
+      await loadArticles();
+    }
+  } catch (e) {
+    toast('WP更新エラー: ' + e.message, 'error');
+    await loadArticles();
+  }
+}
+
+// ---- Article Modal ----
+// 記事モーダルから「再生成」: モーダルを閉じて生成画面へ遷移する。
+// （行の「本文/設定編集」と「再生成」を1つに統合したための導線）
+function regenerateFromArticleModal() {
+  const id = document.getElementById('modal-article-id').value;
+  if (!id) return;
+  closeArticleModal();
+  quickGenerate(id);
+}
+
+async function openArticleModal(id) {
+  const res = await fetch(`/api/articles/${id}`);
+  const article = await res.json();
+  document.getElementById('modal-article-id').value = id;
+  document.getElementById('modal-title').value = article.title;
+  document.getElementById('modal-keywords').value = article.keywords;
+  document.getElementById('modal-article-type').value = article.article_type || 'ranking';
+  document.getElementById('modal-category').value = article.category || '';
+  document.getElementById('modal-slug').value = article.slug || '';
+  document.getElementById('modal-content').value = article.content || '';
+  updateSiteSelects();
+  document.getElementById('modal-site-id').value = article.site_id || '';
+  document.getElementById('article-modal').classList.add('open');
+}
+
+function closeArticleModal() {
+  document.getElementById('article-modal').classList.remove('open');
+}
+
+async function saveArticleModal() {
+  const id = document.getElementById('modal-article-id').value;
+  const siteId = document.getElementById('modal-site-id').value;
+  await Promise.all([
+    fetch(`/api/articles/${id}`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        title: document.getElementById('modal-title').value,
+        keywords: document.getElementById('modal-keywords').value,
+        article_type: document.getElementById('modal-article-type').value,
+        category: document.getElementById('modal-category').value,
+        slug: document.getElementById('modal-slug').value,
+        content: document.getElementById('modal-content').value,
+      })
+    }),
+    fetch(`/api/articles/${id}/site`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({site_id: siteId || null})
+    })
+  ]);
+  toast('保存しました', 'success');
+  closeArticleModal();
+  loadArticles();
+}
+
+// ---- Ranking to Brand route ----
+function normalizeProductCandidate(value) {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .replace(/^[第\s]*[0-9０-９]+[位\.)）:：、\s-]+/, '')
+    .replace(/（[0-9０-９]+位）|\([0-9０-９]+位\)/g, '')
+    .replace(/^\[[^\]]+\]\s*/, '')
+    .replace(/^【[^】]+】\s*/, '')
+    .trim();
+}
+
+function addProductCandidate(products, value) {
+  const product = normalizeProductCandidate(value);
+  if (!product || product.length < 2 || product.length > 90) return;
+  if (/^(?:商品名|おすすめ商品|こんな人に|理由|特徴|価格|価格目安|向いている人|選び方|まとめ|FAQ|よくある質問|ランキング|比較表|選定基準)$/i.test(product)) return;
+  if (/^(?:Q|A)[\.．:：]/.test(product)) return;
+  if (/候補\s*[0-9０-９]+/.test(product)) return;
+  if (!products.some(p => p.toLowerCase() === product.toLowerCase())) products.push(product);
+}
+
+function extractProductsFromRankingArticle(article) {
+  const products = [];
+  const content = String(article?.content || '');
+  if (!content.trim()) return products;
+  const doc = new DOMParser().parseFromString(`<div>${content}</div>`, 'text/html');
+
+  doc.querySelectorAll('table').forEach(table => {
+    const headerCells = [...table.querySelectorAll('thead th')].map(th => th.textContent.trim());
+    let productIndex = headerCells.findIndex(h => /商品名|商品|サービス名|名称/.test(h));
+    if (productIndex < 0 && headerCells.some(h => /順位|ランク/.test(h))) productIndex = 1;
+    if (productIndex < 0) productIndex = 0;
+    table.querySelectorAll('tbody tr, tr').forEach(row => {
+      if (row.querySelector('th')) return;
+      const cells = [...row.querySelectorAll('td')];
+      if (!cells.length || productIndex >= cells.length) return;
+      addProductCandidate(products, cells[productIndex].textContent);
+    });
+  });
+
+  doc.querySelectorAll('h3').forEach(h => {
+    const text = h.textContent.trim();
+    const ranked = text.match(/^[第\s]*[0-9０-９]+[位\.)）:：、\s-]+(.+)$/);
+    if (ranked) addProductCandidate(products, ranked[1].split(/[｜|]/)[0]);
+  });
+
+  return products.slice(0, 20);
+}
+
+function openBrandExpansionModal(id) {
+  const article = allArticles.find(a => a.id === id);
+  if (!article) return;
+  const products = extractProductsFromRankingArticle(article);
+  document.getElementById('brand-expansion-source-id').value = id;
+  document.getElementById('brand-expansion-source').innerHTML =
+    `<strong>親ランキング記事:</strong> ${esc(article.title)}<br>` +
+    `<strong>投稿先サイト:</strong> ${esc(getSitePlainName(article.site_id) || '未設定')} / ` +
+    `<strong>カテゴリー:</strong> ${esc(article.category || '未設定')}`;
+  document.getElementById('brand-product-lines').value = products.join('\n');
+  document.getElementById('brand-expansion-modal').classList.add('open');
+  if (!products.length) {
+    toast('商品名を自動抽出できませんでした。商品名を1行ずつ入力してください。', 'info');
+  }
+}
+
+function closeBrandExpansionModal() {
+  document.getElementById('brand-expansion-modal').classList.remove('open');
+}
+
+function shortenProductName(name) {
+  let s = String(name || '').trim();
+  if (!s) return '';
+  if (s.length <= 30) return s; // 既に短ければそのまま
+
+  // 装飾系の括弧を除去（販促文言が入りがち）
+  // ただし先頭の【BRAND】[BRAND] は中身を残す（ブランド情報の可能性）
+  s = s.replace(/^[【\[]\s*([^】\]\s]{1,15})\s*[】\]]\s*/, '$1 ');
+  s = s.replace(/【[^】]*】/g, ' ').replace(/\[[^\]]*\]/g, ' ');
+  s = s.replace(/（[^）]*）/g, ' ').replace(/\([^)]{3,}\)/g, ' ');
+  s = s.replace(/\s+/g, ' ').trim();
+
+  if (s.length <= 30) return s;
+
+  // トークン分割、最大25〜30文字に収まるまで先頭から積む
+  const tokens = s.split(/[\s,、・\/｜|]+/).filter(Boolean);
+  if (tokens.length === 0) return s.slice(0, 28);
+  let result = '';
+  for (const t of tokens) {
+    const next = result ? `${result} ${t}` : t;
+    if (next.length > 28) {
+      if (!result) {
+        // 最初のトークン自体が長い場合は強制カット
+        result = t.slice(0, 28);
+      }
+      break;
+    }
+    result = next;
+    if (result.length >= 20) break;
+  }
+  return result || s.slice(0, 28);
+}
+
+function brandDraftTitle(productName) {
+  const short = shortenProductName(productName);
+  return `${short}の口コミ・評判レビュー｜メリット・デメリットを解説`;
+}
+
+async function createBrandDraftsFromRanking() {
+  const sourceId = document.getElementById('brand-expansion-source-id').value;
+  const source = allArticles.find(a => a.id === sourceId);
+  if (!source) return;
+  const products = [...new Set(document.getElementById('brand-product-lines').value
+    .split(/\r?\n/)
+    .map(normalizeProductCandidate)
+    .filter(Boolean))];
+  if (!products.length) {
+    toast('商標記事にする商品名を入力してください', 'error');
+    return;
+  }
+
+  const createBtn = document.getElementById('brand-expansion-create-btn');
+  createBtn.disabled = true;
+  createBtn.textContent = '作成中...';
+  const brandQualityId = qualityList.find(q => q.article_type === 'brand')?.id
+    || qualityList.find(q => q.id === 'brand-quality')?.id
+    || null;
+
+  try {
+    let created = 0;
+    for (const product of products) {
+      const payload = {
+        title: brandDraftTitle(product),
+        keywords: product,
+        category: source.category || '',
+        article_type: 'brand',
+        site_id: source.site_id || null,
+        quality_id: brandQualityId,
+        parent_article_id: source.id,
+        source_product_name: product,
+        memo: `親ランキング記事「${source.title}」から商標記事候補として作成。親記事ID: ${source.id}`
+      };
+      const res = await fetch('/api/articles', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `${product} の下書き作成に失敗しました`);
+      created++;
+    }
+    closeBrandExpansionModal();
+    await loadArticles();
+    showPage('articles');
+    toast(`商標記事の未生成下書きを${created}件作成しました`, 'success');
+  } catch (e) {
+    toast(e.message || '商標記事下書きの作成に失敗しました', 'error');
+  } finally {
+    createBtn.disabled = false;
+    createBtn.textContent = '商標記事下書きを作成';
+  }
+}
+
+// ---- Title Ideas ----
+function fillTitleIdeaSample() {
+  document.getElementById('title-keywords').value = [
+    'ネックウォーマー おすすめ',
+    '電熱ベスト 口コミ',
+    '防寒手袋 比較',
+    '着る毛布 洗える'
+  ].join('\n');
+  if (!document.getElementById('title-category').value) {
+    document.getElementById('title-category').value = '防寒グッズ';
+  }
+}
+
+function titleIdeaScoreClass(score) {
+  const s = Number(score || 0);
+  if (s >= 82) return 'high';
+  if (s < 65) return 'low';
+  return '';
+}
+
+function updateTitleIdea(index, field, value) {
+  if (!titleIdeaList[index]) return;
+  titleIdeaList[index][field] = value;
+}
+
+function renderTitleIdeas() {
+  const body = document.getElementById('title-ideas-body');
+  const empty = document.getElementById('title-ideas-empty');
+  const count = document.getElementById('title-ideas-count');
+  const saveBtn = document.getElementById('title-save-btn');
+  if (!body) return;
+  if (count) count.textContent = `${titleIdeaList.length}件`;
+  if (saveBtn) saveBtn.disabled = !titleIdeaList.length;
+  if (!titleIdeaList.length) {
+    body.innerHTML = '';
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+  body.innerHTML = titleIdeaList.map((idea, i) => {
+    const checked = idea.duplicate ? '' : 'checked';
+    const duplicate = idea.duplicate ? '<div class="title-idea-duplicate">既存タイトルと重複しています</div>' : '';
+    return `
+      <tr>
+        <td><input type="checkbox" class="title-idea-check" data-index="${i}" ${checked}></td>
+        <td style="font-size:12px;max-width:220px" title="${esc(idea.keywords || idea.keyword)}">${esc(idea.keywords || idea.keyword || '—')}</td>
+        <td style="white-space:nowrap;color:var(--accent);font-size:11px;font-weight:600">${articleTypeLabel(idea.article_type || 'ranking')}</td>
+        <td class="title-idea-title">
+          <input type="text" class="form-control" value="${esc(idea.title)}" onchange="updateTitleIdea(${i}, 'title', this.value)" style="font-size:12px;height:32px">
+          <div class="title-idea-meta">
+            ${idea.slug ? `スラッグ: <code style="font-size:11px">${esc(idea.slug)}</code><br>` : ''}
+            ${idea.search_intent ? `検索意図: ${esc(idea.search_intent)}<br>` : ''}
+            ${idea.reason ? `理由: ${esc(idea.reason)}` : ''}
+          </div>
+          ${duplicate}
+        </td>
+        <td style="white-space:nowrap">
+          <select class="form-control" onchange="updateTitleIdea(${i}, 'priority', this.value)" style="font-size:11px;height:30px">
+            ${['高', '中', '低'].map(v => `<option value="${v}" ${idea.priority === v ? 'selected' : ''}>${v}</option>`).join('')}
+          </select>
+        </td>
+        <td><span class="title-idea-score ${titleIdeaScoreClass(idea.score)}">${esc(idea.score || '—')}</span></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function toggleTitleIdeaChecks(checked) {
+  document.querySelectorAll('.title-idea-check').forEach(c => c.checked = checked);
+  const all = document.getElementById('title-check-all');
+  if (all) all.checked = checked;
+}
+
+function removeDuplicateTitleIdeas() {
+  document.querySelectorAll('.title-idea-check').forEach(c => {
+    const idea = titleIdeaList[Number(c.dataset.index)];
+    if (idea?.duplicate) c.checked = false;
+  });
+}
+
+function selectedTitleIdeas() {
+  return [...document.querySelectorAll('.title-idea-check:checked')]
+    .map(c => titleIdeaList[Number(c.dataset.index)])
+    .filter(Boolean)
+    .map(idea => ({
+      ...idea,
+      category: document.getElementById('title-category').value || idea.category || '',
+      site_id: document.getElementById('title-site').value || idea.site_id || null,
+    }));
+}
+
+async function readTitleIdeaJson(res, label) {
+  const text = await res.text();
+  let data = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch (e) {
+    throw new Error(readableHttpError(res.status, text, label));
+  }
+  if (!res.ok) {
+    throw new Error(data.error || readableHttpError(res.status, text, label));
+  }
+  return data;
+}
+
+// タイトル案生成の上限。サーバ側 TITLE_IDEA_MAX_KEYWORDS と揃える。
+const TITLE_IDEA_MAX_KEYWORDS = 30;
+
+function updateTitleKeywordCount() {
+  const ta = document.getElementById('title-keywords');
+  const countEl = document.getElementById('title-keyword-count');
+  const btn = document.getElementById('title-generate-btn');
+  if (!ta || !countEl) return;
+  const lines = ta.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const n = lines.length;
+  const over = n > TITLE_IDEA_MAX_KEYWORDS;
+  countEl.textContent = `${n} / ${TITLE_IDEA_MAX_KEYWORDS} 件（品質と安定性を担保する上限）`;
+  countEl.style.color = over ? 'var(--error)' : 'var(--muted)';
+  if (btn) {
+    btn.disabled = over;
+    btn.title = over ? `${TITLE_IDEA_MAX_KEYWORDS}件以下にしてください` : '';
+  }
+}
+
+// アクティブなタイトル案ジョブ。ページ遷移しても継続するためグローバル保持。
+let activeTitleJobId = null;
+let activeTitleJobTimer = null;
+
+function stopTitleJobPolling() {
+  if (activeTitleJobTimer) {
+    clearTimeout(activeTitleJobTimer);
+    activeTitleJobTimer = null;
+  }
+}
+
+function setTitleGenerateButton(running) {
+  const btn = document.getElementById('title-generate-btn');
+  if (!btn) return;
+  btn.disabled = running;
+  btn.textContent = running ? '生成中...（裏で動いてます）' : 'タイトル案を生成';
+}
+
+function applyTitleJobToUI(job, opts = {}) {
+  const msg = document.getElementById('title-ideas-msg');
+  if (!job) return;
+  if (Array.isArray(job.ideas) && job.ideas.length) {
+    titleIdeaList = job.ideas;
+    renderTitleIdeas();
+  }
+  if (!msg) return;
+  if (job.status === 'running') {
+    msg.style.color = 'var(--muted)';
+    msg.textContent = job.message || '生成中...';
+    setTitleGenerateButton(true);
+  } else if (job.status === 'completed') {
+    const warn = job.warning ? ` ${job.warning}` : '';
+    const count = Array.isArray(job.ideas) ? job.ideas.length : 0;
+    msg.style.color = job.warning ? 'var(--warning)' : 'var(--muted)';
+    msg.textContent = `${job.source === 'claude' ? 'Claude生成' : 'AI生成'}: ${count}件のタイトル案を作成しました${warn}`;
+    setTitleGenerateButton(false);
+    if (opts.toastOnDone) {
+      toast(`タイトル案 ${count}件 生成完了`, job.warning ? 'warning' : 'success');
+    }
+  } else if (job.status === 'error') {
+    msg.style.color = 'var(--error)';
+    msg.textContent = job.message || job.error || 'タイトル案生成に失敗しました';
+    setTitleGenerateButton(false);
+    if (opts.toastOnDone) toast(job.error || 'タイトル案生成に失敗しました', 'error');
+  }
+}
+
+async function pollTitleJob(jobId, opts = {}) {
+  stopTitleJobPolling();
+  if (!jobId) return;
+  activeTitleJobId = jobId;
+  let consecutiveErrors = 0;
+  const MAX_CONSECUTIVE_ERRORS = 20; // 大量KW時は Render 側が一時的に詰まるので寛容に
+  const tick = async () => {
+    if (activeTitleJobId !== jobId) return; // 別ジョブに切り替わった
+    try {
+      const res = await fetch(`/api/title-ideas/jobs/${jobId}`);
+      if (!res.ok) {
+        consecutiveErrors++;
+        // UIに途中経過を表示（諦めずに待ってます感を出す）
+        const msg = document.getElementById('title-ideas-msg');
+        if (msg && consecutiveErrors >= 3) {
+          msg.style.color = 'var(--muted)';
+          msg.textContent = `ジョブ状態の取得を再試行中... (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS})`;
+        }
+        if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+          if (msg) { msg.style.color = 'var(--error)'; msg.textContent = 'ジョブ状態の取得に失敗しました（裏側では継続中の可能性があります）'; }
+          setTitleGenerateButton(false);
+          return;
+        }
+      } else {
+        consecutiveErrors = 0;
+        const job = await res.json();
+        applyTitleJobToUI(job, opts);
+        if (job.status === 'running') {
+          activeTitleJobTimer = setTimeout(tick, 2000);
+          return;
+        }
+        // 完了/エラー時はポーリング終了
+        activeTitleJobId = null;
+        return;
+      }
+    } catch (e) {
+      consecutiveErrors++;
+    }
+    // 失敗を重ねるほど間隔を伸ばす（Render負荷時の自爆防止）
+    const backoff = Math.min(8000, 2500 + consecutiveErrors * 500);
+    activeTitleJobTimer = setTimeout(tick, backoff);
+  };
+  tick();
+}
+
+// ---- KWストック（大量タイトル案連続生成） ----
+const KW_STOCK_KEY = 'affiros9_kw_stock';
+let kwStock = [];
+let _stockRunning = false;
+let _stockStop = false;
+
+function loadKwStock() {
+  try { kwStock = JSON.parse(localStorage.getItem(KW_STOCK_KEY) || '[]'); }
+  catch (e) { kwStock = []; }
+}
+
+function saveKwStock() {
+  localStorage.setItem(KW_STOCK_KEY, JSON.stringify(kwStock));
+}
+
+function updateKwStockDisplay() {
+  const el = document.getElementById('kw-stock-status');
+  const btn = document.getElementById('stock-generate-btn');
+  if (el) el.textContent = `ストック: ${kwStock.length} 件`;
+  if (btn) btn.disabled = kwStock.length === 0 || _stockRunning;
+}
+
+function addToKwStock() {
+  const ta = document.getElementById('kw-stock-input');
+  if (!ta) return;
+  const lines = ta.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  if (!lines.length) { toast('キーワードを入力してください', 'error'); return; }
+  const existing = new Set(kwStock);
+  const added = lines.filter(l => !existing.has(l));
+  kwStock.push(...added);
+  saveKwStock();
+  ta.value = '';
+  updateKwStockDisplay();
+  toast(`${added.length} 件追加（重複 ${lines.length - added.length} 件スキップ）`, 'success');
+}
+
+function clearKwStock() {
+  if (!kwStock.length) return;
+  if (!confirm(`ストックの ${kwStock.length} 件をすべて削除しますか？`)) return;
+  kwStock = [];
+  saveKwStock();
+  updateKwStockDisplay();
+  document.getElementById('kw-stock-progress').textContent = '';
+  toast('ストックをクリアしました', 'info');
+}
+
+function stopStockGeneration() {
+  _stockStop = true;
+  const btn = document.getElementById('stock-stop-btn');
+  if (btn) btn.textContent = '中止リクエスト済み...';
+}
+
+// ジョブが complete/error になるまでポーリングして結果を返す
+function _waitTitleJob(jobId, onMsg) {
+  return new Promise((resolve) => {
+    let errs = 0;
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/title-ideas/jobs/${jobId}`);
+        if (!res.ok) { errs++; }
+        else {
+          const job = await res.json();
+          if (onMsg && job.message) onMsg(job.message);
+          if (job.status === 'completed') { resolve(job); return; }
+          if (job.status === 'error')     { resolve(null); return; }
+          errs = 0;
+        }
+      } catch (e) { errs++; }
+      if (errs > 20) { resolve(null); return; }
+      setTimeout(tick, 2000);
+    };
+    tick();
+  });
+}
+
+async function generateFromStock() {
+  if (_stockRunning || !kwStock.length) return;
+  _stockRunning = true;
+  _stockStop = false;
+  document.getElementById('stock-generate-btn').disabled = true;
+  const stopBtn = document.getElementById('stock-stop-btn');
+  if (stopBtn) { stopBtn.style.display = ''; stopBtn.textContent = '⏹ 中止'; }
+  const progressEl = document.getElementById('kw-stock-progress');
+
+  const site_id = document.getElementById('title-site').value || null;
+  const category = document.getElementById('title-category').value;
+  const count_per_keyword = document.getElementById('title-count').value;
+
+  let batch = 0, totalGen = 0;
+  while (kwStock.length > 0 && !_stockStop) {
+    const chunk = kwStock.slice(0, TITLE_IDEA_MAX_KEYWORDS);
+    batch++;
+    const remaining = kwStock.length;
+    const totalBatches = Math.ceil(remaining / TITLE_IDEA_MAX_KEYWORDS) + (batch - 1);
+    if (progressEl) progressEl.textContent = `バッチ ${batch}/${totalBatches} 処理中... (ストック残 ${remaining} 件)`;
+    try {
+      const res = await fetch('/api/title-ideas/generate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ keywords: chunk.join('\n'), count_per_keyword, site_id, category }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!data.job_id) throw new Error('job_idが返されませんでした');
+
+      const job = await _waitTitleJob(data.job_id, (m) => {
+        if (progressEl) progressEl.textContent = `バッチ ${batch}: ${m} (残 ${kwStock.length} 件)`;
+      });
+      if (job && Array.isArray(job.ideas) && job.ideas.length) {
+        titleIdeaList = [...titleIdeaList, ...job.ideas]; // 追記（クリアしない）
+        renderTitleIdeas();
+        totalGen += job.ideas.length;
+      }
+      kwStock = kwStock.slice(chunk.length);
+      saveKwStock();
+      updateKwStockDisplay();
+    } catch (e) {
+      toast(`バッチ ${batch} 失敗: ${e.message}`, 'error');
+      break;
+    }
+    if (kwStock.length > 0 && !_stockStop) await new Promise(r => setTimeout(r, 1500));
+  }
+
+  _stockRunning = false;
+  if (stopBtn) stopBtn.style.display = 'none';
+  updateKwStockDisplay();
+  if (progressEl) {
+    progressEl.style.color = _stockStop ? 'var(--warning)' : 'var(--success)';
+    progressEl.textContent = _stockStop
+      ? `中止しました（${totalGen} 件生成済み・ストック残 ${kwStock.length} 件）`
+      : `✓ 完了！合計 ${totalGen} 件のタイトル案を生成しました`;
+  }
+  if (!_stockStop) toast(`ストック処理完了: ${totalGen} 件生成`, 'success');
+}
+
+async function generateTitleIdeas() {
+  const msg = document.getElementById('title-ideas-msg');
+  const keywordsRaw = document.getElementById('title-keywords').value;
+  const count_per_keyword = document.getElementById('title-count').value;
+  const site_id = document.getElementById('title-site').value || null;
+  const category = document.getElementById('title-category').value;
+
+  if (!keywordsRaw.trim()) {
+    toast('キーワードを1行以上入力してください', 'error');
+    return;
+  }
+  const kwLines = keywordsRaw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  if (kwLines.length > TITLE_IDEA_MAX_KEYWORDS) {
+    toast(`キーワードは ${TITLE_IDEA_MAX_KEYWORDS} 件まで（現在 ${kwLines.length} 件）。分割してください。`, 'error');
+    return;
+  }
+
+  setTitleGenerateButton(true);
+  if (msg) {
+    msg.style.color = 'var(--muted)';
+    msg.textContent = 'ジョブを起動しています...';
+  }
+
+  try {
+    const res = await fetch('/api/title-ideas/generate', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ keywords: keywordsRaw, count_per_keyword, site_id, category }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(()=>'');
+      let parsed = {};
+      try { parsed = text ? JSON.parse(text) : {}; } catch (_) {}
+      throw new Error(parsed.error || readableHttpError(res.status, text, 'タイトル案API'));
+    }
+    const data = await res.json();
+    if (!data.job_id) throw new Error('job_idが返されませんでした');
+    // 既存表示はクリア（新規ジョブなので）
+    titleIdeaList = [];
+    renderTitleIdeas();
+    if (msg) msg.textContent = data.message || '裏で生成中。ページ移動しても処理は継続します。';
+    pollTitleJob(data.job_id, { toastOnDone: true });
+  } catch (e) {
+    setTitleGenerateButton(false);
+    const reason = `タイトル案ジョブの起動に失敗しました。${e.message ? ` ${e.message}` : ''}`;
+    if (msg) { msg.style.color = 'var(--error)'; msg.textContent = reason; }
+    toast(reason, 'error');
+  }
+}
+
+async function saveSelectedTitleIdeas() {
+  const ideas = selectedTitleIdeas();
+  if (!ideas.length) {
+    toast('保存するタイトル案を選択してください', 'error');
+    return;
+  }
+  const btn = document.getElementById('title-save-btn');
+  const msg = document.getElementById('title-ideas-msg');
+  btn.disabled = true;
+  btn.textContent = '保存中...';
+  try {
+    const res = await fetch('/api/title-ideas/save', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        ideas,
+        category: document.getElementById('title-category').value,
+        site_id: document.getElementById('title-site').value || null,
+      })
+    });
+    const data = await readTitleIdeaJson(res, '一括処理送信API');
+    if (msg) msg.textContent = `一括処理へ送信: ${data.created}件 / 重複スキップ: ${data.skipped || 0}件`;
+    toast(`${data.created}件を一括処理へ送りました`, 'success');
+    await loadArticles();
+    showPage('batch');
+    setBatchTypeTab('');
+  } catch (e) {
+    toast(e.message || '一括処理への送信に失敗しました', 'error');
+    if (msg) msg.textContent = e.message || '一括処理への送信に失敗しました';
+  } finally {
+    btn.disabled = !titleIdeaList.length;
+    btn.textContent = '選択を一括処理へ送る';
+  }
+}
+
+// ---- Generate ----
+function populateGenSelect() {
+  const sel = document.getElementById('gen-article-select');
+  const cur = sel.value;
+  const targets = allArticles.filter(a => !a.article_type || a.article_type === currentArticleType);
+  sel.innerHTML = '<option value="">-- 記事を選択 --</option>' +
+    targets.map(a => `<option value="${a.id}">${esc(a.title)}${a.seo_score ? ` / ${a.seo_score}点` : ''}</option>`).join('');
+  sel.value = cur;
+}
+
+function onArticleSelect() {
+  const id = document.getElementById('gen-article-select').value;
+  const article = allArticles.find(a => a.id === id);
+  const output = document.getElementById('gen-output');
+  const genBtn = document.getElementById('gen-btn');
+  if (article) {
+    document.getElementById('gen-title').value = article.title;
+    document.getElementById('gen-keywords').value = article.keywords;
+    document.getElementById('gen-category').value = article.category || '';
+    document.getElementById('gen-slug').value = article.slug || '';
+    document.getElementById('gen-site').value = article.site_id || '';
+    if (output) output.textContent = article.content || '// ここに生成された記事が表示されます...';
+    if (genBtn) genBtn.textContent = article.content ? '⚡ 再生成開始' : '⚡ 生成開始';
+    currentGenArticleId = id;
+  } else {
+    if (output) output.textContent = '// ここに生成された記事が表示されます...';
+    if (genBtn) genBtn.textContent = '⚡ 生成開始';
+    currentGenArticleId = null;
+  }
+  updateGeneratePublishButton(id);
+}
+
+function updateGeneratePublishButton(articleId = currentGenArticleId) {
+  const buttons = ['gen-publish-btn', 'gen-push-btn']
+    .map(id => document.getElementById(id))
+    .filter(Boolean);
+  const panel = document.getElementById('gen-push-panel');
+  const note = document.getElementById('gen-push-note');
+  if (!buttons.length && !panel) return;
+  const article = allArticles.find(a => a.id === articleId);
+  const hasContent = !!article?.content;
+  const label = article?.wp_post_id ? 'WPへ上書きPUSH' : 'WPにPUSH（下書き）';
+  const title = article?.wp_post_id
+    ? 'Affiros9に保存されている本文を既存WordPress投稿へ送信します'
+    : 'WordPressに新規下書き投稿します';
+  buttons.forEach(btn => {
+    btn.disabled = !hasContent;
+    btn.textContent = label;
+    btn.title = title;
+  });
+  if (panel) panel.style.display = hasContent ? 'block' : 'none';
+  if (note) {
+    const baseMsg = article?.wp_post_id
+      ? '生成済み本文を既存のWordPress投稿へ上書き送信できます。'
+      : '生成済み本文をWordPressへ下書き投稿できます。';
+    const cs = article?.card_injection_stats || {};
+    let cardMsg = '';
+    if (cs.mode === 'marker_only' || typeof cs.marker_count === 'number') {
+      const mc = cs.marker_count || 0;
+      if (mc > 0) {
+        cardMsg = ` ✅ 広告マーカー ${mc}件挿入済み（WP側プラグインで商品カードに置換）`;
+      } else {
+        cardMsg = ' ⚠️ 広告マーカー未挿入: 記事構造を確認してください';
+      }
+    } else if (typeof cs.h3_count === 'number') {
+      // 旧 direct モードの記事を表示する後方互換
+      if (cs.products_available === 0) {
+        cardMsg = ' ⚠️ 商品カード未挿入: 実商品データを取得できませんでした（Amazon/楽天APIキーと疎通を確認してください）';
+      } else if (cs.matched_count === 0 && cs.h3_count > 0) {
+        cardMsg = ` ⚠️ 商品カード未挿入: 取得商品 ${cs.products_available}件あるが商品名がマッチしませんでした`;
+      } else if (cs.matched_count > 0) {
+        cardMsg = ` ✅ 商品カード ${cs.matched_count}件挿入済み（取得商品 ${cs.products_available}件 / 見出し ${cs.h3_count}件）`;
+      }
+    }
+    note.innerHTML = esc(baseMsg) + (cardMsg ? `<br><span style="color:${cardMsg.startsWith(' ⚠️') ? 'var(--error)' : 'var(--accent)'}">${esc(cardMsg.trim())}</span>` : '');
+  }
+  const viewBtn = document.getElementById('gen-wp-view-btn');
+  const editBtn = document.getElementById('gen-wp-edit-btn');
+  const unlinkBtn = document.getElementById('gen-unlink-btn');
+  const site = article?.site_id ? siteList.find(s => s.id === article.site_id) : null;
+  if (viewBtn) {
+    if (article?.wp_url) {
+      viewBtn.href = article.wp_url;
+      viewBtn.style.display = 'inline-flex';
+    } else {
+      viewBtn.style.display = 'none';
+    }
+  }
+  if (editBtn) {
+    if (article?.wp_post_id && site?.wp_url) {
+      editBtn.href = `${site.wp_url.replace(/\/$/, '')}/wp-admin/post.php?post=${article.wp_post_id}&action=edit`;
+      editBtn.style.display = 'inline-flex';
+    } else {
+      editBtn.style.display = 'none';
+    }
+  }
+  if (unlinkBtn) {
+    unlinkBtn.style.display = article?.wp_post_id ? 'inline-flex' : 'none';
+  }
+}
+
+function setGeneratePublishActionState(disabled, showPanel = null) {
+  ['gen-publish-btn', 'gen-push-btn']
+    .map(id => document.getElementById(id))
+    .filter(Boolean)
+    .forEach(btn => btn.disabled = disabled);
+  const panel = document.getElementById('gen-push-panel');
+  if (panel && showPanel !== null) panel.style.display = showPanel ? 'block' : 'none';
+}
+
+async function createArticleFromGenerateForm() {
+  const title = document.getElementById('gen-title').value.trim();
+  if (!title) throw new Error('タイトルを入力してください');
+  const payload = {
+    title,
+    keywords: document.getElementById('gen-keywords').value,
+    category: document.getElementById('gen-category').value,
+    slug: document.getElementById('gen-slug').value,
+    site_id: document.getElementById('gen-site').value || null,
+    quality_id: document.getElementById('gen-quality').value || null,
+    article_type: currentArticleType,
+  };
+  const res = await fetch('/api/articles', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const article = await res.json();
+  if (!res.ok) throw new Error(article.error || '記事データの作成に失敗しました');
+  allArticles.push(article);
+  populateGenSelect();
+  document.getElementById('gen-article-select').value = article.id;
+  currentGenArticleId = article.id;
+  return article.id;
+}
+
+function generatedTextLength(content) {
+  const text = String(content || '')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, '');
+  return text.length;
+}
+
+function formatElapsed(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const min = Math.floor(total / 60);
+  const sec = String(total % 60).padStart(2, '0');
+  return `${min}:${sec}`;
+}
+
+function renderGenerateActivityPreview(output, started, article = null, job = null, fallbackMessage = '記事生成中です。', percent = 0) {
+  if (!output) return;
+  const elapsedMs = Date.now() - started;
+  const dots = '.'.repeat((Math.floor(elapsedMs / 1000) % 3) + 1);
+  const title = article?.title || job?.current_title || document.getElementById('gen-title')?.value || '';
+  const message = article?.processing_message || job?.message || fallbackMessage;
+  const total = Number(job?.total || 1);
+  const completed = Number(job?.completed || 0);
+  const failed = Number(job?.failed || 0);
+  const updatedAt = new Date().toLocaleTimeString('ja-JP', {hour12: false});
+  output.textContent = [
+    `// 生成中${dots}`,
+    title ? `タイトル: ${title}` : '',
+    `経過時間: ${formatElapsed(elapsedMs)}`,
+    `進捗目安: ${Math.max(0, Math.min(99, percent))}%`,
+    job ? `ジョブ: ${completed + failed}/${total}件処理済み` : '',
+    `現在の処理: ${message}`,
+    `最終確認: ${updatedAt}`,
+    '',
+    '完了後に本文HTMLをここへ表示します。'
+  ].filter(Boolean).join('\n');
+}
+
+async function recoverGenerateAfterStreamLoss(articleId, formData, streamedContent) {
+  await loadArticles();
+  const savedArticle = allArticles.find(a => a.id === articleId);
+  if (savedArticle?.status === 'generated' && savedArticle.content) {
+    await finalizeGenerateSuccess(articleId, {
+      content_chars: savedArticle.last_generation_chars || generatedTextLength(savedArticle.content),
+      changed: savedArticle.last_generation_changed,
+      usage: savedArticle.usage || null,
+      recovered: true,
+    });
+    setArticleLocalMessage(articleId, '生成完了信号は途切れましたが、保存済み本文を確認できました。');
+    return true;
+  }
+
+  if (generatedTextLength(streamedContent) < 500) return false;
+
+  const res = await fetch(`/api/articles/${articleId}/recover-generated-content`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({...formData, content: streamedContent})
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    if (data.error) {
+      setArticleLocalStatus(articleId, 'error', data.error);
+      toast(data.error, 'error');
+      return true;
+    }
+    return false;
+  }
+
+  await finalizeGenerateSuccess(articleId, {
+    content_chars: data.content_chars,
+    changed: data.changed,
+    usage: data.usage || null,
+    recovered: true,
+  });
+  setArticleLocalMessage(articleId, '生成完了信号は途切れましたが、画面に届いた本文を保存して復旧しました。');
+  return true;
+}
+
+async function markGenerateInterrupted(articleId, message) {
+  const progressNote = document.getElementById('gen-progress-note');
+  if (progressNote) {
+    progressNote.style.display = 'block';
+    progressNote.textContent = message;
+  }
+  setArticleLocalStatus(articleId, 'error', message);
+  await loadArticles();
+  toast(message, 'error');
+}
+
+function readableHttpError(status, text = '', label = '生成API') {
+  const raw = String(text || '');
+  const title = raw.match(/<title>([\s\S]*?)<\/title>/i)?.[1]
+    || raw.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1]
+    || raw.match(/<p[^>]*>([\s\S]*?)<\/p>/i)?.[1]
+    || raw.slice(0, 160);
+  const clean = title
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return `${label}でサーバーエラーが発生しました（HTTP ${status}${clean ? `: ${clean}` : ''}）。`;
+}
+
+async function startGenerate() {
+  closeToast();
+  let articleId = document.getElementById('gen-article-select').value;
+  const qualityId = document.getElementById('gen-quality').value;
+  const siteId = document.getElementById('gen-site').value;
+  if (!siteId) { toast('投稿先サイトを選択してください', 'error'); return; }
+  if (!articleId) {
+    try {
+      articleId = await createArticleFromGenerateForm();
+      toast('新規記事データを作成しました', 'success');
+    } catch (e) {
+      toast(e.message || '記事データの作成に失敗しました', 'error');
+      return;
+    }
+  }
+
+  const output = document.getElementById('gen-output');
+  const btn = document.getElementById('gen-btn');
+  const generateStartedAt = Date.now();
+  const title = document.getElementById('gen-title').value;
+  const keywords = document.getElementById('gen-keywords').value;
+  const category = document.getElementById('gen-category').value;
+  const slug = document.getElementById('gen-slug').value;
+  const generatePayload = {
+    quality_id: qualityId,
+    title,
+    keywords,
+    category,
+    slug,
+    site_id: siteId,
+    article_type: currentArticleType
+  };
+
+  renderGenerateActivityPreview(output, generateStartedAt, null, null, '生成ジョブを開始しています...', 10);
+  btn.disabled = true;
+  btn.textContent = '⌛ 生成中...';
+  setGeneratePublishActionState(true, false);
+  setArticleLocalStatus(articleId, 'generating', 'バックグラウンドで記事生成中です。完了後に本文を表示します。');
+
+  const progress = document.getElementById('gen-progress');
+  const fill = document.getElementById('gen-progress-fill');
+  const progressNote = document.getElementById('gen-progress-note');
+  progress.style.display = 'block';
+  fill.style.width = '10%';
+  if (progressNote) {
+    progressNote.style.display = 'block';
+    progressNote.textContent = '生成ジョブを開始しています...';
+  }
+
+  try {
+    const saveRes = await fetch(`/api/articles/${articleId}`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(generatePayload)
+    });
+    if (!saveRes.ok) throw new Error((await saveRes.json().catch(() => ({}))).error || '記事設定の保存に失敗しました');
+
+    const jobRes = await fetch('/api/batch-generate', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        article_ids: [articleId],
+        quality_id: qualityId,
+        article_type: currentArticleType
+      })
+    });
+    const jobData = await jobRes.json().catch(() => ({}));
+    if (!jobRes.ok || !jobData.success) throw new Error(jobData.error || '生成ジョブの開始に失敗しました');
+
+    if (progressNote) progressNote.textContent = 'バックグラウンドで記事生成中です。画面を移動しても処理は継続します。';
+    await waitForSingleGenerateCompletion(articleId, jobData.job_id, generateStartedAt);
+  } catch (e) {
+    const message = e?.message || '生成開始に失敗しました。';
+    await markGenerateInterrupted(articleId, message);
+  }
+
+  btn.disabled = false;
+  const refreshedArticle = allArticles.find(a => a.id === articleId);
+  btn.textContent = refreshedArticle?.content ? '⚡ 再生成開始' : '⚡ 生成開始';
+  setTimeout(() => {
+    progress.style.display = 'none';
+    if (progressNote) progressNote.style.display = 'none';
+  }, 1000);
+}
+
+async function waitForSingleGenerateCompletion(articleId, jobId, started = Date.now()) {
+  const output = document.getElementById('gen-output');
+  const fill = document.getElementById('gen-progress-fill');
+  const progressNote = document.getElementById('gen-progress-note');
+  const timeoutMs = 30 * 60 * 1000;
+  while (Date.now() - started < timeoutMs) {
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    await loadArticles();
+    const article = allArticles.find(a => a.id === articleId);
+    const job = await loadBatchJob(jobId) || await loadLatestBatchJob();
+    if (article?.status === 'generated' && article.content) {
+      if (output) output.textContent = article.content;
+      if (job?.status === 'running' && article.generation_phase === 'base_saved') {
+        if (progressNote) progressNote.textContent = '本文は保存済みです。品質改善などの後処理を続けています。';
+        if (fill) fill.style.width = '75%';
+        continue;
+      }
+      const usage = article.usage || null;
+      await finalizeGenerateSuccess(articleId, {
+        content_chars: article.last_generation_chars || generatedTextLength(article.content),
+        changed: article.last_generation_changed,
+        warning: article.generation_warning || '',
+        usage
+      });
+      return true;
+    }
+    if (article?.status === 'error') {
+      const message = article.error || job?.last_error || '生成に失敗しました。';
+      if (progressNote) progressNote.textContent = message;
+      if (fill) fill.style.width = '100%';
+      toast(message, 'error');
+      return false;
+    }
+    if (job?.status === 'completed_with_errors' || job?.status === 'failed') {
+      const message = article?.error || job.last_error || '生成ジョブがエラーで終了しました。';
+      if (progressNote) progressNote.textContent = message;
+      if (fill) fill.style.width = '100%';
+      toast(message, 'error');
+      return false;
+    }
+    const total = Number(job?.total || 1);
+    const done = Number(job?.completed || 0) + Number(job?.failed || 0);
+    const basePercent = total ? Math.round((done / total) * 100) : 0;
+    const elapsedPercent = Math.min(85, 15 + Math.floor((Date.now() - started) / 3000));
+    const percent = Math.max(basePercent, elapsedPercent);
+    if (fill) fill.style.width = `${percent}%`;
+    const message = article?.processing_message || job?.message || '記事生成中です。完了まで待機しています。';
+    if (progressNote) progressNote.textContent = message;
+    renderGenerateActivityPreview(output, started, article, job, message, percent);
+  }
+  await markGenerateInterrupted(articleId, '生成が長時間完了しませんでした。一括処理または対応履歴で状態を確認してください。');
+  return false;
+}
+
+async function finalizeGenerateSuccess(articleId, result = {}) {
+  const fill = document.getElementById('gen-progress-fill');
+  if (fill) fill.style.width = '100%';
+  const progressNote = document.getElementById('gen-progress-note');
+  if (progressNote) progressNote.textContent = '生成完了しました。';
+  currentGenArticleId = articleId;
+  await loadArticles();
+  const usageYen = result.usage?.cost_yen ? ` / 概算 ${Math.ceil(Number(result.usage.cost_yen)).toLocaleString()}円` : '';
+  const charInfo = result.content_chars ? `${Number(result.content_chars).toLocaleString()}文字` : '本文';
+  const article = allArticles.find(a => a.id === articleId);
+  const warningText = result.warning || article?.generation_warning || '';
+  const cs = result.card_stats || article?.card_injection_stats || {};
+  let cardInfo = '';
+  if (cs && typeof cs.h3_count === 'number') {
+    if (cs.products_available === 0) {
+      cardInfo = ' / 商品カード: 未挿入（実商品データを取得できませんでした。Amazon/楽天APIキーと疎通を確認）';
+    } else if (cs.matched_count === 0 && cs.h3_count > 0) {
+      cardInfo = ` / 商品カード: 未挿入（取得商品 ${cs.products_available}件あるが商品名がマッチせず）`;
+    } else if (cs.matched_count > 0) {
+      cardInfo = ` / 商品カード ${cs.matched_count}件挿入（取得商品 ${cs.products_available}件）`;
+    }
+  }
+  const message = (warningText ? warningText + cardInfo : (result.changed === false
+    ? `生成は完了しましたが、保存済み本文と同一でした（${charInfo}${usageYen}）。${cardInfo}`
+    : `生成完了しました（${charInfo}${usageYen}）。${cardInfo}`));
+  setArticleLocalMessage(articleId, message);
+  document.getElementById('gen-article-select').value = articleId;
+  const output = document.getElementById('gen-output');
+  if (article?.content && output) output.textContent = article.content;
+  updateGeneratePublishButton(articleId);
+  toast(
+    warningText || (article?.wp_post_id ? '記事生成が完了しました。既存WPへ上書き送信できます。' : '記事生成が完了しました。WP下書き投稿できます。'),
+    warningText ? 'info' : 'success'
+  );
+}
+
+async function publishGenerated() {
+  if (!currentGenArticleId) return;
+  const article = allArticles.find(a => a.id === currentGenArticleId);
+  const isRepair = !!article?.wp_post_id;
+
+  // A: タイトル/キーワード変更ガード
+  const lastTitle = article?.last_generation_title;
+  const lastKw = article?.last_generation_keywords;
+  const titleChanged = lastTitle && lastTitle !== article.title;
+  const kwChanged = lastKw !== undefined && lastKw !== article.keywords;
+  if (titleChanged || kwChanged) {
+    const parts = [];
+    if (titleChanged) parts.push(`タイトル: 「${lastTitle}」 → 「${article.title}」`);
+    if (kwChanged) parts.push(`キーワード: 「${lastKw || '(なし)'}」 → 「${article.keywords || '(なし)'}」`);
+    if (!confirm(
+      '⚠️ 前回の生成からタイトル/キーワードが変更されています:\n\n'
+      + parts.join('\n')
+      + '\n\n保存済み本文は古いタイトル/キーワードで生成されたものです。'
+      + 'このままWordPressに送信しますか？（先に「再生成開始」を押すのを推奨）'
+    )) return;
+  }
+
+  if (isRepair && !confirm('Affiros9に保存されている本文を、既存のWordPress投稿へ上書き送信します。Claude生成やリライトは行いません。実行しますか?')) return;
+  setArticleLocalStatus(
+    currentGenArticleId,
+    isRepair ? 'repairing' : 'publishing',
+    isRepair ? 'WPへ上書き送信中です。完了後に記事一覧を更新します。' : 'WordPressへ下書き投稿中です。'
+  );
+  setGeneratePublishActionState(true, true);
+  try {
+    const res = isRepair
+      ? await fetch(`/api/articles/${currentGenArticleId}/repair-post`, {method:'POST'})
+      : await fetch(`/api/publish/${currentGenArticleId}`, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({post_status:'draft'})
+        });
+    let data;
+    try {
+      data = await res.json();
+    } catch (parseErr) {
+      // 非JSON応答（Renderエッジタイムアウト等で HTML が返ってきた）
+      const hint = res.status === 504 || res.status === 502
+        ? 'サーバー応答タイムアウト'
+        : `HTTP ${res.status}`;
+      toast(
+        `${hint}: WP側で実際に投稿が反映されたかブラウザでご確認ください。反映済みなら追加操作不要、未反映なら再試行を。`,
+        'error'
+      );
+      await loadArticles();
+      updateGeneratePublishButton(currentGenArticleId);
+      return;
+    }
+    if (data.success) {
+      toast((isRepair ? (data.wp_changed ? 'WP更新完了: ' : 'WP送信完了（本文変化なし）: ') : '投稿完了: ') + data.wp_url, isRepair && !data.wp_changed ? 'error' : 'success');
+      await loadArticles();
+      const chars = data.content_chars ? `${Number(data.content_chars).toLocaleString()}文字を` : '';
+      const info = data.repair_info || {};
+      const compare = `WP本文 ${Number(info.before_content_chars || 0).toLocaleString()}文字 → ${Number(info.after_content_chars || 0).toLocaleString()}文字`;
+      const repairMessage = data.wp_changed
+        ? `WP更新完了しました。${chars}WordPressへ送信し、WordPress側の本文変更を確認しました（${compare}）。`
+        : `WPへ送信しましたが、WordPress側の本文は更新前と同じでした（${compare}）。Affiros9保存本文とWP本文がすでに同じ可能性があります。`;
+      setArticleLocalMessage(currentGenArticleId, isRepair ? repairMessage : '投稿完了しました。');
+      updateGeneratePublishButton(currentGenArticleId);
+    } else if (data.wp_post_not_found) {
+      // B: 404 リカバリ
+      if (confirm(
+        `この記事の紐付き先 WordPress 投稿 (ID: ${data.wp_post_id}) が見つかりません。\n`
+        + 'WordPress側で削除された可能性があります。\n\n'
+        + 'WP紐付けをクリアして、新規下書きとして投稿しますか？'
+      )) {
+        await fetch(`/api/articles/${currentGenArticleId}/unlink-wp`, {method:'POST'});
+        await loadArticles();
+        const res2 = await fetch(`/api/publish/${currentGenArticleId}`, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({post_status:'draft'})
+        });
+        const data2 = await res2.json();
+        if (data2.success) {
+          toast('新規投稿として作成しました: ' + data2.wp_url, 'success');
+          await loadArticles();
+        } else {
+          toast(data2.error || '新規投稿に失敗しました', 'error');
+        }
+      }
+      updateGeneratePublishButton(currentGenArticleId);
+    } else {
+      toast(data.error || (isRepair ? 'WP上書き送信に失敗しました' : '投稿失敗'), 'error');
+      await loadArticles();
+      updateGeneratePublishButton(currentGenArticleId);
+    }
+  } catch (e) {
+    toast((isRepair ? 'WP更新エラー: ' : '投稿エラー: ') + e.message, 'error');
+    await loadArticles();
+    updateGeneratePublishButton(currentGenArticleId);
+  }
+}
+
+async function unlinkWpPost() {
+  if (!currentGenArticleId) return;
+  const article = allArticles.find(a => a.id === currentGenArticleId);
+  if (!article?.wp_post_id) {
+    toast('この記事はWPに紐付いていません', 'error');
+    return;
+  }
+  if (!confirm(
+    `WP投稿 (ID: ${article.wp_post_id}) との紐付けを解除します。\n`
+    + 'Affiros9側のデータのみ変更され、WordPress側の投稿は削除されません。\n'
+    + '次回PUSH時は新規投稿として作成されます。\n\n実行しますか？'
+  )) return;
+  const res = await fetch(`/api/articles/${currentGenArticleId}/unlink-wp`, {method:'POST'});
+  const data = await res.json();
+  if (data.success) {
+    toast('WP紐付けを解除しました', 'success');
+    await loadArticles();
+    updateGeneratePublishButton(currentGenArticleId);
+  } else {
+    toast(data.error || '解除に失敗しました', 'error');
+  }
+}
+
+// ---- Batch ----
+function toDateInputValue(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+async function saveBatchField(id, field, value) {
+  const article = allArticles.find(a => a.id === id);
+  if (article) article[field] = value;
+  const res = await fetch(`/api/articles/${id}`, {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({[field]: value})
+  });
+  const data = await res.json();
+  if (!data.success) toast(data.error || '保存に失敗しました', 'error');
+}
+
+function startBatchPolling() {
+  if (batchPollTimer) return;
+  batchPollTimer = setInterval(async () => {
+    await loadArticles();
+    await loadLatestBatchJob();
+  }, 5000);
+}
+
+function stopBatchPolling() {
+  if (!batchPollTimer) return;
+  clearInterval(batchPollTimer);
+  batchPollTimer = null;
+}
+
+async function cancelBatchJob(jobId) {
+  if (!jobId) return;
+  if (!confirm('実行中の一括処理を中止しますか？\n\n・処理中の1件はそのまま続行されます\n・待機中の記事は「未生成」に戻り、後で再実行できます')) {
+    return;
+  }
+  try {
+    const res = await fetch(`/api/batch-jobs/${jobId}/cancel`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast(data.error || '中止に失敗しました', 'error');
+      return;
+    }
+    toast(data.message || 'キャンセル要求を送信しました', 'success');
+    await loadLatestBatchJob();
+    await loadArticles();
+  } catch (e) {
+    toast(`中止リクエストに失敗: ${e.message || e}`, 'error');
+  }
+}
+
+async function forceTerminateBatchJob(jobId) {
+  if (!jobId) return;
+  if (!confirm('一括処理を強制終了します。\n\n・処理中の記事のAPI呼び出しは裏側で動き続けますが、結果は記事に反映されません\n・待機中/処理中の記事は全て「未生成」に戻ります\n・stuckしている時の最終手段です。本当に実行しますか？')) {
+    return;
+  }
+  try {
+    const res = await fetch(`/api/batch-jobs/${jobId}/force-terminate`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast(data.error || '強制終了に失敗しました', 'error');
+      return;
+    }
+    toast(data.message || '強制終了しました', 'success');
+    await loadLatestBatchJob();
+    await loadArticles();
+  } catch (e) {
+    toast(`強制終了リクエストに失敗: ${e.message || e}`, 'error');
+  }
+}
+
+async function loadLatestBatchJob() {
+  try {
+    const res = await fetch('/api/batch-jobs/latest');
+    if (!res.ok) return null;
+    const job = await res.json();
+    renderBatchJobStatus(job);
+    return job;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function loadBatchJob(jobId) {
+  if (!jobId) return null;
+  try {
+    const res = await fetch(`/api/batch-jobs/${jobId}`);
+    if (!res.ok) return null;
+    const job = await res.json();
+    renderBatchJobStatus(job);
+    return job;
+  } catch (e) {
+    return null;
+  }
+}
+
+function renderBatchJobStatus(job) {
+  const el = document.getElementById('batch-msg');
+  const progress = document.getElementById('batch-progress');
+  const fill = document.getElementById('batch-progress-fill');
+  const percentEl = document.getElementById('batch-progress-percent');
+  const countEl = document.getElementById('batch-progress-count');
+  const currentEl = document.getElementById('batch-progress-current');
+  if (!el) return;
+  const generatingCount = allArticles.filter(a => a.status === 'generating').length;
+  const queuedCount = allArticles.filter(a => a.status === 'queued').length;
+  if (!job && !generatingCount && !queuedCount) {
+    el.textContent = '';
+    if (progress) progress.style.display = 'none';
+    stopBatchPolling();
+    return;
+  }
+  const isRunning = job?.status === 'running' || generatingCount > 0 || queuedCount > 0;
+  const completed = Number(job?.completed || 0);
+  const failed = Number(job?.failed || 0);
+  const retried = Number(job?.retried || 0);
+  const total = Number(job?.total || (generatingCount + queuedCount));
+  const done = Math.min(total, completed + failed);
+  const percent = total ? Math.round((done / total) * 100) : 0;
+  if (progress) progress.style.display = job || generatingCount || queuedCount ? 'block' : 'none';
+  if (fill) fill.style.width = `${percent}%`;
+  if (percentEl) percentEl.textContent = `${percent}%`;
+  if (countEl) countEl.textContent = `${done}/${total}件`;
+  if (currentEl) currentEl.textContent = job?.current_title ? `処理中: ${job.current_title}` : '';
+  if (isRunning) {
+    const queueInfo = queuedCount ? ` / 待機 ${queuedCount}件` : '';
+    const cancelBtn = job?.id
+      ? `<button class="btn btn-secondary btn-sm" style="margin-left:8px" onclick="cancelBatchJob('${esc(job.id)}')">⏹ 一括処理を中止</button>
+         <button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="forceTerminateBatchJob('${esc(job.id)}')" title="現在の記事のAPI呼び出しを待たずにジョブを終了マーク。stuckしてる時用">✕ 強制終了</button>`
+      : '';
+    el.innerHTML = `<div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px"><span>一括生成中: ${completed}/${total}件完了${queueInfo}${failed ? ` / エラー ${failed}件` : ''}${retried ? ` / 自動リトライ ${retried}回` : ''}</span>${cancelBtn}</div><div style="margin-top:4px">${esc(job?.message || 'ページを移動しても処理は継続します。戻ってきたら自動で状況を更新します。')}</div>`;
+    // 一括生成開始ボタンを無効化（並行起動防止）
+    const startBtn = document.querySelector('button[onclick="startBatchGenerate()"]');
+    if (startBtn) {
+      startBtn.disabled = true;
+      startBtn.dataset.batchRunning = '1';
+    }
+    startBatchPolling();
+    return;
+  }
+  // running ではない場合、開始ボタンを戻す
+  const startBtn = document.querySelector('button[onclick="startBatchGenerate()"]');
+  if (startBtn && startBtn.dataset.batchRunning === '1') {
+    startBtn.disabled = false;
+    delete startBtn.dataset.batchRunning;
+  }
+  stopBatchPolling();
+  // 終了済みジョブの表示: クラッシュ/キャンセル/強制終了/再起動中断は進捗バーを隠す。
+  // 正常完了だけ 100% で完了メッセージを表示する。
+  const terminalNonSuccess = ['crashed', 'crashed_on_restart', 'cancelled', 'terminated'].includes(job?.status);
+  if (terminalNonSuccess) {
+    // 進捗バー本体は隠し、メッセージだけ残す
+    if (progress) progress.style.display = 'none';
+    if (el && job?.message) {
+      el.style.color = 'var(--warning)';
+      el.textContent = job.message;
+    }
+  } else if (job?.status) {
+    if (fill) fill.style.width = '100%';
+    if (percentEl) percentEl.textContent = '100%';
+    if (countEl) countEl.textContent = `${job.completed || 0}/${job.total || 0}件`;
+    if (currentEl) currentEl.textContent = '';
+    if (el) el.textContent = job.message || `一括生成完了: 成功 ${job.completed || 0}件 / エラー ${job.failed || 0}件`;
+  }
+}
+
+function loadBatchArticles() {
+  // 一括処理ページは「これから生成する対象」のみ。
+  // pending / queued / generating / error を固定表示（生成済 / PUSH済 は対応履歴へ）
+  const typeFilter = currentBatchTypeTab || '';
+  const category = document.getElementById('batch-category-filter')?.value || '';
+  let targets = allArticles.filter(a => ['pending', 'queued', 'generating', 'error'].includes(a.status));
+  if (typeFilter) targets = targets.filter(a => (a.article_type || 'ranking') === typeFilter);
+  if (category) targets = targets.filter(a => (a.category || '') === category);
+  // 新着が上に来るよう作成日時降順で並べる（商標化した記事がすぐ上に現れる）
+  targets.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+
+  document.getElementById('batch-count').textContent = targets.length;
+  // 選択状態はタブ非依存の永続Set batchSelectedIds で管理する。
+  // null（ページに入った直後）のときは、全タブの選択可能記事をデフォルト選択。
+  if (batchSelectedIds === null) {
+    batchSelectedIds = new Set(allArticles.filter(a => batchRowSelectable(a)).map(a => a.id));
+  }
+  document.getElementById('batch-body').innerHTML = targets.map(a => {
+    const selectable = batchRowSelectable(a);
+    const shouldCheck = selectable && batchSelectedIds.has(a.id);
+    return `
+    <tr>
+      <td><input type="checkbox" class="check-row" value="${a.id}" ${shouldCheck ? 'checked' : ''} ${selectable ? '' : 'disabled'} onchange="toggleBatchRow('${a.id}', this.checked)"></td>
+      <td>${statusBadge(a.status)}${a.processing_message ? `<div style="font-size:10px;color:var(--muted);margin-top:4px">${esc(a.processing_message)}</div>` : ''}</td>
+      <td style="font-size:12px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.title)}</td>
+      <td style="font-size:11px;color:var(--muted);white-space:nowrap">${esc(articleTypeLabel(a.article_type || 'ranking'))}</td>
+      <td><input type="text" class="form-control" value="${esc(a.slug || '')}" placeholder="自動" style="font-size:11px;height:28px" onchange="saveBatchField('${a.id}', 'slug', this.value)"></td>
+      <td style="font-size:11px;color:var(--muted);white-space:nowrap">${esc(a.category || '—')}</td>
+      <td>${scoreBadge(a)}</td>
+      <td>${getSiteName(a.site_id)}</td>
+    </tr>
+  `;
+  }).join('');
+  syncBatchTopScroll();
+}
+
+function syncBatchTopScroll() {
+  const wrap = document.getElementById('batch-table-wrap');
+  const topScroll = document.getElementById('batch-top-scroll');
+  const topInner = document.getElementById('batch-top-scroll-inner');
+  if (!wrap || !topScroll || !topInner) return;
+  const table = wrap.querySelector('table');
+  if (!table) return;
+  // 内側のダミー要素の幅 = 実テーブルの幅にする
+  const width = table.scrollWidth;
+  topInner.style.width = width + 'px';
+  // 一度だけイベントリスナーをセット（フラグで重複防止）
+  if (!topScroll._scrollSyncBound) {
+    topScroll.addEventListener('scroll', () => {
+      if (topScroll._syncing) return;
+      wrap._syncing = true;
+      wrap.scrollLeft = topScroll.scrollLeft;
+      wrap._syncing = false;
+    });
+    wrap.addEventListener('scroll', () => {
+      if (wrap._syncing) return;
+      topScroll._syncing = true;
+      topScroll.scrollLeft = wrap.scrollLeft;
+      topScroll._syncing = false;
+    });
+    topScroll._scrollSyncBound = true;
+  }
+}
+
+function batchRowSelectable(article) {
+  // 一括処理ページで選択可能なのは pending / error のみ。
+  // queued / generating / publishing / repairing は進行中なので選択不可。
+  if (isArticleBusy(article.status)) return false;
+  return ['pending', 'error'].includes(article.status);
+}
+
+// チェックボックス1行の ON/OFF を永続Setに反映
+function toggleBatchRow(id, checked) {
+  if (batchSelectedIds === null) batchSelectedIds = new Set();
+  if (checked) batchSelectedIds.add(id);
+  else batchSelectedIds.delete(id);
+}
+
+function toggleBatchAll(cb) {
+  // 現在表示中（＝今のタブ）の選択可能行だけを一括ON/OFFする。
+  // 他タブの選択は batchSelectedIds にそのまま保持される。
+  document.querySelectorAll('#batch-body .check-row').forEach(c => {
+    if (c.disabled) return;
+    c.checked = cb.checked;
+    toggleBatchRow(c.value, cb.checked);
+  });
+}
+
+function getBatchSelectedIds() {
+  if (!batchSelectedIds) return [];
+  // 「いま選択可能な対象記事」に存在するIDだけに絞る（古いID・選択不可を除外）
+  const valid = new Set(allArticles.filter(a => batchRowSelectable(a)).map(a => a.id));
+  return [...batchSelectedIds].filter(id => valid.has(id));
+}
+
+async function startBatchGenerate() {
+  const ids = getBatchSelectedIds();
+  if (!ids.length) { toast('記事を選択してください', 'error'); return; }
+  setArticlesLocalStatus(ids, 'generating', '一括生成中です。完了後に点数を更新します。');
+  const qualityId = document.getElementById('batch-quality').value;
+  const articleType = currentBatchTypeTab || currentArticleType;
+  const res = await fetch('/api/batch-generate', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({article_ids: ids, quality_id: qualityId, article_type: articleType})
+  });
+  const data = await res.json();
+  if (data.success) {
+    toast(data.message, 'success');
+    document.getElementById('batch-msg').innerHTML = '一括生成中...<br>ページを移動しても処理は継続します。';
+    const progress = document.getElementById('batch-progress');
+    if (progress) progress.style.display = 'block';
+    const fill = document.getElementById('batch-progress-fill');
+    if (fill) fill.style.width = '0%';
+    await loadArticles();
+    await loadLatestBatchJob();
+    startBatchPolling();
+  } else {
+    toast(data.error || '失敗', 'error');
+    await loadArticles();
+  }
+}
+
+// ---- Title Definition ----
+async function loadTitleDefinition() {
+  const msg = document.getElementById('td-msg');
+  try {
+    const res = await fetch('/api/title-definition');
+    if (!res.ok) throw new Error('読み込みに失敗しました');
+    const data = await res.json();
+    const d = data.definition || {};
+    document.getElementById('td-char-basic-min').value = d.char_basic_min ?? '';
+    document.getElementById('td-char-basic-max').value = d.char_basic_max ?? '';
+    document.getElementById('td-char-max').value = d.char_max ?? '';
+    document.getElementById('td-forbidden-phrases').value = (d.forbidden_phrases || []).join(', ');
+    document.getElementById('td-concreteness').value = d.concreteness_examples || '';
+    document.getElementById('td-angle-categories').value = (d.angle_categories || []).join(', ');
+    document.getElementById('td-symbol-rules').value = d.symbol_rules || '';
+    document.getElementById('td-ranking-default').value = d.ranking_default_count ?? 5;
+    document.getElementById('td-ranking-max').value = d.ranking_max_count ?? 7;
+    document.getElementById('td-additional').value = d.additional_instructions || '';
+    if (msg) { msg.style.color = 'var(--muted)'; msg.textContent = 'タイトル定義を読み込みました。'; }
+  } catch (e) {
+    if (msg) { msg.style.color = 'var(--error)'; msg.textContent = '読み込みエラー: ' + e.message; }
+  }
+}
+
+function readListField(value) {
+  return String(value || '')
+    .split(/[,、，\n]+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+async function saveTitleDefinition() {
+  const msg = document.getElementById('td-msg');
+  const payload = {
+    char_basic_min: parseInt(document.getElementById('td-char-basic-min').value, 10) || 28,
+    char_basic_max: parseInt(document.getElementById('td-char-basic-max').value, 10) || 35,
+    char_max: parseInt(document.getElementById('td-char-max').value, 10) || 45,
+    forbidden_phrases: readListField(document.getElementById('td-forbidden-phrases').value),
+    concreteness_examples: document.getElementById('td-concreteness').value,
+    angle_categories: readListField(document.getElementById('td-angle-categories').value),
+    symbol_rules: document.getElementById('td-symbol-rules').value,
+    ranking_default_count: parseInt(document.getElementById('td-ranking-default').value, 10) || 5,
+    ranking_max_count: parseInt(document.getElementById('td-ranking-max').value, 10) || 7,
+    additional_instructions: document.getElementById('td-additional').value,
+  };
+  try {
+    const res = await fetch('/api/title-definition', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || '保存失敗');
+    if (msg) { msg.style.color = 'var(--success, #0a7a2f)'; msg.textContent = '✓ 保存しました。次回のタイトル案生成から反映されます。'; }
+    toast('タイトル定義を保存しました', 'success');
+  } catch (e) {
+    if (msg) { msg.style.color = 'var(--error)'; msg.textContent = '保存エラー: ' + e.message; }
+    toast('保存に失敗しました', 'error');
+  }
+}
+
+async function resetTitleDefinition() {
+  if (!confirm('タイトル定義をデフォルトに戻しますか？\n（現在の設定は失われます）')) return;
+  try {
+    const res = await fetch('/api/title-definition/reset', {method: 'POST'});
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || 'リセット失敗');
+    await loadTitleDefinition();
+    toast('デフォルトに戻しました', 'success');
+  } catch (e) {
+    toast('リセットに失敗しました: ' + e.message, 'error');
+  }
+}
+
+// ---- Ad Insertion Definition ----
+let adInsertionState = { ranking: [], brand: [], column: [] };
+const AD_POSITION_LABELS = {
+  'top':                '記事冒頭',
+  'before_first_h2':    '最初のH2の直前',
+  'after_first_h2':     '最初のH2の直後',
+  'after_each_h3_rank': '各「N位」H3の直後',
+  'before_matome_h2':   'まとめH2の直前',
+  'after_matome_h2':    'まとめH2の直後',
+  'after_last_h2':      '最後のH2の直後（確定）',
+  'bottom':             '記事末尾',
+};
+const AD_DESIGN_LABELS = { 'vertical': '縦置きカード', 'ranking': 'ランキングカード' };
+
+function renderAdRules(articleType) {
+  const container = document.getElementById('ad-rules-' + articleType);
+  if (!container) return;
+  const rules = adInsertionState[articleType] || [];
+  if (!rules.length) {
+    container.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">ルール無し（マーカーは挿入されない）</div>';
+    return;
+  }
+  container.innerHTML = rules.map((r, i) => {
+    const posOpts = Object.entries(AD_POSITION_LABELS).map(([v, l]) =>
+      `<option value="${v}" ${r.position === v ? 'selected' : ''}>${esc(l)}</option>`
+    ).join('');
+    const designOpts = Object.entries(AD_DESIGN_LABELS).map(([v, l]) =>
+      `<option value="${v}" ${r.design === v ? 'selected' : ''}>${esc(l)}</option>`
+    ).join('');
+    const showCount = r.design === 'ranking';
+    const showRepeat = r.design === 'vertical';
+    return `
+      <div class="ad-rule-row" style="display:grid;grid-template-columns:2fr 1.4fr 1fr 1fr auto;gap:8px;align-items:center;margin-bottom:6px;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:4px">
+        <select class="form-control" onchange="updateAdRule('${articleType}', ${i}, 'position', this.value)" style="font-size:12px;height:32px">${posOpts}</select>
+        <select class="form-control" onchange="updateAdRule('${articleType}', ${i}, 'design', this.value); renderAdRules('${articleType}')" style="font-size:12px;height:32px">${designOpts}</select>
+        <div style="font-size:11px;color:var(--muted)">
+          ${showCount ? `件数: <input type="number" min="1" max="10" value="${r.count || 3}" onchange="updateAdRule('${articleType}', ${i}, 'count', parseInt(this.value, 10))" style="width:50px;font-size:11px">` : '—'}
+        </div>
+        <div style="font-size:11px;color:var(--muted)">
+          ${showRepeat ? `連続: <input type="number" min="1" max="5" value="${r.repeat || 1}" onchange="updateAdRule('${articleType}', ${i}, 'repeat', parseInt(this.value, 10))" style="width:50px;font-size:11px">` : '—'}
+        </div>
+        <button class="btn btn-danger btn-sm" onclick="removeAdRule('${articleType}', ${i})">🗑</button>
+      </div>
+    `;
+  }).join('');
+}
+
+function updateAdRule(articleType, index, key, value) {
+  if (!adInsertionState[articleType] || !adInsertionState[articleType][index]) return;
+  if (key === 'repeat' && value <= 1) {
+    delete adInsertionState[articleType][index].repeat;
+  } else if (key === 'count' && (!value || isNaN(value))) {
+    delete adInsertionState[articleType][index].count;
+  } else {
+    adInsertionState[articleType][index][key] = value;
+  }
+}
+
+function addAdRule(articleType) {
+  if (!adInsertionState[articleType]) adInsertionState[articleType] = [];
+  adInsertionState[articleType].push({ position: 'after_first_h2', design: 'vertical' });
+  renderAdRules(articleType);
+}
+
+function removeAdRule(articleType, index) {
+  if (!adInsertionState[articleType]) return;
+  adInsertionState[articleType].splice(index, 1);
+  renderAdRules(articleType);
+}
+
+async function loadAdInsertion() {
+  const msg = document.getElementById('ad-insertion-msg');
+  try {
+    const res = await fetch('/api/ad-insertion');
+    if (!res.ok) throw new Error('読み込みに失敗しました');
+    const data = await res.json();
+    adInsertionState = data.definition || { ranking: [], brand: [], column: [] };
+    ['ranking', 'brand', 'column'].forEach(t => {
+      if (!Array.isArray(adInsertionState[t])) adInsertionState[t] = [];
+      renderAdRules(t);
+    });
+    if (msg) { msg.style.color = 'var(--muted)'; msg.textContent = '広告挿入定義を読み込みました。'; }
+  } catch (e) {
+    if (msg) { msg.style.color = 'var(--error)'; msg.textContent = '読み込みエラー: ' + e.message; }
+  }
+}
+
+async function saveAdInsertion() {
+  const msg = document.getElementById('ad-insertion-msg');
+  try {
+    const res = await fetch('/api/ad-insertion', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ definition: adInsertionState }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || '保存失敗');
+    adInsertionState = data.definition;
+    ['ranking', 'brand', 'column'].forEach(t => renderAdRules(t));
+    toast('広告挿入定義を保存しました', 'success');
+    if (msg) { msg.style.color = 'var(--success)'; msg.textContent = '保存しました（' + new Date().toLocaleTimeString() + '）'; }
+  } catch (e) {
+    toast('保存に失敗しました: ' + e.message, 'error');
+    if (msg) { msg.style.color = 'var(--error)'; msg.textContent = '保存エラー: ' + e.message; }
+  }
+}
+
+async function resetAdInsertion() {
+  if (!confirm('広告挿入定義をデフォルトに戻しますか？\n（現在の設定は失われます）')) return;
+  try {
+    const res = await fetch('/api/ad-insertion/reset', {method: 'POST'});
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || 'リセット失敗');
+    await loadAdInsertion();
+    toast('デフォルトに戻しました', 'success');
+  } catch (e) {
+    toast('リセットに失敗しました: ' + e.message, 'error');
+  }
+}
+
+// ---- Quality ----
+async function loadQuality() {
+  const res = await fetch('/api/quality');
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    toast(data.error || '品質定義の取得に失敗しました', 'error');
+    return;
+  }
+  qualityList = await res.json();
+  renderQuality();
+  loadQualitySelects();
+  updateQualityDefaultsForCurrentContext();
+  scheduleDataSnapshotBackup();
+}
+
+function renderQuality() {
+  document.getElementById('quality-grid').innerHTML = qualityList.map(q => `
+    <div class="quality-card">
+      <div class="quality-name">
+        ${esc(q.name)}
+        ${q.is_default ? '<span class="quality-default">★ デフォルト</span>' : ''}
+      </div>
+      <div style="font-size:10px;color:var(--accent);margin-bottom:6px">
+        ${articleTypeLabel(q.article_type || 'common')} · ${q.target_chars ? `${esc(q.target_chars)}文字` : '文字数指定なし'} · ${esc(q.tone || 'ですます調')}
+      </div>
+      <div class="quality-prompt">${esc(q.prompt)}</div>
+      ${q.reference_url ? `<div style="font-size:10px;margin-top:6px"><a href="${esc(q.reference_url)}" target="_blank" style="color:var(--accent)">🔗 書き方参考URL</a></div>` : ''}
+      ${q.structure_html ? `<div style="font-size:10px;margin-top:6px;color:var(--accent)">HTML構成見本あり</div>` : ''}
+      <div class="quality-actions">
+        <button class="btn btn-secondary btn-sm" onclick="editQuality('${q.id}')">✏ 編集</button>
+        <button class="btn btn-secondary btn-sm" onclick="setDefaultQuality('${q.id}')">★ デフォルト</button>
+        ${!q.is_default ? `<button class="btn btn-danger btn-sm" onclick="deleteQuality('${q.id}')">🗑</button>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function loadQualitySelects() {
+  const placeholderOpt = '<option value="">-- 品質定義を選択 --</option>';
+  const autoOpt = '<option value="">自動（記事種類に合わせる）</option>';
+  const qualityOpts = qualityList.map(q => `<option value="${q.id}">${esc(q.name)}</option>`).join('');
+  ['gen-quality', 'batch-quality', 's-default-quality'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const prev = el.value;
+    // gen-quality / batch-quality は「自動」、それ以外は単なるプレースホルダ
+    const firstOpt = (id === 'gen-quality' || id === 'batch-quality') ? autoOpt : placeholderOpt;
+    el.innerHTML = firstOpt + qualityOpts;
+    // 既存の選択値を保持。無ければ空（=自動）。
+    el.value = qualityList.some(q => q.id === prev) ? prev : '';
+  });
+}
+
+function defaultQualityId(articleType = currentArticleType) {
+  return (
+    qualityList.find(q => q.article_type === articleType)?.id ||
+    (articleType === 'ranking' ? qualityList.find(q => q.id === 'ranking-quality')?.id : '') ||
+    (articleType === 'brand' ? qualityList.find(q => q.id === 'brand-quality')?.id : '') ||
+    (articleType === 'column' ? qualityList.find(q => q.id === 'column-quality')?.id : '') ||
+    qualityList.find(q => q.is_default)?.id ||
+    qualityList[0]?.id ||
+    ''
+  );
+}
+
+function openQualityModal() {
+  document.getElementById('quality-edit-id').value = '';
+  document.getElementById('quality-name').value = '';
+  document.getElementById('quality-reference-url').value = '';
+  document.getElementById('quality-article-type').value = currentArticleType || '';
+  document.getElementById('quality-target-chars').value = '3000';
+  document.getElementById('quality-tone').value = 'ですます調';
+  document.getElementById('quality-extra-rules').value = '';
+  document.getElementById('quality-structure-html').value = '';
+  document.getElementById('quality-prompt').value = '';
+  document.getElementById('quality-is-default').checked = false;
+  document.getElementById('quality-modal-title').textContent = '// 品質定義を追加';
+  document.getElementById('quality-modal').classList.add('open');
+}
+
+function editQuality(id) {
+  const q = qualityList.find(q => q.id === id);
+  if (!q) return;
+  document.getElementById('quality-edit-id').value = id;
+  document.getElementById('quality-name').value = q.name;
+  document.getElementById('quality-reference-url').value = q.reference_url || '';
+  document.getElementById('quality-article-type').value = q.article_type || '';
+  document.getElementById('quality-target-chars').value = q.target_chars || '';
+  document.getElementById('quality-tone').value = q.tone || 'ですます調';
+  document.getElementById('quality-extra-rules').value = q.extra_rules || '';
+  document.getElementById('quality-structure-html').value = q.structure_html || '';
+  document.getElementById('quality-prompt').value = q.prompt;
+  document.getElementById('quality-is-default').checked = q.is_default || false;
+  document.getElementById('quality-modal-title').textContent = '// 品質定義を編集';
+  document.getElementById('quality-modal').classList.add('open');
+}
+
+function closeQualityModal() {
+  document.getElementById('quality-modal').classList.remove('open');
+}
+
+async function saveQuality() {
+  const id = document.getElementById('quality-edit-id').value;
+  const body = {
+    name: document.getElementById('quality-name').value,
+    reference_url: document.getElementById('quality-reference-url').value,
+    article_type: document.getElementById('quality-article-type').value,
+    target_chars: document.getElementById('quality-target-chars').value,
+    tone: document.getElementById('quality-tone').value,
+    extra_rules: document.getElementById('quality-extra-rules').value,
+    structure_html: document.getElementById('quality-structure-html').value,
+    prompt: document.getElementById('quality-prompt').value,
+    is_default: document.getElementById('quality-is-default').checked,
+  };
+  if (id) {
+    await fetch(`/api/quality/${id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  } else {
+    await fetch('/api/quality', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  }
+  toast('保存しました', 'success');
+  closeQualityModal();
+  loadQuality();
+}
+
+async function setDefaultQuality(id) {
+  await fetch(`/api/quality/${id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({is_default:true})});
+  loadQuality();
+}
+
+async function deleteQuality(id) {
+  if (!confirm('削除しますか?')) return;
+  await fetch(`/api/quality/${id}`, {method:'DELETE'});
+  toast('削除しました', 'success');
+  loadQuality();
+}
+
+// ---- Settings ----
+const SETTINGS_BACKUP_KEY = 'affiros9.apiSettingsBackup.v1';
+const SETTINGS_BACKUP_FIELDS = [
+  'claude_api_key',
+  'default_quality_id',
+  'article_css',
+  'amazon_access_key',
+  'amazon_secret_key',
+  'amazon_partner_tag',
+  'rakuten_app_id',
+  'rakuten_affiliate_id'
+];
+const MASKED_SETTING_FIELDS = new Set([
+  'claude_api_key',
+  'amazon_access_key',
+  'amazon_secret_key',
+  'rakuten_app_id'
+]);
+
+function readSettingsBackup() {
+  try {
+    return JSON.parse(localStorage.getItem(SETTINGS_BACKUP_KEY) || '{}');
+  } catch (e) {
+    return {};
+  }
+}
+
+function isMaskedSettingValue(value) {
+  return String(value || '').includes('•');
+}
+
+function looksLikeHtml(value) {
+  const text = String(value || '');
+  return /<!--\s*wp:/i.test(text) || /<\/?[a-z][\s\S]*>/i.test(text);
+}
+
+function writeSettingsBackup(data) {
+  const previous = readSettingsBackup();
+  const backup = {...previous};
+  SETTINGS_BACKUP_FIELDS.forEach(field => {
+    if (!(field in data)) return;
+    const value = data[field];
+    if (MASKED_SETTING_FIELDS.has(field) && isMaskedSettingValue(value)) return;
+    backup[field] = value;
+  });
+  backup.updated_at = new Date().toISOString();
+  try {
+    localStorage.setItem(SETTINGS_BACKUP_KEY, JSON.stringify(backup));
+  } catch (e) {
+    console.warn('settings backup failed', e);
+  }
+}
+
+function settingHasValue(value) {
+  return typeof value === 'boolean' ? value : String(value || '').trim() !== '';
+}
+
+function collectSettingsFormData() {
+  return {
+    claude_api_key: document.getElementById('s-claude-key').value,
+    claude_article_model: document.getElementById('s-article-model').value,
+    default_quality_id: document.getElementById('s-default-quality').value,
+    article_css: document.getElementById('s-article-css').value,
+    amazon_access_key: document.getElementById('s-amazon-access-key').value,
+    amazon_secret_key: document.getElementById('s-amazon-secret-key').value,
+    amazon_partner_tag: document.getElementById('s-amazon-partner-tag').value,
+    rakuten_app_id: document.getElementById('s-rakuten-app-id').value,
+    rakuten_affiliate_id: document.getElementById('s-rakuten-affiliate-id').value,
+    schedule_daily_cap: parseInt(document.getElementById('s-schedule-daily-cap').value, 10) || 20,
+  };
+}
+
+async function restoreSettingsFromBrowserBackup(settings) {
+  const backup = readSettingsBackup();
+  if (!backup || Object.keys(backup).length === 0) return settings;
+
+  const restorePayload = {...settings};
+  let shouldRestore = false;
+  SETTINGS_BACKUP_FIELDS.forEach(field => {
+    const backupValue = backup[field];
+    if (!settingHasValue(restorePayload[field]) && settingHasValue(backupValue)) {
+      restorePayload[field] = backupValue;
+      shouldRestore = true;
+    }
+  });
+
+  if (!shouldRestore) return settings;
+
+  const res = await fetch('/api/settings', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(restorePayload)
+  });
+  if (!res.ok) return settings;
+  const fresh = await fetch('/api/settings');
+  toast('ブラウザのバックアップからAPI設定を復元しました', 'success');
+  return await fresh.json();
+}
+
+// APIキー等のパスワード入力欄の表示/非表示を個別に切り替える。
+// data-secret-field を持つ欄（APIキー類）は、表示時にサーバから実キー全体を
+// 取得して見せる（GET /api/settings はマスク値しか返さないため）。
+async function toggleKeyVisibility(btn) {
+  const input = btn.parentElement.querySelector('input');
+  if (!input) return;
+  // 実値の取得先URL。APIキー欄は data-secret-field、サイトのWPパスワードは
+  // data-reveal-url を持つ。どちらも無ければ単純に type を切り替えるだけ。
+  const revealUrl = input.dataset.revealUrl
+    || (input.dataset.secretField ? '/api/settings/reveal-secret/' + input.dataset.secretField : '');
+  if (input.type === 'password') {
+    // ── 表示する ──
+    if (revealUrl) {
+      // 表示直前のマスク値を退避（「隠す」で元に戻すため）
+      if (input.dataset.masked === undefined) input.dataset.masked = input.value;
+      btn.disabled = true;
+      try {
+        const res = await fetch(revealUrl);
+        if (res.ok) {
+          const d = await res.json();
+          if (typeof d.value === 'string') input.value = d.value;
+        }
+      } catch (e) {
+        // 取得失敗時はマスクのまま（表示だけ切替）
+      } finally {
+        btn.disabled = false;
+      }
+    }
+    input.type = 'text';
+    btn.textContent = '隠す';
+  } else {
+    // ── 隠す ──
+    if (revealUrl && input.dataset.masked !== undefined) {
+      input.value = input.dataset.masked;
+    }
+    input.type = 'password';
+    btn.textContent = '表示';
+  }
+}
+
+async function loadSettings() {
+  const res = await fetch('/api/settings');
+  let s = await res.json();
+  s = await restoreSettingsFromBrowserBackup(s);
+  document.getElementById('s-claude-key').value = s.claude_api_key || '';
+  document.getElementById('s-article-model').value = s.claude_article_model || 'claude-sonnet-4-6';
+  document.getElementById('s-article-css').value = s.article_css || '';
+  document.getElementById('s-amazon-access-key').value = s.amazon_access_key || '';
+  document.getElementById('s-amazon-secret-key').value = s.amazon_secret_key || '';
+  document.getElementById('s-amazon-partner-tag').value = s.amazon_partner_tag || '';
+  document.getElementById('s-rakuten-app-id').value = s.rakuten_app_id || '';
+  document.getElementById('s-rakuten-affiliate-id').value = s.rakuten_affiliate_id || '';
+  document.getElementById('s-schedule-daily-cap').value = s.schedule_daily_cap || 20;
+  // 秘匿フィールドは再読み込み時に「隠す」状態へ戻す（表示中だった欄の取り残しを防ぐ）
+  document.querySelectorAll('input[data-secret-field]').forEach(inp => {
+    inp.type = 'password';
+    delete inp.dataset.masked;
+    const tgl = inp.parentElement.querySelector('button');
+    if (tgl) tgl.textContent = '表示';
+  });
+  await loadQuality();
+  if (s.default_quality_id) document.getElementById('s-default-quality').value = s.default_quality_id;
+  scheduleDataSnapshotBackup();
+}
+
+async function saveSettings() {
+  const data = collectSettingsFormData();
+  if (looksLikeHtml(data.article_css)) {
+    toast('記事CSS定義にはHTMLを保存できません。CSSだけを入力してください。', 'error');
+    const msgEl = document.getElementById('settings-msg');
+    msgEl.textContent = '✗ CSS欄にHTML/Gutenbergブロックが入っています';
+    msgEl.style.color = 'var(--error)';
+    return;
+  }
+  const res = await fetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+  const result = await res.json();
+  if (result.success) {
+    writeSettingsBackup(data);
+    toast('設定を保存しました', 'success');
+    document.getElementById('settings-msg').textContent = '✓ 保存完了';
+    setTimeout(() => document.getElementById('settings-msg').textContent = '', 3000);
+  } else {
+    const msgEl = document.getElementById('settings-msg');
+    msgEl.textContent = '✗ ' + (result.error || '保存に失敗しました');
+    msgEl.style.color = 'var(--error)';
+  }
+}
+
+// Close modals on overlay click
+// mousedown と mouseup が両方 overlay 上の時だけ閉じる。
+// （input 選択中にドラッグで外に出てもモーダルが閉じないように）
+['quality-modal','site-modal','article-modal','brand-expansion-modal','schedule-publish-modal'].forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  let mouseDownOnOverlay = false;
+  el.addEventListener('mousedown', e => {
+    mouseDownOnOverlay = (e.target === e.currentTarget);
+  });
+  el.addEventListener('mouseup', e => {
+    if (mouseDownOnOverlay && e.target === e.currentTarget) {
+      e.currentTarget.classList.remove('open');
+    }
+    mouseDownOnOverlay = false;
+  });
+});
+
+window.addEventListener('popstate', () => {
+  showPage(pageFromUrl() || 'ranking', { updateUrl: false });
+});
+
+// === マルチサイト管理 ===
+let currentSiteId = '';     // 現在選択中のサイトID（''=ダッシュボード）
+let sitesDashboardData = [];  // 各サイトの統計
+
+async function loadCurrentSite() {
+  try {
+    const res = await fetch('/api/current-site');
+    const data = await res.json();
+    currentSiteId = String(data.site_id || '');
+  } catch (e) {
+    currentSiteId = '';
+  }
+}
+
+async function loadSitesDashboard() {
+  try {
+    const res = await fetch('/api/dashboard/sites');
+    const data = await res.json();
+    sitesDashboardData = data.sites || [];
+    currentSiteId = String(data.current_site_id || '');
+    renderSidebarSites();
+    renderSiteCardsOnHome();
+    updateHomePageMode();
+  } catch (e) {
+    console.error('loadSitesDashboard failed', e);
+  }
+}
+
+function renderSidebarSites() {
+  const container = document.getElementById('sidebar-sites');
+  if (!container) return;
+  const dashLink = document.getElementById('sidebar-dashboard-link');
+  if (dashLink) {
+    dashLink.classList.toggle('active', !currentSiteId);
+  }
+  // ヘッダーの現在サイト表示
+  const indicator = document.getElementById('current-site-indicator');
+  const indicatorName = document.getElementById('current-site-name');
+  if (indicator && indicatorName) {
+    const current = sitesDashboardData.find(s => String(s.id) === currentSiteId);
+    if (current) {
+      indicator.style.display = '';
+      indicatorName.textContent = '🏠 ' + current.name;
+    } else {
+      indicator.style.display = 'none';
+    }
+  }
+  // サイトスコープメニューの表示制御
+  const siteScoped = document.getElementById('nav-site-scoped');
+  const noSiteHint = document.getElementById('nav-no-site-hint');
+  if (siteScoped && noSiteHint) {
+    if (currentSiteId) {
+      siteScoped.style.display = 'flex';
+      noSiteHint.style.display = 'none';
+    } else {
+      siteScoped.style.display = 'none';
+      noSiteHint.style.display = 'block';
+    }
+  }
+  if (!sitesDashboardData.length) {
+    container.innerHTML = '<div class="sidebar-link muted">登録なし</div>';
+    return;
+  }
+  container.innerHTML = sitesDashboardData.map(site => {
+    const isActive = String(site.id) === currentSiteId;
+    const batchBadge = site.active_batch_count > 0
+      ? `<span class="site-card__batch-badge" title="一括処理が${site.active_batch_count}件 実行中">⚡${site.active_batch_count}</span>`
+      : '';
+    const icon = siteFaviconHtml(site.wp_url);
+    return `
+      <a class="sidebar-link ${isActive ? 'active' : ''}" onclick="switchToSite('${esc(site.id)}')" title="${esc(site.wp_url)}">
+        ${icon}
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${esc(site.name)}</span>
+        ${batchBadge}
+        ${isActive ? '<span class="check">✓</span>' : ''}
+      </a>
+    `;
+  }).join('');
+}
+
+// サイトの WP URL から favicon を取る。Google の S2 サービスを使うのでホストが
+// 自前で favicon を吐いていなくても表示される。取得失敗時は家アイコンにフォールバック。
+function siteFaviconHtml(wpUrl) {
+  if (!wpUrl) return '<span>🏠</span>';
+  let host = '';
+  try {
+    host = new URL(wpUrl).hostname;
+  } catch (_) {
+    return '<span>🏠</span>';
+  }
+  if (!host) return '<span>🏠</span>';
+  const src = `https://www.google.com/s2/favicons?sz=32&domain=${encodeURIComponent(host)}`;
+  return `<img src="${esc(src)}" alt="" width="16" height="16" style="vertical-align:middle;border-radius:3px;flex-shrink:0" onerror="this.outerHTML='<span>🏠</span>'">`;
+}
+
+function updateHomePageMode() {
+  // dashboard-overview-section と dashboard-hero を currentSiteId で切替
+  const overview = document.getElementById('dashboard-overview-section');
+  const hero = document.getElementById('dashboard-hero');
+  if (overview) overview.style.display = currentSiteId ? 'none' : '';
+  if (hero) hero.style.display = currentSiteId ? '' : 'none';
+  // ワークスペース時のサイトタイトル設定
+  if (currentSiteId) {
+    const current = sitesDashboardData.find(s => String(s.id) === currentSiteId);
+    const titleEl = document.getElementById('workspace-site-title');
+    const urlEl = document.getElementById('workspace-site-url');
+    if (current && titleEl) titleEl.textContent = '🏠 ' + current.name + ' の作業ホーム';
+    if (current && urlEl) {
+      const url = current.wp_url || '';
+      urlEl.innerHTML = url
+        ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:none">${esc(url)} ↗</a>`
+        : '';
+    }
+  }
+  // 各フォームの「投稿先サイト」セレクタを現在サイト時は非表示にして自動選択
+  applySiteSelectorAutoFill();
+}
+
+function applySiteSelectorAutoFill() {
+  // 全フォームの site-selector-group を currentSiteId で非表示にし、
+  // 内側の select の値を currentSiteId に自動設定
+  const groups = document.querySelectorAll('.site-selector-group');
+  groups.forEach(g => {
+    const select = g.querySelector('select');
+    if (currentSiteId) {
+      g.style.display = 'none';
+      if (select) {
+        // option が存在すれば設定（存在しない場合は loadSites 後に再試行）
+        const hasOpt = Array.from(select.options).some(o => o.value === currentSiteId);
+        if (hasOpt) {
+          select.value = currentSiteId;
+          // change イベント発火（カテゴリー候補等を更新するため）
+          select.dispatchEvent(new Event('change'));
+        }
+      }
+    } else {
+      g.style.display = '';
+    }
+  });
+}
+
+function renderSiteCardsOnHome() {
+  // ホームページにサイトカードを表示（ダッシュボードsectionの内側に挿入）
+  let grid = document.getElementById('site-cards-grid');
+  if (!grid) {
+    const overview = document.getElementById('dashboard-overview-section');
+    if (!overview) return;
+    grid = document.createElement('div');
+    grid.id = 'site-cards-grid';
+    grid.className = 'site-cards-grid';
+    overview.appendChild(grid);
+  }
+  if (!sitesDashboardData.length) {
+    grid.innerHTML = '<div class="intel-empty" style="grid-column:1/-1;padding:20px;text-align:center">サイトが未登録です。「サイトを追加」から登録してください。</div>';
+    return;
+  }
+  grid.innerHTML = sitesDashboardData.map(site => {
+    const c = site.counts || {};
+    const generatingHi = (c.generating || 0) > 0 ? 'active' : '';
+    const batchBadge = site.active_batch_count > 0
+      ? `<span class="site-card__batch-badge">バッチ進行中 ${site.active_batch_count}件</span>`
+      : '<span></span>';
+    const lastPub = site.last_published_at
+      ? `最終投稿: ${esc(formatDateShort(site.last_published_at))}`
+      : '最終投稿: なし';
+    return `
+      <div class="site-card" onclick="switchToSite('${esc(site.id)}')">
+        <div class="site-card__name">🏠 ${esc(site.name)}</div>
+        <div class="site-card__url">${esc(site.wp_url || '(URL未設定)')}</div>
+        <div class="site-card__counts">
+          <div class="site-card__count">
+            <span class="num">${c.total || 0}</span>
+            <span class="lbl">合計</span>
+          </div>
+          <div class="site-card__count ${generatingHi}">
+            <span class="num">${c.generating || 0}</span>
+            <span class="lbl">生成中</span>
+          </div>
+          <div class="site-card__count">
+            <span class="num">${c.published || 0}</span>
+            <span class="lbl">PUSH済</span>
+          </div>
+        </div>
+        <div class="site-card__footer">
+          ${batchBadge}
+          <span>${lastPub}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function formatDateShort(iso) {
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    const m = (d.getMonth() + 1).toString().padStart(2, '0');
+    const day = d.getDate().toString().padStart(2, '0');
+    return `${d.getFullYear()}/${m}/${day}`;
+  } catch { return iso; }
+}
+
+async function switchToSite(siteId) {
+  if (!siteId) return;
+  try {
+    const res = await fetch('/api/current-site', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({site_id: siteId})
+    });
+    const data = await res.json();
+    if (!data.success) {
+      toast(data.error || 'サイト切替に失敗しました', 'error');
+      return;
+    }
+    currentSiteId = siteId;
+    localStorage.setItem('lastSiteId', siteId);
+    renderSidebarSites();
+    updateHomePageMode();
+    // 切替後はそのサイトの作業ホームへ
+    showPage('home');
+    // 記事一覧を新フィルタで再ロード
+    await loadArticles();
+    toast('サイトを切替しました', 'success');
+  } catch (e) {
+    toast('エラー: ' + e.message, 'error');
+  }
+}
+
+async function goToDashboard() {
+  try {
+    await fetch('/api/current-site', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({site_id: ''})
+    });
+    currentSiteId = '';
+    renderSidebarSites();
+    updateHomePageMode();
+    showPage('home');
+    await loadSitesDashboard();
+    // 全サイト集計に切り替えるため記事を再ロード
+    await loadArticles();
+  } catch (e) {
+    toast('エラー: ' + e.message, 'error');
+  }
+}
+
+(async function init() {
+  const initialPage = pageFromUrl() || localStorage.getItem('currentPage') || 'home';
+  showPage(initialPage, { replaceUrl: true, skipLoad: true });
+  await ensureDurableData();
+  await loadCurrentSite();
+  // 最後に使ったサイトがあって、サーバー側未設定なら復元
+  if (!currentSiteId) {
+    const last = localStorage.getItem('lastSiteId');
+    if (last) {
+      try {
+        await fetch('/api/current-site', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({site_id: last})
+        });
+        currentSiteId = last;
+      } catch {}
+    }
+  }
+  await loadSites();
+  await loadSitesDashboard();
+  await loadQuality();
+  await loadArticles();
+  await showPage(initialPage, { replaceUrl: true });
+  renderMonthlyUsageEstimate();
+})();

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Weak Words | English Diary Coach</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="app-topbar">
+      <a class="brand" href="/">English Diary Coach</a>
+      <nav class="topnav" aria-label="App navigation">
+        <a href="/">Diary</a>
+        <a href="/words.html">Words</a>
+        <a href="/usage.html">Cost</a>
+        <a href="/settings.html">Settings</a>
+      </nav>
+    </header>
+
+    <main class="words-shell">
+      <header class="usage-header">
+        <div>
+          <p class="eyebrow">Weak Words</p>
+          <h1>&#33510;&#25163;&#21336;&#35486;</h1>
+        </div>
+        <a class="utility-link" href="/">Back</a>
+      </header>
+
+      <section class="settings-card">
+        <div>
+          <h2>&#33510;&#25163;&#21336;&#35486;&#30331;&#37682;</h2>
+          <p>&#33258;&#20998;&#12364;&#26085;&#35352;&#12391;&#20351;&#12356;&#12383;&#12356;&#33521;&#21336;&#35486;&#12539;&#34920;&#29694;&#12434;&#30331;&#37682;&#12375;&#12414;&#12377;&#12290;</p>
+        </div>
+
+        <form id="wordForm" class="word-form">
+          <label class="field">
+            <span>English</span>
+            <input id="wordEnglish" type="text" placeholder="come up with" required />
+          </label>
+          <label class="field">
+            <span>&#26085;&#26412;&#35486;</span>
+            <input id="wordJapanese" type="text" placeholder="思いつく" required />
+          </label>
+          <label class="select-field">
+            <span>TOEIC</span>
+            <select id="wordToeic">
+              <option value="400">400&#28857;&#30446;&#23433;</option>
+              <option value="600" selected>600&#28857;&#30446;&#23433;</option>
+              <option value="800">800&#28857;&#30446;&#23433;</option>
+            </select>
+          </label>
+          <button class="primary-button" type="submit">&#30331;&#37682;</button>
+        </form>
+      </section>
+
+      <section class="settings-card">
+        <div>
+          <h2>&#33510;&#25163;&#21336;&#35486;&#19968;&#35239;</h2>
+          <p>&#24460;&#12391;&#12362;&#38988;&#29983;&#25104;&#12539;&#28155;&#21066;&#12539;&#24489;&#32722;&#12395;&#20351;&#12360;&#12427;&#12424;&#12358;&#12395;&#20445;&#23384;&#12375;&#12414;&#12377;&#12290;</p>
+        </div>
+        <div id="wordList" class="word-list"></div>
+      </section>
+    </main>
+
+    <script src="/words.js" type="module"></script>
+  </body>
+</html>

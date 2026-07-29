@@ -16,6 +16,16 @@ data/
 # Environment
 .env
 .env.local
+.env.deploy
+
+# プラグイン配信バンドル（build-keys-host.py の生成物。ソースは plugin-downloads/）
+ke-ys-plugin-host/
+ke-ys-plugin-host*.zip
+
+# 🚨 データスナップショット。APIキー・WP管理者パスワードが平文で入っている。絶対に push しない
+backup_*/
+data-snapshot*.json
+snapshot_backup*.json
 
 # Logs (ローカル実行時のFlaskログなどはGit管理しない)
 *.log
