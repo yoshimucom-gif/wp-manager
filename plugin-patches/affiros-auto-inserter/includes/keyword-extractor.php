@@ -136,6 +136,42 @@ class Affiros_AI_Keyword_Extractor {
         return $filtered;
     }
 
+    /**
+     * 検品全滅時の代替キーワード再抽出 (v0.10.1)
+     * 前回キーワードの検索結果が全て別カテゴリ商品 (カバー等) だった場合に、
+     * 検索エンジンが誤解釈しない具体的な商品種名で出し直す。
+     */
+    public function extract_alternative($title, $content, $failed_keyword) {
+        if (!$this->is_configured()) {
+            return new WP_Error('not_configured', 'Claude API キーが未設定');
+        }
+        $plain = trim(wp_strip_all_tags($content));
+        if (mb_strlen($plain) > 2000) $plain = mb_substr($plain, 0, 2000) . '...';
+
+        $prompt = "Amazon商品検索用キーワードの出し直しです。\n\n"
+            . "前回のキーワード「{$failed_keyword}」で検索したところ、結果は全て別カテゴリ商品\n"
+            . "(カバー・ケース・収納用品・付属品など) でした。字面が一致する周辺グッズに\n"
+            . "誤マッチするキーワードだったということです。\n\n"
+            . "## 出し直しのルール\n"
+            . "- 記事の主題商品を指す、より具体的な商品種名を使う\n"
+            . "  (例: 「スーツ用コート」→「チェスターコート メンズ」)\n"
+            . "- 「用」「対応」など周辺グッズにマッチしやすい語は使わない\n"
+            . "- ブランド名・「おすすめ」等のノイズ語は禁止\n"
+            . "- 出力はキーワード文字列のみ。前置き・引用符・改行を含めない\n\n"
+            . "## 記事タイトル\n{$title}\n\n"
+            . "## 記事本文 (先頭2000字)\n{$plain}";
+
+        $text = $this->call_api($prompt, 60);
+        if (is_wp_error($text)) return $text;
+
+        $text = preg_replace('/^["「『【]+|["」』】]+$/u', '', trim($text));
+        $text = trim(preg_replace('/[\r\n]+/', ' ', $text));
+        if (mb_strlen($text) < 2 || mb_strlen($text) > 60) {
+            return new WP_Error('bad_keyword', '再抽出結果が異常: ' . $text);
+        }
+        return $text;
+    }
+
     /** Claude API 呼び出し共通部。成功時はテキスト、失敗時は WP_Error */
     private function call_api($prompt, $max_tokens) {
         $response = wp_remote_post(self::API_URL, [

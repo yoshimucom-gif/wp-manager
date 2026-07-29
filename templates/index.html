@@ -1951,6 +1951,17 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.24 / auto-inserter v0.10.1 (2026-07-29) — 検品全滅時はキーワードを出し直して再挑戦</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>問題</strong>: v0.10.0の検品ゲートは「スーツ用コート」でAmazon10件・楽天10件を正しく全滅判定したが、その結果カードが挿入されず、古い誤商品カードが残ったままになった。</li>
+              <li><strong>対応</strong>: 検品全滅（検索結果はあるが全て別カテゴリ商品）の場合、<code>extract_alternative()</code> で「前回キーワードは周辺グッズに誤マッチした。より具体的な商品種名で出し直せ（例: スーツ用コート → チェスターコート メンズ）」と再抽出し、新キーワードで検索→検品をもう1周。成功したらキーワードのキャッシュも更新し、結果に「🔁 キーワード再抽出: A → B」を表示。</li>
+              <li><strong>再挑戦は1回のみ</strong>。それでも全滅なら従来どおり失敗表示（間違った商品を載せるより載せない）。コストは問題記事のみ +¥0.6程度。</li>
+              <li><strong>実装整理</strong>: 検索→検品→多様性フィルタを <code>fetch_products()</code> に共通化。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.10.0 → 0.10.1 / <code>APP_VERSION</code> 1.9.23 → 1.9.24。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.23 / auto-inserter v0.10.0 (2026-07-29) — 🎯 AI検品ゲート: 字面一致の別カテゴリ商品を除外</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>実害</strong>: 「スーツに合うコートの種類」の記事に防虫カバー・洋服カバーが3枚並んだ。キーワード「スーツ用コート」は正しいのに、Amazonの字面一致検索が「スーツ・コート用 防虫カバー」を上位に返すため（商品名にスーツ/コート/用が全部含まれる）。多様性フィルタでは防げない別ブランドの別商品。</li>

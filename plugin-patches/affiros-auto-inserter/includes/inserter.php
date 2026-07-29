@@ -77,43 +77,33 @@ class Affiros_AI_Inserter {
             $products_data = is_array($cached_products) ? $cached_products : json_decode($cached_products, true);
         }
         $count = max(1, min(5, intval($settings['products_count'] ?? 3)));
+        $keyword_note = '';
         if (empty($products_data) || empty($products_data['amazon']) && empty($products_data['rakuten'])) {
-            $amazon_api  = new Affiros_AI_Amazon_API($settings);
-            $rakuten_api = new Affiros_AI_Rakuten_API($settings);
-
-            $amazon_products = [];
-            $rakuten_products = [];
-            $errors = [];
-
-            // 多めに取る → AI検品 (字面一致の別カテゴリ商品を除外) → 多様性フィルタ
-            // 検品の必要性: Amazon検索は「スーツ用コート」で防虫カバーを返す
-            // (商品名にスーツ/コート/用が全部含まれるため)。v0.10.0
             $extractor = new Affiros_AI_Keyword_Extractor($settings);
 
-            if ($amazon_api->is_configured()) {
-                $res = $amazon_api->search($keyword, 10);
-                if (is_wp_error($res)) $errors[] = 'Amazon: ' . $res->get_error_message();
-                else {
-                    $before = count($res);
-                    $res = $extractor->filter_relevant($keyword, $post->post_title, $res);
-                    if (empty($res) && $before > 0) {
-                        $errors[] = "Amazon: 検索結果{$before}件は全て別カテゴリ商品 (カバー・付属品等) と判定";
+            list($amazon_products, $rakuten_products, $errors, $all_rejected) =
+                self::fetch_products($settings, $extractor, $keyword, $post->post_title, $count);
+
+            // 検品全滅 (検索結果はあるが全て別カテゴリ商品) なら、
+            // キーワードを出し直して1回だけ再挑戦する。v0.10.1
+            // 例: 「スーツ用コート」→防虫カバーだらけ→「チェスターコート メンズ」で再検索
+            if (empty($amazon_products) && empty($rakuten_products) && $all_rejected) {
+                $kw2 = $extractor->extract_alternative($post->post_title, $post->post_content, $keyword);
+                if (!is_wp_error($kw2) && $kw2 !== '' && $kw2 !== $keyword) {
+                    list($a2, $r2, $errors2, ) =
+                        self::fetch_products($settings, $extractor, $kw2, $post->post_title, $count);
+                    if (!empty($a2) || !empty($r2)) {
+                        $amazon_products = $a2;
+                        $rakuten_products = $r2;
+                        $errors = $errors2;
+                        $keyword_note = "キーワード再抽出: {$keyword} → {$kw2}";
+                        $keyword = $kw2;
+                        update_post_meta($post_id, AFFIROS_AI_META_KEYWORD, $keyword);
+                    } else {
+                        $errors = array_merge($errors, array_map(function ($e) {
+                            return '再挑戦でも ' . $e;
+                        }, $errors2));
                     }
-                    $amazon_products = self::diversify($res, $count);
-                }
-            }
-            // 楽天は Amazon 商品が取れなかった時だけ主軸として使う
-            // (Amazon 主軸カードの楽天ボタンは検索一覧リンクなので商品データ不要)
-            if (empty($amazon_products) && $rakuten_api->is_configured()) {
-                $res = $rakuten_api->search($keyword, 10);
-                if (is_wp_error($res)) $errors[] = '楽天: ' . $res->get_error_message();
-                else {
-                    $before = count($res);
-                    $res = $extractor->filter_relevant($keyword, $post->post_title, $res);
-                    if (empty($res) && $before > 0) {
-                        $errors[] = "楽天: 検索結果{$before}件は全て別カテゴリ商品と判定";
-                    }
-                    $rakuten_products = self::diversify($res, $count);
                 }
             }
 
@@ -125,7 +115,7 @@ class Affiros_AI_Inserter {
             // (Amazonが弾かれて楽天主軸になった原因をユーザーが特定できるように)
             if (!empty($errors)) {
                 $partial_error = implode(' / ', $errors);
-            } elseif (empty($amazon_products) && $amazon_api->is_configured()) {
+            } elseif (empty($amazon_products) && (new Affiros_AI_Amazon_API($settings))->is_configured()) {
                 $partial_error = 'Amazon: エラーなしで0件 (キーワードにヒットなし)';
             }
 
@@ -202,6 +192,9 @@ class Affiros_AI_Inserter {
         if ($partial_error !== '') {
             $msg .= " ⚠️ {$partial_error} → 楽天主軸で挿入";
         }
+        if ($keyword_note !== '') {
+            $msg .= " 🔁 {$keyword_note}";
+        }
 
         return self::result(true, $msg, [
             'changed' => true,
@@ -210,6 +203,52 @@ class Affiros_AI_Inserter {
             'amazon_count' => count($products_data['amazon'] ?? []),
             'rakuten_count' => count($products_data['rakuten'] ?? []),
         ]);
+    }
+
+    /**
+     * キーワードで Amazon/楽天 を検索し、AI検品 → 多様性フィルタまで通す。
+     * 検品の必要性: Amazon検索は「スーツ用コート」で防虫カバーを返す
+     * (商品名にスーツ/コート/用が全部含まれる字面一致のため)。v0.10.0
+     *
+     * @return array [amazon_products, rakuten_products, errors(配列), all_rejected(検品全滅か)]
+     */
+    private static function fetch_products($settings, $extractor, $keyword, $post_title, $count) {
+        $amazon_api  = new Affiros_AI_Amazon_API($settings);
+        $rakuten_api = new Affiros_AI_Rakuten_API($settings);
+        $amazon_products = [];
+        $rakuten_products = [];
+        $errors = [];
+        $all_rejected = false;
+
+        if ($amazon_api->is_configured()) {
+            $res = $amazon_api->search($keyword, 10);
+            if (is_wp_error($res)) $errors[] = 'Amazon: ' . $res->get_error_message();
+            else {
+                $before = count($res);
+                $res = $extractor->filter_relevant($keyword, $post_title, $res);
+                if (empty($res) && $before > 0) {
+                    $errors[] = "Amazon: 検索結果{$before}件は全て別カテゴリ商品 (カバー・付属品等) と判定";
+                    $all_rejected = true;
+                }
+                $amazon_products = self::diversify($res, $count);
+            }
+        }
+        // 楽天は Amazon 商品が取れなかった時だけ主軸として使う
+        // (Amazon 主軸カードの楽天ボタンは検索一覧リンクなので商品データ不要)
+        if (empty($amazon_products) && $rakuten_api->is_configured()) {
+            $res = $rakuten_api->search($keyword, 10);
+            if (is_wp_error($res)) $errors[] = '楽天: ' . $res->get_error_message();
+            else {
+                $before = count($res);
+                $res = $extractor->filter_relevant($keyword, $post_title, $res);
+                if (empty($res) && $before > 0) {
+                    $errors[] = "楽天: 検索結果{$before}件は全て別カテゴリ商品と判定";
+                    $all_rejected = true;
+                }
+                $rakuten_products = self::diversify($res, $count);
+            }
+        }
+        return [$amazon_products, $rakuten_products, $errors, $all_rejected];
     }
 
     /**
