@@ -84,7 +84,8 @@ class Affiros_AI_Rakuten_API {
             } else {
                 $image = '';
             }
-            $url = $item['itemUrl'] ?? $item['affiliateUrl'] ?? '';
+            // アフィリエイトURLを最優先 (itemUrl は素のリンクで成果にならない)
+            $url = !empty($item['affiliateUrl']) ? $item['affiliateUrl'] : ($item['itemUrl'] ?? '');
 
             $products[] = [
                 'source' => 'rakuten',
@@ -96,6 +97,9 @@ class Affiros_AI_Rakuten_API {
                 'price_display' => '¥' . number_format($price),
                 'image' => $image,
                 'url' => $url,
+                // 楽天はレビューデータが取れる (Amazonは取れない)。品質判定と表示に使う
+                'review_count' => intval($item['reviewCount'] ?? 0),
+                'review_avg'   => floatval($item['reviewAverage'] ?? 0),
                 'fetched_at' => current_time('mysql'),
             ];
         }

@@ -78,10 +78,11 @@ class Affiros_AI_Inserter {
         }
         $count = max(1, min(5, intval($settings['products_count'] ?? 3)));
         $keyword_note = '';
+        $source_note = '';
         if (empty($products_data) || empty($products_data['amazon']) && empty($products_data['rakuten'])) {
             $extractor = new Affiros_AI_Keyword_Extractor($settings);
 
-            list($amazon_products, $rakuten_products, $errors, $all_rejected) =
+            list($amazon_products, $rakuten_products, $errors, $all_rejected, $source_note) =
                 self::fetch_products($settings, $extractor, $keyword, $post->post_title, $count);
 
             // 検品全滅 (検索結果はあるが全て別カテゴリ商品) なら、
@@ -90,12 +91,13 @@ class Affiros_AI_Inserter {
             if (empty($amazon_products) && empty($rakuten_products) && $all_rejected) {
                 $kw2 = $extractor->extract_alternative($post->post_title, $post->post_content, $keyword);
                 if (!is_wp_error($kw2) && $kw2 !== '' && $kw2 !== $keyword) {
-                    list($a2, $r2, $errors2, ) =
+                    list($a2, $r2, $errors2, , $note2) =
                         self::fetch_products($settings, $extractor, $kw2, $post->post_title, $count);
                     if (!empty($a2) || !empty($r2)) {
                         $amazon_products = $a2;
                         $rakuten_products = $r2;
                         $errors = $errors2;
+                        $source_note = $note2;
                         $keyword_note = "キーワード再抽出: {$keyword} → {$kw2}";
                         $keyword = $kw2;
                         update_post_meta($post_id, AFFIROS_AI_META_KEYWORD, $keyword);
@@ -195,6 +197,9 @@ class Affiros_AI_Inserter {
         if ($keyword_note !== '') {
             $msg .= " 🔁 {$keyword_note}";
         }
+        if (!empty($source_note)) {
+            $msg .= " 📊 {$source_note}";
+        }
 
         return self::result(true, $msg, [
             'changed' => true,
@@ -210,7 +215,13 @@ class Affiros_AI_Inserter {
      * 検品の必要性: Amazon検索は「スーツ用コート」で防虫カバーを返す
      * (商品名にスーツ/コート/用が全部含まれる字面一致のため)。v0.10.0
      *
-     * @return array [amazon_products, rakuten_products, errors(配列), all_rejected(検品全滅か)]
+     * ソース選択 (v0.11.0): Amazonの合格商品が表示件数に満たない場合、
+     * 楽天から「レビューが付いている商品だけ」を取って検品にかけ、
+     * 良品が多い方を主軸にする。Amazonはレビューデータを返さないが
+     * 楽天は返すため、ニッチ玩具系などAmazonが無名出品だらけのキーワードで
+     * 「レビュー実績のある楽天商品」に切り替えられる。
+     *
+     * @return array [amazon_products, rakuten_products, errors(配列), all_rejected(検品全滅か), source_note]
      */
     private static function fetch_products($settings, $extractor, $keyword, $post_title, $count) {
         $amazon_api  = new Affiros_AI_Amazon_API($settings);
@@ -219,6 +230,7 @@ class Affiros_AI_Inserter {
         $rakuten_products = [];
         $errors = [];
         $all_rejected = false;
+        $source_note = '';
 
         if ($amazon_api->is_configured()) {
             $res = $amazon_api->search($keyword, 10);
@@ -233,22 +245,38 @@ class Affiros_AI_Inserter {
                 $amazon_products = self::diversify($res, $count);
             }
         }
-        // 楽天は Amazon 商品が取れなかった時だけ主軸として使う
-        // (Amazon 主軸カードの楽天ボタンは検索一覧リンクなので商品データ不要)
-        if (empty($amazon_products) && $rakuten_api->is_configured()) {
+
+        // Amazonが表示件数を満たせない場合は楽天も検討する
+        // (楽天はレビュー0件の商品を除外できるので、良品が多ければ主軸を切り替える)
+        if (count($amazon_products) < $count && $rakuten_api->is_configured()) {
             $res = $rakuten_api->search($keyword, 10);
             if (is_wp_error($res)) $errors[] = '楽天: ' . $res->get_error_message();
             else {
                 $before = count($res);
+                // レビュー実績のある商品だけに絞る (楽天だけができる品質フィルタ)
+                $res = array_values(array_filter($res, function ($p) {
+                    return intval($p['review_count'] ?? 0) > 0;
+                }));
                 $res = $extractor->filter_relevant($keyword, $post_title, $res);
                 if (empty($res) && $before > 0) {
-                    $errors[] = "楽天: 検索結果{$before}件は全て不合格 (別カテゴリ商品 or 低品質出品) と判定";
-                    $all_rejected = true;
+                    $errors[] = "楽天: 検索結果{$before}件は全て不合格 (レビューなし・別カテゴリ・低品質) と判定";
+                    if (empty($amazon_products)) $all_rejected = true;
                 }
-                $rakuten_products = self::diversify($res, $count);
+                $rakuten_candidates = self::diversify($res, $count);
+
+                if (count($rakuten_candidates) > count($amazon_products)) {
+                    // 楽天主軸に切り替え (renderer は amazon が空のとき楽天主軸で組む)
+                    if (!empty($amazon_products)) {
+                        $source_note = '楽天主軸を採用 (Amazon良品' . count($amazon_products) . '件 < 楽天レビューあり良品' . count($rakuten_candidates) . '件)';
+                    }
+                    $amazon_products = [];
+                    $rakuten_products = $rakuten_candidates;
+                } elseif (empty($amazon_products)) {
+                    $rakuten_products = $rakuten_candidates;
+                }
             }
         }
-        return [$amazon_products, $rakuten_products, $errors, $all_rejected];
+        return [$amazon_products, $rakuten_products, $errors, $all_rejected, $source_note];
     }
 
     /**

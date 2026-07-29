@@ -113,6 +113,10 @@ class Affiros_AI_Card_Renderer {
             $html .= '  <div class="affiros-ai-img"><a href="' . $product_url . '" target="_blank" rel="nofollow noopener sponsored"><img src="' . $image . '" alt="' . $title . '" loading="lazy"></a></div>' . "\n";
         }
         $html .= '  <div class="affiros-ai-title"><a href="' . $product_url . '" target="_blank" rel="nofollow noopener sponsored">' . $title . '</a></div>' . "\n";
+        $rating_html = self::rating_html($product);
+        if ($rating_html) {
+            $html .= '  ' . $rating_html . "\n";
+        }
         if ($price) {
             $html .= '  <div class="affiros-ai-price">' . $price . '</div>' . "\n";
         }
@@ -168,6 +172,10 @@ class Affiros_AI_Card_Renderer {
         if ($brand) {
             $html .= '      <div class="affiros-ai-brand">' . $brand . '</div>' . "\n";
         }
+        $rating_html = self::rating_html($primary);
+        if ($rating_html) {
+            $html .= '      ' . $rating_html . "\n";
+        }
         if ($price) {
             $html .= '      <div class="affiros-ai-price">' . $price . '</div>' . "\n";
         }
@@ -179,6 +187,18 @@ class Affiros_AI_Card_Renderer {
         $html .= '      </div>' . "\n";
         $html .= '    </div>' . "\n";
         return $html;
+    }
+
+    /**
+     * レビュー表示 (★4.3 (123件))。楽天商品のみデータがある。
+     * Amazon は Creators API がレビューを返さないため表示なし。
+     */
+    private static function rating_html($product) {
+        $avg = floatval($product['review_avg'] ?? 0);
+        $cnt = intval($product['review_count'] ?? 0);
+        if ($avg <= 0 || $cnt <= 0) return '';
+        return '<div class="affiros-ai-rating">★' . esc_html(number_format($avg, 1))
+            . ' <span>(' . esc_html(number_format($cnt)) . '件)</span></div>';
     }
 
     public static function tokenize($str) {

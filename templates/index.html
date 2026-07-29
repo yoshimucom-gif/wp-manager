@@ -1951,6 +1951,17 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.27 / auto-inserter v0.11.0 (2026-07-29) — 📊 楽天レビューデータを品質判定に活用、主軸自動切替 + 星表示</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>課題</strong>: ニッチ玩具系KW（スクイーズペン等）はAmazonの検索結果自体が無名出品だらけで、検品を通っても「レビュー0の商品」しか残らない（10件中2件のみ合格、いずれもレビューなし）。Amazonはレビュー数をAPIで返さないため直接フィルタ不可。</li>
+              <li><strong>対策</strong>: 楽天APIは <code>reviewCount</code> / <code>reviewAverage</code> を返すことを活用。Amazonの合格商品が表示件数に満たない場合、楽天から<strong>レビュー1件以上の商品だけ</strong>を取って検品にかけ、良品が多ければ楽天主軸に自動切替。結果メッセージに「📊 楽天主軸を採用 (Amazon良品N件 &lt; 楽天レビューあり良品M件)」を表示。</li>
+              <li><strong>星表示</strong>: 楽天主軸カード・サイドバーカードに「★4.3 (123件)」を表示（社会的証明）。Amazon商品はデータがないため表示なし。</li>
+              <li><strong>🐛 収益バグ修正</strong>: 楽天商品URLが <code>itemUrl</code>（素のリンク）優先で <code>affiliateUrl</code> が後回しだった。アフィリエイトURL最優先に修正——<strong>これまでの楽天主軸カードの商品ボタンは成果が付かない素リンクだった可能性が高い。要・一括再挿入</strong>。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.10.3 → 0.11.0 / <code>APP_VERSION</code> 1.9.26 → 1.9.27。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.26 / auto-inserter v0.10.3 (2026-07-29) — 検品に出品品質判定を追加（低品質マーケットプレイス出品を排除）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>実害</strong>: 「スクイーズペン」でレビュー0の低品質出品（機械翻訳調タイトル「陽気な偽スパイダーペン小道具、家族の集まり…」、ランダム英字ブランド sodeber / APGLSXY 等）がカードに並んだ。カテゴリ判定は通るため v0.10.0 の検品では防げない。</li>
