@@ -69,7 +69,10 @@ add_shortcode('affiros_ai_top', function ($atts) {
 
 function affiros_ai_ajax_render_top() {
     $post_id = intval($_POST['post_id'] ?? 0);
-    if (!$post_id || get_post_type($post_id) !== 'post' || get_post_status($post_id) !== 'publish') {
+    // 未ログイン閲覧者には公開記事のみ。編集権限者には予約/下書きプレビューでも出す
+    // (v0.9.2以前は publish 限定で、管理者が予約記事を見るとポップアップだけ空になった)
+    $status_ok = get_post_status($post_id) === 'publish' || current_user_can('edit_post', $post_id);
+    if (!$post_id || get_post_type($post_id) !== 'post' || !$status_ok) {
         wp_send_json_success(''); // 出せない場合は空 (エラーにしない)
     }
     $rank = max(1, min(5, intval($_POST['rank'] ?? 1)));

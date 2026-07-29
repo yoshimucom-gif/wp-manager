@@ -56,20 +56,16 @@ function affiros_ai_sanitize_settings($input) {
     return $output;
 }
 
-// 秘密キーが「本物の値で」設定済みか (過去バグで保存されたマスク値は未設定扱い)
-function affiros_ai_secret_is_set($val) {
-    return $val !== '' && !preg_match('/^\*+$/', (string)$val);
-}
-
-// 秘密キー入力欄: 値は絶対に出力しない。placeholder で設定状態だけ伝える
+// 秘密キー入力欄: 実値を password type (●●●) で表示し「表示」ボタンで確認できる
+// (product-inserter v1.9.27 と同じ方式。実値の再送信なのでマスク値上書き事故は起きない)
 function affiros_ai_secret_field($key, $settings) {
-    $is_set = affiros_ai_secret_is_set($settings[$key] ?? '');
+    $val = (string)($settings[$key] ?? '');
     printf(
-        '<input type="password" name="%s[%s]" value="" placeholder="%s" class="regular-text" autocomplete="new-password"> %s',
+        '<span class="affiros-ai-secret-wrap"><input type="password" name="%s[%s]" value="%s" class="regular-text affiros-ai-secret" autocomplete="off"><button type="button" class="button affiros-ai-secret-toggle">表示</button></span>%s',
         esc_attr(AFFIROS_AI_OPTION_KEY),
         esc_attr($key),
-        $is_set ? '設定済み（変更する場合のみ入力）' : '未設定',
-        $is_set ? '<span style="color:#00a32a">✓ 設定済み</span>' : '<span style="color:#d63638">未設定</span>'
+        esc_attr($val),
+        $val === '' ? ' <span style="color:#d63638">未設定</span>' : ''
     );
 }
 
@@ -78,6 +74,11 @@ function affiros_ai_render_settings_page() {
     $settings = affiros_ai_get_settings();
     ?>
     <div class="wrap">
+        <style>
+        .affiros-ai-secret-wrap { display: inline-flex; gap: 6px; align-items: center; }
+        .affiros-ai-secret-wrap .affiros-ai-secret { flex: 1; }
+        .affiros-ai-secret-wrap .affiros-ai-secret-toggle { flex-shrink: 0; min-width: 56px; }
+        </style>
         <h1>⚙️ Affiros オートインサーター 設定</h1>
         <p style="font-size:13px;line-height:1.7">
             Claude Haiku が本文からキーワードを抽出し、Amazon + 楽天から商品3件を「最初のH2直前」「まとめ直後」に自動挿入します。
@@ -236,6 +237,16 @@ function affiros_ai_render_settings_page() {
 
             <?php submit_button(); ?>
         </form>
+
+        <script>
+        document.addEventListener('click', function (e) {
+            if (!e.target.classList || !e.target.classList.contains('affiros-ai-secret-toggle')) return;
+            var input = e.target.closest('.affiros-ai-secret-wrap').querySelector('.affiros-ai-secret');
+            var isPw = input.type === 'password';
+            input.type = isPw ? 'text' : 'password';
+            e.target.textContent = isPw ? '非表示' : '表示';
+        });
+        </script>
 
         <h2>⑧ サイドバー用ショートコード</h2>
         <div style="max-width:680px;background:#fff;border:1px solid #ccd0d4;border-radius:4px;padding:16px 20px;font-size:13px;line-height:1.9">
