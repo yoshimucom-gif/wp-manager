@@ -13,9 +13,41 @@
  * [affiros_ai_top] と書くだけ。記事ごとにその記事のキャッシュ済み商品を表示する。
  * 商品データがないページ (固定ページ・アーカイブ・未挿入記事・ランキング記事) では
  * 何も出力しない。
+ *
+ * ── ショートコード非対応領域のフォールバック (v0.9.1) ──
+ * テーマのポップアップ等、do_shortcode() を通らない場所に書かれた
+ * [affiros_ai_top...] は文字のまま出力される。フロントJS
+ * (assets/shortcode-fallback.js) がそれを検出し、AJAXで取得した
+ * カードHTMLにその場で置換する。テーマに手を入れずに動く。
  */
 
 if (!defined('ABSPATH')) exit;
+
+/**
+ * カードHTML生成の共通部 (ショートコード / AJAXフォールバック 両方から使う)
+ * @param int $post_id
+ * @param int $rank 1〜5
+ * @param string|null $title null なら設定の side_heading。'' なら見出しなし
+ */
+function affiros_ai_top_html($post_id, $rank = 1, $title = null) {
+    $data = get_post_meta($post_id, AFFIROS_AI_META_PRODUCTS, true);
+    if (!is_array($data)) $data = json_decode((string)$data, true);
+    if (empty($data)) return '';
+
+    // in-content カードと同じ優先順: Amazon 主軸、なければ楽天
+    $list = !empty($data['amazon']) ? $data['amazon'] : ($data['rakuten'] ?? []);
+    $idx = max(1, intval($rank)) - 1;
+    if (empty($list[$idx])) return '';
+
+    $settings = affiros_ai_get_settings();
+    if ($title === null) $title = $settings['side_heading'] ?? 'この記事のイチオシ';
+    return Affiros_AI_Card_Renderer::render_single($list[$idx], [
+        'keyword' => $data['keyword'] ?? get_post_meta($post_id, AFFIROS_AI_META_KEYWORD, true),
+        'title'   => $title,
+        'amazon_partner_tag'   => $settings['amazon_partner_tag']   ?? '',
+        'rakuten_affiliate_id' => $settings['rakuten_affiliate_id'] ?? '',
+    ]);
+}
 
 add_shortcode('affiros_ai_top', function ($atts) {
     $atts = shortcode_atts([
@@ -30,21 +62,38 @@ add_shortcode('affiros_ai_top', function ($atts) {
     $post_id = get_queried_object_id();
     if (!$post_id) return '';
 
-    $data = get_post_meta($post_id, AFFIROS_AI_META_PRODUCTS, true);
-    if (!is_array($data)) $data = json_decode((string)$data, true);
-    if (empty($data)) return '';
+    return affiros_ai_top_html($post_id, intval($atts['rank']), $atts['title']);
+});
 
-    // in-content カードと同じ優先順: Amazon 主軸、なければ楽天
-    $list = !empty($data['amazon']) ? $data['amazon'] : ($data['rakuten'] ?? []);
-    $idx = max(1, intval($atts['rank'])) - 1;
-    if (empty($list[$idx])) return '';
+// ── ショートコード非対応領域向け AJAX (未ログイン閲覧者も叩くので公開記事限定) ──
 
-    $settings = affiros_ai_get_settings();
-    $title = $atts['title'] !== null ? $atts['title'] : ($settings['side_heading'] ?? 'この記事のイチオシ');
-    return Affiros_AI_Card_Renderer::render_single($list[$idx], [
-        'keyword' => $data['keyword'] ?? get_post_meta($post_id, AFFIROS_AI_META_KEYWORD, true),
-        'title'   => $title,
-        'amazon_partner_tag'   => $settings['amazon_partner_tag']   ?? '',
-        'rakuten_affiliate_id' => $settings['rakuten_affiliate_id'] ?? '',
+function affiros_ai_ajax_render_top() {
+    $post_id = intval($_POST['post_id'] ?? 0);
+    if (!$post_id || get_post_type($post_id) !== 'post' || get_post_status($post_id) !== 'publish') {
+        wp_send_json_success(''); // 出せない場合は空 (エラーにしない)
+    }
+    $rank = max(1, min(5, intval($_POST['rank'] ?? 1)));
+    $title = (($_POST['has_title'] ?? '') === '1')
+        ? sanitize_text_field(wp_unslash($_POST['title'] ?? ''))
+        : null;
+    wp_send_json_success(affiros_ai_top_html($post_id, $rank, $title));
+}
+add_action('wp_ajax_affiros_ai_render_top', 'affiros_ai_ajax_render_top');
+add_action('wp_ajax_nopriv_affiros_ai_render_top', 'affiros_ai_ajax_render_top');
+
+// ── フォールバックJSの読み込み (公開済み記事ページのみ) ──
+
+add_action('wp_enqueue_scripts', function () {
+    if (!is_singular('post')) return;
+    wp_enqueue_script(
+        'affiros-ai-top-fallback',
+        AFFIROS_AI_URL . 'assets/shortcode-fallback.js',
+        [],
+        AFFIROS_AI_VERSION,
+        true
+    );
+    wp_localize_script('affiros-ai-top-fallback', 'AffirosAITop', [
+        'ajaxUrl' => admin_url('admin-ajax.php'),
+        'postId'  => get_queried_object_id(),
     ]);
 });

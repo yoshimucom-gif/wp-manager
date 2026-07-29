@@ -1951,6 +1951,18 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.20 / auto-inserter v0.9.1 (2026-07-28) — ショートコード非対応領域 (テーマのポップアップ等) でも [affiros_ai_top] が動くように</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>問題</strong>: テーマのポップアップ機能のコンテンツ欄は <code>do_shortcode()</code> を通らず、<code>[affiros_ai_top]</code> が文字のまま表示された（ウィジェットは解釈されるのでサイドバーは正常）。</li>
+              <li><strong>対応</strong>: フォールバックJS（<code>assets/shortcode-fallback.js</code>）を追加。ページ内のテキストに残った <code>[affiros_ai_top...]</code> を検出し、AJAX（<code>affiros_ai_render_top</code>、未ログイン可・公開記事限定）で取得したカードHTMLにその場で置換。<code>rank</code>/<code>title</code> 属性も解釈。前後の文章は保持。</li>
+              <li><strong>動作範囲</strong>: 公開済み記事ページのみJS読込。初回スキャン＋クリック後400msの追いスキャン（遅延挿入されるポップアップ対応）。ページ内にショートコード文字列がなければ即終了で負荷ゼロ。</li>
+              <li><strong>実装整理</strong>: カード生成を <code>affiros_ai_top_html()</code> に共通化（ショートコード/AJAX両対応）。</li>
+              <li><strong>検証</strong>: fetchモックの静的テストページで、属性解釈（rank=2/title=""）・前後テキスト保持・複数箇所置換を確認済み。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.9.0 → 0.9.1 / <code>APP_VERSION</code> 1.9.19 → 1.9.20。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.19 / auto-inserter v0.9.0 (2026-07-28) — 挿入しないカテゴリー・タグを設定可能に</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>追加</strong>: 設定「⑤ 挿入しないカテゴリー・タグ」。カテゴリーはチェックボックス（記事数付き）、タグはカンマ区切り（名前/スラッグ）で指定。</li>
