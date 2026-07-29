@@ -9,7 +9,9 @@ import json
 import os
 import shutil
 
-CODEX = r"C:\Users\yoshi\OneDrive\デスクトップ\Codex"
+# リポジトリルートはこのスクリプトの位置から求める。
+# 絶対パスを直書きすると GitHub Actions（Ubuntu）で動かなくなる。
+CODEX = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 APP_PY = os.path.join(CODEX, "app.py")
 ZIP_SRC = os.path.join(CODEX, "plugin-downloads")
 OUT = os.path.join(CODEX, "ke-ys-plugin-host")
