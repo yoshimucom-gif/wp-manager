@@ -1951,6 +1951,15 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.29 / auto-inserter v0.11.2 (2026-07-29) — 品質判定の主軸を「タイトルの日本語品質」に修正</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>指摘</strong>: ランダム英字ブランドを補欠に落とす基準だと、スーツ系で主戦場の「無名ブランドだが★4.2・レビュー316件の実力商品」（例: WINROMTICO 3点セット）まで不当に後回しになる。</li>
+              <li><strong>修正</strong>: 低品質出品の本当のシグナルは「タイトルが機械翻訳調で不自然」。ブランド名のランダム英字単体では補欠にせず、タイトルも不自然な場合の補強シグナルに格下げ。シーン語の列挙（就活 結婚式 礼服）は検索対策の常套として正常扱いし、日本語として破綻したカンマ羅列だけを補欠にする。WINROMTICOを合格例としてプロンプトに明記。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.11.1 → 0.11.2 / <code>APP_VERSION</code> 1.9.28 → 1.9.29。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.28 / auto-inserter v0.11.1 (2026-07-29) — 検品を合格/補欠の2段階にして表示枚数を確保</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>課題</strong>: ニッチKW（スクイーズペン等）では厳格検品の合格が2件しか残らず、カードが2枚になった。吉村さん判断「カテゴリ違いは論外だが、出品品質は妥協してでも3枚出す方がいい」。</li>
