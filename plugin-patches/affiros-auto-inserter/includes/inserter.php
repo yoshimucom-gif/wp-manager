@@ -192,7 +192,8 @@ class Affiros_AI_Inserter {
 
         $msg = "挿入完了 ({$insertions}箇所)";
         if ($partial_error !== '') {
-            $msg .= " ⚠️ {$partial_error} → 楽天主軸で挿入";
+            $primary_src = !empty($products_data['amazon']) ? 'Amazon' : '楽天';
+            $msg .= " ⚠️ {$partial_error} → {$primary_src}主軸で挿入";
         }
         if ($keyword_note !== '') {
             $msg .= " 🔁 {$keyword_note}";

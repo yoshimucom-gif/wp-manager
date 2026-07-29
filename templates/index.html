@@ -1951,6 +1951,16 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.28 / auto-inserter v0.11.1 (2026-07-29) — 検品を合格/補欠の2段階にして表示枚数を確保</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>課題</strong>: ニッチKW（スクイーズペン等）では厳格検品の合格が2件しか残らず、カードが2枚になった。吉村さん判断「カテゴリ違いは論外だが、出品品質は妥協してでも3枚出す方がいい」。</li>
+              <li><strong>変更</strong>: 検品を2段階判定に。<strong>合格</strong>（カテゴリ一致＋品質OK）を最優先、<strong>補欠</strong>（カテゴリ一致だが機械翻訳調タイトル等の品質難）は合格だけで枚数が埋まらない時のみ繰り上げ。<strong>カテゴリ違いはどれだけ不足しても不使用</strong>。出力を <code>{"pass": [...], "sub": [...]}</code> 形式に変更（旧形式フォールバックあり）。</li>
+              <li><strong>🐛 メッセージ修正</strong>: 片側失敗時の「→ 楽天主軸で挿入」が決め打ちで、Amazon主軸でも楽天主軸と表示されていた。実際の主軸ソースを表示するように。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.11.0 → 0.11.1 / <code>APP_VERSION</code> 1.9.27 → 1.9.28。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.27 / auto-inserter v0.11.0 (2026-07-29) — 📊 楽天レビューデータを品質判定に活用、主軸自動切替 + 星表示</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>課題</strong>: ニッチ玩具系KW（スクイーズペン等）はAmazonの検索結果自体が無名出品だらけで、検品を通っても「レビュー0の商品」しか残らない（10件中2件のみ合格、いずれもレビューなし）。Amazonはレビュー数をAPIで返さないため直接フィルタ不可。</li>

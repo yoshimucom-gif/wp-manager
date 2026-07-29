@@ -117,33 +117,50 @@ class Affiros_AI_Keyword_Extractor {
             . "- そのカテゴリの「カバー・ケース・収納用品・防虫剤・掃除用品・付属品・関連グッズ」は不合格\n"
             . "  (字面が似ていても別商品。例: キーワード「スーツ用コート」→ チェスターコートは合格、\n"
             . "   「スーツ・コート用 防虫カバー」「洋服カバー」は不合格)\n\n"
-            . "## 判定ルール2: 出品品質 (低品質マーケットプレイス出品の排除)\n"
-            . "- 商品名が機械翻訳調・不自然な日本語のものは不合格\n"
-            . "  (例: 「陽気な偽スパイダーペン小道具、家族の集まり、誕生日パーティー、社交イベント用」)\n"
-            . "- 用途語をカンマで羅列したキーワード詰め込みタイトルは不合格\n"
-            . "- ブランドが無意味なランダム英字 (例: APGLSXY, sodeber) のものは不合格\n"
-            . "- 日本の一般的なブランド・自然な日本語タイトルの商品を優先\n\n"
+            . "## 判定ルール2: 出品品質 (カテゴリが合っている商品を「合格」と「補欠」に分ける)\n"
+            . "- 自然な日本語タイトル・まともなブランドの商品 → 合格\n"
+            . "- カテゴリは合っているが以下に該当する商品 → 補欠\n"
+            . "  ・商品名が機械翻訳調・不自然な日本語\n"
+            . "    (例: 「陽気な偽スパイダーペン小道具、家族の集まり、誕生日パーティー、社交イベント用」)\n"
+            . "  ・用途語をカンマで羅列したキーワード詰め込みタイトル\n"
+            . "  ・ブランドが無意味なランダム英字 (例: APGLSXY, sodeber)\n\n"
             . "## 共通ルール\n"
-            . "- 迷ったら不合格にする (間違った商品・怪しい商品を載せる方が機会損失より害が大きい)\n\n"
+            . "- カテゴリ一致に迷ったら不合格 (別カテゴリ商品を載せるのが最悪)\n"
+            . "- カテゴリは合っているが出品品質だけに難がある商品は「補欠」に回す\n"
+            . "  (合格商品だけで枚数が足りない時のみ繰り上げて使われる)\n\n"
             . "## 商品リスト\n"
             . implode("\n", $lines) . "\n\n"
             . "## 出力形式\n"
-            . "合格した商品の番号だけをJSON配列で。例: [1,3,5]。全滅なら []。他の文字は出力しない";
+            . 'JSONのみ: {"pass": [合格番号], "sub": [補欠番号]}。例: {"pass": [1,3], "sub": [5]}。'
+            . '該当なしは空配列。他の文字は出力しない';
 
-        $text = $this->call_api($prompt, 100);
+        $text = $this->call_api($prompt, 150);
         if (is_wp_error($text)) return $products; // 検品失敗時は素通し (挿入自体は止めない)
 
-        if (!preg_match('/\[[\d,\s]*\]/', $text, $m)) return $products;
-        $keep = json_decode($m[0], true);
-        if (!is_array($keep)) return $products;
-
         $values = array_values($products);
-        $filtered = [];
-        foreach ($keep as $n) {
-            $idx = intval($n) - 1;
-            if (isset($values[$idx])) $filtered[] = $values[$idx];
+        $pick = function ($nums) use ($values) {
+            $out = [];
+            foreach ((array)$nums as $n) {
+                $idx = intval($n) - 1;
+                if (isset($values[$idx])) $out[] = $values[$idx];
+            }
+            return $out;
+        };
+
+        // {"pass":[...],"sub":[...]} 形式。合格を先頭に、補欠を後ろに並べて返す
+        // (呼び出し側の diversify が上から表示件数分を取るので、補欠は不足時のみ使われる)
+        if (preg_match('/\{[\s\S]*\}/', $text, $m)) {
+            $obj = json_decode($m[0], true);
+            if (is_array($obj) && (isset($obj['pass']) || isset($obj['sub']))) {
+                return array_merge($pick($obj['pass'] ?? []), $pick($obj['sub'] ?? []));
+            }
         }
-        return $filtered;
+        // 旧形式 [1,3,5] へのフォールバック
+        if (preg_match('/\[[\d,\s]*\]/', $text, $m)) {
+            $keep = json_decode($m[0], true);
+            if (is_array($keep)) return $pick($keep);
+        }
+        return $products;
     }
 
     /**
