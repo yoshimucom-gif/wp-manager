@@ -50,6 +50,7 @@ function affiros_ai_sanitize_settings($input) {
     $output['exclude_tags']         = sanitize_text_field($input['exclude_tags'] ?? '');
 
     $output['auto_on_publish']        = ($input['auto_on_publish'] ?? 'no') === 'yes' ? 'yes' : 'no';
+    $output['monthly_refresh']        = ($input['monthly_refresh'] ?? 'no') === 'yes' ? 'yes' : 'no';
     // v0.7.0 で週次リフレッシュ廃止。旧設定が残っていたら捨てる
     unset($output['cron_refresh']);
 
@@ -233,6 +234,16 @@ function affiros_ai_render_settings_page() {
                 <tr>
                     <th>公開時に自動挿入</th>
                     <td><label><input type="checkbox" name="<?php echo AFFIROS_AI_OPTION_KEY; ?>[auto_on_publish]" value="yes" <?php checked($settings['auto_on_publish'], 'yes'); ?>> 記事公開時に自動で商品カードを挿入する</label><p class="description">公開の60秒後に WP Cron 経由で実行 (公開自体を遅らせない)</p></td>
+                </tr>
+                <tr>
+                    <th>月次リフレッシュ</th>
+                    <td>
+                        <label><input type="checkbox" name="<?php echo AFFIROS_AI_OPTION_KEY; ?>[monthly_refresh]" value="yes" <?php checked($settings['monthly_refresh'] ?? 'yes', 'yes'); ?>> 挿入から30日経過した記事の商品カードを自動で最新化する</label>
+                        <p class="description">
+                            毎日10件ずつの分散処理（全記事が同日に動かない）。リビジョンを作らず、更新日 (post_modified) も動かさない。<br>
+                            商品再取得＋AI検品のみで約¥0.1〜0.4/記事/月。実行結果は一括挿入ページ下部の「リフレッシュ履歴」で確認できる。
+                        </p>
+                    </td>
                 </tr>
             </table>
 

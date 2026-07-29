@@ -1990,6 +1990,17 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.32 / auto-inserter v0.12.0 (2026-07-29) — 🕐 月次リフレッシュ + 実行履歴を導入</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: 脚注を「◯月◯日時点」表記にした以上、放置で日付が古くなるのは信頼を落とす。週次リフレッシュ（v0.7.0廃止）の3つの副作用を全て潰した設計で月次を再導入。</li>
+              <li><strong>仕組み</strong>: 毎日のWP Cronで「最終挿入から30日経過した記事」を古い順に<strong>1日10件だけ</strong>処理（分散ローテーション・全記事が同日に動かない）。処理中は<strong>リビジョンを作らず</strong>（<code>wp_revisions_to_keep</code>=0）、<strong>更新日 post_modified も動かさない</strong>（<code>wp_insert_post_data</code> で元値復元）。商品再取得＋AI検品のみ（KW再抽出なし）で約¥0.1〜0.4/記事/月。取得失敗時は本文に触らないので既存カードは残る。</li>
+              <li><strong>実行履歴</strong>: 全処理結果（日時・記事・成功/スキップ/失敗・メッセージ）を直近300件記録し、一括挿入ページ下部「🕐 月次リフレッシュ履歴」に直近50件表示（失敗は赤字）。次回実行予定時刻も表示。</li>
+              <li><strong>設定</strong>: ⑦自動化に「月次リフレッシュ」チェックボックス（既定ON）。無効化するとcronは発火するが即returnする。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.11.4 → 0.12.0 / <code>APP_VERSION</code> 1.9.31 → 1.9.32。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.31 / auto-inserter v0.11.4 (2026-07-29) — カード脚注の時点表記を日付のみに短縮</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>変更</strong>: 「2026-07-28 17:25:40 時点。価格・在庫は変動します。」→「<strong>2026年7月28日時点の情報です。価格・在庫は変動します。</strong>」。規約上必要なのは「いつ時点の情報か」だけなので秒までは出さない。表記自体はアソシエイト規約・誤認防止のため削除しない（吉村さん確認済み）。</li>

@@ -436,4 +436,63 @@ add_action('affiros_ai_delayed_process', function ($post_id) {
     Affiros_AI_Inserter::process(intval($post_id));
 });
 
+// =============================================================================
+// 月次リフレッシュ (v0.12.0)
+// =============================================================================
+// 毎日1回、最終挿入から30日以上経過した記事を10件だけ処理する分散ローテーション。
+// 週次リフレッシュ (v0.7.0で廃止) の副作用への対策込み:
+//   - リビジョンを作らない (wp_revisions_to_keep を処理中だけ0に)
+//   - post_modified を動かさない (wp_insert_post_data で元値を復元)
+//   - 全記事が同日に動かない (1日10件ずつ)
+// 商品再取得+検品のみ (KW再抽出なし) で約¥0.1〜0.4/記事。結果は履歴に記録し
+// 一括挿入ページ下部で確認できる。取得失敗時は本文に触らないので既存カードは残る。
+
+add_action('affiros_ai_daily_refresh', function () {
+    $settings = affiros_ai_get_settings();
+    if (($settings['monthly_refresh'] ?? 'yes') !== 'yes') return;
+
+    $allowed = array_filter(array_map('trim', explode(',', $settings['target_statuses'] ?? 'publish,future,draft')));
+    if (empty($allowed)) $allowed = ['publish'];
+
+    $cutoff = date('Y-m-d H:i:s', strtotime(current_time('mysql')) - 30 * DAY_IN_SECONDS);
+
+    global $wpdb;
+    $placeholders = implode(',', array_fill(0, count($allowed), '%s'));
+    $rows = $wpdb->get_col($wpdb->prepare(
+        "SELECT p.ID FROM {$wpdb->posts} p
+         INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = %s
+         WHERE p.post_type = 'post' AND p.post_status IN ($placeholders)
+           AND pm.meta_value < %s
+         ORDER BY pm.meta_value ASC
+         LIMIT 10",
+        ...array_merge([AFFIROS_AI_META_LAST_INSERT_AT], $allowed, [$cutoff])
+    ));
+    if (empty($rows)) return;
+
+    $zero_revisions = function () { return 0; };
+
+    foreach ($rows as $pid) {
+        $pid = intval($pid);
+        $orig = get_post($pid);
+        if (!$orig) continue;
+
+        // 更新日 (post_modified) をリフレッシュで動かさない
+        $keep_modified = function ($data, $postarr) use ($pid, $orig) {
+            if (intval($postarr['ID'] ?? 0) === $pid) {
+                $data['post_modified']     = $orig->post_modified;
+                $data['post_modified_gmt'] = $orig->post_modified_gmt;
+            }
+            return $data;
+        };
+
+        add_filter('wp_revisions_to_keep', $zero_revisions, 999);
+        add_filter('wp_insert_post_data', $keep_modified, 999, 2);
+        $res = Affiros_AI_Inserter::process($pid, ['force_refresh_products' => true]);
+        remove_filter('wp_insert_post_data', $keep_modified, 999);
+        remove_filter('wp_revisions_to_keep', $zero_revisions, 999);
+
+        affiros_ai_refresh_log_add($pid, $res);
+    }
+});
+
 endif;

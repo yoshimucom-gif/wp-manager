@@ -66,6 +66,51 @@ function affiros_ai_render_bulk_page() {
             </table>
         </div>
 
+        <h2 style="margin-top:36px">🕐 月次リフレッシュ履歴</h2>
+        <?php
+        $mr_on = ($settings['monthly_refresh'] ?? 'yes') === 'yes';
+        $next  = wp_next_scheduled('affiros_ai_daily_refresh');
+        $log   = get_option('affiros_ai_refresh_log', []);
+        if (!is_array($log)) $log = [];
+        ?>
+        <p style="font-size:13px;color:#666">
+            状態: <?php echo $mr_on ? '<span style="color:#0a7a2f;font-weight:600">有効</span>' : '<span style="color:#c62828;font-weight:600">無効</span>'; ?>
+            （挿入から30日経過した記事を毎日10件ずつ自動更新・リビジョン無し・更新日保持）
+            <?php if ($next): ?>
+                ・次回実行: <?php echo esc_html(date_i18n('Y-m-d H:i', $next + (int)(get_option('gmt_offset') * 3600))); ?>
+            <?php endif; ?>
+        </p>
+        <?php if (empty($log)): ?>
+            <p style="color:#999;font-size:13px">まだ履歴がありません（30日経過した記事が出てくると自動で記録されます）。</p>
+        <?php else: ?>
+            <table class="wp-list-table widefat striped" style="max-width:900px">
+                <thead><tr>
+                    <th style="width:150px">日時</th>
+                    <th>記事</th>
+                    <th>結果</th>
+                </tr></thead>
+                <tbody>
+                <?php foreach (array_slice(array_reverse($log), 0, 50) as $e):
+                    $title = get_the_title($e['id']) ?: ('#' . $e['id']);
+                    $link  = get_permalink($e['id']);
+                    if ($e['ok'] && empty($e['skip'])) {
+                        $result = '<span style="color:#0a7a2f">✓ ' . esc_html($e['msg']) . '</span>';
+                    } elseif (!empty($e['skip'])) {
+                        $result = '<span style="color:#888">− ' . esc_html($e['msg']) . '</span>';
+                    } else {
+                        $result = '<span style="color:#c62828;font-weight:600">✗ ' . esc_html($e['msg']) . '</span>';
+                    }
+                ?>
+                    <tr>
+                        <td><?php echo esc_html($e['t']); ?></td>
+                        <td><?php if ($link): ?><a href="<?php echo esc_url($link); ?>" target="_blank"><?php echo esc_html($title); ?></a><?php else: echo esc_html($title); endif; ?></td>
+                        <td><?php echo $result; ?></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php endif; ?>
+
         <script>
         jQuery(function ($) {
             const ajaxUrl = (window.AffirosAI && AffirosAI.ajaxUrl) || ajaxurl;
