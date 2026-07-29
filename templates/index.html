@@ -1990,6 +1990,15 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.31 / auto-inserter v0.11.4 (2026-07-29) — カード脚注の時点表記を日付のみに短縮</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>変更</strong>: 「2026-07-28 17:25:40 時点。価格・在庫は変動します。」→「<strong>2026年7月28日時点の情報です。価格・在庫は変動します。</strong>」。規約上必要なのは「いつ時点の情報か」だけなので秒までは出さない。表記自体はアソシエイト規約・誤認防止のため削除しない（吉村さん確認済み）。</li>
+              <li><strong>反映</strong>: 脚注はHTML焼き込みのため既存記事への反映は再挿入時（楽天アフィリンク修正の一括再挿入に同乗）。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.11.3 → 0.11.4 / <code>APP_VERSION</code> 1.9.30 → 1.9.31。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.30 / auto-inserter v0.11.3 (2026-07-29) — 一括ページのタイトルリンクを公開URLに変更</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>変更</strong>: 一括挿入ページのタイトルリンク先を編集画面 → <strong>公開URL（パーマリンク）</strong>に。挿入結果をすぐ実ページで確認できる。編集に行きたい時用に小さな［編集］リンクをタイトル横に追加。</li>

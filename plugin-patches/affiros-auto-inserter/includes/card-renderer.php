@@ -32,7 +32,8 @@ class Affiros_AI_Card_Renderer {
 
         $keyword_raw = trim((string)($meta['keyword'] ?? ''));
         $keyword    = esc_html($keyword_raw);
-        $updated_at = esc_html($meta['updated_at'] ?? current_time('mysql'));
+        // 規約上必要なのは「いつ時点の情報か」だけなので日付のみ (秒まで出さない)
+        $updated_at = esc_html(mysql2date('Y年n月j日', $meta['updated_at'] ?? current_time('mysql')));
 
         // 対応商品がない側のボタンは検索結果一覧に飛ばす (一覧経由でもアフィ成果になる)
         $ctx = self::build_search_urls($keyword_raw, $meta);
@@ -50,7 +51,7 @@ class Affiros_AI_Card_Renderer {
         }
 
         $html .= '  </div>' . "\n";
-        $html .= '  <div class="affiros-ai-card-foot"><small>' . $updated_at . ' 時点。価格・在庫は変動します。</small></div>' . "\n";
+        $html .= '  <div class="affiros-ai-card-foot"><small>' . $updated_at . '時点の情報です。価格・在庫は変動します。</small></div>' . "\n";
         $html .= '</div>' . "\n";
         $html .= '<!-- affiros-ai-card-end -->' . "\n";
         return $html;
