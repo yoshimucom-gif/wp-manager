@@ -1951,6 +1951,15 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.21 / auto-inserter v0.9.2 (2026-07-28) — Amazon片側失敗の理由を結果メッセージに表示</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>問題</strong>: Amazonだけ失敗して楽天主軸で挿入された場合、エラー内容が完全に握りつぶされ、Amazonボタンが検索一覧に飛ぶ原因を特定できなかった（e-omochaサイトで発生。同時刻のスーツサイトは正常＝サイト固有のAmazon認証問題の疑い）。</li>
+              <li><strong>修正</strong>: 片側APIだけ失敗した場合、結果メッセージに「⚠️ Amazon: {エラー内容} → 楽天主軸で挿入」を表示。エラーなしで0件の場合もその旨を表示。メタボックス・一括ページ両方で見える。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.9.1 → 0.9.2 / <code>APP_VERSION</code> 1.9.20 → 1.9.21。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.20 / auto-inserter v0.9.1 (2026-07-28) — ショートコード非対応領域 (テーマのポップアップ等) でも [affiros_ai_top] が動くように</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>問題</strong>: テーマのポップアップ機能のコンテンツ欄は <code>do_shortcode()</code> を通らず、<code>[affiros_ai_top]</code> が文字のまま表示された（ウィジェットは解釈されるのでサイドバーは正常）。</li>

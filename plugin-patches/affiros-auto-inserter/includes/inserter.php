@@ -72,6 +72,7 @@ class Affiros_AI_Inserter {
         // 商品取得 (キャッシュ or 新規)
         $cached_products = get_post_meta($post_id, AFFIROS_AI_META_PRODUCTS, true);
         $products_data = [];
+        $partial_error = '';
         if (!empty($cached_products) && empty($opts['force_refresh_products'])) {
             $products_data = is_array($cached_products) ? $cached_products : json_decode($cached_products, true);
         }
@@ -100,6 +101,14 @@ class Affiros_AI_Inserter {
 
             if (empty($amazon_products) && empty($rakuten_products)) {
                 return self::fail($post_id, '商品取得失敗: ' . implode(' / ', $errors ?: ['両APIとも0件']));
+            }
+
+            // 片側だけ失敗した場合も理由を握りつぶさず結果メッセージに載せる
+            // (Amazonが弾かれて楽天主軸になった原因をユーザーが特定できるように)
+            if (!empty($errors)) {
+                $partial_error = implode(' / ', $errors);
+            } elseif (empty($amazon_products) && $amazon_api->is_configured()) {
+                $partial_error = 'Amazon: エラーなしで0件 (キーワードにヒットなし)';
             }
 
             $products_data = [
@@ -171,7 +180,12 @@ class Affiros_AI_Inserter {
         update_post_meta($post_id, AFFIROS_AI_META_LAST_INSERT_AT, current_time('mysql'));
         self::clear_last_error($post_id);
 
-        return self::result(true, "挿入完了 ({$insertions}箇所)", [
+        $msg = "挿入完了 ({$insertions}箇所)";
+        if ($partial_error !== '') {
+            $msg .= " ⚠️ {$partial_error} → 楽天主軸で挿入";
+        }
+
+        return self::result(true, $msg, [
             'changed' => true,
             'keyword' => $keyword,
             'insertions' => $insertions,
