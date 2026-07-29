@@ -95,7 +95,8 @@ function affiros_ai_render_settings_page() {
                     <td>
                         <?php affiros_ai_secret_field('claude_api_key', $settings); ?>
                         <p class="description">
-                            記事本文から検索キーワードを抽出する用。Haiku 使用でコスト 1記事あたり ¥0.3 程度。
+                            キーワード抽出＋商品のAI検品用。コストは1記事あたり約¥0.5
+                            （内訳: 抽出¥0.3＋検品¥0.1〜0.2。検品全滅→キーワード再抽出が発動した記事のみ約¥1.0〜1.4）。
                             <br>入力欄が空のまま保存すると既存値を保持。値を更新する場合だけ入力。
                         </p>
                     </td>

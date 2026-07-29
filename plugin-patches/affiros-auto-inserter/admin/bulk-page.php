@@ -31,7 +31,8 @@ function affiros_ai_render_bulk_page() {
 
         <p style="font-size:13px;line-height:1.7">
             全記事をスキャンして「未挿入」「除外」「対象外(ランキング)」に振り分けます。「未挿入」の記事に一括で商品カードを挿入できます。
-            <br>1記事あたり Claude Haiku ¥0.3 + Amazon/楽天 API (無料) = 実質 <strong>¥0.3/記事</strong>。100件で ¥30。
+            <br>1記事あたり Claude Haiku 約<strong>¥0.5</strong>（キーワード抽出＋商品のAI検品）＋ Amazon/楽天 API (無料)。
+            <br>検索結果が全て別カテゴリ商品でキーワード再抽出が発動した記事は 約¥1.0〜1.4（概算・全体の1割前後の想定）。100件で <strong>¥50〜60目安</strong>。
         </p>
 
         <div style="margin:16px 0">
@@ -172,7 +173,7 @@ function affiros_ai_render_bulk_page() {
             async function applyBatch(targetState, verb) {
                 const targets = posts.filter(p => p.state === targetState);
                 if (!targets.length) { alert(`${targetState === 'pending' ? '未挿入' : '挿入済'}の対象がありません`); return; }
-                if (!confirm(`${targets.length} 件に順次${verb}します。想定コスト: ¥${(targets.length * 0.3).toFixed(1)} 前後。よろしいですか？`)) return;
+                if (!confirm(`${targets.length} 件に順次${verb}します。想定コスト: ¥${Math.round(targets.length * 0.5)}〜¥${Math.round(targets.length * 0.65)} 前後 (再抽出発動分を含む概算)。よろしいですか？`)) return;
 
                 abort = false;
                 $('#ai-apply-all-btn, #ai-reapply-all-btn').prop('disabled', true);
@@ -267,7 +268,7 @@ add_action('wp_ajax_affiros_ai_apply', function () {
     if (!$post_id) wp_send_json_error('post_id 不正');
 
     // 手動実行 = 「今の結果をやり直したい」なのでキーワードも再抽出する
-    // (プロンプト改善を既存記事のキャッシュ済みKWにも反映させる。Haiku ¥0.3/回)
+    // (プロンプト改善を既存記事のキャッシュ済みKWにも反映させる。Haiku 約¥0.5/回)
     $res = Affiros_AI_Inserter::process($post_id, [
         'force_refresh_keyword'  => true,
         'force_refresh_products' => true,
