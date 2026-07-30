@@ -41,6 +41,23 @@ function affiros_ai_render_bulk_page() {
         </div>
 
         <div id="ai-result" style="display:none">
+            <div style="margin:0 0 10px;display:flex;gap:18px;align-items:center;flex-wrap:wrap;font-size:13px;background:#fff;border:1px solid #ccd0d4;border-radius:4px;padding:10px 14px">
+                <strong>🔎 絞り込み</strong>
+                <label>カテゴリー:
+                    <select id="ai-filter-cat"><option value="">すべて</option></select>
+                </label>
+                <label>最終挿入:
+                    <select id="ai-filter-date">
+                        <option value="">すべて</option>
+                        <option value="never">未挿入のみ</option>
+                        <option value="7">7日以上前</option>
+                        <option value="30">30日以上前</option>
+                        <option value="90">90日以上前</option>
+                    </select>
+                </label>
+                <span id="ai-filter-count" style="color:#666"></span>
+                <span style="color:#a06000;font-size:12px">※ 一括ボタンは絞り込み表示中の記事だけに実行されます</span>
+            </div>
             <div style="margin:0 0 12px">
                 <button type="button" id="ai-apply-all-btn" class="button button-primary">✨ 未挿入の記事に一括適用</button>
                 <button type="button" id="ai-reapply-all-btn" class="button" style="margin-left:8px">🔄 挿入済の記事に一括再挿入</button>
@@ -121,6 +138,28 @@ function affiros_ai_render_bulk_page() {
             $('#ai-scan-btn').on('click', scan);
             $('#ai-apply-all-btn').on('click', () => applyBatch('pending', '挿入'));
             $('#ai-reapply-all-btn').on('click', () => applyBatch('done', '再挿入'));
+            $('#ai-filter-cat, #ai-filter-date').on('change', render);
+
+            // 現在の絞り込み条件を通過した記事だけを返す
+            function filteredPosts() {
+                const cat = $('#ai-filter-cat').val();
+                const dateOpt = $('#ai-filter-date').val();
+                let th = null;
+                if (dateOpt && dateOpt !== 'never') {
+                    const d = new Date(Date.now() - parseInt(dateOpt, 10) * 86400000);
+                    th = d.toISOString().slice(0, 10); // YYYY-MM-DD
+                }
+                return posts.filter(p => {
+                    if (cat && !(p.cats || []).includes(parseInt(cat, 10))) return false;
+                    if (dateOpt === 'never') {
+                        if (p.last_insert_at) return false;
+                    } else if (th) {
+                        // 「N日以上前」= 挿入済みかつ最終挿入がしきい値より古い
+                        if (!p.last_insert_at || p.last_insert_at.slice(0, 10) > th) return false;
+                    }
+                    return true;
+                });
+            }
 
             async function scan() {
                 $('#ai-scan-btn').prop('disabled', true);
@@ -136,6 +175,13 @@ function affiros_ai_render_bulk_page() {
                         return;
                     }
                     posts = res.data.posts || [];
+                    // カテゴリー絞り込みの選択肢を構築 (記事があるカテゴリーだけ、件数付き)
+                    const catCount = {};
+                    posts.forEach(p => (p.cats || []).forEach(c => { catCount[c] = (catCount[c] || 0) + 1; }));
+                    const $catSel = $('#ai-filter-cat').empty().append('<option value="">すべて</option>');
+                    (res.data.categories || []).forEach(c => {
+                        if (catCount[c.id]) $catSel.append(`<option value="${c.id}">${esc(c.name)} (${catCount[c.id]})</option>`);
+                    });
                     const stats = res.data.stats || {};
                     $('#ai-scan-status').html(
                         `スキャン完了: ${res.data.scanned}件 / 未挿入 <strong>${stats.pending || 0}</strong>件 / 挿入済 ${stats.done || 0}件 / 除外 ${stats.excluded || 0}件 / 除外(分類) ${stats.taxonomy || 0}件 / ランキング ${stats.ranking || 0}件`
@@ -152,7 +198,9 @@ function affiros_ai_render_bulk_page() {
 
             function render() {
                 const tbody = $('#ai-result-tbody').empty();
-                posts.forEach(p => {
+                const list = filteredPosts();
+                $('#ai-filter-count').text(`表示中 ${list.length}件 / 全${posts.length}件`);
+                list.forEach(p => {
                     const editUrl = `${location.origin}/wp-admin/post.php?post=${p.id}&action=edit`;
                     const viewUrl = p.link || editUrl; // タイトル = 公開URL (確認用)
                     const stateBadge = badge(p.state);
@@ -217,9 +265,11 @@ function affiros_ai_render_bulk_page() {
             }
 
             async function applyBatch(targetState, verb) {
-                const targets = posts.filter(p => p.state === targetState);
-                if (!targets.length) { alert(`${targetState === 'pending' ? '未挿入' : '挿入済'}の対象がありません`); return; }
-                if (!confirm(`${targets.length} 件に順次${verb}します。想定コスト: ¥${Math.round(targets.length * 0.5)}〜¥${Math.round(targets.length * 0.65)} 前後 (再抽出発動分を含む概算)。よろしいですか？`)) return;
+                const filtered = filteredPosts();
+                const targets = filtered.filter(p => p.state === targetState);
+                const filterOn = filtered.length !== posts.length;
+                if (!targets.length) { alert(`${targetState === 'pending' ? '未挿入' : '挿入済'}の対象がありません${filterOn ? ' (絞り込み適用中)' : ''}`); return; }
+                if (!confirm(`${filterOn ? '【絞り込み適用中】' : ''}${targets.length} 件に順次${verb}します。想定コスト: ¥${Math.round(targets.length * 0.5)}〜¥${Math.round(targets.length * 0.65)} 前後 (再抽出発動分を含む概算)。よろしいですか？`)) return;
 
                 abort = false;
                 $('#ai-apply-all-btn, #ai-reapply-all-btn').prop('disabled', true);
@@ -296,13 +346,19 @@ add_action('wp_ajax_affiros_ai_scan', function () {
             'state' => $state,
             'keyword' => $keyword,
             'last_insert_at' => $last_insert,
+            'cats' => array_map('intval', wp_get_post_categories($post_id)),
         ];
     }
+
+    $categories = array_map(function ($c) {
+        return ['id' => $c->term_id, 'name' => $c->name];
+    }, get_categories(['hide_empty' => false, 'orderby' => 'name']));
 
     wp_send_json_success([
         'scanned' => count($rows),
         'stats'   => $stats,
         'posts'   => $posts,
+        'categories' => array_values($categories),
     ]);
 });
 

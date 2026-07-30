@@ -1990,6 +1990,16 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.33 / auto-inserter v0.13.0 (2026-07-29) — 🔎 一括ページにカテゴリー・最終挿入日の絞り込みを追加</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>追加</strong>: スキャン結果の上に絞り込みバー。<strong>カテゴリー</strong>（記事があるものだけ件数付きで表示）と<strong>最終挿入</strong>（未挿入のみ / 7日以上前 / 30日以上前 / 90日以上前）で対象を絞れる。</li>
+              <li><strong>一括ボタンとの連動</strong>: 一括適用・一括再挿入は<strong>絞り込み表示中の記事だけ</strong>に実行される（「地域カテゴリーだけ再挿入」「90日以上古い記事だけ再挿入」が可能）。確認ダイアログに【絞り込み適用中】と件数・コストを表示。</li>
+              <li><strong>実装</strong>: スキャンAPIが記事ごとのカテゴリーIDとサイトのカテゴリー一覧を返すようになり、絞り込みはクライアント側で完結（追加の通信なし）。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.12.0 → 0.13.0 / <code>APP_VERSION</code> 1.9.32 → 1.9.33。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.32 / auto-inserter v0.12.0 (2026-07-29) — 🕐 月次リフレッシュ + 実行履歴を導入</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: 脚注を「◯月◯日時点」表記にした以上、放置で日付が古くなるのは信頼を落とす。週次リフレッシュ（v0.7.0廃止）の3つの副作用を全て潰した設計で月次を再導入。</li>
