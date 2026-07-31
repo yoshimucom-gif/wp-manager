@@ -170,6 +170,15 @@ class Affiros_AI_Amazon_API {
             $detail_url = $item['detailPageURL']
                 ?? $item['detailPageUrl']
                 ?? '';
+            // アソシエイトタグの保証: APIが返すURLにタグが無ければ強制付与する
+            // (通常は partnerTag 指定で埋め込まれて返るが、API挙動に依存しない。
+            //  楽天で素リンクが混入した事故 v0.11.0 の教訓)
+            if ($detail_url === '' && $asin !== '') {
+                $detail_url = 'https://' . $this->marketplace . '/dp/' . rawurlencode($asin);
+            }
+            if ($detail_url !== '' && $this->partner_tag !== '' && strpos($detail_url, 'tag=') === false) {
+                $detail_url = add_query_arg('tag', $this->partner_tag, $detail_url);
+            }
 
             $products[] = [
                 'source' => 'amazon',

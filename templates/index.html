@@ -1990,6 +1990,16 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.34 / auto-inserter v0.13.1 (2026-07-29) — 🛡️ Amazonアソシエイトタグの強制付与ガード</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: Amazon商品ボタンのURLは Creators API の <code>detailPageURL</code>（partnerTag指定で埋め込まれて返る仕様）に依存していた。楽天で素リンク混入事故（v0.11.0で修正）があったため、依存を保証に変える。</li>
+              <li><strong>ガード</strong>: パース時にURLへ <code>tag=</code> が無ければ Partner Tag を強制付与。URLが空でASINだけある場合も <code>/dp/ASIN?tag=</code> で自前組み立て。これで<strong>全Amazonリンクにタグが付くことをコードで保証</strong>（API挙動に依存しない）。</li>
+              <li><strong>目視確認方法</strong>: カードのAmazonボタンを右クリック→リンクコピーで <code>tag=サイト名-22</code> が含まれているか確認できる。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.13.0 → 0.13.1 / <code>APP_VERSION</code> 1.9.33 → 1.9.34。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.33 / auto-inserter v0.13.0 (2026-07-29) — 🔎 一括ページにカテゴリー・最終挿入日の絞り込みを追加</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>追加</strong>: スキャン結果の上に絞り込みバー。<strong>カテゴリー</strong>（記事があるものだけ件数付きで表示）と<strong>最終挿入</strong>（未挿入のみ / 7日以上前 / 30日以上前 / 90日以上前）で対象を絞れる。</li>
