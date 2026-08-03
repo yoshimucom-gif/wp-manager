@@ -55,6 +55,14 @@ function affiros_ai_render_bulk_page() {
                         <option value="90">90日以上前</option>
                     </select>
                 </label>
+                <label>カード:
+                    <select id="ai-filter-cards">
+                        <option value="">すべて</option>
+                        <option value="lost">⚠️ 消失 (挿入済なのに0枚)</option>
+                        <option value="1">1枚</option>
+                        <option value="2">2枚</option>
+                    </select>
+                </label>
                 <span id="ai-filter-count" style="color:#666"></span>
                 <span style="color:#a06000;font-size:12px">※ 一括ボタンは絞り込み表示中の記事だけに実行されます</span>
             </div>
@@ -74,6 +82,7 @@ function affiros_ai_render_bulk_page() {
                         <th style="width:60px">ID</th>
                         <th>タイトル</th>
                         <th style="width:120px">状態</th>
+                        <th style="width:70px">カード</th>
                         <th style="width:140px">キーワード</th>
                         <th style="width:180px">最終挿入</th>
                         <th style="width:200px">アクション</th>
@@ -138,12 +147,13 @@ function affiros_ai_render_bulk_page() {
             $('#ai-scan-btn').on('click', scan);
             $('#ai-apply-all-btn').on('click', () => applyBatch('pending', '挿入'));
             $('#ai-reapply-all-btn').on('click', () => applyBatch('done', '再挿入'));
-            $('#ai-filter-cat, #ai-filter-date').on('change', render);
+            $('#ai-filter-cat, #ai-filter-date, #ai-filter-cards').on('change', render);
 
             // 現在の絞り込み条件を通過した記事だけを返す
             function filteredPosts() {
                 const cat = $('#ai-filter-cat').val();
                 const dateOpt = $('#ai-filter-date').val();
+                const cardsOpt = $('#ai-filter-cards').val();
                 let th = null;
                 if (dateOpt && dateOpt !== 'never') {
                     const d = new Date(Date.now() - parseInt(dateOpt, 10) * 86400000);
@@ -156,6 +166,11 @@ function affiros_ai_render_bulk_page() {
                     } else if (th) {
                         // 「N日以上前」= 挿入済みかつ最終挿入がしきい値より古い
                         if (!p.last_insert_at || p.last_insert_at.slice(0, 10) > th) return false;
+                    }
+                    if (cardsOpt === 'lost') {
+                        if (!(p.last_insert_at && (p.cards || 0) === 0)) return false;
+                    } else if (cardsOpt !== '') {
+                        if ((p.cards || 0) !== parseInt(cardsOpt, 10)) return false;
                     }
                     return true;
                 });
@@ -183,8 +198,11 @@ function affiros_ai_render_bulk_page() {
                         if (catCount[c.id]) $catSel.append(`<option value="${c.id}">${esc(c.name)} (${catCount[c.id]})</option>`);
                     });
                     const stats = res.data.stats || {};
+                    const lostHtml = (stats.lost || 0) > 0
+                        ? ` / <span style="color:#c62828;font-weight:700">⚠️ カード消失 ${stats.lost}件</span>`
+                        : '';
                     $('#ai-scan-status').html(
-                        `スキャン完了: ${res.data.scanned}件 / 未挿入 <strong>${stats.pending || 0}</strong>件 / 挿入済 ${stats.done || 0}件 / 除外 ${stats.excluded || 0}件 / 除外(分類) ${stats.taxonomy || 0}件 / ランキング ${stats.ranking || 0}件`
+                        `スキャン完了: ${res.data.scanned}件 / 未挿入 <strong>${stats.pending || 0}</strong>件 / 挿入済 ${stats.done || 0}件 / 除外 ${stats.excluded || 0}件 / 除外(分類) ${stats.taxonomy || 0}件 / ランキング ${stats.ranking || 0}件${lostHtml}`
                     );
                     render();
                     $('#ai-result').show();
@@ -205,11 +223,15 @@ function affiros_ai_render_bulk_page() {
                     const viewUrl = p.link || editUrl; // タイトル = 公開URL (確認用)
                     const stateBadge = badge(p.state);
                     const canApply = (p.state === 'pending' || p.state === 'done');
+                    const cardsCell = (p.last_insert_at && (p.cards || 0) === 0)
+                        ? '<span style="color:#c62828;font-weight:700">⚠️ 0枚</span>'
+                        : `${p.cards || 0}枚`;
                     tbody.append(`
                         <tr data-id="${p.id}">
                             <td>${p.id}</td>
                             <td><a href="${viewUrl}" target="_blank">${esc(p.title)}</a> <a href="${editUrl}" target="_blank" style="font-size:11px;color:#999;text-decoration:none">[編集]</a></td>
                             <td>${stateBadge}</td>
+                            <td>${cardsCell}</td>
                             <td>${esc(p.keyword || '')}</td>
                             <td>${esc(p.last_insert_at || '')}</td>
                             <td>
@@ -319,13 +341,16 @@ add_action('wp_ajax_affiros_ai_scan', function () {
     ));
 
     $posts = [];
-    $stats = ['pending' => 0, 'done' => 0, 'excluded' => 0, 'ranking' => 0, 'taxonomy' => 0];
+    $stats = ['pending' => 0, 'done' => 0, 'excluded' => 0, 'ranking' => 0, 'taxonomy' => 0, 'lost' => 0];
     foreach ($rows as $r) {
         $post_id = intval($r->ID);
         $post_obj = get_post($post_id);
         $keyword = get_post_meta($post_id, AFFIROS_AI_META_KEYWORD, true);
         $last_insert = get_post_meta($post_id, AFFIROS_AI_META_LAST_INSERT_AT, true);
         $excluded = get_post_meta($post_id, AFFIROS_AI_META_EXCLUDED, true);
+
+        // 本文のカード枚数を実測 (挿入済のはずなのに0枚 = 他プロセスの上書きで消失)
+        $cards = substr_count((string)$post_obj->post_content, 'affiros-ai-card-start');
 
         if ($excluded === 'yes') {
             $state = 'excluded'; $stats['excluded']++;
@@ -335,6 +360,7 @@ add_action('wp_ajax_affiros_ai_scan', function () {
             $state = 'taxonomy'; $stats['taxonomy']++;
         } elseif (!empty($last_insert)) {
             $state = 'done'; $stats['done']++;
+            if ($cards === 0) $stats['lost']++;
         } else {
             $state = 'pending'; $stats['pending']++;
         }
@@ -347,6 +373,7 @@ add_action('wp_ajax_affiros_ai_scan', function () {
             'keyword' => $keyword,
             'last_insert_at' => $last_insert,
             'cats' => array_map('intval', wp_get_post_categories($post_id)),
+            'cards' => $cards,
         ];
     }
 

@@ -1990,6 +1990,16 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.35 / auto-inserter v0.14.0 (2026-08-01) — ⚠️ カード消失監査: 挿入済なのに0枚の記事を検出</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: 別プロセスが古い本文スナップショットで記事を上書きするとカードが消える（実例: カテゴリー/タグ付け替え処理がcontent込みで更新→吉村さんの改行編集も巻き戻った）。目視では検出不能。</li>
+              <li><strong>監査</strong>: スキャン時に本文の <code>affiros-ai-card-start</code> を実測カウント。一覧に「カード」列（挿入済なのに0枚は<strong>赤字⚠️</strong>）、統計に「⚠️ カード消失 N件」、絞り込みに「消失のみ/1枚/2枚」を追加。消失だけ絞って一括再挿入で復旧できる。</li>
+              <li><strong>運用ルール</strong>: 本文を書き換える処理（再入稿・リライト・整形・content込みの一括更新）と挿入を並行させない。付け替え系スクリプトはRESTで categories/tags だけ送る（contentを送らない）。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.13.1 → 0.14.0 / <code>APP_VERSION</code> 1.9.34 → 1.9.35。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.34 / auto-inserter v0.13.1 (2026-07-29) — 🛡️ Amazonアソシエイトタグの強制付与ガード</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: Amazon商品ボタンのURLは Creators API の <code>detailPageURL</code>（partnerTag指定で埋め込まれて返る仕様）に依存していた。楽天で素リンク混入事故（v0.11.0で修正）があったため、依存を保証に変える。</li>
