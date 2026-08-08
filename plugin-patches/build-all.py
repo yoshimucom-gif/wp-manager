@@ -22,7 +22,7 @@ OUT_DIR = os.path.join(ROOT, os.pardir, 'plugin-downloads')
 # (ソースディレクトリ, zip 内トップディレクトリ名, 出力 zip 名)
 SPECS = [
     (os.path.join(ROOT, 'affiros-product-inserter'),
-     'affiros-product-inserter', 'affiros-product-inserter-1.9.31.zip'),
+     'affiros-product-inserter', 'affiros-product-inserter-1.10.0.zip'),
     (os.path.join(ROOT, 'affiros-decoration'),
      'affiros-decoration', 'affiros-decoration-1.2.3.zip'),
     (os.path.join(ROOT, 'affiros-rewrite'),
@@ -38,7 +38,7 @@ SPECS = [
     (os.path.join(ROOT, 'affiros-mark-stripper'),
      'affiros-mark-stripper', 'affiros-mark-stripper-1.0.0.zip'),
     (os.path.join(ROOT, 'affiros-auto-inserter'),
-     'affiros-auto-inserter', 'affiros-auto-inserter-0.14.0.zip'),
+     'affiros-auto-inserter', 'affiros-auto-inserter-0.14.1.zip'),
     (os.path.join(ROOT, 'affiros-cat-eyecatch'),
      'affiros-cat-eyecatch', 'affiros-cat-eyecatch-1.0.0.zip'),
 ]

@@ -1990,6 +1990,14 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.36 / auto-inserter v0.14.1 (2026-08-08) — 絞り込みに「公開日◯◯以降」を追加</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>追加</strong>: 一括ページの絞り込みバーに日付入力「公開日: ◯◯ 以降」。スキャンAPIが <code>post_date</code> を返すようになり、他の絞り込み（カテゴリー・最終挿入・カード枚数）と組み合わせ可能。一括ボタンの対象にも従来どおり連動。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.14.0 → 0.14.1 / <code>APP_VERSION</code> 1.9.35 → 1.9.36。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.35 / auto-inserter v0.14.0 (2026-08-01) — ⚠️ カード消失監査: 挿入済なのに0枚の記事を検出</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: 別プロセスが古い本文スナップショットで記事を上書きするとカードが消える（実例: カテゴリー/タグ付け替え処理がcontent込みで更新→吉村さんの改行編集も巻き戻った）。目視では検出不能。</li>

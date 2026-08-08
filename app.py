@@ -235,7 +235,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.9.35'
+APP_VERSION = '1.9.36'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -6419,9 +6419,9 @@ def favicon():
 PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugin-downloads')
 PLUGIN_DOWNLOADS = {
     'product-inserter': {
-        'file': 'affiros-product-inserter-1.9.31.zip',
+        'file': 'affiros-product-inserter-1.10.0.zip',
         'name': 'Affiros プロダクトインサーター',
-        'version': '1.9.31',
+        'version': '1.10.0',
     },
     'decoration': {
         'file': 'affiros-decoration-1.2.3.zip',
@@ -6449,9 +6449,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.1.5',
     },
     'auto-inserter': {
-        'file': 'affiros-auto-inserter-0.14.0.zip',
+        'file': 'affiros-auto-inserter-0.14.1.zip',
         'name': 'Affiros オートインサーター',
-        'version': '0.14.0',
+        'version': '0.14.1',
     },
     'decoration-formatter': {
         'file': 'decoration-formatter-1.0.10.zip',

@@ -55,6 +55,9 @@ function affiros_ai_render_bulk_page() {
                         <option value="90">90日以上前</option>
                     </select>
                 </label>
+                <label>公開日:
+                    <input type="date" id="ai-filter-pubdate" style="font-size:13px"> 以降
+                </label>
                 <label>カード:
                     <select id="ai-filter-cards">
                         <option value="">すべて</option>
@@ -147,13 +150,14 @@ function affiros_ai_render_bulk_page() {
             $('#ai-scan-btn').on('click', scan);
             $('#ai-apply-all-btn').on('click', () => applyBatch('pending', '挿入'));
             $('#ai-reapply-all-btn').on('click', () => applyBatch('done', '再挿入'));
-            $('#ai-filter-cat, #ai-filter-date, #ai-filter-cards').on('change', render);
+            $('#ai-filter-cat, #ai-filter-date, #ai-filter-cards, #ai-filter-pubdate').on('change', render);
 
             // 現在の絞り込み条件を通過した記事だけを返す
             function filteredPosts() {
                 const cat = $('#ai-filter-cat').val();
                 const dateOpt = $('#ai-filter-date').val();
                 const cardsOpt = $('#ai-filter-cards').val();
+                const pubFrom = $('#ai-filter-pubdate').val(); // YYYY-MM-DD or ''
                 let th = null;
                 if (dateOpt && dateOpt !== 'never') {
                     const d = new Date(Date.now() - parseInt(dateOpt, 10) * 86400000);
@@ -172,6 +176,7 @@ function affiros_ai_render_bulk_page() {
                     } else if (cardsOpt !== '') {
                         if ((p.cards || 0) !== parseInt(cardsOpt, 10)) return false;
                     }
+                    if (pubFrom && (!p.date || p.date < pubFrom)) return false;
                     return true;
                 });
             }
@@ -335,7 +340,7 @@ add_action('wp_ajax_affiros_ai_scan', function () {
     global $wpdb;
     $placeholders = implode(',', array_fill(0, count($statuses), '%s'));
     $rows = $wpdb->get_results($wpdb->prepare(
-        "SELECT ID, post_title, post_status FROM {$wpdb->posts}
+        "SELECT ID, post_title, post_status, post_date FROM {$wpdb->posts}
          WHERE post_type = 'post' AND post_status IN ($placeholders) ORDER BY ID DESC",
         ...$statuses
     ));
@@ -374,6 +379,7 @@ add_action('wp_ajax_affiros_ai_scan', function () {
             'last_insert_at' => $last_insert,
             'cats' => array_map('intval', wp_get_post_categories($post_id)),
             'cards' => $cards,
+            'date' => substr((string)$r->post_date, 0, 10), // 公開日 (YYYY-MM-DD)
         ];
     }
 
