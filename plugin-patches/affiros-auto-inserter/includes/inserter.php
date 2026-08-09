@@ -141,7 +141,7 @@ class Affiros_AI_Inserter {
                 // 対応商品がない側のボタンを検索一覧に飛ばすためのアフィリエイト情報
                 'amazon_partner_tag'   => $settings['amazon_partner_tag']   ?? '',
                 'rakuten_affiliate_id' => $settings['rakuten_affiliate_id'] ?? '',
-                'card_heading'         => $settings['card_heading']         ?? '',
+                'card_heading_suffix'  => $settings['card_heading_suffix']  ?? '',
             ]
         );
 
@@ -402,15 +402,24 @@ add_filter('the_content', function ($content) {
     if (strpos($content, 'affiros-ai-card-head') === false) return $content;
 
     $settings = affiros_ai_get_settings();
-    $heading = trim((string)($settings['card_heading'] ?? ''));
-    if ($heading === '') $heading = '超売れ筋のおすすめTOP3';
+    $suffix = trim((string)($settings['card_heading_suffix'] ?? ''));
+    if ($suffix === '') $suffix = 'はどれを選ぶ？';
 
-    // 開始divタグ直後〜次のタグまで (見出しテキスト部分) を差し替え。
-    // キーワードの <span class="affiros-ai-kw"> は保持される
+    // 見出し全体を「{キーワード}」+接尾辞 に書き換える (v0.16.0)。
+    // キーワードは旧カードなら <span class="affiros-ai-kw">「KW」で厳選</span> から、
+    // 新カードなら見出し先頭の 「KW」 から取り出す。どちらも現在の設定文言で再構成
+    // されるため、設定変更が焼き込み済みカードにも即反映される。
     $content = preg_replace_callback(
-        '/(<div class="affiros-ai-card-head">)[^<]*/u',
-        function ($m) use ($heading) {
-            return $m[1] . esc_html($heading) . ' ';
+        '/<div class="affiros-ai-card-head">.*?<\/div>/us',
+        function ($m) use ($suffix) {
+            $kw = '';
+            if (preg_match('/affiros-ai-kw">「(.*?)」/u', $m[0], $km)) {
+                $kw = $km[1]; // 旧形式: spanの「KW」で厳選
+            } elseif (preg_match('/card-head">「(.*?)」/u', $m[0], $km)) {
+                $kw = $km[1]; // 新形式: 見出し先頭の「KW」
+            }
+            $head = $kw !== '' ? '「' . $kw . '」' . esc_html($suffix) : esc_html($suffix);
+            return '<div class="affiros-ai-card-head">' . $head . '</div>';
         },
         $content
     );

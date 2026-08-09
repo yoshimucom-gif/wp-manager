@@ -75,9 +75,8 @@ function affiros_ai_render_preview_page() {
 
     $settings = affiros_ai_get_settings();
     $meta = [
-        'keyword'      => 'コードレス掃除機',
-        'updated_at'   => current_time('mysql'),
-        'card_heading' => $settings['card_heading'] ?? '',
+        'keyword'             => 'コードレス掃除機',
+        'card_heading_suffix' => $settings['card_heading_suffix'] ?? '',
     ];
     ?>
     <div class="wrap">

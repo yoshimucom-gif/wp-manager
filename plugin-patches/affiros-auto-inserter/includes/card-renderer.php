@@ -37,12 +37,14 @@ class Affiros_AI_Card_Renderer {
         // 対応商品がない側のボタンは検索結果一覧に飛ばす (一覧経由でもアフィ成果になる)
         $ctx = self::build_search_urls($keyword_raw, $meta);
 
-        $heading = trim((string)($meta['card_heading'] ?? ''));
-        if ($heading === '') $heading = '超売れ筋のおすすめTOP3';
+        // 見出し = 「{キーワード}」+ 接尾辞 (キーワード先頭・疑問形・根拠不要の主張ゼロ)
+        $suffix = trim((string)($meta['card_heading_suffix'] ?? ''));
+        if ($suffix === '') $suffix = 'はどれを選ぶ？';
+        $heading = $keyword_raw !== '' ? '「' . $keyword_raw . '」' . $suffix : $suffix;
 
         $html  = '<!-- affiros-ai-card-start -->' . "\n";
         $html .= '<div class="affiros-ai-compare-card" data-affiros-ai="1">' . "\n";
-        $html .= '  <div class="affiros-ai-card-head">' . esc_html($heading) . ($keyword ? ' <span class="affiros-ai-kw">「' . $keyword . '」で厳選</span>' : '') . '</div>' . "\n";
+        $html .= '  <div class="affiros-ai-card-head">' . esc_html($heading) . '</div>' . "\n";
         $html .= '  <div class="affiros-ai-card-grid">' . "\n";
 
         foreach ($primary as $idx => $p) {
@@ -89,7 +91,12 @@ class Affiros_AI_Card_Renderer {
         $keyword_raw = trim((string)($meta['keyword'] ?? ''));
         $ctx = self::build_search_urls($keyword_raw, $meta);
 
-        $heading = trim((string)($meta['title'] ?? ''));
+        // 見出し = 「{キーワード}」+ 接尾辞 (title は接尾辞。'' なら見出しなし)
+        $suffix = trim((string)($meta['title'] ?? ''));
+        $heading = '';
+        if ($suffix !== '') {
+            $heading = $keyword_raw !== '' ? '「' . $keyword_raw . '」' . $suffix : $suffix;
+        }
         $title = esc_html(mb_substr($product['title'] ?? '', 0, 60));
         $image = esc_url($product['image'] ?? '');
         $product_url = esc_url($product['url'] ?? '');

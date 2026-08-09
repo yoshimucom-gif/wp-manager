@@ -35,12 +35,14 @@ function affiros_ai_sanitize_settings($input) {
     $output['products_count']         = max(1, min(5, intval($input['products_count'] ?? 3)));
     $output['target_statuses']        = sanitize_text_field($input['target_statuses'] ?? 'publish,future,draft');
 
-    // 見出し文言。空で保存されたら既定に戻す
+    // 見出し接尾辞。空で保存されたら既定に戻す
     $defaults = affiros_ai_default_settings();
-    foreach (['card_heading', 'side_heading'] as $k) {
+    foreach (['card_heading_suffix', 'side_heading_suffix'] as $k) {
         $val = trim(sanitize_text_field($input[$k] ?? ''));
         $output[$k] = $val !== '' ? $val : $defaults[$k];
     }
+    // v0.16.0 で廃止した旧見出し設定を掃除
+    unset($output['card_heading'], $output['side_heading']);
 
     $output['skip_ranking_articles']  = ($input['skip_ranking_articles'] ?? 'no') === 'yes' ? 'yes' : 'no';
     $output['ranking_title_patterns'] = sanitize_textarea_field($input['ranking_title_patterns'] ?? '');
@@ -164,17 +166,17 @@ function affiros_ai_render_settings_page() {
                     </td>
                 </tr>
                 <tr>
-                    <th>記事内カードの見出し</th>
+                    <th>記事内カード見出しの接尾辞</th>
                     <td>
-                        <input type="text" name="<?php echo AFFIROS_AI_OPTION_KEY; ?>[card_heading]" value="<?php echo esc_attr($settings['card_heading']); ?>" class="regular-text" placeholder="超売れ筋のおすすめTOP3">
-                        <p class="description">空で保存すると既定「超売れ筋のおすすめTOP3」に戻る。<br>表示時に差し替える方式なので、保存すれば既存記事にも即反映（再挿入不要）。</p>
+                        「AIキーワード」<input type="text" name="<?php echo AFFIROS_AI_OPTION_KEY; ?>[card_heading_suffix]" value="<?php echo esc_attr($settings['card_heading_suffix'] ?? 'はどれを選ぶ？'); ?>" class="regular-text" placeholder="はどれを選ぶ？">
+                        <p class="description">見出しは <strong>「キーワード」＋この文言</strong> で表示（例: 「フェルトシール」はどれを選ぶ？）。<br>空で保存すると既定「はどれを選ぶ？」に戻る。表示時差し替え方式なので既存記事にも即反映（再挿入不要）。<br>⚠️ 「売れ筋」「ランキング」「No.1」「厳選」等の根拠を示せない語は景表法リスクがあるため使わない。</p>
                     </td>
                 </tr>
                 <tr>
-                    <th>サイドバーカードの見出し</th>
+                    <th>サイドバー見出しの接尾辞</th>
                     <td>
-                        <input type="text" name="<?php echo AFFIROS_AI_OPTION_KEY; ?>[side_heading]" value="<?php echo esc_attr($settings['side_heading']); ?>" class="regular-text" placeholder="この記事のイチオシ">
-                        <p class="description">ショートコード <code>[affiros_ai_top]</code> の見出し。こちらは動的表示なので保存すれば即反映。<br><code>title="..."</code> 属性を書いた場合はそちらが優先。</p>
+                        「AIキーワード」<input type="text" name="<?php echo AFFIROS_AI_OPTION_KEY; ?>[side_heading_suffix]" value="<?php echo esc_attr($settings['side_heading_suffix'] ?? 'で迷ったらこれ'); ?>" class="regular-text" placeholder="で迷ったらこれ">
+                        <p class="description">ショートコード <code>[affiros_ai_top]</code> の見出し（例: 「フェルトシール」で迷ったらこれ）。動的表示なので保存すれば即反映。<br><code>title="..."</code> 属性を書いた場合はそちらが接尾辞として優先。</p>
                     </td>
                 </tr>
             </table>
@@ -271,7 +273,7 @@ function affiros_ai_render_settings_page() {
                 <tbody>
                     <tr><td><code>[affiros_ai_top]</code></td><td>その記事の1位商品を表示</td></tr>
                     <tr><td><code>[affiros_ai_top rank="2"]</code></td><td>2位を表示（1位の下にもう1ブロック置けば2枚並ぶ）</td></tr>
-                    <tr><td><code>[affiros_ai_top title="今日のイチオシ"]</code></td><td>見出しを個別指定（既定は上の「サイドバーカードの見出し」設定値）</td></tr>
+                    <tr><td><code>[affiros_ai_top title="で迷ったらこれ"]</code></td><td>見出しの接尾辞を個別指定（既定は上の「サイドバー見出しの接尾辞」設定値。表示は「キーワード」＋接尾辞）</td></tr>
                     <tr><td><code>[affiros_ai_top title=""]</code></td><td>見出しなし</td></tr>
                 </tbody>
             </table>

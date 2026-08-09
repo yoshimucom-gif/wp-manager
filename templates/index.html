@@ -1990,6 +1990,18 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.38 / auto-inserter v0.16.0 (2026-08-09) — 見出しを「{キーワード}」＋接尾辞 形式に刷新（景表法・CTR対応）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: 「超売れ筋のおすすめTOP3」は実体がAPI検索上位3件で売上順位ではなく、根拠のない優良誤認リスク（景表法）。CTR面でも定型句が広告臭を出しキーワードが後置される欠点。</li>
+              <li><strong>新形式</strong>: 記事内カード＝<strong>「{AIキーワード}」はどれを選ぶ？</strong>（例: 「フェルトシール」はどれを選ぶ？）。サイドバー＝「{AIキーワード}」で迷ったらこれ。接尾辞は設定で変更可（キーワードが先頭・疑問形・根拠の要る主張ゼロ）。「で厳選」スパンも廃止（「厳選」も根拠不能）。</li>
+              <li><strong>既存カードも即反映</strong>: <code>the_content</code> フィルタが旧カードのキーワードspanから、新カードは見出し先頭の「」からKWを取り出して現在の接尾辞で再構成。記事を触らず全サイト一斉切替・即ロールバック可。旧/新/KW無しの3形式でシミュレーション検証済み。</li>
+              <li><strong>設定キー刷新</strong>: <code>card_heading_suffix</code> / <code>side_heading_suffix</code> を新設、旧 card_heading/side_heading は保存時に破棄（「「KW」超売れ筋…」のような変な合成を防止）。設定画面に景表法NGワードの注意書き（売れ筋/ランキング/No.1/厳選）。</li>
+              <li><strong>配信の推奨</strong>: 価格削除 (v0.15.0) と効果が混ざらないよう、0.15.0を先に配信→数値が落ち着いてから0.16.0の順（GA4 amazon_click で前後比較）。両zipを Claudeメディア構築 に併置。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.15.0 → 0.16.0 / <code>APP_VERSION</code> 1.9.37 → 1.9.38。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.37 / auto-inserter v0.15.0 (2026-08-08) — 💴 価格表示を廃止（Amazonアソシエイト規約対応）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: 静的に焼き込んだ価格の表示は規約リスク（価格表示には鮮度要件がある）。サイト運用ポリシー（my-diy等で「価格は書かない」）とも整合させ、カードから価格表示を全廃。</li>

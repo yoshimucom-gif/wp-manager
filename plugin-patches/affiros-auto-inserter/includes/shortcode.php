@@ -4,9 +4,10 @@
  *
  * [affiros_ai_top]                                — 表示中の記事の1位商品をコンパクト表示
  * [affiros_ai_top rank="2"]                       — 2位を表示
- * [affiros_ai_top title="今日のイチオシ"]         — 見出しを個別指定 (title="" で見出しなし)
+ * [affiros_ai_top title="で迷ったらこれ"]         — 接尾辞を個別指定 (title="" で見出しなし)
  *
- * 見出しの既定値は設定画面「サイドバーカードの見出し」(side_heading)。
+ * 見出しは「{AIキーワード}」+接尾辞 の形式 (v0.16.0)。
+ * 接尾辞の既定値は設定画面「サイドバー見出しの接尾辞」(side_heading_suffix)。
  * title 属性を書いた場合のみそちらが優先される。
  *
  * 使い方: 外観 → ウィジェット → サイドバーに「ショートコード」ブロックを置いて
@@ -27,7 +28,7 @@ if (!defined('ABSPATH')) exit;
  * カードHTML生成の共通部 (ショートコード / AJAXフォールバック 両方から使う)
  * @param int $post_id
  * @param int $rank 1〜5
- * @param string|null $title null なら設定の side_heading。'' なら見出しなし
+ * @param string|null $title 見出しの接尾辞。null なら設定の side_heading_suffix。'' なら見出しなし
  */
 function affiros_ai_top_html($post_id, $rank = 1, $title = null) {
     $data = get_post_meta($post_id, AFFIROS_AI_META_PRODUCTS, true);
@@ -40,7 +41,7 @@ function affiros_ai_top_html($post_id, $rank = 1, $title = null) {
     if (empty($list[$idx])) return '';
 
     $settings = affiros_ai_get_settings();
-    if ($title === null) $title = $settings['side_heading'] ?? 'この記事のイチオシ';
+    if ($title === null) $title = $settings['side_heading_suffix'] ?? 'で迷ったらこれ';
     return Affiros_AI_Card_Renderer::render_single($list[$idx], [
         'keyword' => $data['keyword'] ?? get_post_meta($post_id, AFFIROS_AI_META_KEYWORD, true),
         'title'   => $title,
@@ -52,7 +53,7 @@ function affiros_ai_top_html($post_id, $rank = 1, $title = null) {
 add_shortcode('affiros_ai_top', function ($atts) {
     $atts = shortcode_atts([
         'rank'  => 1,
-        'title' => null, // 未指定なら設定画面の side_heading を使う
+        'title' => null, // 未指定なら設定画面の side_heading_suffix を使う
     ], $atts, 'affiros_ai_top');
 
     // 個別記事ページ以外では絶対に出さない。
