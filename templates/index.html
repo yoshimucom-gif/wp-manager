@@ -1990,6 +1990,17 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.37 / auto-inserter v0.15.0 (2026-08-08) — 💴 価格表示を廃止（Amazonアソシエイト規約対応）</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: 静的に焼き込んだ価格の表示は規約リスク（価格表示には鮮度要件がある）。サイト運用ポリシー（my-diy等で「価格は書かない」）とも整合させ、カードから価格表示を全廃。</li>
+              <li><strong>新規カード</strong>: 比較カード・サイドバーカードとも価格を出力しない。価格が無くなったため「◯月◯日時点の情報です。価格・在庫は変動します」の脚注も削除。</li>
+              <li><strong>既存カード</strong>: <code>the_content</code> フィルタで表示時に価格div・脚注divを除去（見出し差し替えと同方式）。<strong>プラグイン更新だけで全記事から即座に消える</strong>（再挿入不要）。旧v0.4〜v0.11系の両脚注形式で除去を検証済み。本文中の円表記には触れない。</li>
+              <li><strong>データは保持</strong>: 商品metaの価格データは残す（表示しないだけ。将来の分析・復活に使える）。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.14.1 → 0.15.0 / <code>APP_VERSION</code> 1.9.36 → 1.9.37。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.36 / auto-inserter v0.14.1 (2026-08-08) — 絞り込みに「公開日◯◯以降」を追加</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>追加</strong>: 一括ページの絞り込みバーに日付入力「公開日: ◯◯ 以降」。スキャンAPIが <code>post_date</code> を返すようになり、他の絞り込み（カテゴリー・最終挿入・カード枚数）と組み合わせ可能。一括ボタンの対象にも従来どおり連動。</li>

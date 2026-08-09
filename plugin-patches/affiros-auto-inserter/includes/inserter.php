@@ -407,13 +407,20 @@ add_filter('the_content', function ($content) {
 
     // 開始divタグ直後〜次のタグまで (見出しテキスト部分) を差し替え。
     // キーワードの <span class="affiros-ai-kw"> は保持される
-    return preg_replace_callback(
+    $content = preg_replace_callback(
         '/(<div class="affiros-ai-card-head">)[^<]*/u',
         function ($m) use ($heading) {
             return $m[1] . esc_html($heading) . ' ';
         },
         $content
     );
+
+    // 価格表示は規約対応 (v0.15.0) で廃止。焼き込み済みの旧カードからも
+    // 表示時に除去する (再挿入を待たずに全記事から即座に消える)
+    $content = preg_replace('/<div class="affiros-ai-price">[^<]*<\/div>\s*/u', '', $content);
+    $content = preg_replace('/<div class="affiros-ai-card-foot"><small>[^<]*<\/small><\/div>\s*/u', '', $content);
+
+    return $content;
 }, 20);
 
 // =============================================================================

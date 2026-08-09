@@ -32,8 +32,7 @@ class Affiros_AI_Card_Renderer {
 
         $keyword_raw = trim((string)($meta['keyword'] ?? ''));
         $keyword    = esc_html($keyword_raw);
-        // 規約上必要なのは「いつ時点の情報か」だけなので日付のみ (秒まで出さない)
-        $updated_at = esc_html(mysql2date('Y年n月j日', $meta['updated_at'] ?? current_time('mysql')));
+        // 価格・時点表記は規約対応 (v0.15.0) で廃止済み
 
         // 対応商品がない側のボタンは検索結果一覧に飛ばす (一覧経由でもアフィ成果になる)
         $ctx = self::build_search_urls($keyword_raw, $meta);
@@ -51,7 +50,6 @@ class Affiros_AI_Card_Renderer {
         }
 
         $html .= '  </div>' . "\n";
-        $html .= '  <div class="affiros-ai-card-foot"><small>' . $updated_at . '時点の情報です。価格・在庫は変動します。</small></div>' . "\n";
         $html .= '</div>' . "\n";
         $html .= '<!-- affiros-ai-card-end -->' . "\n";
         return $html;
@@ -94,7 +92,6 @@ class Affiros_AI_Card_Renderer {
         $heading = trim((string)($meta['title'] ?? ''));
         $title = esc_html(mb_substr($product['title'] ?? '', 0, 60));
         $image = esc_url($product['image'] ?? '');
-        $price = esc_html($product['price_display'] ?? '');
         $product_url = esc_url($product['url'] ?? '');
         $is_amazon = ($product['source'] ?? '') === 'amazon';
 
@@ -117,9 +114,6 @@ class Affiros_AI_Card_Renderer {
         $rating_html = self::rating_html($product);
         if ($rating_html) {
             $html .= '  ' . $rating_html . "\n";
-        }
-        if ($price) {
-            $html .= '  <div class="affiros-ai-price">' . $price . '</div>' . "\n";
         }
         $html .= '  <div class="affiros-ai-btns">' . "\n";
         if ($amazon_url) {
@@ -144,7 +138,6 @@ class Affiros_AI_Card_Renderer {
     private static function render_one_card($primary, $rank, $ctx = []) {
         $title = esc_html(mb_substr($primary['title'] ?? '', 0, 60));
         $image = esc_url($primary['image'] ?? '');
-        $price = esc_html($primary['price_display'] ?? '');
         $brand = esc_html($primary['brand'] ?? '');
         $primary_url = esc_url($primary['url'] ?? '');
         $is_amazon = ($primary['source'] ?? '') === 'amazon';
@@ -176,9 +169,6 @@ class Affiros_AI_Card_Renderer {
         $rating_html = self::rating_html($primary);
         if ($rating_html) {
             $html .= '      ' . $rating_html . "\n";
-        }
-        if ($price) {
-            $html .= '      <div class="affiros-ai-price">' . $price . '</div>' . "\n";
         }
         $html .= '      <div class="affiros-ai-btns">' . "\n";
         $html .= '        ' . $primary_btn . "\n";
