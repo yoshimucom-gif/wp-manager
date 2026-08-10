@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros オートインサーター
  * Description: マーカー不要。Claude Haiku が本文から検索キーワードを自動抽出し、Amazon + 楽天から関連商品3件を引っ張って「最初のH2直前」「まとめ直後」の2箇所に比較カードを自動挿入する。ランキング記事は自動判定して除外。既存の affiros-product-inserter とは独立して動作。
- * Version: 0.16.0
+ * Version: 0.16.1
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-auto-inserter
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('AFFIROS_AI_VERSION',      '0.16.0');
+define('AFFIROS_AI_VERSION',      '0.16.1');
 define('AFFIROS_AI_PATH',         plugin_dir_path(__FILE__));
 define('AFFIROS_AI_URL',          plugin_dir_url(__FILE__));
 define('AFFIROS_AI_OPTION_KEY',   'affiros_ai_settings');
@@ -39,10 +39,16 @@ require_once AFFIROS_AI_PATH . 'admin/design-preview.php';
 
 /**
  * 自動更新チェッカー登録
+ *
+ * v0.16.1: GitHub直配信に移行。旧ホスト (Render=停止 / ke-ys.co.jp=フォルダ消失) は
+ * どちらも死んでいるため、mu-plugin の AFFIROS_UPDATE_HOST は参照しない (固定URL)。
+ * リポジトリ公開前提。配信は push だけで完了する。
  */
 add_action('init', function () {
-    $host = defined('AFFIROS_UPDATE_HOST') ? AFFIROS_UPDATE_HOST : 'https://wp-manager.onrender.com';
-    new Affiros_Plugin_Updater(__FILE__, rtrim($host, '/') . '/api/plugin-update/auto-inserter');
+    new Affiros_Plugin_Updater(
+        __FILE__,
+        'https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-host/api/plugin-update/auto-inserter'
+    );
 });
 
 /**

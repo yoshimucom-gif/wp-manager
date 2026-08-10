@@ -1990,6 +1990,17 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.39 / auto-inserter v0.16.1 (2026-08-09) — 📦 プラグイン配信をGitHub直配信に移行</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: 自動更新が7/31から死んでいた。ke-ys.co.jp サーバーの <code>affiros-plugins/</code> フォルダが消失し、デプロイActionsが553で全滅（更新JSONは0.13.0の残骸、zipは404）。</li>
+              <li><strong>新方式</strong>: wp-manager リポジトリは公開なので <strong>raw.githubusercontent.com で直配信</strong>。更新JSON=<code>plugin-host/api/plugin-update/&lt;key&gt;</code>、zip=<code>plugin-downloads/</code> をそのまま配信。<strong>push した瞬間が配信完了</strong>（サーバー・FTP・Actions不要）。</li>
+              <li><strong>auto-inserter v0.16.1</strong>: 更新チェック先をGitHub固定URLに変更。旧mu-plugin（AFFIROS_UPDATE_HOST）は参照しない。<strong>これを各サイトに手動で入れるのが最後の手動インストール</strong>で、以後は更新バッジ→ワンクリック。</li>
+              <li><strong>クリーンアップ</strong>: deploy-plugin-host.yml（FTPSワークフロー）と build-keys-host.py を削除、<code>build-update-host.py</code> に置換（全11プラグインのJSONを生成、download_urlはraw）。他プラグインも次回リリース時に同方式へ移行予定（現状の更新チェック先は死んだままなので実害なし）。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.16.0 → 0.16.1 / <code>APP_VERSION</code> 1.9.38 → 1.9.39。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.38 / auto-inserter v0.16.0 (2026-08-09) — 見出しを「{キーワード}」＋接尾辞 形式に刷新（景表法・CTR対応）</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: 「超売れ筋のおすすめTOP3」は実体がAPI検索上位3件で売上順位ではなく、根拠のない優良誤認リスク（景表法）。CTR面でも定型句が広告臭を出しキーワードが後置される欠点。</li>

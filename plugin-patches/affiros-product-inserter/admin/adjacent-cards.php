@@ -280,7 +280,6 @@ const AI_PI_HEAVY_DESIGNS = ['compare', 'ranking'];
 function ai_pi_find_card_blocks($content) {
     $blocks = [];
     if (!$content) return $blocks;
-    $len = strlen($content);
     $max_iter = 2000; // 暴走防止
 
     // (1) カード div を検出（挿入処理済み記事）
@@ -306,22 +305,7 @@ function ai_pi_find_card_blocks($content) {
 
         // 現行で生成されるカードは vertical / compare / ranking の3種のみ。
         // proscons / mini / score は出力されないので検出対象から除外。
-        $design = null;
-        if (preg_match_all('/(?<![a-z0-9_-])(aipi-[a-z][a-z0-9_-]*)/i', $attrs, $cm)) {
-            foreach ($cm[1] as $cls) {
-                $cls = strtolower($cls);
-                // aipi-card--vertical（aipi-card--mini/proscons/score は現行未使用なので無視）
-                if ($cls === 'aipi-card--vertical') {
-                    $design = 'vertical';
-                    break;
-                }
-                // aipi-compare / aipi-ranking はそのまま
-                if (preg_match('/^aipi-(compare|ranking)$/', $cls, $mc)) {
-                    $design = $mc[1];
-                    break;
-                }
-            }
-        }
+        $design = ai_pi_classify_card_div($attrs, false);
 
         if ($design === null) {
             // カード div ではない（普通の div / wp-block-image 等）→ 次へ
@@ -330,26 +314,7 @@ function ai_pi_find_card_blocks($content) {
         }
 
         // この div の終わりをネスト深度カウントで探す
-        $pos = $tag_end_pos;
-        $depth = 1;
-        $end = $len;
-        $guard = 5000;
-        while ($depth > 0 && $pos < $len && $guard-- > 0) {
-            $next_open = stripos($content, '<div', $pos);
-            $next_close = stripos($content, '</div>', $pos);
-            if ($next_close === false) break;
-            if ($next_open !== false && $next_open < $next_close) {
-                $depth++;
-                $pos = $next_open + 4;
-            } else {
-                $depth--;
-                if ($depth === 0) {
-                    $end = $next_close + 6;
-                    break;
-                }
-                $pos = $next_close + 6;
-            }
-        }
+        $end = ai_pi_find_div_end($content, $tag_end_pos);
         $blocks[] = ['start' => $tag_start, 'end' => $end, 'design' => $design, 'type' => 'card'];
         $offset = $end;
     }

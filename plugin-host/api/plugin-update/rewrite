@@ -1,0 +1,15 @@
+{
+  "name": "Affiros ポストプロセッサー",
+  "slug": "affiros-rewrite",
+  "plugin": "affiros-rewrite/affiros-rewrite.php",
+  "version": "0.5.17",
+  "tested": "6.6",
+  "requires": "5.8",
+  "requires_php": "7.4",
+  "author": "Affiros",
+  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/affiros-rewrite-0.5.17.zip",
+  "sections": {
+    "description": "Affiros ポストプロセッサー 本体。GitHub から自動更新します。",
+    "changelog": "最新バージョン 0.5.17"
+  }
+}

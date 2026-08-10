@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros プロダクトインサーター
  * Description: AIが記事内容を解析し、Amazon・楽天市場の最適な商品アフィリエイトカードを自動挿入するプラグイン
- * Version: 1.9.31
+ * Version: 1.10.0
  * Author: AI Product Inserter
  * License: GPL v2 or later
  * Text Domain: ai-product-inserter
@@ -34,7 +34,7 @@ if (defined('AI_PI_VERSION')) {
     return;
 }
 
-define('AI_PI_VERSION', '1.9.31');
+define('AI_PI_VERSION', '1.10.0');
 define('AI_PI_PATH', plugin_dir_path(__FILE__));
 define('AI_PI_URL', plugin_dir_url(__FILE__));
 
@@ -117,12 +117,14 @@ require_once AI_PI_PATH . 'includes/amazon-api.php';
 require_once AI_PI_PATH . 'includes/rakuten-api.php';
 require_once AI_PI_PATH . 'includes/product-selector.php';
 require_once AI_PI_PATH . 'includes/card-renderer.php';
+require_once AI_PI_PATH . 'includes/card-blocks.php';
 require_once AI_PI_PATH . 'includes/inserter.php';
 require_once AI_PI_PATH . 'includes/auto-insert.php';
 require_once AI_PI_PATH . 'includes/post-meta.php';
 require_once AI_PI_PATH . 'admin/settings.php';
 require_once AI_PI_PATH . 'admin/meta-box.php';
 require_once AI_PI_PATH . 'admin/bulk-process.php';
+require_once AI_PI_PATH . 'admin/bulk-delete.php';
 require_once AI_PI_PATH . 'admin/ajax-handler.php';
 require_once AI_PI_PATH . 'admin/design-preview.php';
 require_once AI_PI_PATH . 'admin/adjacent-cards.php';
@@ -265,6 +267,15 @@ function ai_pi_admin_menu() {
 
     add_submenu_page(
         'ai-product-inserter',
+        'カード／マーカー一括削除',
+        '🗑 カード／マーカー削除',
+        'manage_options',
+        'ai-product-inserter-delete',
+        'ai_pi_render_bulk_delete_page'
+    );
+
+    add_submenu_page(
+        'ai-product-inserter',
         '処理ログ',
         '処理ログ',
         'manage_options',
@@ -312,6 +323,12 @@ function ai_pi_render_logs_page() {
  */
 add_action('ai_pi_daily_refresh', 'ai_pi_do_daily_refresh');
 function ai_pi_do_daily_refresh() {
+    // 一括削除ツールの退避データ（post_content 丸ごと）を30日で掃除する。
+    // 放置すると postmeta が膨らむため、24hリフレッシュの設定とは無関係に必ず走らせる。
+    if (function_exists('ai_pi_del_prune_backups')) {
+        ai_pi_del_prune_backups(30);
+    }
+
     $settings = get_option('ai_pi_settings', []);
     if (($settings['enable_24h_refresh'] ?? 'yes') !== 'yes') return;
 
