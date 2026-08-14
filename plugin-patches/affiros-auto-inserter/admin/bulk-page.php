@@ -70,7 +70,7 @@ function affiros_ai_render_bulk_page() {
                 <span style="color:#a06000;font-size:12px">※ 一括ボタンは絞り込み表示中の記事だけに実行されます</span>
             </div>
             <div style="margin:0 0 12px">
-                <button type="button" id="ai-apply-all-btn" class="button button-primary">✨ 未挿入の記事に一括適用</button>
+                <button type="button" id="ai-apply-all-btn" class="button button-primary">✨ 未挿入・消失の記事に一括適用</button>
                 <button type="button" id="ai-reapply-all-btn" class="button" style="margin-left:8px">🔄 挿入済の記事に一括再挿入</button>
                 <span id="ai-apply-status" style="margin-left:12px;font-size:13px"></span>
                 <div style="font-size:12px;color:#666;margin-top:6px">
@@ -148,8 +148,8 @@ function affiros_ai_render_bulk_page() {
             let abort = false;
 
             $('#ai-scan-btn').on('click', scan);
-            $('#ai-apply-all-btn').on('click', () => applyBatch('pending', '挿入'));
-            $('#ai-reapply-all-btn').on('click', () => applyBatch('done', '再挿入'));
+            $('#ai-apply-all-btn').on('click', () => applyBatch(['pending', 'lost'], '挿入'));
+            $('#ai-reapply-all-btn').on('click', () => applyBatch(['done'], '再挿入'));
             $('#ai-filter-cat, #ai-filter-date, #ai-filter-cards, #ai-filter-pubdate').on('change', render);
 
             // 現在の絞り込み条件を通過した記事だけを返す
@@ -227,7 +227,7 @@ function affiros_ai_render_bulk_page() {
                     const editUrl = `${location.origin}/wp-admin/post.php?post=${p.id}&action=edit`;
                     const viewUrl = p.link || editUrl; // タイトル = 公開URL (確認用)
                     const stateBadge = badge(p.state);
-                    const canApply = (p.state === 'pending' || p.state === 'done');
+                    const canApply = (p.state === 'pending' || p.state === 'done' || p.state === 'lost');
                     const cardsCell = (p.last_insert_at && (p.cards || 0) === 0)
                         ? '<span style="color:#c62828;font-weight:700">⚠️ 0枚</span>'
                         : `${p.cards || 0}枚`;
@@ -254,6 +254,7 @@ function affiros_ai_render_bulk_page() {
             function badge(state) {
                 const styles = {
                     pending:  ['#c62828', '未挿入'],
+                    lost:     ['#c62828', '⚠️ 消失'],
                     done:     ['#0a7a2f', '挿入済'],
                     excluded: ['#666',    '除外'],
                     taxonomy: ['#666',    '除外(分類)'],
@@ -291,11 +292,11 @@ function affiros_ai_render_bulk_page() {
                 }
             }
 
-            async function applyBatch(targetState, verb) {
+            async function applyBatch(targetStates, verb) {
                 const filtered = filteredPosts();
-                const targets = filtered.filter(p => p.state === targetState);
+                const targets = filtered.filter(p => targetStates.includes(p.state));
                 const filterOn = filtered.length !== posts.length;
-                if (!targets.length) { alert(`${targetState === 'pending' ? '未挿入' : '挿入済'}の対象がありません${filterOn ? ' (絞り込み適用中)' : ''}`); return; }
+                if (!targets.length) { alert(`${targetStates.includes('pending') ? '未挿入・消失' : '挿入済'}の対象がありません${filterOn ? ' (絞り込み適用中)' : ''}`); return; }
                 if (!confirm(`${filterOn ? '【絞り込み適用中】' : ''}${targets.length} 件に順次${verb}します。想定コスト: ¥${Math.round(targets.length * 0.5)}〜¥${Math.round(targets.length * 0.65)} 前後 (再抽出発動分を含む概算)。よろしいですか？`)) return;
 
                 abort = false;
@@ -364,8 +365,13 @@ add_action('wp_ajax_affiros_ai_scan', function () {
         } elseif (affiros_ai_taxonomy_excluded($post_id, $settings)) {
             $state = 'taxonomy'; $stats['taxonomy']++;
         } elseif (!empty($last_insert)) {
-            $state = 'done'; $stats['done']++;
-            if ($cards === 0) $stats['lost']++;
+            // 挿入メタはあるが本文にカードが無い = 他プロセスの上書きで消失。
+            // 実質未挿入なので独立状態にし、「未挿入に一括適用」の対象へ含める
+            if ($cards === 0) {
+                $state = 'lost'; $stats['lost']++;
+            } else {
+                $state = 'done'; $stats['done']++;
+            }
         } else {
             $state = 'pending'; $stats['pending']++;
         }

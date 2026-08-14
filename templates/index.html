@@ -1990,6 +1990,15 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.40 / auto-inserter v0.16.2 (2026-08-14) — カード消失を独立状態にして「未挿入一括」の対象に</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>指摘</strong>: リライト等でカードが消えた記事は状態「挿入済」のままで、「未挿入の記事に一括適用」でHITしなかった（再挿入ボタン＋カード絞り込みという遠回りが必要だった）。</li>
+              <li><strong>変更</strong>: 挿入メタがあるのに本文カード0枚の記事は独立状態<strong>「⚠️ 消失」</strong>に。実質未挿入なので<strong>「✨ 未挿入・消失の記事に一括適用」</strong>（ボタン名も変更）の対象に含めた。絞り込み不要で普通に一括すれば復旧される。カード絞り込み「消失」も従来どおり使える。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.16.1 → 0.16.2 / <code>APP_VERSION</code> 1.9.39 → 1.9.40。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.39 / auto-inserter v0.16.1 (2026-08-09) — 📦 プラグイン配信をGitHub直配信に移行</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: 自動更新が7/31から死んでいた。ke-ys.co.jp サーバーの <code>affiros-plugins/</code> フォルダが消失し、デプロイActionsが553で全滅（更新JSONは0.13.0の残骸、zipは404）。</li>
