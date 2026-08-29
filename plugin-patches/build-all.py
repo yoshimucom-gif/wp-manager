@@ -42,7 +42,7 @@ SPECS = [
     (os.path.join(ROOT, 'affiros-cat-eyecatch'),
      'affiros-cat-eyecatch', 'affiros-cat-eyecatch-1.0.0.zip'),
     (os.path.join(ROOT, 'affiros-sale-hub'),
-     'affiros-sale-hub', 'affiros-sale-hub-1.0.0.zip'),
+     'affiros-sale-hub', 'affiros-sale-hub-1.1.0.zip'),
 ]
 
 

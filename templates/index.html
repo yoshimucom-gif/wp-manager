@@ -1990,6 +1990,17 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.42 / sale-hub v1.1.0 (2026-08-29) — 🤖 セール情報の自動巡回書き込みに対応</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>書き込みエンドポイント</strong>: <code>admin-ajax ?action=affiros_sales_push</code> (POST + 連携トークン認証)。毎朝のAI自動巡回エージェントが公式セール情報を調査してプッシュする受け皿。</li>
+              <li><strong>冪等 (replace-auto)</strong>: 自動行 (<code>source=auto</code>) はペイロードで総入れ替え、手動行には一切触らない。同モール・期間重複は手動が勝つ。同じペイロードを何度送っても結果は同じ (push系の冪等性ガード標準)。</li>
+              <li><strong>安全側に倒す</strong>: 調査が空振りした日は自動行が消えるだけ。根拠のない「開催中」表示側には倒れない。</li>
+              <li><strong>トークン</strong>: 初回アクセス時にランダム生成 (公開リポジトリ配布のため既定値は持たない)。管理画面に表示/非表示トグルで表示。セットアップ用に管理者認証RESTの <code>affiros/v1/push-token</code> で取得可。</li>
+              <li><strong>バージョン同期</strong>: sale-hub 1.0.0 → 1.1.0 / <code>APP_VERSION</code> 1.9.41 → 1.9.42。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.41 / sale-hub v1.0.0 (2026-08-29) — 📣 セール配信ハブ プラグインを新設</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>新規プラグイン</strong>: <code>affiros-sale-hub</code> v1.0.0。ke-ys.co.jp に設置する配信元で、Amazon・楽天のセール情報 (モール/文言/開始/終了) を管理画面から登録し、JSONで全メディアサイトに配信する (ポチップのセール表示の自前版)。</li>

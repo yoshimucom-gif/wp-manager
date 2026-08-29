@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros セールハブ
  * Description: Amazon・楽天のセール情報を一元管理して全メディアサイトへ配信する。ke-ys.co.jp に設置する配信元プラグイン。各サイトの affiros-auto-inserter が1日1回ここのJSONを取得し、開催中のセールをカードボタン上のマイクロコピーとして表示する。
- * Version: 1.0.0
+ * Version: 1.1.0
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-sale-hub
@@ -10,8 +10,22 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('AFFIROS_SH_VERSION',    '1.0.0');
+define('AFFIROS_SH_VERSION',    '1.1.0');
 define('AFFIROS_SH_OPTION_KEY', 'affiros_sale_hub_sales');
+define('AFFIROS_SH_TOKEN_KEY',  'affiros_sale_hub_token');
+
+/**
+ * 自動連携用トークン。初回アクセス時にランダム生成して固定。
+ * (公開リポジトリで配布するプラグインなので、既定値としては絶対に持たない)
+ */
+function affiros_sh_get_token() {
+    $token = get_option(AFFIROS_SH_TOKEN_KEY, '');
+    if (!is_string($token) || strlen($token) < 24) {
+        $token = wp_generate_password(40, false, false);
+        update_option(AFFIROS_SH_TOKEN_KEY, $token, false);
+    }
+    return $token;
+}
 
 require_once plugin_dir_path(__FILE__) . 'includes/plugin-updater.php';
 
@@ -83,7 +97,89 @@ add_action('rest_api_init', function () {
             return affiros_sh_feed_payload();
         },
     ]);
+    // 自動連携セットアップ用: トークン取得 (管理者のアプリケーションパスワード認証が必要)
+    register_rest_route('affiros/v1', '/push-token', [
+        'methods'             => 'GET',
+        'permission_callback' => function () { return current_user_can('manage_options'); },
+        'callback'            => function () { return ['token' => affiros_sh_get_token()]; },
+    ]);
 });
+
+/**
+ * 1行分の入力値を検証して保存形式に整える (手動追加・自動プッシュ共通)。
+ * 不正なら null。
+ */
+function affiros_sh_validate_row($mall, $label, $start, $end, $source) {
+    if (!in_array($mall, ['amazon', 'rakuten'], true)) return null;
+    $label = mb_substr(wp_strip_all_tags(trim((string)$label)), 0, 40);
+    $start = affiros_sh_normalize_dt($start);
+    $end   = affiros_sh_normalize_dt($end);
+    if ($label === '' || !$start || !$end) return null;
+    if (strtotime($end) <= strtotime($start)) return null;
+    return [
+        'id'     => uniqid('sale_'),
+        'mall'   => $mall,
+        'label'  => $label,
+        'start'  => $start,
+        'end'    => $end,
+        'source' => $source,
+    ];
+}
+
+/**
+ * 書き込みエンドポイント: 毎朝の自動巡回エージェントがセール情報をプッシュする。
+ *
+ * セマンティクス = replace-auto (冪等):
+ *   - source=auto の行はペイロードの内容で総入れ替え
+ *   - 手動登録した行 (source=manual / 旧バージョンの source なし) には一切触らない
+ *   - 手動行と同モール・期間重複の auto 行は捨てる (手動が常に勝つ)
+ * 同じペイロードを何度送っても結果は同じ。エージェントの調査が空振りした日は
+ * auto 行が消えるだけで、誤表示 (根拠のない「開催中」) 側には倒れない。
+ */
+add_action('wp_ajax_affiros_sales_push',        'affiros_sh_ajax_push');
+add_action('wp_ajax_nopriv_affiros_sales_push', 'affiros_sh_ajax_push');
+function affiros_sh_ajax_push() {
+    if (strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? '')) !== 'POST') {
+        wp_send_json(['ok' => false, 'error' => 'POST only'], 405);
+    }
+    $token = (string)($_POST['token'] ?? '');
+    if ($token === '' || !hash_equals(affiros_sh_get_token(), $token)) {
+        wp_send_json(['ok' => false, 'error' => 'bad token'], 403);
+    }
+    $data = json_decode(wp_unslash((string)($_POST['payload'] ?? '')), true);
+    if (!is_array($data)) {
+        wp_send_json(['ok' => false, 'error' => 'payload must be JSON'], 400);
+    }
+    $rows = (isset($data['sales']) && is_array($data['sales'])) ? $data['sales'] : $data;
+
+    $autos = [];
+    foreach (array_slice($rows, 0, 20) as $r) {
+        if (!is_array($r)) continue;
+        $row = affiros_sh_validate_row(
+            $r['mall'] ?? '', $r['label'] ?? '', $r['start'] ?? '', $r['end'] ?? '', 'auto'
+        );
+        if ($row) $autos[] = $row;
+    }
+
+    $manual = array_values(array_filter(affiros_sh_get_sales(), function ($s) {
+        return ($s['source'] ?? 'manual') !== 'auto';
+    }));
+
+    // 手動行と同モール・期間重複の auto 行は捨てる
+    $autos = array_values(array_filter($autos, function ($a) use ($manual) {
+        foreach ($manual as $m) {
+            if ($m['mall'] === $a['mall']
+                && strtotime($a['start']) < strtotime($m['end'])
+                && strtotime($m['start']) < strtotime($a['end'])) return false;
+        }
+        return true;
+    }));
+
+    $sales = array_merge($manual, $autos);
+    usort($sales, function ($a, $b) { return strcmp($a['start'], $b['start']); });
+    update_option(AFFIROS_SH_OPTION_KEY, $sales, false);
+    wp_send_json(['ok' => true, 'auto' => count($autos), 'manual' => count($manual)]);
+}
 
 /**
  * 管理メニュー
@@ -131,11 +227,12 @@ function affiros_sh_render_admin_page() {
         } else {
             $sales = affiros_sh_get_sales();
             $sales[] = [
-                'id'    => uniqid('sale_'),
-                'mall'  => $mall,
-                'label' => $label,
-                'start' => $start,
-                'end'   => $end,
+                'id'     => uniqid('sale_'),
+                'mall'   => $mall,
+                'label'  => $label,
+                'start'  => $start,
+                'end'    => $end,
+                'source' => 'manual',
             ];
             usort($sales, function ($a, $b) { return strcmp($a['start'], $b['start']); });
             update_option(AFFIROS_SH_OPTION_KEY, $sales, false);
@@ -213,7 +310,7 @@ function affiros_sh_render_admin_page() {
             <p>登録はありません。</p>
         <?php else: ?>
         <table class="widefat striped" style="max-width:900px">
-            <thead><tr><th>状態</th><th>モール</th><th>文言</th><th>開始</th><th>終了</th><th></th></tr></thead>
+            <thead><tr><th>状態</th><th>モール</th><th>文言</th><th>開始</th><th>終了</th><th>登録元</th><th></th></tr></thead>
             <tbody>
             <?php foreach ($sales as $s):
                 $st = strtotime($s['start']); $en = strtotime($s['end']);
@@ -230,6 +327,7 @@ function affiros_sh_render_admin_page() {
                     <td>＼<?php echo esc_html($s['label']); ?>／</td>
                     <td><?php echo esc_html($s['start']); ?></td>
                     <td><?php echo esc_html($s['end']); ?></td>
+                    <td><?php echo ($s['source'] ?? 'manual') === 'auto' ? '🤖 自動' : '✍️ 手動'; ?></td>
                     <td>
                         <form method="post" style="display:inline" onsubmit="return confirm('このセールを削除しますか？');">
                             <?php wp_nonce_field('affiros_sh_save'); ?>
@@ -257,6 +355,20 @@ function affiros_sh_render_admin_page() {
             </tbody>
         </table>
         <p class="description" style="margin-top:8px">各サイトの affiros-auto-inserter が1日1回このJSONを取得してキャッシュします。登録・削除の反映は最長24時間後。終了だけは受信側でも期間判定するので、終了日時を過ぎれば取得を待たずに表示が消えます。</p>
+
+        <h2 style="margin-top:28px">自動巡回 (毎朝のセール情報自動登録)</h2>
+        <p style="color:#555;max-width:720px">毎朝1回、AIエージェントが Amazon・楽天の公式セール情報を調査して「🤖 自動」行を書き込みます。<br>
+        ✍️ 手動で登録した行には触りません (同モール・期間重複の自動行は手動が勝ちます)。自動行が間違っていたら手動で同じセールを登録すれば上書きできます。</p>
+        <table class="form-table" style="max-width:900px">
+            <tr>
+                <th style="width:160px">連携トークン</th>
+                <td>
+                    <input type="password" id="affiros-sh-token" readonly value="<?php echo esc_attr(affiros_sh_get_token()); ?>" class="regular-text" style="font-family:monospace">
+                    <button type="button" class="button" onclick="var f=document.getElementById('affiros-sh-token');f.type=f.type==='password'?'text':'password';this.textContent=f.type==='password'?'表示':'隠す';">表示</button>
+                    <p class="description">自動巡回エージェントだけに渡す。漏れた場合はこのプラグインを無効化→有効化…ではなく、DBの <code>affiros_sale_hub_token</code> オプションを削除すると再生成される。</p>
+                </td>
+            </tr>
+        </table>
     </div>
     <?php
 }
