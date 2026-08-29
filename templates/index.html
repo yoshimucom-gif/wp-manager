@@ -1990,6 +1990,18 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.41 / sale-hub v1.0.0 (2026-08-29) — 📣 セール配信ハブ プラグインを新設</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>新規プラグイン</strong>: <code>affiros-sale-hub</code> v1.0.0。ke-ys.co.jp に設置する配信元で、Amazon・楽天のセール情報 (モール/文言/開始/終了) を管理画面から登録し、JSONで全メディアサイトに配信する (ポチップのセール表示の自前版)。</li>
+              <li><strong>配信経路</strong>: 主経路=admin-ajax (<code>?action=affiros_sales</code>、SiteGuardのREST無効化・WAFの影響を受けない)、予備=REST (<code>affiros/v1/sales</code>)。外部到達性は実測済み。</li>
+              <li><strong>二重期間ゲート</strong>: 配信側は終了前の行だけ返し、開催中判定は受信側が自分の現在時刻で行う。配信が止まってもセール終了後に「開催中」が残らない。終了60日超の行は自動掃除。</li>
+              <li><strong>景表法ガード</strong>: 文言はモール公式セール名のプリセット (datalist) を用意し、独自の煽り・根拠のない「最大○%」を入れない運用を管理画面に明記。</li>
+              <li><strong>受信側は次リリース</strong>: auto-inserter v0.17.0 で日次取得＋ボタン上マイクロコピー表示 (表示時注入なので焼き込み済みカードにも再挿入なしで反映) を実装予定。</li>
+              <li><strong>バージョン同期</strong>: sale-hub 1.0.0 を <code>build-all.py</code> / <code>PLUGIN_DOWNLOADS</code> / <code>PLUGIN_UPDATE_META</code> (キー <code>sale-hub</code>) に登録。<code>APP_VERSION</code> 1.9.40 → 1.9.41。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.40 / auto-inserter v0.16.2 (2026-08-14) — カード消失を独立状態にして「未挿入一括」の対象に</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>指摘</strong>: リライト等でカードが消えた記事は状態「挿入済」のままで、「未挿入の記事に一括適用」でHITしなかった（再挿入ボタン＋カード絞り込みという遠回りが必要だった）。</li>

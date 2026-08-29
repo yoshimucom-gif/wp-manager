@@ -41,6 +41,8 @@ SPECS = [
      'affiros-auto-inserter', 'affiros-auto-inserter-0.16.2.zip'),
     (os.path.join(ROOT, 'affiros-cat-eyecatch'),
      'affiros-cat-eyecatch', 'affiros-cat-eyecatch-1.0.0.zip'),
+    (os.path.join(ROOT, 'affiros-sale-hub'),
+     'affiros-sale-hub', 'affiros-sale-hub-1.0.0.zip'),
 ]
 
 
