@@ -1990,6 +1990,15 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.44 / sale-hub v1.1.2 (2026-08-29) — 表示イメージプレビュー＋実施履歴タブ</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>表示イメージ</strong>: 各モールブロックの下に、本番カードと同一デザインのボタン (auto-inserterのcard.cssを忠実に再現) ＋「＼文言／」マイクロコピーのプレビューを表示。文言欄への入力にリアルタイム連動し、開催中のセールがあればその文言を初期表示 (「● いま本番で表示される文言です」)。このプレビューが auto-inserter v0.17.0 のマイクロコピー表示のデザイン契約になる。</li>
+              <li><strong>実施履歴タブ</strong>: 終了したセールは削除ではなく「📚 実施履歴」タブへ自動移動 (直近500件・新しい順・日数つき)。旧仕様の「終了60日で自動掃除」を置き換え。</li>
+              <li><strong>バージョン同期</strong>: sale-hub 1.1.1 → 1.1.2 / <code>APP_VERSION</code> 1.9.43 → 1.9.44。スタブテスト13項目PASS。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.43 / sale-hub v1.1.1 (2026-08-29) — 管理画面をAmazon/楽天の2ブロック構成に</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>指摘</strong>: モールをラジオボタンで選ぶ1フォーム方式はわかりにくい。</li>
