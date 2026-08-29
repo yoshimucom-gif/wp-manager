@@ -1990,6 +1990,15 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.45 / sale-hub v1.1.3 (2026-08-30) — 表示イメージを実カード形式 (2ボタン) に</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>指摘</strong>: プレビューが自モールのボタン1つだけで、実際のカードと違う。</li>
+              <li><strong>変更</strong>: 本番サイト (good-butsugu.com) の実カードを実測し、商品名＋「Amazonで見る」「楽天市場で見る」2ボタン並びのカード下部を再現。マイクロコピーは該当モールのボタン直上に表示 (Amazonブロック=Amazonボタンの上、楽天ブロック=楽天ボタンの上)。</li>
+              <li><strong>バージョン同期</strong>: sale-hub 1.1.2 → 1.1.3 / <code>APP_VERSION</code> 1.9.44 → 1.9.45。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.44 / sale-hub v1.1.2 (2026-08-29) — 表示イメージプレビュー＋実施履歴タブ</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>表示イメージ</strong>: 各モールブロックの下に、本番カードと同一デザインのボタン (auto-inserterのcard.cssを忠実に再現) ＋「＼文言／」マイクロコピーのプレビューを表示。文言欄への入力にリアルタイム連動し、開催中のセールがあればその文言を初期表示 (「● いま本番で表示される文言です」)。このプレビューが auto-inserter v0.17.0 のマイクロコピー表示のデザイン契約になる。</li>
