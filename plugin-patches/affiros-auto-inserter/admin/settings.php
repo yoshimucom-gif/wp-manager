@@ -53,6 +53,11 @@ function affiros_ai_sanitize_settings($input) {
 
     $output['auto_on_publish']        = ($input['auto_on_publish'] ?? 'no') === 'yes' ? 'yes' : 'no';
     $output['monthly_refresh']        = ($input['monthly_refresh'] ?? 'no') === 'yes' ? 'yes' : 'no';
+
+    // セール表示 (v0.17.0)。URL空なら既定 (ke-ysセールハブ) に戻す
+    $output['sale_display']  = ($input['sale_display'] ?? 'no') === 'yes' ? 'yes' : 'no';
+    $sale_url = trim(sanitize_text_field($input['sale_feed_url'] ?? ''));
+    $output['sale_feed_url'] = $sale_url !== '' ? esc_url_raw($sale_url) : $defaults['sale_feed_url'];
     // v0.7.0 で週次リフレッシュ廃止。旧設定が残っていたら捨てる
     unset($output['cron_refresh']);
 
@@ -249,6 +254,34 @@ function affiros_ai_render_settings_page() {
                 </tr>
             </table>
 
+            <h2>⑧ セール表示 (マイクロコピー)</h2>
+            <table class="form-table">
+                <tr>
+                    <th>セールマイクロコピー</th>
+                    <td>
+                        <label><input type="checkbox" name="<?php echo AFFIROS_AI_OPTION_KEY; ?>[sale_display]" value="yes" <?php checked($settings['sale_display'] ?? 'yes', 'yes'); ?>> 開催中のセールをボタンの上に「＼お買い物マラソン開催中／」のように表示する</label>
+                        <p class="description">セールハブ (ke-ys.co.jp) の登録内容を1日1回取得。開催期間内だけ表示され、終了すると自動で消える。文言・動きはハブ側で一元管理。</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th>配信元URL</th>
+                    <td>
+                        <input type="text" name="<?php echo AFFIROS_AI_OPTION_KEY; ?>[sale_feed_url]" value="<?php echo esc_attr($settings['sale_feed_url'] ?? ''); ?>" class="large-text" style="max-width:560px">
+                        <?php
+                        $sale_cache = get_option(AFFIROS_AI_SALES_CACHE_KEY, []);
+                        $az = function_exists('affiros_ai_sale_active') ? affiros_ai_sale_active('amazon') : null;
+                        $rk = function_exists('affiros_ai_sale_active') ? affiros_ai_sale_active('rakuten') : null;
+                        ?>
+                        <p class="description">
+                            通常は変更不要。空で保存すると既定URLに戻る。設定を保存すると即時取得する。<br>
+                            最終取得: <strong><?php echo esc_html($sale_cache['fetched'] ?? 'まだ取得していません'); ?></strong>
+                            ／ 取得済み <?php echo count((array)($sale_cache['sales'] ?? [])); ?> 件
+                            ／ 開催中: Amazon=<?php echo $az ? '「' . esc_html($az['label']) . '」' : 'なし'; ?>・楽天=<?php echo $rk ? '「' . esc_html($rk['label']) . '」' : 'なし'; ?>
+                        </p>
+                    </td>
+                </tr>
+            </table>
+
             <?php submit_button(); ?>
         </form>
 
@@ -262,7 +295,7 @@ function affiros_ai_render_settings_page() {
         });
         </script>
 
-        <h2>⑧ サイドバー用ショートコード</h2>
+        <h2>⑨ サイドバー用ショートコード</h2>
         <div style="max-width:680px;background:#fff;border:1px solid #ccd0d4;border-radius:4px;padding:16px 20px;font-size:13px;line-height:1.9">
             <p style="margin-top:0">
                 表示中の記事に挿入済みの商品をコンパクトカード（画像・商品名・価格・Amazon/楽天ボタン）で表示します。<br>

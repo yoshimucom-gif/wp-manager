@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros オートインサーター
  * Description: マーカー不要。Claude Haiku が本文から検索キーワードを自動抽出し、Amazon + 楽天から関連商品3件を引っ張って「最初のH2直前」「まとめ直後」の2箇所に比較カードを自動挿入する。ランキング記事は自動判定して除外。既存の affiros-product-inserter とは独立して動作。
- * Version: 0.16.2
+ * Version: 0.17.0
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-auto-inserter
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('AFFIROS_AI_VERSION',      '0.16.2');
+define('AFFIROS_AI_VERSION',      '0.17.0');
 define('AFFIROS_AI_PATH',         plugin_dir_path(__FILE__));
 define('AFFIROS_AI_URL',          plugin_dir_url(__FILE__));
 define('AFFIROS_AI_OPTION_KEY',   'affiros_ai_settings');
@@ -31,6 +31,7 @@ require_once AFFIROS_AI_PATH . 'includes/keyword-extractor.php';
 require_once AFFIROS_AI_PATH . 'includes/card-renderer.php';
 require_once AFFIROS_AI_PATH . 'includes/ranking-detector.php';
 require_once AFFIROS_AI_PATH . 'includes/inserter.php';
+require_once AFFIROS_AI_PATH . 'includes/sale-feed.php';
 require_once AFFIROS_AI_PATH . 'includes/shortcode.php';
 require_once AFFIROS_AI_PATH . 'admin/settings.php';
 require_once AFFIROS_AI_PATH . 'admin/bulk-page.php';
@@ -82,6 +83,10 @@ function affiros_ai_default_settings() {
         // 挿入しないカテゴリー・タグ
         'exclude_category_ids'   => [],  // カテゴリーID配列
         'exclude_tags'           => '',  // カンマ区切り (タグ名 or スラッグ)
+        // セール表示 (v0.17.0): セールハブ (ke-ys.co.jp) から日次取得して
+        // 開催中セールをボタン直上のマイクロコピーで表示
+        'sale_display'           => 'yes',
+        'sale_feed_url'          => 'https://ke-ys.co.jp/wp-admin/admin-ajax.php?action=affiros_sales',
         // 挿入動作
         'auto_on_publish'        => 'yes', // 公開時自動挿入
         // 月次リフレッシュ (v0.12.0): 挿入から30日経過した記事を1日10件ずつ商品更新

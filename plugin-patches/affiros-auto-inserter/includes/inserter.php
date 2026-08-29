@@ -464,6 +464,9 @@ add_action('affiros_ai_delayed_process', function ($post_id) {
 // 一括挿入ページ下部で確認できる。取得失敗時は本文に触らないので既存カードは残る。
 
 add_action('affiros_ai_daily_refresh', function () {
+    // セール情報の日次取得 (v0.17.0)。月次リフレッシュOFFでも取得は毎日行う
+    affiros_ai_sale_fetch();
+
     $settings = affiros_ai_get_settings();
     if (($settings['monthly_refresh'] ?? 'yes') !== 'yes') return;
 

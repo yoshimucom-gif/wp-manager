@@ -1990,6 +1990,16 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.47 / auto-inserter v0.17.0 (2026-08-30) — 📣 セールハブ連携 (受信側)</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>日次取得</strong>: 既存の日次cronでセールハブのJSONを取得しキャッシュ (月次リフレッシュOFFでも取得は毎日)。設定保存時にも即取得。ページ表示中は外部HTTPを一切撃たない。</li>
+              <li><strong>表示時注入</strong>: 開催中セールを該当モールのボタン直上に「＼文言／」マイクロコピーで表示 (<code>affiros_ai_sale_decorate</code> 1本を記事本文・サイドバー・ポップアップAJAXが共通で通る)。焼き込み済みカードにも再挿入なしで即反映、終了すれば即消滅 (二重期間ゲート)。アニメ5種はハブ側の指定どおり再生。</li>
+              <li><strong>設定⑧セール表示</strong>: ON/OFF＋配信元URL (既定=ke-ysセールハブ、空保存で既定復帰)。最終取得日時・取得件数・現在開催中のセールを表示。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.16.2 → 0.17.0 / <code>APP_VERSION</code> 1.9.46 → 1.9.47。受信スタブテストPASS。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.46 / sale-hub v1.2.0 (2026-08-30) — ✨ マイクロコピーのアニメーション5パターン</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>パターン</strong>: なし / 点滅 (既定) / バウンド / 拡大縮小 / ぷるぷる。セール登録フォームの「動き」で選択し、表示イメージがリアルタイムで動いて確認できる。登録一覧にも (点滅) のように表記。</li>

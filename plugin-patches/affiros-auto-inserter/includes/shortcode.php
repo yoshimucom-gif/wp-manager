@@ -42,12 +42,14 @@ function affiros_ai_top_html($post_id, $rank = 1, $title = null) {
 
     $settings = affiros_ai_get_settings();
     if ($title === null) $title = $settings['side_heading_suffix'] ?? 'で迷ったらこれ';
-    return Affiros_AI_Card_Renderer::render_single($list[$idx], [
+    $html = Affiros_AI_Card_Renderer::render_single($list[$idx], [
         'keyword' => $data['keyword'] ?? get_post_meta($post_id, AFFIROS_AI_META_KEYWORD, true),
         'title'   => $title,
         'amazon_partner_tag'   => $settings['amazon_partner_tag']   ?? '',
         'rakuten_affiliate_id' => $settings['rakuten_affiliate_id'] ?? '',
     ]);
+    // 開催中セールのマイクロコピー (v0.17.0)。サイドバー/ポップアップも記事内と同じ表示
+    return affiros_ai_sale_decorate($html);
 }
 
 add_shortcode('affiros_ai_top', function ($atts) {
