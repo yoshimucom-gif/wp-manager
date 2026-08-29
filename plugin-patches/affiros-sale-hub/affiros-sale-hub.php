@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros セールハブ
  * Description: Amazon・楽天のセール情報を一元管理して全メディアサイトへ配信する。ke-ys.co.jp に設置する配信元プラグイン。各サイトの affiros-auto-inserter が1日1回ここのJSONを取得し、開催中のセールをカードボタン上のマイクロコピーとして表示する。
- * Version: 1.1.3
+ * Version: 1.2.0
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-sale-hub
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('AFFIROS_SH_VERSION',    '1.1.3');
+define('AFFIROS_SH_VERSION',    '1.2.0');
 define('AFFIROS_SH_OPTION_KEY',  'affiros_sale_hub_sales');
 define('AFFIROS_SH_TOKEN_KEY',   'affiros_sale_hub_token');
 define('AFFIROS_SH_HISTORY_KEY', 'affiros_sale_hub_history');
@@ -36,6 +36,23 @@ add_action('init', function () {
         'https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-host/api/plugin-update/sale-hub'
     );
 });
+
+/**
+ * マイクロコピーのアニメーションパターン (キーがfeedで配信され、受信側のCSSクラスになる)
+ */
+function affiros_sh_anims() {
+    return [
+        'none'   => 'なし',
+        'blink'  => '点滅',
+        'bounce' => 'バウンド',
+        'pulse'  => '拡大縮小',
+        'shake'  => 'ぷるぷる',
+    ];
+}
+
+function affiros_sh_sanitize_anim($v) {
+    return array_key_exists((string)$v, affiros_sh_anims()) ? (string)$v : 'blink';
+}
 
 /**
  * セール一覧を取得する。終了した行はここで実施履歴へ自動移動する
@@ -96,6 +113,7 @@ function affiros_sh_feed_payload() {
             'label' => $s['label'],
             'start' => $s['start'],
             'end'   => $s['end'],
+            'anim'  => affiros_sh_sanitize_anim($s['anim'] ?? 'blink'),
         ];
     }
     return [
@@ -134,7 +152,7 @@ add_action('rest_api_init', function () {
  * 1行分の入力値を検証して保存形式に整える (手動追加・自動プッシュ共通)。
  * 不正なら null。
  */
-function affiros_sh_validate_row($mall, $label, $start, $end, $source) {
+function affiros_sh_validate_row($mall, $label, $start, $end, $source, $anim = 'blink') {
     if (!in_array($mall, ['amazon', 'rakuten'], true)) return null;
     $label = mb_substr(wp_strip_all_tags(trim((string)$label)), 0, 40);
     $start = affiros_sh_normalize_dt($start);
@@ -147,6 +165,7 @@ function affiros_sh_validate_row($mall, $label, $start, $end, $source) {
         'label'  => $label,
         'start'  => $start,
         'end'    => $end,
+        'anim'   => affiros_sh_sanitize_anim($anim),
         'source' => $source,
     ];
 }
@@ -181,7 +200,8 @@ function affiros_sh_ajax_push() {
     foreach (array_slice($rows, 0, 20) as $r) {
         if (!is_array($r)) continue;
         $row = affiros_sh_validate_row(
-            $r['mall'] ?? '', $r['label'] ?? '', $r['start'] ?? '', $r['end'] ?? '', 'auto'
+            $r['mall'] ?? '', $r['label'] ?? '', $r['start'] ?? '', $r['end'] ?? '', 'auto',
+            $r['anim'] ?? 'blink'
         );
         if ($row) $autos[] = $row;
     }
@@ -257,6 +277,7 @@ function affiros_sh_render_admin_page() {
                 'label'  => $label,
                 'start'  => $start,
                 'end'    => $end,
+                'anim'   => affiros_sh_sanitize_anim($_POST['anim'] ?? 'blink'),
                 'source' => 'manual',
             ];
             usort($sales, function ($a, $b) { return strcmp($a['start'], $b['start']); });
@@ -281,6 +302,19 @@ function affiros_sh_render_admin_page() {
     $rest_feed = home_url('/?rest_route=/affiros/v1/sales');
     $tab = (($_GET['tab'] ?? '') === 'history') ? 'history' : 'manage';
     ?>
+    <style>
+    /* マイクロコピーのアニメーション (受信側 auto-inserter と同一のデザイン契約) */
+    @keyframes affiros-sh-blink  { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+    @keyframes affiros-sh-bounce { 0%,20%,50%,80%,100% { transform: translateY(0); } 40% { transform: translateY(-4px); } 60% { transform: translateY(-2px); } }
+    @keyframes affiros-sh-pulse  { 0%,100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+    @keyframes affiros-sh-shake  { 0%,88%,100% { transform: rotate(0); } 90% { transform: rotate(2deg); } 92% { transform: rotate(-2deg); } 94% { transform: rotate(1.5deg); } 96% { transform: rotate(-1.5deg); } 98% { transform: rotate(.5deg); } }
+    .affiros-sh-anim-none   { animation: none; }
+    .affiros-sh-anim-blink  { animation: affiros-sh-blink 1.4s ease-in-out infinite; }
+    .affiros-sh-anim-bounce { animation: affiros-sh-bounce 2.2s ease-in-out infinite; }
+    .affiros-sh-anim-pulse  { animation: affiros-sh-pulse 1.6s ease-in-out infinite; }
+    .affiros-sh-anim-shake  { animation: affiros-sh-shake 3s ease-in-out infinite; }
+    @media (prefers-reduced-motion: reduce) { [class^="affiros-sh-anim-"] { animation: none; } }
+    </style>
     <div class="wrap">
         <h1>📣 Affiros セールハブ <small style="font-size:12px;color:#888">v<?php echo esc_html(AFFIROS_SH_VERSION); ?></small></h1>
         <h2 class="nav-tab-wrapper" style="margin-bottom:16px">
@@ -357,6 +391,7 @@ function affiros_sh_render_admin_page() {
                 }
             }
             $pv_label = $active ? $active['label'] : $mc['placeholder'];
+            $pv_anim  = affiros_sh_sanitize_anim($active ? ($active['anim'] ?? 'blink') : 'blink');
         ?>
             <div style="flex:1;min-width:430px;max-width:560px;background:#fff;border:1px solid #ccd0d4;border-top:3px solid <?php echo $mc['color']; ?>;padding:16px">
                 <h2 style="margin:0 0 4px"><span style="background:<?php echo $mc['color']; ?>;color:#fff;padding:2px 12px;border-radius:3px;font-size:14px"><?php echo $mc['title']; ?></span> のセール</h2>
@@ -382,6 +417,17 @@ function affiros_sh_render_admin_page() {
                             <th style="padding:8px 0">終了日時</th>
                             <td style="padding:8px 0"><input type="datetime-local" name="end"></td>
                         </tr>
+                        <tr>
+                            <th style="padding:8px 0">動き</th>
+                            <td style="padding:8px 0">
+                                <select name="anim" onchange="document.getElementById('affiros-sh-pv-<?php echo esc_attr($mall_key); ?>').className='affiros-sh-anim-'+this.value">
+                                    <?php foreach (affiros_sh_anims() as $ak => $an): ?>
+                                        <option value="<?php echo esc_attr($ak); ?>"<?php echo $ak === 'blink' ? ' selected' : ''; ?>><?php echo esc_html($an); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <span class="description">下の表示イメージで動きを確認できます</span>
+                            </td>
+                        </tr>
                     </table>
                     <p style="margin:8px 0 0"><button type="submit" name="affiros_sh_add" value="1" class="button button-primary"><?php echo $mc['title']; ?>のセールを登録</button></p>
                 </form>
@@ -400,7 +446,7 @@ function affiros_sh_render_admin_page() {
                     ?>
                         <tr>
                             <td style="white-space:nowrap"><?php echo $badge; ?></td>
-                            <td>＼<?php echo esc_html($s['label']); ?>／</td>
+                            <td>＼<?php echo esc_html($s['label']); ?>／ <span style="color:#999;font-size:11px">(<?php echo esc_html(affiros_sh_anims()[affiros_sh_sanitize_anim($s['anim'] ?? 'blink')]); ?>)</span></td>
                             <td style="white-space:nowrap"><?php echo esc_html($s['start']); ?></td>
                             <td style="white-space:nowrap"><?php echo esc_html($s['end']); ?></td>
                             <td style="white-space:nowrap"><?php echo ($s['source'] ?? 'manual') === 'auto' ? '🤖 自動' : '✍️ 手動'; ?></td>
@@ -424,11 +470,11 @@ function affiros_sh_render_admin_page() {
                             <div style="text-align:center;font-weight:700;font-size:13px;line-height:1.5">ニトリ(NITORI) インテリア仏壇 NB01<br><span style="font-weight:400;color:#999;font-size:11.5px">※ 商品名はサンプル</span></div>
                             <div style="margin-top:10px">
                                 <?php if ($mall_key === 'amazon'): ?>
-                                    <div id="affiros-sh-pv-amazon" style="text-align:center;font-size:12.5px;font-weight:700;color:<?php echo $mall_defs['amazon']['copy_color']; ?>;margin-bottom:3px">＼<?php echo esc_html($pv_label); ?>／</div>
+                                    <div id="affiros-sh-pv-amazon" class="affiros-sh-anim-<?php echo esc_attr($pv_anim); ?>" style="text-align:center;font-size:12.5px;font-weight:700;color:<?php echo $mall_defs['amazon']['copy_color']; ?>;margin-bottom:3px">＼<?php echo esc_html($pv_label); ?>／</div>
                                 <?php endif; ?>
                                 <span style="display:block;width:100%;box-sizing:border-box;padding:12px 10px;border-radius:6px;font-size:13px;font-weight:700;line-height:1.4;text-align:center;color:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12);background:<?php echo $mall_defs['amazon']['btn_bg']; ?>">Amazonで見る</span>
                                 <?php if ($mall_key === 'rakuten'): ?>
-                                    <div id="affiros-sh-pv-rakuten" style="text-align:center;font-size:12.5px;font-weight:700;color:<?php echo $mall_defs['rakuten']['copy_color']; ?>;margin:8px 0 3px">＼<?php echo esc_html($pv_label); ?>／</div>
+                                    <div id="affiros-sh-pv-rakuten" class="affiros-sh-anim-<?php echo esc_attr($pv_anim); ?>" style="text-align:center;font-size:12.5px;font-weight:700;color:<?php echo $mall_defs['rakuten']['copy_color']; ?>;margin:8px 0 3px">＼<?php echo esc_html($pv_label); ?>／</div>
                                 <?php endif; ?>
                                 <span style="display:block;width:100%;box-sizing:border-box;padding:12px 10px;border-radius:6px;font-size:13px;font-weight:700;line-height:1.4;text-align:center;color:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12);background:<?php echo $mall_defs['rakuten']['btn_bg']; ?>;<?php echo $mall_key === 'rakuten' ? '' : 'margin-top:8px'; ?>">楽天市場で見る</span>
                             </div>

@@ -1990,6 +1990,15 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.46 / sale-hub v1.2.0 (2026-08-30) — ✨ マイクロコピーのアニメーション5パターン</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>パターン</strong>: なし / 点滅 (既定) / バウンド / 拡大縮小 / ぷるぷる。セール登録フォームの「動き」で選択し、表示イメージがリアルタイムで動いて確認できる。登録一覧にも (点滅) のように表記。</li>
+              <li><strong>配信スキーマ拡張</strong>: feed の各行に <code>anim</code> キーを追加。受信側 auto-inserter v0.17.0 は同名キーフレーム (affiros-sh-blink 等) を card.css に持ち、クラス付与で再生する (このページの CSS がデザイン契約)。<code>prefers-reduced-motion</code> ではアニメ停止。</li>
+              <li><strong>バージョン同期</strong>: sale-hub 1.1.3 → 1.2.0 / <code>APP_VERSION</code> 1.9.45 → 1.9.46。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.45 / sale-hub v1.1.3 (2026-08-30) — 表示イメージを実カード形式 (2ボタン) に</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>指摘</strong>: プレビューが自モールのボタン1つだけで、実際のカードと違う。</li>
