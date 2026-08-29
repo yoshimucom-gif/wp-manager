@@ -1990,6 +1990,15 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.43 / sale-hub v1.1.1 (2026-08-29) — 管理画面をAmazon/楽天の2ブロック構成に</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>指摘</strong>: モールをラジオボタンで選ぶ1フォーム方式はわかりにくい。</li>
+              <li><strong>変更</strong>: Amazon (オレンジ) と楽天 (赤) の独立ブロックに分割。各ブロックに専用の追加フォーム＋そのモールの登録一覧。文言プリセットもモール別 (Amazon=スマイルセール/プライムデー等6種、楽天=マラソン/スーパーセール等6種)。</li>
+              <li><strong>バージョン同期</strong>: sale-hub 1.1.0 → 1.1.1 / <code>APP_VERSION</code> 1.9.42 → 1.9.43。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.42 / sale-hub v1.1.0 (2026-08-29) — 🤖 セール情報の自動巡回書き込みに対応</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>書き込みエンドポイント</strong>: <code>admin-ajax ?action=affiros_sales_push</code> (POST + 連携トークン認証)。毎朝のAI自動巡回エージェントが公式セール情報を調査してプッシュする受け皿。</li>

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros セールハブ
  * Description: Amazon・楽天のセール情報を一元管理して全メディアサイトへ配信する。ke-ys.co.jp に設置する配信元プラグイン。各サイトの affiros-auto-inserter が1日1回ここのJSONを取得し、開催中のセールをカードボタン上のマイクロコピーとして表示する。
- * Version: 1.1.0
+ * Version: 1.1.1
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-sale-hub
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('AFFIROS_SH_VERSION',    '1.1.0');
+define('AFFIROS_SH_VERSION',    '1.1.1');
 define('AFFIROS_SH_OPTION_KEY', 'affiros_sale_hub_sales');
 define('AFFIROS_SH_TOKEN_KEY',  'affiros_sale_hub_token');
 
@@ -263,83 +263,86 @@ function affiros_sh_render_admin_page() {
         <?php if ($notice): ?><div class="notice notice-success"><p><?php echo esc_html($notice); ?></p></div><?php endif; ?>
         <?php if ($error):  ?><div class="notice notice-error"><p><?php echo esc_html($error); ?></p></div><?php endif; ?>
 
-        <h2>セールを追加</h2>
-        <form method="post" style="background:#fff;border:1px solid #ccd0d4;padding:16px;max-width:720px">
-            <?php wp_nonce_field('affiros_sh_save'); ?>
-            <table class="form-table" style="margin-top:0">
-                <tr>
-                    <th style="width:120px">モール</th>
-                    <td>
-                        <label style="margin-right:16px"><input type="radio" name="mall" value="amazon" checked> Amazon</label>
-                        <label><input type="radio" name="mall" value="rakuten"> 楽天</label>
-                    </td>
-                </tr>
-                <tr>
-                    <th>表示する文言</th>
-                    <td>
-                        <input type="text" name="label" list="affiros-sh-presets" class="regular-text" maxlength="40" placeholder="お買い物マラソン開催中">
-                        <datalist id="affiros-sh-presets">
-                            <option value="お買い物マラソン開催中">
-                            <option value="楽天スーパーセール開催中">
-                            <option value="楽天ブラックフライデー開催中">
-                            <option value="楽天大感謝祭開催中">
-                            <option value="楽天イーグルス感謝祭開催中">
-                            <option value="スマイルセール開催中">
-                            <option value="プライムデー開催中">
-                            <option value="プライム感謝祭開催中">
-                            <option value="ブラックフライデー開催中">
-                            <option value="タイムセール祭り開催中">
-                        </datalist>
-                        <p class="description">「＼」「／」は表示側が付けるので不要。<strong>モール公式のセール名をそのまま</strong>使う (景表法対策: 独自の煽り文言・根拠のない「最大○%」は入れない)。</p>
-                    </td>
-                </tr>
-                <tr>
-                    <th>開始日時</th>
-                    <td><input type="datetime-local" name="start"> <span class="description">日本時間</span></td>
-                </tr>
-                <tr>
-                    <th>終了日時</th>
-                    <td><input type="datetime-local" name="end"> <span class="description">日本時間。過ぎると全サイトで自動的に表示が消える</span></td>
-                </tr>
-            </table>
-            <p><button type="submit" name="affiros_sh_add" value="1" class="button button-primary">登録する</button></p>
-        </form>
+        <p class="description" style="max-width:900px">文言の「＼」「／」は表示側が付けるので不要。<strong>モール公式のセール名をそのまま</strong>使う (景表法対策: 独自の煽り文言・根拠のない「最大○%」は入れない)。日時はすべて日本時間。終了日時を過ぎると全サイトで自動的に表示が消える。</p>
 
-        <h2 style="margin-top:28px">登録済みセール</h2>
-        <?php if (!$sales): ?>
-            <p>登録はありません。</p>
-        <?php else: ?>
-        <table class="widefat striped" style="max-width:900px">
-            <thead><tr><th>状態</th><th>モール</th><th>文言</th><th>開始</th><th>終了</th><th>登録元</th><th></th></tr></thead>
-            <tbody>
-            <?php foreach ($sales as $s):
-                $st = strtotime($s['start']); $en = strtotime($s['end']);
-                if ($now_ts > $en)       { $badge = '<span style="color:#999">終了</span>'; }
-                elseif ($now_ts >= $st)  { $badge = '<span style="color:#d63638;font-weight:bold">● 開催中</span>'; }
-                else                     { $badge = '<span style="color:#2271b1">開始前</span>'; }
-                $mall_badge = $s['mall'] === 'amazon'
-                    ? '<span style="background:#ff9900;color:#fff;padding:2px 8px;border-radius:3px;font-size:11px">Amazon</span>'
-                    : '<span style="background:#bf0000;color:#fff;padding:2px 8px;border-radius:3px;font-size:11px">楽天</span>';
-            ?>
-                <tr>
-                    <td><?php echo $badge; ?></td>
-                    <td><?php echo $mall_badge; ?></td>
-                    <td>＼<?php echo esc_html($s['label']); ?>／</td>
-                    <td><?php echo esc_html($s['start']); ?></td>
-                    <td><?php echo esc_html($s['end']); ?></td>
-                    <td><?php echo ($s['source'] ?? 'manual') === 'auto' ? '🤖 自動' : '✍️ 手動'; ?></td>
-                    <td>
-                        <form method="post" style="display:inline" onsubmit="return confirm('このセールを削除しますか？');">
-                            <?php wp_nonce_field('affiros_sh_save'); ?>
-                            <input type="hidden" name="sale_id" value="<?php echo esc_attr($s['id']); ?>">
-                            <button type="submit" name="affiros_sh_delete" value="1" class="button button-small">削除</button>
-                        </form>
-                    </td>
-                </tr>
-            <?php endforeach; ?>
-            </tbody>
-        </table>
-        <?php endif; ?>
+        <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;margin-top:12px">
+        <?php
+        $mall_defs = [
+            'amazon'  => ['title' => 'Amazon', 'color' => '#ff9900', 'placeholder' => 'スマイルセール開催中', 'presets' => [
+                'スマイルセール開催中', 'プライムデー開催中', 'プライム感謝祭開催中',
+                'ブラックフライデー開催中', 'タイムセール祭り開催中', '初売りセール開催中',
+            ]],
+            'rakuten' => ['title' => '楽天', 'color' => '#bf0000', 'placeholder' => 'お買い物マラソン開催中', 'presets' => [
+                'お買い物マラソン開催中', '楽天スーパーセール開催中', '楽天ブラックフライデー開催中',
+                '楽天大感謝祭開催中', '楽天イーグルス感謝祭開催中', '楽天超ポイントバック祭開催中',
+            ]],
+        ];
+        foreach ($mall_defs as $mall_key => $mc):
+            $mall_sales = array_values(array_filter($sales, function ($s) use ($mall_key) {
+                return ($s['mall'] ?? '') === $mall_key;
+            }));
+        ?>
+            <div style="flex:1;min-width:430px;max-width:560px;background:#fff;border:1px solid #ccd0d4;border-top:3px solid <?php echo $mc['color']; ?>;padding:16px">
+                <h2 style="margin:0 0 4px"><span style="background:<?php echo $mc['color']; ?>;color:#fff;padding:2px 12px;border-radius:3px;font-size:14px"><?php echo $mc['title']; ?></span> のセール</h2>
+
+                <form method="post" style="margin:12px 0 4px">
+                    <?php wp_nonce_field('affiros_sh_save'); ?>
+                    <input type="hidden" name="mall" value="<?php echo esc_attr($mall_key); ?>">
+                    <table class="form-table" style="margin:0">
+                        <tr>
+                            <th style="width:90px;padding:8px 0">文言</th>
+                            <td style="padding:8px 0">
+                                <input type="text" name="label" list="affiros-sh-presets-<?php echo esc_attr($mall_key); ?>" maxlength="40" placeholder="<?php echo esc_attr($mc['placeholder']); ?>" style="width:100%">
+                                <datalist id="affiros-sh-presets-<?php echo esc_attr($mall_key); ?>">
+                                    <?php foreach ($mc['presets'] as $p): ?><option value="<?php echo esc_attr($p); ?>"><?php endforeach; ?>
+                                </datalist>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th style="padding:8px 0">開始日時</th>
+                            <td style="padding:8px 0"><input type="datetime-local" name="start"></td>
+                        </tr>
+                        <tr>
+                            <th style="padding:8px 0">終了日時</th>
+                            <td style="padding:8px 0"><input type="datetime-local" name="end"></td>
+                        </tr>
+                    </table>
+                    <p style="margin:8px 0 0"><button type="submit" name="affiros_sh_add" value="1" class="button button-primary"><?php echo $mc['title']; ?>のセールを登録</button></p>
+                </form>
+
+                <?php if (!$mall_sales): ?>
+                    <p style="color:#888;margin:14px 0 0">登録はありません。</p>
+                <?php else: ?>
+                <table class="widefat striped" style="margin-top:14px">
+                    <thead><tr><th>状態</th><th>文言</th><th>開始</th><th>終了</th><th>登録元</th><th></th></tr></thead>
+                    <tbody>
+                    <?php foreach ($mall_sales as $s):
+                        $st = strtotime($s['start']); $en = strtotime($s['end']);
+                        if ($now_ts > $en)       { $badge = '<span style="color:#999">終了</span>'; }
+                        elseif ($now_ts >= $st)  { $badge = '<span style="color:#d63638;font-weight:bold">● 開催中</span>'; }
+                        else                     { $badge = '<span style="color:#2271b1">開始前</span>'; }
+                    ?>
+                        <tr>
+                            <td style="white-space:nowrap"><?php echo $badge; ?></td>
+                            <td>＼<?php echo esc_html($s['label']); ?>／</td>
+                            <td style="white-space:nowrap"><?php echo esc_html($s['start']); ?></td>
+                            <td style="white-space:nowrap"><?php echo esc_html($s['end']); ?></td>
+                            <td style="white-space:nowrap"><?php echo ($s['source'] ?? 'manual') === 'auto' ? '🤖 自動' : '✍️ 手動'; ?></td>
+                            <td>
+                                <form method="post" style="display:inline" onsubmit="return confirm('このセールを削除しますか？');">
+                                    <?php wp_nonce_field('affiros_sh_save'); ?>
+                                    <input type="hidden" name="sale_id" value="<?php echo esc_attr($s['id']); ?>">
+                                    <button type="submit" name="affiros_sh_delete" value="1" class="button button-small">削除</button>
+                                </form>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <?php endif; ?>
+            </div>
+        <?php endforeach; ?>
+        </div>
 
         <h2 style="margin-top:28px">配信エンドポイント</h2>
         <table class="widefat" style="max-width:900px">
