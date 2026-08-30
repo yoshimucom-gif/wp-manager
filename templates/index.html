@@ -1990,6 +1990,16 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.50 / sale-hub v1.4.0 + auto-inserter v0.17.2 (2026-08-30) — 🎨 コピー色を薄めに刷新・ハブから色変更可能に</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>指摘</strong>: マイクロコピーの色が濃い。ポチップくらいの薄い色がいい・色を変えられるように。</li>
+              <li><strong>既定色刷新</strong>: Amazon <code>#e65100</code>→<code>#f7a306</code> (明るいオレンジ)、楽天 <code>#b71c1c</code>→<code>#e64c4c</code> (明るめの赤)。ポチップ準拠。</li>
+              <li><strong>色の一元管理</strong>: ハブの各モールブロックにカラーピッカー追加 (表示イメージに即時反映→保存)。feedに <code>colors</code> キーで配信し、受信側はインラインstyle (!important) で適用。ハブ未指定時はCSS既定色。</li>
+              <li><strong>バージョン同期</strong>: sale-hub 1.3.0 → 1.4.0 / auto-inserter 0.17.1 → 0.17.2 / <code>APP_VERSION</code> 1.9.49 → 1.9.50。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.49 / auto-inserter v0.17.1 (2026-08-30) — セール即時取得トリガー</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: 受信側の取得は日次cronと設定保存時のみで、ハブ登録直後の反映を外から蹴る手段がなかった (通し確認で顕在化)。</li>

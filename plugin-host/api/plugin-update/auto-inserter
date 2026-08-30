@@ -2,14 +2,14 @@
   "name": "Affiros オートインサーター",
   "slug": "affiros-auto-inserter",
   "plugin": "affiros-auto-inserter/affiros-auto-inserter.php",
-  "version": "0.17.1",
+  "version": "0.17.2",
   "tested": "6.6",
   "requires": "5.8",
   "requires_php": "7.4",
   "author": "Affiros",
-  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/affiros-auto-inserter-0.17.1.zip",
+  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/affiros-auto-inserter-0.17.2.zip",
   "sections": {
     "description": "Affiros オートインサーター 本体。GitHub から自動更新します。",
-    "changelog": "最新バージョン 0.17.1"
+    "changelog": "最新バージョン 0.17.2"
   }
 }

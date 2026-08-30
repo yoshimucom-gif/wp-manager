@@ -52,9 +52,18 @@ function affiros_ai_sale_fetch() {
             'anim'  => $anim,
         ];
     }
+    // マイクロコピーの文字色 (ハブ側で一元管理・モール別)
+    $colors = [];
+    if (isset($data['colors']) && is_array($data['colors'])) {
+        foreach (['amazon', 'rakuten'] as $m) {
+            $v = (string)($data['colors'][$m] ?? '');
+            if (preg_match('/^#[0-9a-fA-F]{6}$/', $v)) $colors[$m] = strtolower($v);
+        }
+    }
     update_option(AFFIROS_AI_SALES_CACHE_KEY, [
         'fetched' => current_time('mysql'),
         'sales'   => $rows,
+        'colors'  => $colors,
     ]);
     return count($rows);
 }
@@ -90,16 +99,22 @@ function affiros_ai_sale_decorate($html) {
 
     static $active = null; // 同一リクエスト内キャッシュ (カード数ぶん再計算しない)
     if ($active === null) {
+        $cache = get_option(AFFIROS_AI_SALES_CACHE_KEY, []);
         $active = [
             'amazon'  => affiros_ai_sale_active('amazon'),
             'rakuten' => affiros_ai_sale_active('rakuten'),
+            'colors'  => (is_array($cache) && !empty($cache['colors']) && is_array($cache['colors'])) ? $cache['colors'] : [],
         ];
     }
 
     foreach (['amazon', 'rakuten'] as $mall) {
         if (!$active[$mall]) continue;
+        // ハブ指定の色をインラインで上書き (CSS既定はポチップ準拠の薄め)
+        $style = isset($active['colors'][$mall])
+            ? ' style="color:' . esc_attr($active['colors'][$mall]) . ' !important"'
+            : '';
         $copy = '<div class="affiros-ai-sale affiros-ai-sale-' . $mall
-              . ' affiros-sh-anim-' . esc_attr($active[$mall]['anim']) . '">＼'
+              . ' affiros-sh-anim-' . esc_attr($active[$mall]['anim']) . '"' . $style . '>＼'
               . esc_html($active[$mall]['label']) . '／</div>';
         $html = preg_replace(
             '/(<a[^>]*affiros-ai-btn-' . $mall . '[^>]*>)/u',

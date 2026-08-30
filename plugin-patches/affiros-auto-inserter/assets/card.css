@@ -250,8 +250,9 @@
     line-height: 1.3 !important;
     margin: 0 !important;
 }
-.affiros-ai-sale-amazon  { color: #e65100 !important; }
-.affiros-ai-sale-rakuten { color: #b71c1c !important; }
+/* 既定色はポチップ準拠の薄め。ハブで色指定があればインラインstyleが優先 */
+.affiros-ai-sale-amazon  { color: #f7a306 !important; }
+.affiros-ai-sale-rakuten { color: #e64c4c !important; }
 /* .affiros-ai-btns は gap:8px の縦flex。コピーとボタンの間だけ詰める */
 .affiros-ai-btns .affiros-ai-sale { margin: 0 0 -5px !important; }
 

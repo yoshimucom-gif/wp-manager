@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros セールハブ
  * Description: Amazon・楽天のセール情報を一元管理して全メディアサイトへ配信する。ke-ys.co.jp に設置する配信元プラグイン。各サイトの affiros-auto-inserter が1日1回ここのJSONを取得し、開催中のセールをカードボタン上のマイクロコピーとして表示する。
- * Version: 1.3.0
+ * Version: 1.4.0
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-sale-hub
@@ -10,11 +10,12 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('AFFIROS_SH_VERSION',    '1.3.0');
+define('AFFIROS_SH_VERSION',    '1.4.0');
 define('AFFIROS_SH_OPTION_KEY',  'affiros_sale_hub_sales');
 define('AFFIROS_SH_TOKEN_KEY',   'affiros_sale_hub_token');
 define('AFFIROS_SH_HISTORY_KEY', 'affiros_sale_hub_history');
 define('AFFIROS_SH_RECUR_KEY',   'affiros_sale_hub_recur');
+define('AFFIROS_SH_COLORS_KEY',  'affiros_sale_hub_colors');
 
 /**
  * 自動連携用トークン。初回アクセス時にランダム生成して固定。
@@ -53,6 +54,21 @@ function affiros_sh_anims() {
 
 function affiros_sh_sanitize_anim($v) {
     return array_key_exists((string)$v, affiros_sh_anims()) ? (string)$v : 'blink';
+}
+
+/**
+ * マイクロコピーの文字色 (モール別・全サイト共通)。
+ * 既定はポチップ準拠の薄め: Amazon=明るいオレンジ / 楽天=明るめの赤
+ */
+function affiros_sh_colors() {
+    $c = get_option(AFFIROS_SH_COLORS_KEY, []);
+    if (!is_array($c)) $c = [];
+    $out = [];
+    foreach (['amazon' => '#f7a306', 'rakuten' => '#e64c4c'] as $mall => $def) {
+        $v = (string)($c[$mall] ?? '');
+        $out[$mall] = preg_match('/^#[0-9a-fA-F]{6}$/', $v) ? strtolower($v) : $def;
+    }
+    return $out;
 }
 
 /**
@@ -178,6 +194,7 @@ function affiros_sh_feed_payload() {
         'version'  => AFFIROS_SH_VERSION,
         'timezone' => 'Asia/Tokyo',
         'now'      => $now,
+        'colors'   => affiros_sh_colors(),
         'sales'    => $rows,
     ];
 }
@@ -344,6 +361,21 @@ function affiros_sh_render_admin_page() {
         }
     }
 
+    // マイクロコピーの色の保存
+    if (isset($_POST['affiros_sh_color_save']) && check_admin_referer('affiros_sh_save')) {
+        $mall = in_array($_POST['mall'] ?? '', ['amazon', 'rakuten'], true) ? $_POST['mall'] : '';
+        $col  = (string)($_POST['copy_color'] ?? '');
+        if ($mall && preg_match('/^#[0-9a-fA-F]{6}$/', $col)) {
+            $colors = get_option(AFFIROS_SH_COLORS_KEY, []);
+            if (!is_array($colors)) $colors = [];
+            $colors[$mall] = strtolower($col);
+            update_option(AFFIROS_SH_COLORS_KEY, $colors, false);
+            $notice = 'コピーの色を保存しました。各サイトには次回取得から反映されます。';
+        } else {
+            $error = '色の形式が不正です (#rrggbb)。';
+        }
+    }
+
     // 定期キャンペーン (5と0のつく日) 設定の保存
     if (isset($_POST['affiros_sh_recur_save']) && check_admin_referer('affiros_sh_save')) {
         $label = mb_substr(wp_strip_all_tags(trim((string)($_POST['recur_label'] ?? ''))), 0, 40);
@@ -434,15 +466,16 @@ function affiros_sh_render_admin_page() {
 
         <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;margin-top:12px">
         <?php
+        $sh_colors = affiros_sh_colors();
         $mall_defs = [
             'amazon'  => ['title' => 'Amazon', 'color' => '#ff9900', 'placeholder' => 'スマイルセール開催中',
-                'btn_bg' => 'linear-gradient(180deg,#ffa726,#fb8c00)', 'copy_color' => '#e65100',
+                'btn_bg' => 'linear-gradient(180deg,#ffa726,#fb8c00)', 'copy_color' => $sh_colors['amazon'],
                 'presets' => [
                 'スマイルセール開催中', 'プライムデー開催中', 'プライム感謝祭開催中',
                 'ブラックフライデー開催中', 'タイムセール祭り開催中', '初売りセール開催中',
             ]],
             'rakuten' => ['title' => '楽天', 'color' => '#bf0000', 'placeholder' => 'お買い物マラソン開催中',
-                'btn_bg' => 'linear-gradient(180deg,#d63a3a,#b71c1c)', 'copy_color' => '#b71c1c',
+                'btn_bg' => 'linear-gradient(180deg,#d63a3a,#b71c1c)', 'copy_color' => $sh_colors['rakuten'],
                 'presets' => [
                 'お買い物マラソン開催中', '楽天スーパーセール開催中', '楽天ブラックフライデー開催中',
                 '楽天大感謝祭開催中', '楽天イーグルス感謝祭開催中', '楽天超ポイントバック祭開催中',
@@ -585,6 +618,14 @@ function affiros_sh_render_admin_page() {
                             いまは開催中のセールがないため、本番ではマイクロコピーなしのボタンだけが出ます (上はサンプル)。文言欄に入力するとリアルタイムで反映されます。
                         <?php endif; ?>
                     </p>
+                    <form method="post" style="margin-top:8px">
+                        <?php wp_nonce_field('affiros_sh_save'); ?>
+                        <input type="hidden" name="mall" value="<?php echo esc_attr($mall_key); ?>">
+                        <label style="font-size:12px;color:#666">コピーの色:</label>
+                        <input type="color" name="copy_color" value="<?php echo esc_attr($mc['copy_color']); ?>" style="vertical-align:middle" oninput="document.getElementById('affiros-sh-pv-<?php echo esc_attr($mall_key); ?>').style.color=this.value">
+                        <button type="submit" name="affiros_sh_color_save" value="1" class="button button-small">色を保存</button>
+                        <span class="description" style="font-size:11px">全サイトのマイクロコピー共通の文字色 (次回取得から反映)</span>
+                    </form>
                 </div>
             </div>
         <?php endforeach; ?>
