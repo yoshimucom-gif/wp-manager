@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros セールハブ
  * Description: Amazon・楽天のセール情報を一元管理して全メディアサイトへ配信する。ke-ys.co.jp に設置する配信元プラグイン。各サイトの affiros-auto-inserter が1日1回ここのJSONを取得し、開催中のセールをカードボタン上のマイクロコピーとして表示する。
- * Version: 1.2.0
+ * Version: 1.3.0
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-sale-hub
@@ -10,10 +10,11 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('AFFIROS_SH_VERSION',    '1.2.0');
+define('AFFIROS_SH_VERSION',    '1.3.0');
 define('AFFIROS_SH_OPTION_KEY',  'affiros_sale_hub_sales');
 define('AFFIROS_SH_TOKEN_KEY',   'affiros_sale_hub_token');
 define('AFFIROS_SH_HISTORY_KEY', 'affiros_sale_hub_history');
+define('AFFIROS_SH_RECUR_KEY',   'affiros_sale_hub_recur');
 
 /**
  * 自動連携用トークン。初回アクセス時にランダム生成して固定。
@@ -52,6 +53,57 @@ function affiros_sh_anims() {
 
 function affiros_sh_sanitize_anim($v) {
     return array_key_exists((string)$v, affiros_sh_anims()) ? (string)$v : 'blink';
+}
+
+/**
+ * 定期キャンペーン「5と0のつく日」(楽天) の設定
+ */
+function affiros_sh_recur_settings() {
+    $r = get_option(AFFIROS_SH_RECUR_KEY, []);
+    if (!is_array($r)) $r = [];
+    $r = array_merge([
+        'enabled' => false,
+        'label'   => '5と0のつく日ポイントアップ',
+        'anim'    => 'blink',
+    ], $r);
+    $r['label'] = mb_substr((string)$r['label'], 0, 40);
+    $r['anim']  = affiros_sh_sanitize_anim($r['anim']);
+    return $r;
+}
+
+/**
+ * 「5と0のつく日」を具体的な日付行に展開する (今日〜10日先)。
+ * 繰り返しルールはハブ側だけが持ち、受信側には普通の期間行として届く
+ * (受信側の改修不要・日次取得が1日空いても直近分はキャッシュに載っている)。
+ * マラソン等の期間セール (登録済みの楽天行) と重なる日は期間セールを優先して出さない。
+ */
+function affiros_sh_recur_rows($sales) {
+    $r = affiros_sh_recur_settings();
+    if (empty($r['enabled'])) return [];
+    $rows = [];
+    $today = strtotime(date('Y-m-d 00:00', strtotime(current_time('mysql'))));
+    for ($i = 0; $i <= 10; $i++) {
+        $day = $today + $i * DAY_IN_SECONDS;
+        if (!in_array((int)date('j', $day), [5, 10, 15, 20, 25, 30], true)) continue;
+        $start = date('Y-m-d 00:00', $day);
+        $end   = date('Y-m-d 23:59', $day);
+        $st = strtotime($start);
+        $en = strtotime($end);
+        $overlap = false;
+        foreach ($sales as $s) {
+            if (($s['mall'] ?? '') !== 'rakuten') continue;
+            if (strtotime($s['start']) < $en && $st < strtotime($s['end'])) { $overlap = true; break; }
+        }
+        if ($overlap) continue;
+        $rows[] = [
+            'mall'  => 'rakuten',
+            'label' => $r['label'],
+            'start' => $start,
+            'end'   => $end,
+            'anim'  => $r['anim'],
+        ];
+    }
+    return $rows;
 }
 
 /**
@@ -104,8 +156,9 @@ function affiros_sh_history_add($rows) {
 function affiros_sh_feed_payload() {
     $now = current_time('mysql');
     $now_ts = strtotime($now);
+    $stored = affiros_sh_get_sales();
     $rows = [];
-    foreach (affiros_sh_get_sales() as $s) {
+    foreach ($stored as $s) {
         $end = strtotime((string)($s['end'] ?? ''));
         if (!$end || $end < $now_ts) continue;
         $rows[] = [
@@ -115,6 +168,11 @@ function affiros_sh_feed_payload() {
             'end'   => $s['end'],
             'anim'  => affiros_sh_sanitize_anim($s['anim'] ?? 'blink'),
         ];
+    }
+    // 定期キャンペーン「5と0のつく日」を日付行に展開して合流
+    foreach (affiros_sh_recur_rows($stored) as $s) {
+        if (strtotime($s['end']) < $now_ts) continue;
+        $rows[] = $s;
     }
     return [
         'version'  => AFFIROS_SH_VERSION,
@@ -286,6 +344,17 @@ function affiros_sh_render_admin_page() {
         }
     }
 
+    // 定期キャンペーン (5と0のつく日) 設定の保存
+    if (isset($_POST['affiros_sh_recur_save']) && check_admin_referer('affiros_sh_save')) {
+        $label = mb_substr(wp_strip_all_tags(trim((string)($_POST['recur_label'] ?? ''))), 0, 40);
+        update_option(AFFIROS_SH_RECUR_KEY, [
+            'enabled' => !empty($_POST['recur_enabled']),
+            'label'   => $label !== '' ? $label : '5と0のつく日ポイントアップ',
+            'anim'    => affiros_sh_sanitize_anim($_POST['recur_anim'] ?? 'blink'),
+        ], false);
+        $notice = '定期キャンペーン設定を保存しました。';
+    }
+
     // 削除
     if (isset($_POST['affiros_sh_delete']) && check_admin_referer('affiros_sh_save')) {
         $del_id = sanitize_text_field((string)($_POST['sale_id'] ?? ''));
@@ -383,9 +452,14 @@ function affiros_sh_render_admin_page() {
             $mall_sales = array_values(array_filter($sales, function ($s) use ($mall_key) {
                 return ($s['mall'] ?? '') === $mall_key;
             }));
-            // いま本番で表示される開催中セール (終了が近いものを優先 = 受信側と同じ規則)
+            // いま本番で表示される開催中セール (終了が近いものを優先 = 受信側と同じ規則)。
+            // 楽天は定期キャンペーン (5と0のつく日) の展開行も候補に含める
+            $candidates = $mall_sales;
+            if ($mall_key === 'rakuten') {
+                $candidates = array_merge($candidates, affiros_sh_recur_rows($sales));
+            }
             $active = null;
-            foreach ($mall_sales as $s) {
+            foreach ($candidates as $s) {
                 if ($now_ts >= strtotime($s['start']) && $now_ts <= strtotime($s['end'])) {
                     if (!$active || strtotime($s['end']) < strtotime($active['end'])) $active = $s;
                 }
@@ -431,6 +505,30 @@ function affiros_sh_render_admin_page() {
                     </table>
                     <p style="margin:8px 0 0"><button type="submit" name="affiros_sh_add" value="1" class="button button-primary"><?php echo $mc['title']; ?>のセールを登録</button></p>
                 </form>
+
+                <?php if ($mall_key === 'rakuten'):
+                    $recur = affiros_sh_recur_settings();
+                    $next_day = '';
+                    $base = strtotime(date('Y-m-d 00:00', strtotime(current_time('mysql'))));
+                    for ($i = 0; $i <= 10; $i++) {
+                        $d = $base + $i * DAY_IN_SECONDS;
+                        if (in_array((int)date('j', $d), [5, 10, 15, 20, 25, 30], true)) { $next_day = date('n/j', $d); break; }
+                    }
+                ?>
+                <form method="post" style="margin:14px 0 4px;border:1px dashed #c3c4c7;border-radius:6px;padding:10px 12px;background:#fafafa">
+                    <?php wp_nonce_field('affiros_sh_save'); ?>
+                    <div style="font-weight:600;font-size:12px;margin-bottom:6px">定期キャンペーン: 5と0のつく日 <span style="font-weight:400;color:#888">(毎月5・10・15・20・25・30日の0:00〜23:59に自動表示<?php echo $next_day ? '・次回 ' . esc_html($next_day) : ''; ?>)</span></div>
+                    <label style="white-space:nowrap"><input type="checkbox" name="recur_enabled" value="1" <?php checked($recur['enabled']); ?>> 表示する</label>
+                    <input type="text" name="recur_label" value="<?php echo esc_attr($recur['label']); ?>" maxlength="40" style="width:230px;margin-left:6px">
+                    <select name="recur_anim" onchange="document.getElementById('affiros-sh-pv-rakuten').className='affiros-sh-anim-'+this.value">
+                        <?php foreach (affiros_sh_anims() as $ak => $an): ?>
+                            <option value="<?php echo esc_attr($ak); ?>"<?php echo $ak === $recur['anim'] ? ' selected' : ''; ?>><?php echo esc_html($an); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <button type="submit" name="affiros_sh_recur_save" value="1" class="button button-small">保存</button>
+                    <p class="description" style="margin:6px 0 0">マラソン等の期間セールと重なる日は期間セールを優先して出さない。倍率 (ポイント4倍等) を文言に入れるなら楽天公式の現行条件を確認してから。</p>
+                </form>
+                <?php endif; ?>
 
                 <?php if (!$mall_sales): ?>
                     <p style="color:#888;margin:14px 0 0">登録はありません。</p>

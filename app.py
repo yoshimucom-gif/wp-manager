@@ -235,7 +235,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.9.47'
+APP_VERSION = '1.9.48'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -6474,9 +6474,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.0.0',
     },
     'sale-hub': {
-        'file': 'affiros-sale-hub-1.2.0.zip',
+        'file': 'affiros-sale-hub-1.3.0.zip',
         'name': 'Affiros セールハブ',
-        'version': '1.2.0',
+        'version': '1.3.0',
     },
 }
 
