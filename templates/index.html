@@ -1990,6 +1990,16 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.49 / auto-inserter v0.17.1 (2026-08-30) — セール即時取得トリガー</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: 受信側の取得は日次cronと設定保存時のみで、ハブ登録直後の反映を外から蹴る手段がなかった (通し確認で顕在化)。</li>
+              <li><strong>追加</strong>: 公開AJAX <code>action=affiros_ai_sale_refresh</code> (POST)。設定済みfeed URLから取得するだけ・応答は件数のみ・10分スロットル付き。ハブでセール登録後に各サイトへ curl 1発で即反映できる。</li>
+              <li><strong>通し確認</strong>: hub push → feed → tatoo-seal 日次取得 → 記事14箇所にマイクロコピー表示 (両モール・アニメ指定どおり) を本番実測済み。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.17.0 → 0.17.1 / <code>APP_VERSION</code> 1.9.48 → 1.9.49。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.48 / sale-hub v1.3.0 (2026-08-30) — 🗓 定期キャンペーン「5と0のつく日」</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>仕組み</strong>: ポチップと同様の繰り返しルール (毎月5・10・15・20・25・30日) をハブ側だけが持ち、<strong>配信時に今日〜10日先の具体的な日付行 (0:00〜23:59) に展開</strong>して合流。受信側 (auto-inserter v0.17.0) は改修不要でそのまま動く。</li>

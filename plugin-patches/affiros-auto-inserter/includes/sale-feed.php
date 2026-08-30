@@ -120,3 +120,21 @@ add_filter('the_content', function ($content) {
 add_action('update_option_' . AFFIROS_AI_OPTION_KEY, function () {
     affiros_ai_sale_fetch();
 });
+
+/**
+ * 即時取得トリガー (v0.17.1)。ハブでセールを登録・変更した直後に
+ * 各サイトの日次取得を待たず反映させる運用用:
+ *   curl -X POST https://サイト/wp-admin/admin-ajax.php -d action=affiros_ai_sale_refresh
+ * 取得元は設定済みfeed URLだけ・返すのは件数だけなので公開しても情報は漏れない。
+ * 連打対策に10分スロットル。
+ */
+add_action('wp_ajax_affiros_ai_sale_refresh',        'affiros_ai_sale_refresh_endpoint');
+add_action('wp_ajax_nopriv_affiros_ai_sale_refresh', 'affiros_ai_sale_refresh_endpoint');
+function affiros_ai_sale_refresh_endpoint() {
+    if (get_transient('affiros_ai_sale_refresh_lock')) {
+        wp_send_json(['ok' => false, 'error' => 'throttled']);
+    }
+    set_transient('affiros_ai_sale_refresh_lock', 1, 10 * MINUTE_IN_SECONDS);
+    $n = affiros_ai_sale_fetch();
+    wp_send_json(['ok' => $n !== false, 'count' => $n === false ? null : $n]);
+}
