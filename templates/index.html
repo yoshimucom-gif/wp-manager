@@ -1990,6 +1990,16 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.52 / auto-inserter v0.17.4 (2026-08-30) — 設定⑤除外カテゴリーも親子ツリーに</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>変更</strong>: 平置きインラインだった除外カテゴリーのチェックボックスを、一括ページと同じ親子ツリー表示 (インデント＋└・スクロール枠) に。<strong>親チェックで子孫連動</strong>。</li>
+              <li><strong>機能面の意味</strong>: 除外判定 (<code>has_category</code>) は記事に付いているカテゴリー単位なので、親だけチェックしても子カテゴリーの記事は除外されない。連動チェックはこの取りこぼしを防ぐ実用機能 (説明文にも明記)。</li>
+              <li><strong>検証</strong>: 親ON→子孫ON / 孫だけOFF可 / 親OFF→全OFF / 中間ノードは自分の子孫のみ、の4パターンをブラウザハーネスで確認。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.17.3 → 0.17.4 / <code>APP_VERSION</code> 1.9.51 → 1.9.52。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.51 / auto-inserter v0.17.3 (2026-08-30) — 一括ページのカテゴリー絞り込みを複数選択・親子ツリーに</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>指摘</strong>: カテゴリー絞り込みが単一選択で、親子構造もわからない (e-kagi 542本のような深い階層サイトで使いにくい)。</li>

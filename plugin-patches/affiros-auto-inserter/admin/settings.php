@@ -197,19 +197,33 @@ function affiros_ai_render_settings_page() {
                         if (empty($all_cats)) {
                             echo '<p class="description">カテゴリーがありません。</p>';
                         } else {
+                            // 親子ツリーで表示 (インデント + └)。親チェックは下のJSで子孫に連動
+                            $by_parent = [];
                             foreach ($all_cats as $cat) {
-                                printf(
-                                    '<label style="display:inline-block;margin:0 16px 6px 0;white-space:nowrap"><input type="checkbox" name="%s[exclude_category_ids][]" value="%d" %s> %s <span style="color:#999">(%d)</span></label>',
-                                    esc_attr(AFFIROS_AI_OPTION_KEY),
-                                    $cat->term_id,
-                                    checked(in_array($cat->term_id, $excl_cats, true), true, false),
-                                    esc_html($cat->name),
-                                    $cat->count
-                                );
+                                $by_parent[intval($cat->parent)][] = $cat;
                             }
+                            echo '<div style="max-height:340px;overflow:auto;background:#fff;border:1px solid #dcdcde;border-radius:4px;padding:10px 14px;max-width:560px">';
+                            $walk = function ($parent, $depth) use (&$walk, $by_parent, $excl_cats) {
+                                foreach ($by_parent[$parent] ?? [] as $cat) {
+                                    printf(
+                                        '<label style="display:block;margin:0 0 4px %dpx;white-space:nowrap"><input type="checkbox" class="affiros-ai-excl-cat" name="%s[exclude_category_ids][]" value="%d" data-parent="%d" %s> %s%s <span style="color:#999">(%d)</span></label>',
+                                        $depth * 22,
+                                        esc_attr(AFFIROS_AI_OPTION_KEY),
+                                        $cat->term_id,
+                                        intval($cat->parent),
+                                        checked(in_array($cat->term_id, $excl_cats, true), true, false),
+                                        $depth ? '<span style="color:#bbb">└</span> ' : '',
+                                        esc_html($cat->name),
+                                        $cat->count
+                                    );
+                                    $walk($cat->term_id, $depth + 1);
+                                }
+                            };
+                            $walk(0, 0);
+                            echo '</div>';
                         }
                         ?>
-                        <p class="description">チェックしたカテゴリーの記事には挿入しない（一括・個別・公開時自動すべて対象外）。</p>
+                        <p class="description">チェックしたカテゴリーの記事には挿入しない（一括・個別・公開時自動すべて対象外）。<br>親をチェックすると子カテゴリーも連動して選択される（除外判定は記事に付いているカテゴリー単位のため、子も選ばないと子カテゴリーの記事は除外されない）。子だけ個別に外すのは後から可能。</p>
                     </td>
                 </tr>
                 <tr>
@@ -292,6 +306,20 @@ function affiros_ai_render_settings_page() {
             var isPw = input.type === 'password';
             input.type = isPw ? 'text' : 'password';
             e.target.textContent = isPw ? '非表示' : '表示';
+        });
+        // 除外カテゴリー: 親のチェックを子孫に連動させる
+        document.addEventListener('change', function (e) {
+            if (!e.target.classList || !e.target.classList.contains('affiros-ai-excl-cat')) return;
+            var byParent = {};
+            document.querySelectorAll('.affiros-ai-excl-cat').forEach(function (cb) {
+                (byParent[cb.dataset.parent] = byParent[cb.dataset.parent] || []).push(cb);
+            });
+            (function cascade(id, checked) {
+                (byParent[id] || []).forEach(function (cb) {
+                    cb.checked = checked;
+                    cascade(cb.value, checked);
+                });
+            })(e.target.value, e.target.checked);
         });
         </script>
 
