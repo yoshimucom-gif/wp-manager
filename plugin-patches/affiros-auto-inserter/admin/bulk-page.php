@@ -43,8 +43,9 @@ function affiros_ai_render_bulk_page() {
         <div id="ai-result" style="display:none">
             <div style="margin:0 0 10px;display:flex;gap:18px;align-items:center;flex-wrap:wrap;font-size:13px;background:#fff;border:1px solid #ccd0d4;border-radius:4px;padding:10px 14px">
                 <strong>🔎 絞り込み</strong>
-                <label>カテゴリー:
-                    <select id="ai-filter-cat"><option value="">すべて</option></select>
+                <label style="position:relative">カテゴリー:
+                    <button type="button" class="button" id="ai-cat-btn">すべて ▾</button>
+                    <div id="ai-cat-panel" style="display:none;position:absolute;z-index:100;top:calc(100% + 4px);left:0;background:#fff;border:1px solid #ccd0d4;border-radius:4px;box-shadow:0 2px 10px rgba(0,0,0,.18);padding:8px 14px 8px 10px;max-height:340px;overflow:auto;min-width:280px;white-space:nowrap"></div>
                 </label>
                 <label>最終挿入:
                     <select id="ai-filter-date">
@@ -147,14 +148,86 @@ function affiros_ai_render_bulk_page() {
             let posts = [];
             let abort = false;
 
+            let catChildren = {}; // カテゴリーID -> 子ID配列 (親チェックの子孫連動用)
+
             $('#ai-scan-btn').on('click', scan);
             $('#ai-apply-all-btn').on('click', () => applyBatch(['pending', 'lost'], '挿入'));
             $('#ai-reapply-all-btn').on('click', () => applyBatch(['done'], '再挿入'));
-            $('#ai-filter-cat, #ai-filter-date, #ai-filter-cards, #ai-filter-pubdate').on('change', render);
+            $('#ai-filter-date, #ai-filter-cards, #ai-filter-pubdate').on('change', render);
+
+            // ── カテゴリー複数選択ドロップダウン ──
+            $('#ai-cat-btn').on('click', function (e) { e.preventDefault(); e.stopPropagation(); $('#ai-cat-panel').toggle(); });
+            $('#ai-cat-panel').on('click', e => e.stopPropagation());
+            $(document).on('click', () => $('#ai-cat-panel').hide());
+            // 注意: パネルは click を stopPropagation しているので、
+            // 委譲は document でなく #ai-cat-panel 自身から行う (documentだと解除リンクが死ぬ)
+            $('#ai-cat-panel').on('change', '.ai-cat-cb', function () {
+                // 親のチェックは子孫に連動 (子だけ個別に外すのは後から可能)
+                const checked = this.checked;
+                (function cascade(id) {
+                    (catChildren[id] || []).forEach(ch => {
+                        $(`.ai-cat-cb[value="${ch}"]`).prop('checked', checked);
+                        cascade(ch);
+                    });
+                })(parseInt(this.value, 10));
+                updateCatButton();
+                render();
+            });
+            $('#ai-cat-panel').on('click', '#ai-cat-clear', function (e) {
+                e.preventDefault();
+                $('.ai-cat-cb').prop('checked', false);
+                updateCatButton();
+                render();
+            });
+
+            function selectedCats() {
+                return $('.ai-cat-cb:checked').map(function () { return parseInt(this.value, 10); }).get();
+            }
+
+            function updateCatButton() {
+                const n = $('.ai-cat-cb:checked').length;
+                $('#ai-cat-btn').text(n ? `カテゴリー ${n}個選択 ▾` : 'すべて ▾');
+            }
+
+            // 親子ツリーを構築してチェックボックスパネルを描画
+            // (記事が1件もないカテゴリーは、配下に記事があるものを除いて出さない)
+            function buildCatPanel(categories, catCount) {
+                const byParent = {};
+                catChildren = {};
+                categories.forEach(c => {
+                    const par = c.parent || 0;
+                    (byParent[par] = byParent[par] || []).push(c);
+                    (catChildren[par] = catChildren[par] || []).push(c.id);
+                });
+                const subtree = {};
+                (function calc(parent) {
+                    let sum = 0;
+                    (byParent[parent] || []).forEach(c => {
+                        subtree[c.id] = (catCount[c.id] || 0) + calc(c.id);
+                        sum += subtree[c.id];
+                    });
+                    return sum;
+                })(0);
+                const $panel = $('#ai-cat-panel').empty();
+                $panel.append('<div style="margin-bottom:6px;border-bottom:1px solid #eee;padding-bottom:6px"><a href="#" id="ai-cat-clear">✕ すべて解除</a></div>');
+                (function renderLevel(parent, depth) {
+                    (byParent[parent] || []).forEach(c => {
+                        if (!subtree[c.id]) return;
+                        const own = catCount[c.id] || 0;
+                        $panel.append(
+                            `<label style="display:block;padding:2px 0 2px ${depth * 18}px;font-size:13px;cursor:pointer">` +
+                            `<input type="checkbox" class="ai-cat-cb" value="${c.id}"> ` +
+                            `${depth ? '<span style="color:#bbb">└</span> ' : ''}${esc(c.name)} <span style="color:#999">(${own})</span></label>`
+                        );
+                        renderLevel(c.id, depth + 1);
+                    });
+                })(0, 0);
+                updateCatButton();
+            }
 
             // 現在の絞り込み条件を通過した記事だけを返す
             function filteredPosts() {
-                const cat = $('#ai-filter-cat').val();
+                const cats = selectedCats(); // 複数選択・ORマッチ (未選択=すべて)
                 const dateOpt = $('#ai-filter-date').val();
                 const cardsOpt = $('#ai-filter-cards').val();
                 const pubFrom = $('#ai-filter-pubdate').val(); // YYYY-MM-DD or ''
@@ -164,7 +237,7 @@ function affiros_ai_render_bulk_page() {
                     th = d.toISOString().slice(0, 10); // YYYY-MM-DD
                 }
                 return posts.filter(p => {
-                    if (cat && !(p.cats || []).includes(parseInt(cat, 10))) return false;
+                    if (cats.length && !(p.cats || []).some(c => cats.includes(c))) return false;
                     if (dateOpt === 'never') {
                         if (p.last_insert_at) return false;
                     } else if (th) {
@@ -195,13 +268,10 @@ function affiros_ai_render_bulk_page() {
                         return;
                     }
                     posts = res.data.posts || [];
-                    // カテゴリー絞り込みの選択肢を構築 (記事があるカテゴリーだけ、件数付き)
+                    // カテゴリー絞り込みパネルを構築 (親子ツリー・件数付き)
                     const catCount = {};
                     posts.forEach(p => (p.cats || []).forEach(c => { catCount[c] = (catCount[c] || 0) + 1; }));
-                    const $catSel = $('#ai-filter-cat').empty().append('<option value="">すべて</option>');
-                    (res.data.categories || []).forEach(c => {
-                        if (catCount[c.id]) $catSel.append(`<option value="${c.id}">${esc(c.name)} (${catCount[c.id]})</option>`);
-                    });
+                    buildCatPanel(res.data.categories || [], catCount);
                     const stats = res.data.stats || {};
                     const lostHtml = (stats.lost || 0) > 0
                         ? ` / <span style="color:#c62828;font-weight:700">⚠️ カード消失 ${stats.lost}件</span>`
@@ -390,7 +460,7 @@ add_action('wp_ajax_affiros_ai_scan', function () {
     }
 
     $categories = array_map(function ($c) {
-        return ['id' => $c->term_id, 'name' => $c->name];
+        return ['id' => $c->term_id, 'name' => $c->name, 'parent' => intval($c->parent)];
     }, get_categories(['hide_empty' => false, 'orderby' => 'name']));
 
     wp_send_json_success([

@@ -1990,6 +1990,16 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           </div>
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.51 / auto-inserter v0.17.3 (2026-08-30) — 一括ページのカテゴリー絞り込みを複数選択・親子ツリーに</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>指摘</strong>: カテゴリー絞り込みが単一選択で、親子構造もわからない (e-kagi 542本のような深い階層サイトで使いにくい)。</li>
+              <li><strong>変更</strong>: セレクトをチェックボックス式ドロップダウンパネルに刷新。親子をインデント＋└で表示、<strong>親をチェックすると子孫も連動</strong> (子だけ個別に外すのは後から可)、複数選択はORマッチ、「✕すべて解除」付き。ボタンは「カテゴリー N個選択」表示。記事0のカテゴリーは配下に記事がある場合を除き非表示 (自記事0でも件数(0)で階層は保つ)。</li>
+              <li><strong>検証で1件検出・修正</strong>: パネルの click stopPropagation が document 委譲の解除リンクを殺すバグ → 委譲元をパネル自身に変更。ブラウザハーネスでツリー描画/連動/解除/開閉すべてグリーン。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.17.2 → 0.17.3 / <code>APP_VERSION</code> 1.9.50 → 1.9.51。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.50 / sale-hub v1.4.0 + auto-inserter v0.17.2 (2026-08-30) — 🎨 コピー色を薄めに刷新・ハブから色変更可能に</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>指摘</strong>: マイクロコピーの色が濃い。ポチップくらいの薄い色がいい・色を変えられるように。</li>
