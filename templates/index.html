@@ -1978,6 +1978,22 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.53 / rediver-helper v1.1.2 (2026-09-04) — 🔧 Re:Diverヘルパーの不具合を洗い出して一括修正</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>データが壊れる不具合</strong>: JSONで送ったバックスラッシュが消えていた。WPのRESTは<strong>JSONボディにスラッシュを付けない</strong>のに <code>wp_unslash</code> をかけ、さらに <code>update_post_meta</code> が内部でもう1段外すため、<code>C:\path</code> が <code>C:path</code>、CSSの <code>"\e89e"</code> が <code>"e89e"</code> になっていた。送信経路 (JSON / フォーム) を見て正規化し、メタ書き込みの直前で <code>wp_slash</code> し直す。</li>
+              <li><strong>一括更新が戻せなかった</strong>: <code>postmeta/bulk</code> だけ退避を取っていなかった (単体更新は取っていた)。一番影響の大きい操作が無防備。全件の変更前の値を<strong>1件の退避にまとめて</strong>保存する方式 (<code>post_bulk</code>) にし、<code>post_ids</code> は500件で頭打ち。1投稿1件で積むと退避上限50件を即座に溢れさせて結局戻せないため。</li>
+              <li><strong>配列オプションの全消し穴</strong>: 409ガードが「送った値も配列のとき」しか発動せず、<code>{"value":"dark"}</code> のようなスカラーだと <code>diver_color</code> 1本を丸ごと置換できた。配列→スカラーも拒否対象に。</li>
+              <li><strong>案内だけで実装が無かった <code>force=true</code></strong>: 409のメッセージが「消すつもりなら force=true」と案内しながら、パラメータの受け取りが存在しなかった。実装。</li>
+              <li><strong>守れていなかったガード</strong>: タームメタの <code>DELETE</code> に退避とターム存在確認を追加 / <code>theme_mod</code> も <code>rdh_key_allowed</code> を通す (context: <code>thememod</code>) / 役割定義オプションの拒否を <code>wp_user_roles</code> 決め打ちから<strong>テーブル接頭辞追従</strong>に / 復元も拒否リストを通し、復元前の値も退避して<strong>復元自体を取り消せる</strong>ように。</li>
+              <li><strong>更新チェッカー</strong>: 取得失敗をキャッシュしておらず、配信URLが落ちている間は管理画面を開くたびに<strong>10秒のブロッキングHTTP</strong>を繰り返していた → 失敗も5分キャッシュ。配布zipのURLは<strong>httpsのみ</strong>受け付ける。</li>
+              <li><strong>その他</strong>: <code>GET /backups?id=</code> で戻る値を事前確認 / メタ一覧の添付URL取得をメモ化＋上限300回 (問い合わせ爆発の抑制) / <code>allow_empty</code> 追加 / <code>/help</code> に退避・復元・DELETEを追記 / <code>uninstall.php</code>・<code>Requires PHP</code>・<code>Update URI</code> 追加。</li>
+              <li><strong>🚨 版数ずれの是正</strong>: <code>PLUGIN_DOWNLOADS</code> と <code>build-all.py</code> の rediver-helper が<strong>1.0.0のまま取り残されていた</strong>。この状態で <code>build-update-host.py</code> を回すと配信メタが1.0.0に巻き戻り、全サイトにダウングレードが降る。1.1.2に是正。</li>
+              <li><strong>検証</strong>: この環境にPHP CLIが無く <code>php -l</code> は未実施。代わりに簡易トークナイザで8ファイルの括弧・クォート・コメント対応を検査し全てOK (1.1.0を落としたクォート入れ子はこれで検出できる種類)。<strong>実サイトでの動作確認は1サイトで先行して行うこと。</strong></li>
+              <li><strong>バージョン同期</strong>: rediver-helper 1.1.1 → 1.1.2 / <code>APP_VERSION</code> 1.9.52 → 1.9.53。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.30 / cat-eyecatch v1.0.0 (2026-07-29) — 🖼 カテゴリーアイキャッチ プラグインを新設</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>新規プラグイン</strong>: <code>affiros-cat-eyecatch</code> v1.0.0 を新設。カテゴリー編集画面で設定した画像を、<strong>アイキャッチ未設定の記事</strong>に自動適用する。量産サイトで「アイキャッチだけ空」が残る問題への対処。</li>
