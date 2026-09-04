@@ -6454,9 +6454,9 @@ PLUGIN_DOWNLOADS = {
         'version': '0.17.4',
     },
     'decoration-formatter': {
-        'file': 'decoration-formatter-1.0.10.zip',
+        'file': 'decoration-formatter-1.0.28.zip',
         'name': '装飾・整形プラグイン',
-        'version': '1.0.10',
+        'version': '1.0.28',
     },
     'reschedule': {
         'file': 'affiros-reschedule-1.1.0.zip',
