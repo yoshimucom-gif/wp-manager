@@ -2,14 +2,14 @@
   "name": "装飾・整形プラグイン",
   "slug": "decoration-formatter",
   "plugin": "decoration-formatter/decoration-formatter.php",
-  "version": "1.0.28",
+  "version": "1.0.10",
   "tested": "6.6",
   "requires": "5.8",
   "requires_php": "7.4",
   "author": "Affiros",
-  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/decoration-formatter-1.0.28.zip",
+  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/decoration-formatter-1.0.10.zip",
   "sections": {
     "description": "装飾・整形プラグイン 本体。GitHub から自動更新します。",
-    "changelog": "最新バージョン 1.0.28"
+    "changelog": "最新バージョン 1.0.10"
   }
 }

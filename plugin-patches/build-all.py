@@ -43,8 +43,6 @@ SPECS = [
      'affiros-cat-eyecatch', 'affiros-cat-eyecatch-1.0.0.zip'),
     (os.path.join(ROOT, 'affiros-sale-hub'),
      'affiros-sale-hub', 'affiros-sale-hub-1.4.0.zip'),
-    (os.path.join(ROOT, 'decoration-formatter'),
-     'decoration-formatter', 'decoration-formatter-1.0.28.zip'),
 ]
 
 
