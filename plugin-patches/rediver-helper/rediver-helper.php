@@ -2,14 +2,14 @@
 /**
  * Plugin Name: Re:Diver ヘルパー
  * Description: 通常のREST APIでは触れないWordPress/テーマの設定を、スクリプトから読み書きできるようにする構築補助プラグイン。テーマ側の不具合の回避（外部リンクアイコンの豆腐）も含む。カテゴリー画像などのタームメタ、記事幅などの投稿メタ、カスタマイザー（theme_mod / オプション）に対応。キー名を発見する調査用エンドポイント付き。全て管理者権限必須。
- * Version: 1.1.0
+ * Version: 1.1.1
  * Author: Keys
  * License: GPL v2 or later
  */
 
 if (!defined('ABSPATH')) exit;
 
-define('RDH_VERSION', '1.1.0');
+define('RDH_VERSION', '1.1.1');
 
 // 自動更新通知（GitHub 直配信のメタJSONを定期チェック）
 require_once __DIR__ . '/includes/plugin-updater.php';
@@ -53,7 +53,7 @@ add_action('rest_api_init', function () {
                     'オプション更新'                   => "POST {$base}/option/<name>  {value}",
                 ],
                 'fixes' => [
-                    '外部リンクアイコンの豆腐' => 'style.min.css の content:"\e89e" が読み込み済みフォントのサブセットに無いため□になる。同セレクタに実文字の矢印を上書きして回避。止めるなら add_filter('rdh_extlink_icon_fix', '__return_false')',
+                    '外部リンクアイコンの豆腐' => 'テーマのCSSが指定する記号が、読み込み済みフォントのサブセットに入っていないため□になる。同じセレクタに実文字の矢印を上書きして回避する。無効化するフィルタ名は rdh_extlink_icon_fix。',
                 ],
                 'notes' => [
                     '書き込み系はすべて before / after / changed を返す。changed=false なら実際には変わっていない。',

@@ -2,14 +2,14 @@
   "name": "Re:Diver ヘルパー",
   "slug": "rediver-helper",
   "plugin": "rediver-helper/rediver-helper.php",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "tested": "6.6",
   "requires": "5.8",
   "requires_php": "7.4",
   "author": "Keys",
-  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/rediver-helper-1.1.0.zip",
+  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/rediver-helper-1.1.1.zip",
   "sections": {
     "description": "Re:Diver ヘルパー 本体。GitHub から自動更新します。",
-    "changelog": "1.1.0 — 外部リンクアイコンの豆腐（□）を修正。re:Diver の style.min.css が content:\"\\e89e\" を指定する一方、読み込むフォントのサブセットにその字が無いため必ず□になっていた。記事本文には触れず、CSSの上書きで全ページ直る。"
+    "changelog": "1.1.1 — 1.1.0 で API一覧の説明文にクォートの入れ子があり、有効化すると Parse error でサイトが停止した。説明文を書き直して修正。1.1.0 の外部リンクアイコン修正はそのまま有効。"
   }
 }
