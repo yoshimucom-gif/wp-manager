@@ -2,12 +2,12 @@
 /**
  * プラグイン自動更新チェッカー
  *
- * ミカタOWNED（mikata-owned.onrender.com）を WordPress の更新サーバーとして使い、
- * 標準の「プラグイン更新」フローに組み込む。
+ * wp-manager リポジトリ（GitHub直配信）を WordPress の更新サーバーとして使い、
+ * 標準の「プラグイン更新」フローに組み込む。v1.0.28でミカタOWNEDから移行。
  *
  * 動作:
  *   1. WP が定期的に pre_set_site_transient_update_plugins を叩く
- *   2. 本クラスがミカタOWNED から JSON を取得し、ヘッダーバージョンと比較
+ *   2. 本クラスが raw.githubusercontent.com から JSON を取得し、ヘッダーバージョンと比較
  *   3. 新しければ transient->response に追加 → 「更新可能」バッジ表示
  *   4. ユーザーが「更新」クリック → WP が download_url から zip 取得・展開
  *
