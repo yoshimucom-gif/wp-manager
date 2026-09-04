@@ -6478,6 +6478,11 @@ PLUGIN_DOWNLOADS = {
         'name': 'Affiros セールハブ',
         'version': '1.4.0',
     },
+    'rediver-helper': {
+        'file': 'rediver-helper-1.0.0.zip',
+        'name': 'Re:Diver ヘルパー',
+        'version': '1.0.0',
+    },
 }
 
 @app.route('/download/plugin/<plugin_key>')
@@ -6584,6 +6589,13 @@ PLUGIN_UPDATE_META = {
         'requires': '5.8',
         'requires_php': '7.4',
         'author':   'Affiros',
+    },
+    'rediver-helper': {
+        'plugin_basename': 'rediver-helper/rediver-helper.php',
+        'tested':   '6.6',
+        'requires': '5.8',
+        'requires_php': '7.4',
+        'author':   'Keys',
     },
 }
 
