@@ -2,14 +2,14 @@
   "name": "Re:Diver ヘルパー",
   "slug": "rediver-helper",
   "plugin": "rediver-helper/rediver-helper.php",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "tested": "6.6",
   "requires": "5.8",
   "requires_php": "7.4",
   "author": "Keys",
-  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/rediver-helper-1.1.1.zip",
+  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/rediver-helper-1.1.2.zip",
   "sections": {
     "description": "Re:Diver ヘルパー 本体。GitHub から自動更新します。",
-    "changelog": "1.1.1 — 1.1.0 で API一覧の説明文にクォートの入れ子があり、有効化すると Parse error でサイトが停止した。説明文を書き直して修正。1.1.0 の外部リンクアイコン修正はそのまま有効。"
+    "changelog": "1.1.2 — 洗い出した不具合の一括修正。(1) JSONで送ったバックスラッシュが消える不具合を修正。(2) 一括更新に退避が無く戻せなかったのを修正し、全件分を1件にまとめて保存・500件で頭打ち。(3) 配列のオプションをスカラーで丸ごと消せてしまう穴を塞いだ。(4) 案内だけで実装が無かった force=true を実装。(5) タームメタのDELETEに退避と存在確認を追加。(6) theme_mod もキーのガードを通るようにした。(7) 役割定義オプションの拒否をテーブル接頭辞に追従。(8) 更新チェックの失敗を5分キャッシュし、管理画面が毎回10秒待たされるのを解消。(9) 配布URLはhttpsのみ受け付ける。(10) 復元前の値も退避し復元を取り消せるようにした。"
   }
 }

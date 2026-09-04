@@ -66,19 +66,20 @@ function rdh_termmeta_write(WP_REST_Request $req) {
     }
 
     $before = get_term_meta($term_id, $key, true);
-    $value  = rdh_clean($req->get_param('value'));
+    $value  = rdh_clean($req->get_param('value'), $req);
 
     if (rest_sanitize_boolean($req->get_param('dry_run'))) {
         return ['term_id' => $term_id, 'key' => $key, 'before' => $before,
-                'would_be' => $value, 'dry_run' => true];
+                'would_be' => $value, 'would_delete' => rdh_is_delete_value($value, $req),
+                'dry_run' => true];
     }
 
     $backup_id = rdh_backup_push('term', $term_id, $key, $before);
-    if ($value === null || $value === '') {
+    if (rdh_is_delete_value($value, $req)) {
         delete_term_meta($term_id, $key);
         $after = '';
     } else {
-        update_term_meta($term_id, $key, $value);
+        update_term_meta($term_id, $key, rdh_slash_for_meta($value));
         $after = get_term_meta($term_id, $key, true);
     }
     return ['term_id' => $term_id, 'key' => $key, 'before' => $before, 'after' => $after,
@@ -87,6 +88,10 @@ function rdh_termmeta_write(WP_REST_Request $req) {
 
 function rdh_termmeta_delete(WP_REST_Request $req) {
     $term_id = (int) $req['id'];
+    $term = get_term($term_id);
+    if (!$term || is_wp_error($term)) {
+        return new WP_Error('rdh_no_term', 'ターム が見つかりません。', ['status' => 404]);
+    }
     $key = (string) $req->get_param('key');
     if ($key === '') {
         return new WP_Error('rdh_no_key', 'key は必須です。', ['status' => 400]);
@@ -95,8 +100,17 @@ function rdh_termmeta_delete(WP_REST_Request $req) {
         return new WP_Error('rdh_key_denied', 'このキーは削除禁止です: ' . $key, ['status' => 403]);
     }
     $before = get_term_meta($term_id, $key, true);
+
+    if (rest_sanitize_boolean($req->get_param('dry_run'))) {
+        return ['term_id' => $term_id, 'key' => $key, 'before' => $before,
+                'would_delete' => true, 'dry_run' => true];
+    }
+
+    // 削除も戻せるように退避する
+    $backup_id = rdh_backup_push('term', $term_id, $key, $before);
     delete_term_meta($term_id, $key);
-    return ['term_id' => $term_id, 'key' => $key, 'before' => $before, 'deleted' => true];
+    return ['term_id' => $term_id, 'key' => $key, 'before' => $before,
+            'deleted' => true, 'backup_id' => $backup_id];
 }
 
 add_action('rest_api_init', function () {
@@ -118,10 +132,12 @@ add_action('rest_api_init', function () {
         ['methods' => 'POST',   'callback' => 'rdh_termmeta_write',
          'permission_callback' => 'rdh_permission',
          'args' => ['key' => ['type' => 'string', 'required' => true], 'value' => [],
+                    'allow_empty' => ['type' => 'boolean', 'default' => false],
                     'dry_run' => ['type' => 'boolean', 'default' => false]]],
         ['methods' => 'DELETE', 'callback' => 'rdh_termmeta_delete',
          'permission_callback' => 'rdh_permission',
-         'args' => ['key' => ['type' => 'string', 'required' => true]]],
+         'args' => ['key' => ['type' => 'string', 'required' => true],
+                    'dry_run' => ['type' => 'boolean', 'default' => false]]],
     ]);
 });
 

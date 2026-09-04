@@ -6479,9 +6479,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.4.0',
     },
     'rediver-helper': {
-        'file': 'rediver-helper-1.0.0.zip',
+        'file': 'rediver-helper-1.1.2.zip',
         'name': 'Re:Diver ヘルパー',
-        'version': '1.0.0',
+        'version': '1.1.2',
     },
 }
 

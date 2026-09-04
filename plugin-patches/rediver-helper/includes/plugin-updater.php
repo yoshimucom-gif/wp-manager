@@ -11,7 +11,12 @@
  *   3. 新しければ transient->response に追加 → 「更新可能」バッジ表示
  *   4. ユーザーが「更新」クリック → WP が download_url から zip 取得・展開
  *
- * 複数プラグインに同梱されるため class_exists ガードで二重定義を防ぐ。
+ * クラス名は本プラグイン専用（RDH_ = Re:Diver Helper）。
+ * それでも二重読み込みで落ちないよう class_exists ガードを置く。
+ *
+ * 取得に失敗したときは「失敗した」ことも短時間キャッシュする。
+ * これが無いと、配信URLが落ちている間は管理画面を開くたびに
+ * 10秒のブロッキングHTTPを繰り返すことになる。
  */
 
 if (!defined('ABSPATH')) exit;
@@ -31,6 +36,10 @@ class RDH_Plugin_Updater {
     private $cache_key;
     /** リモート情報キャッシュ TTL (秒) */
     private $cache_ttl;
+    /** 取得失敗を覚えておくキー（連続リトライで管理画面が固まるのを防ぐ） */
+    private $fail_key;
+    /** 取得失敗を覚えておく秒数 */
+    private $fail_ttl = 300;
 
     public function __construct($plugin_file, $update_url, $cache_ttl = 1800) {
         $this->plugin_file     = $plugin_file;
@@ -38,6 +47,7 @@ class RDH_Plugin_Updater {
         $this->plugin_slug     = dirname($this->plugin_basename);
         $this->update_url      = $update_url;
         $this->cache_key       = 'rdh_updater_' . md5($this->plugin_basename);
+        $this->fail_key        = 'rdh_updater_fail_' . md5($this->plugin_basename);
         $this->cache_ttl       = (int)$cache_ttl;
 
         add_filter('pre_set_site_transient_update_plugins', [$this, 'check_for_update']);
@@ -45,23 +55,49 @@ class RDH_Plugin_Updater {
         add_action('upgrader_process_complete',              [$this, 'purge_cache'], 10, 2);
     }
 
-    /** 配信サーバーから最新メタ情報を取得（キャッシュあり） */
+    /** 配信サーバーから最新メタ情報を取得（成功も失敗もキャッシュする） */
     private function fetch_remote_info() {
         $cached = get_transient($this->cache_key);
         if ($cached !== false) return $cached;
+
+        // 直近で失敗しているなら、しばらく叩きに行かない
+        if (get_transient($this->fail_key) !== false) return null;
 
         $response = wp_remote_get($this->update_url, [
             'timeout' => 10,
             'headers' => ['Accept' => 'application/json'],
         ]);
-        if (is_wp_error($response)) return null;
-        if ((int)wp_remote_retrieve_response_code($response) !== 200) return null;
+        if (is_wp_error($response) || (int)wp_remote_retrieve_response_code($response) !== 200) {
+            return $this->remember_failure();
+        }
 
         $data = json_decode(wp_remote_retrieve_body($response));
-        if (!is_object($data) || empty($data->version)) return null;
+        if (!is_object($data) || empty($data->version)) {
+            return $this->remember_failure();
+        }
 
         set_transient($this->cache_key, $data, $this->cache_ttl);
         return $data;
+    }
+
+    /** 失敗を短時間だけ覚える */
+    private function remember_failure() {
+        set_transient($this->fail_key, 1, $this->fail_ttl);
+        return null;
+    }
+
+    /**
+     * 配布zipのURLとして受け入れてよいURLか。
+     * WP は package をそのままダウンロードして展開するので、
+     * https 以外（http・file 等）は受け付けない。
+     */
+    private function safe_package_url($url) {
+        $url = is_string($url) ? trim($url) : '';
+        if ($url === '') return '';
+        $parts = wp_parse_url($url);
+        if (empty($parts['scheme']) || strtolower($parts['scheme']) !== 'https') return '';
+        if (empty($parts['host'])) return '';
+        return $url;
     }
 
     /** WP の更新チェックに割り込んで、自分の更新情報を注入する */
@@ -75,14 +111,18 @@ class RDH_Plugin_Updater {
         $current_version = $this->current_installed_version();
         if (!$current_version) return $transient;
 
-        if (version_compare($current_version, $remote->version, '<')) {
+        $package = $this->safe_package_url(isset($remote->download_url) ? $remote->download_url : '');
+
+        // https の配布URLが無いなら「更新あり」を出さない。
+        // 出してしまうと、押した瞬間に落ちてくる先が不明なまま展開されることになる。
+        if (version_compare($current_version, $remote->version, '<') && $package !== '') {
             $entry = (object)[
                 'id'           => $this->plugin_basename,
                 'slug'         => $this->plugin_slug,
                 'plugin'       => $this->plugin_basename,
                 'new_version'  => $remote->version,
                 'url'          => isset($remote->homepage) ? $remote->homepage : '',
-                'package'      => isset($remote->download_url) ? $remote->download_url : '',
+                'package'      => $package,
                 'tested'       => isset($remote->tested) ? $remote->tested : '',
                 'requires'     => isset($remote->requires) ? $remote->requires : '',
                 'requires_php' => isset($remote->requires_php) ? $remote->requires_php : '',
@@ -126,7 +166,7 @@ class RDH_Plugin_Updater {
             'requires'     => isset($remote->requires) ? $remote->requires : '',
             'requires_php' => isset($remote->requires_php) ? $remote->requires_php : '',
             'author'       => isset($remote->author) ? $remote->author : 'Keys',
-            'download_link'=> isset($remote->download_url) ? $remote->download_url : '',
+            'download_link'=> $this->safe_package_url(isset($remote->download_url) ? $remote->download_url : ''),
             'sections'     => isset($remote->sections) ? (array)$remote->sections : [],
             'banners'      => [],
         ];
@@ -138,6 +178,7 @@ class RDH_Plugin_Updater {
         if (($hook_extra['action'] ?? '') !== 'update') return;
         if (($hook_extra['type']   ?? '') !== 'plugin') return;
         delete_transient($this->cache_key);
+        delete_transient($this->fail_key);
     }
 
     /** 現在インストール済みのバージョン（プラグインヘッダー）を取得 */
