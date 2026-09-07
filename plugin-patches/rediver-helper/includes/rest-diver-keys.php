@@ -60,23 +60,22 @@ function rdh_diver_keys(WP_REST_Request $req) {
             ],
             'note'    => 'isCustom を立てないと diver_color_custom は無視される。'
                 . 'secondary は濃い面（ヘッダー帯・フッター・H2のbox・タブの選択色）。'
+                . 'ブロックのプリセット色（has-diver-secondary-* など）もここから自動で作られる。'
                 . '反映はフロントの --rd--c--text 等で照合する（0 0 0 のままなら効いていない）。'
-                . '追加CSSで --rd--c--* を上書きする必要はない。',
+                . '追加CSSやグローバルスタイルで上書きしないこと。',
         ],
         [
             'label'   => 'ブロックのプリセット色（has-diver-secondary-* など）',
-            'where'   => 'グローバルスタイル（wp_global_styles）',
-            'keys'    => ['settings.color.palette.theme'],
+            'where'   => '上の配色設定から自動生成（触らない）',
+            'keys'    => [],
             'current' => ['global_styles_post_id' => $gs_id],
-            'write'   => [
-                'POST /wp/v2/global-styles/' . ($gs_id ?: '<id>')
-                    . ' {"settings":{"color":{"palette":{"theme":[ …23件… ]}}}}',
-            ],
-            'note'    => '上の配色設定では変わらない別系統。TOPの帯・タブ・カテゴリカードがここ。'
-                . '23スラッグ（status系7 ＋ text-1..4 / text / background / secondary-1..4 / '
-                . 'secondary / secondary-on / primary / primary-on / link / accent）を配列ごと差し替える。'
-                . 'IDは GET /wp/v2/themes?status=active の _links["wp:user-global-styles"] にも出る。'
-                . 're:Diver は classic theme なので styles.css（グローバルスタイルの追加CSS）はフロントに出力されない。',
+            'write'   => ['設定不要。diver_color_custom を入れれば追従する。'],
+            'note'    => '🚨 立てた直後は古い黒白のままに見えることがある。'
+                . 'テーマが算出済みtheme.jsonを _transient_rediver_theme_json に持っているため。'
+                . '少し待って取り直せば追いつく。ここで「テーマでは変えられない」と判断して'
+                . 'グローバルスタイル（/wp/v2/global-styles/' . ($gs_id ?: '<id>') . '）のパレットを上書きしたり'
+                . '追加CSSを書いたりしないこと。--rd--c--* が新しい値なら設定は効いている。'
+                . 'なお re:Diver は classic theme なので、グローバルスタイルの styles.css はフロントに出力されない。',
         ],
         [
             'label'   => '見出しのデザインと色（カスタマイズ > 見出しデザイン）',

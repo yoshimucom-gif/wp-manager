@@ -63,7 +63,7 @@ re:Diver の設定を全面的に調べた結果、**REST経由で触れる領�
 | 何 | 保存先 | キー |
 |---|---|---|
 | 地の色（背景・文字・ヘッダー帯・フッター・H2・タブ） | theme_mod | `diver_color` ＋ `diver_color_custom` |
-| ブロックのプリセット色（`has-diver-secondary-*`） | グローバルスタイル | `/wp/v2/global-styles/{id}` の `settings.color.palette.theme` |
+| ブロックのプリセット色（`has-diver-secondary-*`） | 上から自動生成（触らない） | — |
 | 見出しの色 | theme_mod | `diver_content_heading`（値は**JSON文字列**） |
 
 ```
@@ -76,7 +76,10 @@ POST /rdh/v1/thememods {"key":"diver_color_custom","value":{
 🚨 **`diver_color.isCustom` を立てないと `diver_color_custom` は丸ごと無視される。**
 色だけ入れて「変わらない」と詰まるのはこれ。`diver-keys` はこの状態を検出して `warnings` に出す。
 反映はフロントの `--rd--c--text` 等で照合する（`0 0 0` のままなら効いていない）。
-**追加CSSで `--rd--c--*` を上書きする必要はない。**
+**追加CSSやグローバルスタイルで上書きしない。**
+ブロックのプリセット色は、設定直後だけ古い色に見えることがある
+（テーマが算出済みtheme.jsonを `_transient_rediver_theme_json` に持っているため）。
+少し待って取り直せば追いつくので、そこで別の手段に逃げないこと。
 
 ### 共通パラメータ
 
