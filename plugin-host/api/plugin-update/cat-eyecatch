@@ -2,14 +2,14 @@
   "name": "Affiros カテゴリーアイキャッチ",
   "slug": "affiros-cat-eyecatch",
   "plugin": "affiros-cat-eyecatch/affiros-cat-eyecatch.php",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "tested": "6.6",
   "requires": "5.8",
   "requires_php": "7.4",
   "author": "Affiros",
-  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/affiros-cat-eyecatch-1.0.0.zip",
+  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/affiros-cat-eyecatch-1.0.1.zip",
   "sections": {
     "description": "Affiros カテゴリーアイキャッチ 本体。GitHub から自動更新します。",
-    "changelog": "最新バージョン 1.0.0"
+    "changelog": "残り9本の更新チェック先を、停止した Render (wp-manager.onrender.com) から GitHub直配信の固定URLへ変更。7月末から止まっていた自動更新が復旧する。プラグインの機能そのものに変更はない。"
   }
 }

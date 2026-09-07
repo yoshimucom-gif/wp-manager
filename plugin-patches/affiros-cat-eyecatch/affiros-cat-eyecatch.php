@@ -2,14 +2,14 @@
 /**
  * Plugin Name: Affiros カテゴリーアイキャッチ
  * Description: カテゴリーごとにアイキャッチ画像を設定し、アイキャッチ未設定の記事に自動で適用する。既定は仮想適用（記事のDBを汚さない）。必要なら実アイキャッチとして一括書き込み／一括取り消しもできる。
- * Version: 1.0.0
+ * Version: 1.0.1
  * Author: Affiros
  * License: GPL v2 or later
  */
 
 if (!defined('ABSPATH')) exit;
 
-define('AFFIROS_CAT_EYECATCH_VERSION', '1.0.0');
+define('AFFIROS_CAT_EYECATCH_VERSION', '1.0.1');
 define('AFFIROS_CAT_EYECATCH_FILE', __FILE__);
 define('AFFIROS_CAT_EYECATCH_DIR', plugin_dir_path(__FILE__));
 define('AFFIROS_CAT_EYECATCH_URL', plugin_dir_url(__FILE__));
@@ -24,8 +24,10 @@ define('AFFIROS_CAT_EYECATCH_APPLIED_META', '_affiros_cat_eyecatch_applied');
 // 自動更新通知（ke-ys.co.jp の配信ホストから定期チェック）
 require_once __DIR__ . '/includes/plugin-updater.php';
 add_action('init', function () {
-    $host = defined('AFFIROS_UPDATE_HOST') ? AFFIROS_UPDATE_HOST : 'https://wp-manager.onrender.com';
-    new Affiros_Plugin_Updater(__FILE__, rtrim($host, '/') . '/api/plugin-update/cat-eyecatch');
+    new Affiros_Plugin_Updater(
+        __FILE__,
+        'https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-host/api/plugin-update/cat-eyecatch'
+    );
 });
 
 require_once __DIR__ . '/includes/settings.php';

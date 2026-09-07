@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros プロダクトインサーター
  * Description: AIが記事内容を解析し、Amazon・楽天市場の最適な商品アフィリエイトカードを自動挿入するプラグイン
- * Version: 1.10.0
+ * Version: 1.10.1
  * Author: AI Product Inserter
  * License: GPL v2 or later
  * Text Domain: ai-product-inserter
@@ -34,7 +34,7 @@ if (defined('AI_PI_VERSION')) {
     return;
 }
 
-define('AI_PI_VERSION', '1.10.0');
+define('AI_PI_VERSION', '1.10.1');
 define('AI_PI_PATH', plugin_dir_path(__FILE__));
 define('AI_PI_URL', plugin_dir_url(__FILE__));
 
@@ -137,8 +137,10 @@ require_once AI_PI_PATH . 'includes/plugin-updater.php';
  * 別ホストで運用する場合は wp-config.php に AFFIROS_UPDATE_HOST を定義する。
  */
 add_action('init', function () {
-    $host = defined('AFFIROS_UPDATE_HOST') ? AFFIROS_UPDATE_HOST : 'https://wp-manager.onrender.com';
-    new Affiros_Plugin_Updater(__FILE__, rtrim($host, '/') . '/api/plugin-update/product-inserter');
+    new Affiros_Plugin_Updater(
+        __FILE__,
+        'https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-host/api/plugin-update/product-inserter'
+    );
 });
 
 /**

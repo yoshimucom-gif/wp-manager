@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros カテゴライザー
  * Description: 記事の公開時に Claude API で本文を解析し、そのサイトの既存カテゴリーへ自動で振り分ける。カテゴリー一覧はサイトから動的に読むため、どの WordPress サイトでもそのまま動作する。
- * Version: 0.1.1
+ * Version: 0.1.2
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-categorizer
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('AFFIROS_CAT_VERSION', '0.1.1');
+define('AFFIROS_CAT_VERSION', '0.1.2');
 define('AFFIROS_CAT_PATH', plugin_dir_path(__FILE__));
 define('AFFIROS_CAT_URL', plugin_dir_url(__FILE__));
 
@@ -30,8 +30,10 @@ require_once AFFIROS_CAT_PATH . 'admin/ajax-handler.php';
 
 // Affiros9 サーバーをアップデートサーバーとして登録（自動更新通知）
 add_action('init', function () {
-    $host = defined('AFFIROS_UPDATE_HOST') ? AFFIROS_UPDATE_HOST : 'https://wp-manager.onrender.com';
-    new Affiros_Plugin_Updater(__FILE__, rtrim($host, '/') . '/api/plugin-update/categorizer');
+    new Affiros_Plugin_Updater(
+        __FILE__,
+        'https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-host/api/plugin-update/categorizer'
+    );
 });
 
 /**

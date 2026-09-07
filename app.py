@@ -235,7 +235,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.9.53'
+APP_VERSION = '1.9.54'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -6419,34 +6419,34 @@ def favicon():
 PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugin-downloads')
 PLUGIN_DOWNLOADS = {
     'product-inserter': {
-        'file': 'affiros-product-inserter-1.10.0.zip',
+        'file': 'affiros-product-inserter-1.10.1.zip',
         'name': 'Affiros プロダクトインサーター',
-        'version': '1.10.0',
+        'version': '1.10.1',
     },
     'decoration': {
-        'file': 'affiros-decoration-1.2.3.zip',
+        'file': 'affiros-decoration-1.2.4.zip',
         'name': 'Affiros デコレーター',
-        'version': '1.2.3',
+        'version': '1.2.4',
     },
     'rewrite': {
-        'file': 'affiros-rewrite-0.5.17.zip',
+        'file': 'affiros-rewrite-0.5.18.zip',
         'name': 'Affiros ポストプロセッサー',
-        'version': '0.5.17',
+        'version': '0.5.18',
     },
     'categorizer': {
-        'file': 'affiros-categorizer-0.1.1.zip',
+        'file': 'affiros-categorizer-0.1.2.zip',
         'name': 'Affiros カテゴライザー',
-        'version': '0.1.1',
+        'version': '0.1.2',
     },
     'dup-cleaner': {
-        'file': 'affiros-dup-cleaner-1.0.1.zip',
+        'file': 'affiros-dup-cleaner-1.0.2.zip',
         'name': 'Affiros 重複投稿クリーンアップ',
-        'version': '1.0.1',
+        'version': '1.0.2',
     },
     'paragraph-splitter': {
-        'file': 'affiros-paragraph-splitter-1.1.5.zip',
+        'file': 'affiros-paragraph-splitter-1.1.6.zip',
         'name': 'Affiros 段落整形 (統合済・移行用)',
-        'version': '1.1.5',
+        'version': '1.1.6',
     },
     'auto-inserter': {
         'file': 'affiros-auto-inserter-0.17.4.zip',
@@ -6459,19 +6459,19 @@ PLUGIN_DOWNLOADS = {
         'version': '1.0.10',
     },
     'reschedule': {
-        'file': 'affiros-reschedule-1.1.0.zip',
+        'file': 'affiros-reschedule-1.1.1.zip',
         'name': 'Affiros 予約再スケジュール',
-        'version': '1.1.0',
+        'version': '1.1.1',
     },
     'mark-stripper': {
-        'file': 'affiros-mark-stripper-1.0.0.zip',
+        'file': 'affiros-mark-stripper-1.0.1.zip',
         'name': 'Affiros 黄色マーカー削除',
-        'version': '1.0.0',
+        'version': '1.0.1',
     },
     'cat-eyecatch': {
-        'file': 'affiros-cat-eyecatch-1.0.0.zip',
+        'file': 'affiros-cat-eyecatch-1.0.1.zip',
         'name': 'Affiros カテゴリーアイキャッチ',
-        'version': '1.0.0',
+        'version': '1.0.1',
     },
     'sale-hub': {
         'file': 'affiros-sale-hub-1.4.0.zip',

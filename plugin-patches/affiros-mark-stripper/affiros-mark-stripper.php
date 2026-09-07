@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros 黄色マーカー削除
  * Description: 過去に AI 装飾で挿入された <mark>...</mark> 黄色マーカーを WP投稿から一括削除するツール。中身は残してタグだけ剥がす。publish/future/draft/private が対象。
- * Version: 1.0.0
+ * Version: 1.0.1
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-mark-stripper
@@ -10,13 +10,15 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('AFFIROS_MARK_STRIPPER_VERSION', '1.0.0');
+define('AFFIROS_MARK_STRIPPER_VERSION', '1.0.1');
 
 require_once plugin_dir_path(__FILE__) . 'includes/plugin-updater.php';
 
 add_action('init', function () {
-    $host = defined('AFFIROS_UPDATE_HOST') ? AFFIROS_UPDATE_HOST : 'https://wp-manager.onrender.com';
-    new Affiros_Plugin_Updater(__FILE__, rtrim($host, '/') . '/api/plugin-update/mark-stripper');
+    new Affiros_Plugin_Updater(
+        __FILE__,
+        'https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-host/api/plugin-update/mark-stripper'
+    );
 });
 
 add_action('admin_menu', function () {

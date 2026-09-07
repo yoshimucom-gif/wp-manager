@@ -1978,6 +1978,18 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.54 / 残り9プラグイン (2026-09-07) — 📦 更新配信をGitHub直配信に統一 (脱Render)</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: v1.9.39 で auto-inserter だけGitHub直配信に移したが、<strong>残り9本は <code>wp-manager.onrender.com</code> を既定の更新チェック先にしたまま</strong>だった。その Render が <code>suspend-by-user</code> で停止しているため、9本の自動更新は<strong>7月末から機能していない</strong>。約30サイトが更新を受け取れない状態。</li>
+              <li><strong>対応</strong>: cat-eyecatch / categorizer / decoration / dup-cleaner / mark-stripper / paragraph-splitter / product-inserter / reschedule / rewrite の9本の更新チェック先を、auto-inserter と同じ <code>raw.githubusercontent.com/.../plugin-host/api/plugin-update/&lt;key&gt;</code> の固定URLに変更。以後 push だけで配信が完了し、サーバーが不要になる。</li>
+              <li><strong>版数</strong>: product-inserter 1.10.1 / decoration 1.2.4 / rewrite 0.5.18 / categorizer 0.1.2 / dup-cleaner 1.0.2 / paragraph-splitter 1.1.6 / reschedule 1.1.1 / mark-stripper 1.0.1 / cat-eyecatch 1.0.1。<code>PLUGIN_DOWNLOADS</code>・<code>build-all.py</code>・配信JSONの3箇所を同期済み (v1.9.53 で起きた版数ずれの再発防止)。</li>
+              <li><strong>🚨 引き渡しの手順</strong>: 現に入っている旧版は<strong>停止中のRenderを見に行く</strong>ため、この新版は push しただけでは届かない。Render を一時 Resume → 旧版が新版を取得 → 新版はGitHubを見るようになる、という受け渡しが要る。Resume 直後に <code>/api/data-snapshot</code> を保存してから push すること。全サイトの移行はRenderのアクセスログで確認し、<code>/api/plugin-update/</code> への到達がゼロになってから削除する。</li>
+              <li><strong>楽天APIは無関係</strong>: <code>rakuten-api.php</code> の <code>ORIGIN</code> は <code>Origin</code> ヘッダに載せる文字列で、リクエスト先は <code>openapi.rakuten.co.jp</code> に直接飛んでいる。Render停止の影響を受けないため変更なし。</li>
+              <li><strong>検証</strong>: この環境にPHP CLIが無く <code>php -l</code> は未実施。全9本のzipビルドと配信JSON生成は成功。<strong>実サイト1件で先行確認してから残りに広げること。</strong></li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.53 / rediver-helper v1.1.2 (2026-09-04) — 🔧 Re:Diverヘルパーの不具合を洗い出して一括修正</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>データが壊れる不具合</strong>: JSONで送ったバックスラッシュが消えていた。WPのRESTは<strong>JSONボディにスラッシュを付けない</strong>のに <code>wp_unslash</code> をかけ、さらに <code>update_post_meta</code> が内部でもう1段外すため、<code>C:\path</code> が <code>C:path</code>、CSSの <code>"\e89e"</code> が <code>"e89e"</code> になっていた。送信経路 (JSON / フォーム) を見て正規化し、メタ書き込みの直前で <code>wp_slash</code> し直す。</li>

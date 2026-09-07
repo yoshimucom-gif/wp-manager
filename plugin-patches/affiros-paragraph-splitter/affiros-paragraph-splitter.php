@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros 段落整形
  * Description: 【統合済】Affiros ポストプロセッサー (v0.5.0〜) に統合されました。affiros-rewrite プラグインをインストールしていればこのプラグインは無効化して構いません。
- * Version: 1.1.5
+ * Version: 1.1.6
  * Author: Affiros
  * License: GPL v2 or later
  */
@@ -24,14 +24,16 @@ if (defined('AFFIROS_PSPLIT_INTEGRATED_LOADED')) {
     return;
 }
 
-define('AFFIROS_PSPLIT_VERSION', '1.1.5');
+define('AFFIROS_PSPLIT_VERSION', '1.1.6');
 define('AFFIROS_PSPLIT_OPTION_KEY', 'affiros_psplit_settings');
 
 // 自動更新通知（Affiros9 サーバーから定期チェック）
 require_once __DIR__ . '/includes/plugin-updater.php';
 add_action('init', function () {
-    $host = defined('AFFIROS_UPDATE_HOST') ? AFFIROS_UPDATE_HOST : 'https://wp-manager.onrender.com';
-    new Affiros_Plugin_Updater(__FILE__, rtrim($host, '/') . '/api/plugin-update/paragraph-splitter');
+    new Affiros_Plugin_Updater(
+        __FILE__,
+        'https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-host/api/plugin-update/paragraph-splitter'
+    );
 });
 
 // =============================================================================

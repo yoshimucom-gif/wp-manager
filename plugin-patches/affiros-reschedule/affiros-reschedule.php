@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros 予約再スケジュール
  * Description: 予約投稿（future）と下書き（draft）の投稿日時を一括で再スケジュールするツール。投稿頻度を1日N件で振り直し可能。下書きは予約投稿に変換される。
- * Version: 1.1.0
+ * Version: 1.1.1
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-reschedule
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('AFFIROS_RESCHEDULE_VERSION', '1.1.0');
+define('AFFIROS_RESCHEDULE_VERSION', '1.1.1');
 
 // 取り消し用に「実行前の状態」を退避する投稿メタ
 define('AFFIROS_RESCHEDULE_META_BATCH',  '_ar_batch');
@@ -26,8 +26,10 @@ require_once plugin_dir_path(__FILE__) . 'includes/plugin-updater.php';
  * 別ホスト運用時は wp-config.php で AFFIROS_UPDATE_HOST を上書き。
  */
 add_action('init', function () {
-    $host = defined('AFFIROS_UPDATE_HOST') ? AFFIROS_UPDATE_HOST : 'https://wp-manager.onrender.com';
-    new Affiros_Plugin_Updater(__FILE__, rtrim($host, '/') . '/api/plugin-update/reschedule');
+    new Affiros_Plugin_Updater(
+        __FILE__,
+        'https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-host/api/plugin-update/reschedule'
+    );
 });
 
 /**

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros ポストプロセッサー
  * Description: Affiros9 で生成した記事の後工程を全部やる統合ツール。Claude API リライト / 商品カード・マーカーの削除&挿入 / H2 章の並び替え / 段落整形。WP_Query 内部処理でホスティング WAF の影響を受けない（403 回避）。
- * Version: 0.5.17
+ * Version: 0.5.18
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-rewrite
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('AFFIROS_REWRITE_VERSION', '0.5.17');
+define('AFFIROS_REWRITE_VERSION', '0.5.18');
 define('AFFIROS_REWRITE_PATH', plugin_dir_path(__FILE__));
 define('AFFIROS_REWRITE_URL', plugin_dir_url(__FILE__));
 
@@ -51,8 +51,10 @@ require_once AFFIROS_REWRITE_PATH . 'admin/ajax-handler.php';
  * を入れると自動で切り替わる。
  */
 add_action('init', function () {
-    $host = defined('AFFIROS_UPDATE_HOST') ? AFFIROS_UPDATE_HOST : 'https://wp-manager.onrender.com';
-    new Affiros_Plugin_Updater(__FILE__, rtrim($host, '/') . '/api/plugin-update/rewrite');
+    new Affiros_Plugin_Updater(
+        __FILE__,
+        'https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-host/api/plugin-update/rewrite'
+    );
 });
 
 /**
