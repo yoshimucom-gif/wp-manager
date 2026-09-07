@@ -40,6 +40,7 @@ re:Diver の設定を全面的に調べた結果、**REST経由で触れる領�
 | `GET /rdh/v1/postmeta-keys?post_type=post&limit=20` | 投稿メタのキーを使用数つきで一覧。記事幅のキー発見 |
 | `GET /rdh/v1/options?search=diver` | テーマ設定オプションを検索（名前・型・トップキー・書き込み可否のみ返す） |
 | `GET /rdh/v1/thememods` | theme_mod 全件 |
+| `GET /rdh/v1/diver-keys` | **re:Diverの設定キー索引（現在値つき）。配色・見出しの色・メインビジュアル・記事幅・カテゴリ画像・追加CSSが、どこに何というキーで入っていて、どう書くかを1回で返す** |
 
 ### 読み書き
 
@@ -53,6 +54,29 @@ re:Diver の設定を全面的に調べた結果、**REST経由で触れる領�
 | `POST /rdh/v1/thememods` | theme_mod（`{key,value}`） |
 | `GET/POST /rdh/v1/backups` | 変更前の値の一覧・復元（`{id}`） |
 | `GET /rdh/v1/backups?id={backup_id}` | その退避で**何に戻るか**を先に確認する |
+
+### 🎨 配色を変えるとき（1.2.0で索引を追加）
+
+**「re:Diverの配色は管理画面でしか変えられません」は誤り。** 保存先が3か所に分かれているだけ。
+`GET /rdh/v1/diver-keys` が現在値と書き方をまとめて返す。
+
+| 何 | 保存先 | キー |
+|---|---|---|
+| 地の色（背景・文字・ヘッダー帯・フッター・H2・タブ） | theme_mod | `diver_color` ＋ `diver_color_custom` |
+| ブロックのプリセット色（`has-diver-secondary-*`） | グローバルスタイル | `/wp/v2/global-styles/{id}` の `settings.color.palette.theme` |
+| 見出しの色 | theme_mod | `diver_content_heading`（値は**JSON文字列**） |
+
+```
+POST /rdh/v1/thememods {"key":"diver_color","value":{"theme":"light-black","isCustom":true}}
+POST /rdh/v1/thememods {"key":"diver_color_custom","value":{
+    "accent":"#6F7E5C","link":"#5C6A4C","secondary":"#46372E",
+    "text":"#46372E","background":"#FAF7F2"}}
+```
+
+🚨 **`diver_color.isCustom` を立てないと `diver_color_custom` は丸ごと無視される。**
+色だけ入れて「変わらない」と詰まるのはこれ。`diver-keys` はこの状態を検出して `warnings` に出す。
+反映はフロントの `--rd--c--text` 等で照合する（`0 0 0` のままなら効いていない）。
+**追加CSSで `--rd--c--*` を上書きする必要はない。**
 
 ### 共通パラメータ
 

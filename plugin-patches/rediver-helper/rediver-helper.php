@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Re:Diver ヘルパー
  * Description: 通常のREST APIでは触れないWordPress/テーマの設定を、スクリプトから読み書きできるようにする構築補助プラグイン。テーマ側の不具合の回避（外部リンクアイコンの豆腐）も含む。カテゴリー画像などのタームメタ、記事幅などの投稿メタ、カスタマイザー（theme_mod / オプション）に対応。キー名を発見する調査用エンドポイント付き。全て管理者権限必須。
- * Version: 1.1.2
+ * Version: 1.2.0
  * Author: Keys
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -12,7 +12,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('RDH_VERSION', '1.1.2');
+define('RDH_VERSION', '1.2.0');
 
 // 自動更新通知（GitHub 直配信のメタJSONを定期チェック）
 require_once __DIR__ . '/includes/plugin-updater.php';
@@ -27,6 +27,7 @@ require_once __DIR__ . '/includes/common.php';
 require_once __DIR__ . '/includes/rest-termmeta.php';
 require_once __DIR__ . '/includes/rest-postmeta.php';
 require_once __DIR__ . '/includes/rest-customizer.php';
+require_once __DIR__ . '/includes/rest-diver-keys.php';
 require_once __DIR__ . '/includes/fix-extlink-icon.php';
 
 /**
@@ -50,6 +51,7 @@ add_action('rest_api_init', function () {
                     '投稿1件の全メタ'                 => "GET  {$base}/postmeta/<post_id>",
                     '投稿メタの更新'                   => "POST {$base}/postmeta/<post_id>  {key,value}",
                     '投稿メタの一括更新'               => "POST {$base}/postmeta/bulk  {key,post_ids,value}",
+                    're:Diverの設定キー索引（現在値つき）' => "GET  {$base}/diver-keys",
                     'カスタマイザー(theme_mod)一覧'    => "GET  {$base}/thememods",
                     'カスタマイザーの更新'             => "POST {$base}/thememods  {key,value}",
                     'オプション検索（キー発見）'        => "GET  {$base}/options?search=diver",
@@ -69,6 +71,7 @@ add_action('rest_api_init', function () {
                     '外部リンクアイコンの豆腐' => 'テーマのCSSが指定する記号が、読み込み済みフォントのサブセットに入っていないため□になる。同じセレクタに実文字の矢印を上書きして回避する。無効化するフィルタ名は rdh_extlink_icon_fix。',
                 ],
                 'notes' => [
+                    '配色・見出しの色・メインビジュアル・記事幅などのキー名が分からないときは GET /diver-keys を見る。現在値と書き方が一緒に返る。',
                     '書き込み系はすべて before / after / changed を返す。changed=false なら実際には変わっていない。',
                     'update_option はサニタイズを通るため、200でも値が反映されないことがある（after で判定する）。',
                     'サイトが壊れるオプション（siteurl/home/template/active_plugins 等）は拒否する。',
