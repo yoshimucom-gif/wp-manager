@@ -1978,6 +1978,16 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.55 / auto-inserter v0.18.0 (2026-09-14) — 🗑 除外記事のカード一括削除＋wp_slash修正</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: 除外カテゴリー/タグを設定する前に挿入されてしまったカードを消す手段が個別 (記事編集画面) しかなかった。</li>
+              <li><strong>一括削除</strong>: 一括ページに「🗑 除外記事のカードを一括削除」ボタン。対象=「除外」「除外(分類)」なのに本文にカードが残っている記事 (スキャン結果に「🗑 除外なのにカード残り N件」を表示、行にも個別🗑ボタン)。絞り込みと連動。既存の個別削除AJAXを回すだけなのでAPI・AIコストゼロ。</li>
+              <li><strong>🚨 バグ修正 (wp_slash)</strong>: 挿入・削除の <code>wp_update_post</code> が素の本文を渡していた。本文に <code>-</code> 等のエスケープを含むGutenbergブロックがあるとスラッシュが剥がれて壊れる潜在バグ (fudosan案件で実証済みの罠) → <code>wp_slash()</code> を通すよう2箇所修正。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.17.4 → 0.18.0 / <code>APP_VERSION</code> 1.9.54 → 1.9.55。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.54 / 残り9プラグイン (2026-09-07) — 📦 更新配信をGitHub直配信に統一 (脱Render)</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: v1.9.39 で auto-inserter だけGitHub直配信に移したが、<strong>残り9本は <code>wp-manager.onrender.com</code> を既定の更新チェック先にしたまま</strong>だった。その Render が <code>suspend-by-user</code> で停止しているため、9本の自動更新は<strong>7月末から機能していない</strong>。約30サイトが更新を受け取れない状態。</li>

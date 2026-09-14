@@ -178,11 +178,12 @@ class Affiros_AI_Inserter {
             return self::fail($post_id, '挿入位置が見つかりませんでした (H2 / まとめ が本文にない)');
         }
 
-        // 更新
-        $upd = wp_update_post([
+        // 更新。wp_update_post は slash 済み入力を期待する。素で渡すと本文中の
+        // - 等のエスケープが剥がれて Gutenberg ブロックが壊れる
+        $upd = wp_update_post(wp_slash([
             'ID'           => $post_id,
             'post_content' => $new_content,
-        ], true);
+        ]), true);
         if (is_wp_error($upd)) {
             return self::fail($post_id, 'wp_update_post 失敗: ' . $upd->get_error_message());
         }

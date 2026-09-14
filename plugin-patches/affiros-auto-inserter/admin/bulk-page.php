@@ -73,11 +73,13 @@ function affiros_ai_render_bulk_page() {
             <div style="margin:0 0 12px">
                 <button type="button" id="ai-apply-all-btn" class="button button-primary">✨ 未挿入・消失の記事に一括適用</button>
                 <button type="button" id="ai-reapply-all-btn" class="button" style="margin-left:8px">🔄 挿入済の記事に一括再挿入</button>
+                <button type="button" id="ai-strip-excluded-btn" class="button" style="margin-left:8px">🗑 除外記事のカードを一括削除</button>
                 <span id="ai-apply-status" style="margin-left:12px;font-size:13px"></span>
                 <div style="font-size:12px;color:#666;margin-top:6px">
                     ⚠️ 適用にはブラウザタブを開いたままにする必要があります (JS ループ方式)。
                     ・100件処理 ≒ 10〜20分 ・¥30程度
                     <br>🔄 再挿入は既存カードを削除して入れ直します (位置ルール変更やキーワード精度改善を既存記事に反映する用。重複しません)
+                    <br>🗑 一括削除は「除外」「除外(分類)」なのにカードが残っている記事 (除外設定より前に挿入されたもの) からカードを剥がします。API・AIコストはゼロ
                 </div>
             </div>
             <table class="wp-list-table widefat striped">
@@ -153,6 +155,7 @@ function affiros_ai_render_bulk_page() {
             $('#ai-scan-btn').on('click', scan);
             $('#ai-apply-all-btn').on('click', () => applyBatch(['pending', 'lost'], '挿入'));
             $('#ai-reapply-all-btn').on('click', () => applyBatch(['done'], '再挿入'));
+            $('#ai-strip-excluded-btn').on('click', stripBatch);
             $('#ai-filter-date, #ai-filter-cards, #ai-filter-pubdate').on('change', render);
 
             // ── カテゴリー複数選択ドロップダウン ──
@@ -276,8 +279,12 @@ function affiros_ai_render_bulk_page() {
                     const lostHtml = (stats.lost || 0) > 0
                         ? ` / <span style="color:#c62828;font-weight:700">⚠️ カード消失 ${stats.lost}件</span>`
                         : '';
+                    const leftover = posts.filter(p => (p.state === 'taxonomy' || p.state === 'excluded') && (p.cards || 0) > 0).length;
+                    const leftoverHtml = leftover > 0
+                        ? ` / <span style="color:#a06000;font-weight:700">🗑 除外なのにカード残り ${leftover}件</span>`
+                        : '';
                     $('#ai-scan-status').html(
-                        `スキャン完了: ${res.data.scanned}件 / 未挿入 <strong>${stats.pending || 0}</strong>件 / 挿入済 ${stats.done || 0}件 / 除外 ${stats.excluded || 0}件 / 除外(分類) ${stats.taxonomy || 0}件 / ランキング ${stats.ranking || 0}件${lostHtml}`
+                        `スキャン完了: ${res.data.scanned}件 / 未挿入 <strong>${stats.pending || 0}</strong>件 / 挿入済 ${stats.done || 0}件 / 除外 ${stats.excluded || 0}件 / 除外(分類) ${stats.taxonomy || 0}件 / ランキング ${stats.ranking || 0}件${lostHtml}${leftoverHtml}`
                     );
                     render();
                     $('#ai-result').show();
@@ -298,6 +305,7 @@ function affiros_ai_render_bulk_page() {
                     const viewUrl = p.link || editUrl; // タイトル = 公開URL (確認用)
                     const stateBadge = badge(p.state);
                     const canApply = (p.state === 'pending' || p.state === 'done' || p.state === 'lost');
+                    const canStrip = ((p.state === 'taxonomy' || p.state === 'excluded') && (p.cards || 0) > 0);
                     const cardsCell = (p.last_insert_at && (p.cards || 0) === 0)
                         ? '<span style="color:#c62828;font-weight:700">⚠️ 0枚</span>'
                         : `${p.cards || 0}枚`;
@@ -311,6 +319,7 @@ function affiros_ai_render_bulk_page() {
                             <td>${esc(p.last_insert_at || '')}</td>
                             <td>
                                 ${canApply ? `<button type="button" class="button button-small ai-apply-one" data-id="${p.id}">✨ 適用</button>` : ''}
+                                ${canStrip ? `<button type="button" class="button button-small ai-strip-one" data-id="${p.id}">🗑 カード削除</button>` : ''}
                             </td>
                         </tr>
                     `);
@@ -318,6 +327,11 @@ function affiros_ai_render_bulk_page() {
                 $('.ai-apply-one').on('click', function () {
                     const id = parseInt($(this).data('id'), 10);
                     applyOne(id, $(this));
+                });
+                $('.ai-strip-one').on('click', function () {
+                    if (!confirm('この記事から挿入済みカードを削除します。よろしいですか？')) return;
+                    const id = parseInt($(this).data('id'), 10);
+                    stripOne(id, $(this));
                 });
             }
 
@@ -370,7 +384,7 @@ function affiros_ai_render_bulk_page() {
                 if (!confirm(`${filterOn ? '【絞り込み適用中】' : ''}${targets.length} 件に順次${verb}します。想定コスト: ¥${Math.round(targets.length * 0.5)}〜¥${Math.round(targets.length * 0.65)} 前後 (再抽出発動分を含む概算)。よろしいですか？`)) return;
 
                 abort = false;
-                $('#ai-apply-all-btn, #ai-reapply-all-btn').prop('disabled', true);
+                $('#ai-apply-all-btn, #ai-reapply-all-btn, #ai-strip-excluded-btn').prop('disabled', true);
                 let done = 0, failed = 0;
                 for (const p of targets) {
                     if (abort) break;
@@ -382,7 +396,55 @@ function affiros_ai_render_bulk_page() {
                     await sleep(300); // API連続叩き回避
                 }
                 $('#ai-apply-status').html(`完了: 成功 <strong>${done}</strong>件 / 失敗 ${failed}件`);
-                $('#ai-apply-all-btn, #ai-reapply-all-btn').prop('disabled', false);
+                $('#ai-apply-all-btn, #ai-reapply-all-btn, #ai-strip-excluded-btn').prop('disabled', false);
+            }
+
+            // 除外記事のカード削除 (既存の個別削除AJAX affiros_ai_strip を使う。コストゼロ)
+            async function stripOne(id, btn) {
+                if (btn) btn.prop('disabled', true).text('削除中...');
+                try {
+                    const res = await $.post(ajaxUrl + '?action=affiros_ai_strip', {
+                        action: 'affiros_ai_strip',
+                        nonce: nonce,
+                        post_id: id,
+                    });
+                    if (res && res.success) {
+                        const changed = !!(res.data && res.data.changed);
+                        if (btn) {
+                            btn.replaceWith(changed
+                                ? '<span style="color:#16a34a;font-weight:600">✓ 削除済</span>'
+                                : '<span style="color:#666">対象なし</span>');
+                        }
+                        return { ok: true, changed };
+                    }
+                    if (btn) btn.replaceWith(`<span style="color:#c62828">✗ ${esc(String(res && res.data || '不明')).slice(0, 40)}</span>`);
+                    return { ok: false };
+                } catch (e) {
+                    if (btn) btn.replaceWith(`<span style="color:#c62828">✗ 通信エラー ${e && e.status}</span>`);
+                    return { ok: false };
+                }
+            }
+
+            async function stripBatch() {
+                const filtered = filteredPosts();
+                const targets = filtered.filter(p => (p.state === 'taxonomy' || p.state === 'excluded') && (p.cards || 0) > 0);
+                const filterOn = filtered.length !== posts.length;
+                if (!targets.length) { alert(`除外なのにカードが残っている記事はありません${filterOn ? ' (絞り込み適用中)' : ''}`); return; }
+                if (!confirm(`${filterOn ? '【絞り込み適用中】' : ''}除外記事 ${targets.length} 件からカードを削除します。戻すには除外を解除して再挿入が必要です。よろしいですか？`)) return;
+
+                abort = false;
+                $('#ai-apply-all-btn, #ai-reapply-all-btn, #ai-strip-excluded-btn').prop('disabled', true);
+                let done = 0, failed = 0;
+                for (const p of targets) {
+                    if (abort) break;
+                    $('#ai-apply-status').text(`削除中 ${done + failed + 1}/${targets.length}... #${p.id}`);
+                    const btn = $(`tr[data-id="${p.id}"] .ai-strip-one`);
+                    const r = await stripOne(p.id, btn.length ? btn : null);
+                    if (r.ok) done++; else failed++;
+                    await sleep(150);
+                }
+                $('#ai-apply-status').html(`削除完了: 成功 <strong>${done}</strong>件 / 失敗 ${failed}件`);
+                $('#ai-apply-all-btn, #ai-reapply-all-btn, #ai-strip-excluded-btn').prop('disabled', false);
             }
 
             function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }

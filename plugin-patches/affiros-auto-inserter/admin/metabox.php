@@ -154,7 +154,9 @@ add_action('wp_ajax_affiros_ai_strip', function () {
     if ($new === $post->post_content) {
         wp_send_json_success(['changed' => false, 'message' => '削除対象なし']);
     }
-    $upd = wp_update_post(['ID' => $post_id, 'post_content' => $new], true);
+    // wp_update_post は slash 済み入力を期待する。素で渡すと本文中の - 等の
+    // エスケープが剥がれて Gutenberg ブロックが壊れる (fudosan案件で実証済みの罠)
+    $upd = wp_update_post(wp_slash(['ID' => $post_id, 'post_content' => $new]), true);
     if (is_wp_error($upd)) wp_send_json_error($upd->get_error_message());
     delete_post_meta($post_id, AFFIROS_AI_META_LAST_INSERT_AT);
     wp_send_json_success(['changed' => true]);
