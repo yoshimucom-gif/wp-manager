@@ -6419,9 +6419,9 @@ def favicon():
 PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugin-downloads')
 PLUGIN_DOWNLOADS = {
     'kyutoki-shindan': {
-        'file': 'kyutoki-shindan-1.0.1.zip',
+        'file': 'kyutoki-shindan-1.0.2.zip',
         'name': '給湯器エラーコード診断',
-        'version': '1.0.1',
+        'version': '1.0.2',
     },
     'product-inserter': {
         'file': 'affiros-product-inserter-1.10.1.zip',
