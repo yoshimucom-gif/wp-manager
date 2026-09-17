@@ -6418,6 +6418,11 @@ def favicon():
 # 配布プラグイン（WordPress 連携プラグインの zip）
 PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugin-downloads')
 PLUGIN_DOWNLOADS = {
+    'kyutoki-shindan': {
+        'file': 'kyutoki-shindan-1.0.1.zip',
+        'name': '給湯器エラーコード診断',
+        'version': '1.0.1',
+    },
     'product-inserter': {
         'file': 'affiros-product-inserter-1.10.1.zip',
         'name': 'Affiros プロダクトインサーター',
@@ -6506,6 +6511,13 @@ def download_plugin(plugin_key):
 # WP の plugins_api / pre_set_site_transient_update_plugins フィルタ経由で
 # 各プラグインがここを叩き、新バージョンを検知して自動更新する。
 PLUGIN_UPDATE_META = {
+    'kyutoki-shindan': {
+        'plugin_basename': 'kyutoki-shindan/kyutoki-shindan.php',
+        'tested':   '6.7',
+        'requires': '6.0',
+        'requires_php': '7.4',
+        'author':   'Keys',
+    },
     'rewrite': {
         'plugin_basename': 'affiros-rewrite/affiros-rewrite.php',
         'tested':   '6.6',

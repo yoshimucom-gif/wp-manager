@@ -1,0 +1,75 @@
+/* 給湯器エラーコード診断 */
+.kys{--kys-accent:#F97316;--kys-ink:#3A3F47;--kys-line:#E3E6EA;--kys-bg:#FAFAFB;
+  border:1px solid var(--kys-line);border-radius:12px;padding:24px;background:#fff;
+  color:var(--kys-ink);line-height:1.8;margin:32px 0}
+.kys *{box-sizing:border-box}
+/* テーマ側が div に display を当てていると hidden が効かなくなる。
+   手順1と2の出し分けが壊れると診断そのものが成立しないので、ここだけ強く指定する */
+.kys [hidden]{display:none !important}
+.kys__title{margin:0 0 8px;font-size:1.25rem;line-height:1.5}
+.kys__lead{margin:0 0 20px;font-size:.9rem}
+.kys__step{margin-bottom:20px}
+.kys__steplabel{display:flex;align-items:center;gap:8px;margin:0 0 12px;font-weight:700}
+.kys__num{display:inline-flex;align-items:center;justify-content:center;
+  width:1.6em;height:1.6em;border-radius:50%;background:var(--kys-accent);color:#fff;
+  font-size:.85rem;flex:none}
+.kys__makers,.kys__codes{display:flex;flex-wrap:wrap;gap:8px}
+.kys__maker,.kys__code{border:1px solid var(--kys-line);background:var(--kys-bg);
+  border-radius:8px;padding:10px 16px;font-size:.95rem;cursor:pointer;color:inherit;
+  font-family:inherit;transition:border-color .15s,background .15s}
+.kys__maker:hover,.kys__code:hover{border-color:var(--kys-accent);background:#FFF7ED}
+.kys__maker[aria-pressed="true"]{border-color:var(--kys-accent);background:#FFF7ED;
+  font-weight:700}
+.kys__code{min-width:5.5em;text-align:center;font-variant-numeric:tabular-nums}
+.kys__hint{margin:12px 0 0;font-size:.82rem;color:#6B7280}
+.kys__manual{margin-top:16px;padding-top:16px;border-top:1px dashed var(--kys-line)}
+.kys__manual label{display:block;font-size:.85rem;margin-bottom:6px;color:#6B7280}
+.kys__inputrow{display:flex;gap:8px;flex-wrap:wrap}
+.kys__inputrow input{flex:1 1 10em;min-width:0;padding:10px 12px;font-size:1rem;
+  border:1px solid var(--kys-line);border-radius:8px;font-family:inherit}
+.kys__go{border:0;background:var(--kys-accent);color:#fff;border-radius:8px;
+  padding:10px 20px;font-size:.95rem;font-weight:700;cursor:pointer;font-family:inherit}
+.kys__back{margin-top:14px;border:0;background:none;color:#6B7280;font-size:.85rem;
+  text-decoration:underline;cursor:pointer;padding:0;font-family:inherit}
+.kys__result{margin-top:8px}
+.kys__card{border:1px solid var(--kys-line);border-radius:10px;overflow:hidden}
+.kys__head{background:var(--kys-bg);padding:16px 20px;border-bottom:1px solid var(--kys-line)}
+.kys__code-big{font-size:1.4rem;font-weight:700;font-variant-numeric:tabular-nums}
+.kys__maker-name{font-size:.9rem;color:#6B7280;display:block}
+.kys__body{padding:20px}
+.kys__body h4{margin:20px 0 6px;font-size:.95rem}
+.kys__body h4:first-child{margin-top:0}
+.kys__body p{margin:0 0 4px;font-size:.92rem}
+.kys__sub{font-size:.82rem;color:#6B7280;margin:10px 0 2px;font-weight:700}
+.kys__badge{display:inline-block;border-radius:999px;padding:5px 14px;font-size:.82rem;
+  font-weight:700;margin-top:10px}
+.kys__badge--repair{background:#FEE2E2;color:#991B1B}
+.kys__badge--self{background:#DCFCE7;color:#14532D}
+.kys__badge--cond{background:#FEF3C7;color:#78350F}
+.kys__badge--unknown{background:#E5E7EB;color:#374151}
+.kys__danger{background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;
+  padding:14px 16px;margin-bottom:16px}
+.kys__danger strong{color:#991B1B;display:block;margin-bottom:4px}
+.kys__danger p{margin:0;font-size:.88rem}
+.kys__warn{background:#FFFBEB;border:1px solid #FCD34D;border-radius:8px;
+  padding:14px 16px;margin-top:16px}
+.kys__warn strong{display:block;margin-bottom:4px}
+.kys__warn p{margin:0;font-size:.88rem}
+.kys__source{margin-top:18px;padding-top:14px;border-top:1px solid var(--kys-line);
+  font-size:.8rem;color:#6B7280}
+.kys__source a{color:inherit}
+.kys__more{display:inline-block;margin-top:14px;font-size:.9rem;font-weight:700}
+.kys__cta{margin-top:16px;border:1px solid var(--kys-line);border-radius:10px;padding:18px 20px}
+.kys__cta h4{margin:0 0 6px;font-size:1rem}
+.kys__cta p{margin:0 0 12px;font-size:.88rem}
+.kys__btn{display:inline-block;background:var(--kys-accent);color:#fff;
+  border-radius:8px;padding:12px 24px;font-weight:700;text-decoration:none;font-size:.95rem}
+.kys__btn:hover{opacity:.9;color:#fff}
+.kys__blocked{background:var(--kys-bg);border-radius:8px;padding:16px 20px;font-size:.9rem}
+.kys__notfound{background:var(--kys-bg);border-radius:8px;padding:16px 20px;font-size:.9rem}
+.kys__note{margin:20px 0 0;font-size:.78rem;color:#6B7280;line-height:1.7}
+@media (max-width:600px){
+  .kys{padding:18px}
+  .kys__makers,.kys__codes{gap:6px}
+  .kys__maker,.kys__code{padding:9px 12px;font-size:.88rem}
+}
