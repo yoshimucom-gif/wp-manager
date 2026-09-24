@@ -1,0 +1,15 @@
+{
+  "name": "ミカタセミナー新着",
+  "slug": "mikata-seminar-feed",
+  "plugin": "mikata-seminar-feed/mikata-seminar-feed.php",
+  "version": "1.0.0",
+  "tested": "6.7",
+  "requires": "6.0",
+  "requires_php": "7.4",
+  "author": "ミカタ株式会社",
+  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/mikata-seminar-feed-1.0.0.zip",
+  "sections": {
+    "description": "ミカタセミナー新着 本体。GitHub から自動更新します。",
+    "changelog": "最新バージョン 1.0.0"
+  }
+}
