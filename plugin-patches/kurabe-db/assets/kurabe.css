@@ -105,3 +105,11 @@
 .kurabe-shop-links a{color:var(--k-accent);font-weight:700;font-size:15px;white-space:nowrap}
 .kurabe-shop-links a::after{content:" ›"}
 .kurabe-adnote{font-size:13.5px;color:#56636E;margin:.5em 0 1.5em}
+
+/* 関連する品目：箱にせず、文字のリンクを折り返して並べる */
+.kurabe-related{margin:0 0 1.5em}
+.kurabe-related-label{font-size:13.5px;font-weight:700;color:#56636E;margin:1.2em 0 .4em}
+.kurabe-links{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px 22px}
+.kurabe-links li{margin:0;padding:0}
+.kurabe-links a{font-weight:700}
+.kurabe-links span{font-size:13.5px;color:#56636E;margin-left:6px}

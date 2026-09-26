@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.0.8
+ * Version:     1.0.9
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.0.8';
+    const VERSION  = '1.0.9';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -55,6 +55,16 @@ class Kurabe_Db
     public static function register_meta()
     {
         foreach (array('post', 'page') as $type) {
+            foreach (array('kurabe_item', 'kurabe_group', 'kurabe_parent', 'kurabe_count') as $k) {
+                register_post_meta($type, $k, array(
+                    'type'          => 'string',
+                    'single'        => true,
+                    'show_in_rest'  => true,
+                    'auth_callback' => function () {
+                        return current_user_can('edit_posts');
+                    },
+                ));
+            }
             register_post_meta($type, self::META, array(
                 'type'          => 'string',
                 'single'        => true,
@@ -398,6 +408,72 @@ class Kurabe_Db
         }
         $h .= '</tbody></table></div>';
         return $h;
+    }
+
+    /* 関連する品目のリンク（公開済みのページだけを拾う。公開が増えれば自動で増える）
+       投稿メタ: kurabe_item＝品目名 / kurabe_group＝ダイソーの売り場の小分類 /
+                 kurabe_parent＝親の品目名（「ワイヤーネット用フック」なら「ワイヤーネット」）/ kurabe_count＝掲載種数 */
+    private static function linked_posts($key, $value, $exclude, $limit)
+    {
+        if ($value === '' || $value === null) {
+            return array();
+        }
+        $status = array('publish');
+        if (is_preview() && current_user_can('edit_posts')) {
+            $status[] = 'draft';      // 下書きのプレビューでは下書き同士もつないで確認できるようにする
+        }
+        return get_posts(array(
+            'post_type'        => 'post',
+            'post_status'      => $status,
+            'posts_per_page'   => $limit,
+            'post__not_in'     => array((int) $exclude),
+            'meta_key'         => $key,
+            'meta_value'       => $value,
+            'orderby'          => 'title',
+            'order'            => 'ASC',
+            'suppress_filters' => true,
+        ));
+    }
+
+    private static function link_list($posts)
+    {
+        $h = '<ul class="kurabe-links">';
+        foreach ($posts as $p) {
+            $item  = get_post_meta($p->ID, 'kurabe_item', true);
+            $count = get_post_meta($p->ID, 'kurabe_count', true);
+            $h .= '<li><a href="' . esc_url(get_permalink($p)) . '">100均' . esc_html($item ? $item : get_the_title($p)) . '</a>'
+                . ($count ? '<span>' . (int) $count . '種</span>' : '') . '</li>';
+        }
+        return $h . '</ul>';
+    }
+
+    private static function part_related($d)
+    {
+        $id     = get_the_ID();
+        $item   = get_post_meta($id, 'kurabe_item', true);
+        $group  = get_post_meta($id, 'kurabe_group', true);
+        $parent = get_post_meta($id, 'kurabe_parent', true);
+
+        $pair = array_merge(
+            $parent ? self::linked_posts('kurabe_item', $parent, $id, 1) : array(),
+            $item ? self::linked_posts('kurabe_parent', $item, $id, 8) : array()
+        );
+        $seen = wp_list_pluck($pair, 'ID');
+        $same = array_values(array_filter(self::linked_posts('kurabe_group', $group, $id, 16), function ($p) use ($seen) {
+            return !in_array($p->ID, $seen, true);
+        }));
+        if (!$pair && !$same) {
+            return '';
+        }
+        $name = $item ? $item : (isset($d['item']) ? $d['item'] : '');
+        $h = '<h2 class="wp-block-heading">100均' . esc_html($name) . 'とあわせて比べたい品目</h2><div class="kurabe-related">';
+        if ($pair) {
+            $h .= '<p class="kurabe-related-label">一緒に使う品目</p>' . self::link_list($pair);
+        }
+        if ($same) {
+            $h .= '<p class="kurabe-related-label">同じ売り場の品目</p>' . self::link_list($same);
+        }
+        return $h . '</div>';
     }
 
     private static function part_shop($d)
