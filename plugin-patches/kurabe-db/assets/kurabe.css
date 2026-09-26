@@ -2,8 +2,7 @@
 .kurabe-source,.kurabe-stats,.kurabe-table,.kurabe-scale,.kurabe-shop{
   --k-ink:#1E2A33;--k-ink2:#56636E;--k-line:#D3DADF;--k-line2:#E6EAED;--k-bg:#F4F6F7;--k-surface:#fff;
   --k-accent:#3C5566;--k-tag:#F2C744;--k-tag-ink:#3A2E05;--k-mesh:#B4C1CA;
-  --k-daiso:#C23B63;--k-cando:#B86A06;--k-watts:#2F8A5B;
-  --k-daiso-bg:#FBE9EF;--k-cando-bg:#FCF1DF;--k-watts-bg:#E3F3EA;
+  --k-daiso:#f5008c;--k-cando:#e94709;--k-watts:#f8b300;--k-watts-ink:#3a2a00;
   --k-note:#FFF8DD;--k-note-line:#EAD58A;
   box-sizing:border-box;
 }
@@ -47,11 +46,15 @@
 .kurabe-table th button[data-dir="desc"]::after{content:" ↓";opacity:1}
 .kurabe-num{font-variant-numeric:tabular-nums;white-space:nowrap}
 .kurabe-text{min-width:11em;color:var(--k-ink2)}
-.kurabe-store{display:inline-block;font-size:12px;font-weight:700;padding:1px 8px;border-radius:3px;white-space:nowrap}
-.kurabe-daiso{color:var(--k-daiso);background:var(--k-daiso-bg)}
-.kurabe-cando{color:var(--k-cando);background:var(--k-cando-bg)}
-.kurabe-watts{color:var(--k-watts);background:var(--k-watts-bg)}
-.kurabe-price{display:inline-block;background:var(--k-tag);color:var(--k-tag-ink);font-weight:700;padding:0 8px;border-radius:2px}
+/* 店名バッジは各社のブランド色（公式サイトのCSSの値） */
+.kurabe-store{display:inline-block;font-size:12px;font-weight:700;padding:2px 9px;border-radius:3px;white-space:nowrap;letter-spacing:.02em}
+.kurabe-daiso{color:#fff;background:var(--k-daiso)}
+.kurabe-cando{color:#fff;background:var(--k-cando)}
+.kurabe-watts{color:var(--k-watts-ink);background:var(--k-watts)}
+.kurabe-chip-daiso[aria-pressed="true"]{background:var(--k-daiso);border-color:var(--k-daiso);color:#fff}
+.kurabe-chip-cando[aria-pressed="true"]{background:var(--k-cando);border-color:var(--k-cando);color:#fff}
+.kurabe-chip-watts[aria-pressed="true"]{background:var(--k-watts);border-color:var(--k-watts);color:var(--k-watts-ink)}
+.kurabe-price{display:inline-block;background:var(--k-bg);border:1px solid var(--k-line);color:var(--k-ink);font-weight:700;padding:0 8px;border-radius:2px}
 .kurabe-sub{display:block;font-size:11px;color:var(--k-ink2);margin-top:2px;white-space:normal}
 .kurabe-sub b{color:var(--k-accent)}
 .kurabe-dim{color:var(--k-ink2)}

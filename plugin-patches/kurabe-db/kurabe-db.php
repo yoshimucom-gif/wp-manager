@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.0.0
+ * Version:     1.0.1
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,10 +23,12 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.0.0';
+    const VERSION  = '1.0.1';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
+    /* 店名バッジと絞り込みに出す表記（各社のロゴ表記） */
+    const LABELS   = array('ダイソー' => 'DAISO', 'キャンドゥ' => 'Can★Do', 'ワッツ' => 'Watts');
 
     private static $json_printed = false;
     private static $used = false;
@@ -150,6 +152,11 @@ class Kurabe_Db
         );
     }
 
+    private static function label($s)
+    {
+        return isset(self::LABELS[$s]) ? self::LABELS[$s] : $s;
+    }
+
     private static function date_ja($ymd)
     {
         $t = strtotime($ymd);
@@ -212,7 +219,7 @@ class Kurabe_Db
         $h .= '<div class="kurabe-fgroup"><span class="kurabe-flabel">店</span><div class="kurabe-chips" data-filter="s">';
         foreach (array_keys(self::STORES) as $s) {
             if (isset($stores[$s])) {
-                $h .= '<button type="button" class="kurabe-chip" data-v="' . esc_attr($s) . '" aria-pressed="true">' . esc_html($s) . '</button>';
+                $h .= '<button type="button" class="kurabe-chip kurabe-chip-' . self::STORES[$s] . '" data-v="' . esc_attr($s) . '" aria-pressed="true">' . esc_html(self::label($s)) . '</button>';
             }
         }
         $h .= '</div></div>';
@@ -260,7 +267,7 @@ class Kurabe_Db
             }
             $cls = isset(self::STORES[$r['s']]) ? self::STORES[$r['s']] : 'other';
             $h .= '<tr' . $attrs . '>';
-            $h .= '<td><span class="kurabe-store kurabe-' . $cls . '">' . esc_html($r['s']) . '</span></td>';
+            $h .= '<td><span class="kurabe-store kurabe-' . $cls . '">' . esc_html(self::label($r['s'])) . '</span></td>';
             $h .= '<td><span class="kurabe-pname">' . esc_html($r['n']) . '</span>';
             if (!empty($r['same'])) {
                 $h .= '<span class="kurabe-sub"><b>' . esc_html(implode('・', $r['same'])) . '</b>でも同じ商品を販売（JAN ' . esc_html($r['jan']) . '）</span>';

@@ -5,6 +5,8 @@
   var D;
   try { D = JSON.parse(jsonEl.textContent); } catch (e) { return; }
   var COL = { 'ダイソー': 'var(--k-daiso)', 'キャンドゥ': 'var(--k-cando)', 'ワッツ': 'var(--k-watts)' };
+  var LBL = { 'ダイソー': 'DAISO', 'キャンドゥ': 'Can★Do', 'ワッツ': 'Watts' };
+  var lbl = function (s) { return LBL[s] || s; };
   var fmt = function (n) { return Number.isInteger(n) ? String(n) : String(Math.round(n * 10) / 10); };
 
   /* ---------- 一覧表 ---------- */
@@ -105,7 +107,7 @@
     });
     var keys = function (o) { return Object.keys(o); };
     var strokeOf = function (g) { var s = keys(g.stores); return s.length === 1 ? COL[s[0]] || 'var(--k-accent)' : 'var(--k-accent)'; };
-    var sub = function (g) { return keys(g.stores).join('・') + ' ' + keys(g.prices).sort(function (a, b) { return a - b; }).join('/') + '円'; };
+    var sub = function (g) { return keys(g.stores).map(lbl).join('・') + ' ' + keys(g.prices).sort(function (a, b) { return a - b; }).join('/') + '円'; };
 
     if (D.mode === 'range') {
       order.sort(function (a, b) { return groups[a].v[1] - groups[b].v[1] || groups[a].v[0] - groups[b].v[0]; });
@@ -149,7 +151,7 @@
     var names = { '2d': '', '3d': '各ケースのいちばん大きい面（長い2辺）を描いています。', 'range': '線の太い部分が伸縮できる範囲です。' };
     var present = D.rows.reduce(function (o, r) { o[r.s] = true; return o; }, {});
     sc.querySelector('.kurabe-legend').innerHTML = ['ダイソー', 'キャンドゥ', 'ワッツ'].filter(function (s) { return present[s]; }).map(function (s) {
-      return '<span><i style="background:' + COL[s] + '"></i>' + s + 'のみ</span>';
+      return '<span><i style="background:' + COL[s] + '"></i>' + lbl(s) + 'のみ</span>';
     }).join('') + '<span><i style="background:var(--k-accent)"></i>複数の店にあるサイズ</span>' + (names[D.mode] ? '<span>' + names[D.mode] + '</span>' : '');
   }
 })();
