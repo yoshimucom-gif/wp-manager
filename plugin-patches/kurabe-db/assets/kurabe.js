@@ -94,7 +94,7 @@
 
   /* ---------- 縮尺図 ---------- */
   var sc = document.querySelector('.kurabe-scale');
-  if (sc && D.mode !== 'none') {
+  if (sc && D.mode !== 'none' && D.mode !== 'range') {
     var svg = sc.querySelector('svg'), maxW = 900, pad = 16, out = '', H;
     var groups = {}, order = [];
     D.rows.forEach(function (r) {

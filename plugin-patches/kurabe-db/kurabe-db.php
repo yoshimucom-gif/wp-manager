@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.0.2
+ * Version:     1.0.3
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.0.2';
+    const VERSION  = '1.0.3';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -298,8 +298,61 @@ class Kurabe_Db
         if (empty($d['mode']) || $d['mode'] === 'none') {
             return '';
         }
+        if ($d['mode'] === 'range') {
+            return self::range_guide($d);
+        }
         $item = isset($d['item']) ? $d['item'] : '';
         return '<div class="kurabe-scale"' . self::data_attr($d) . '><svg role="img" aria-label="' . esc_attr($item) . 'のサイズを同じ縮尺で並べた図"></svg><div class="kurabe-legend"></div></div>';
+    }
+
+    /* 伸縮する品目（突っ張り棒など）の早見表：取り付けたい幅ごとに、各社で何円から何種あるか */
+    private static function range_guide($d)
+    {
+        $rows = array();
+        $max = 0;
+        foreach ($d['rows'] as $r) {
+            if (empty($r['range']) || mb_strpos($r['n'], '縦') !== false) {
+                continue;          // 床と天井の間に立てる縦型は横幅の比較に入れない
+            }
+            $rows[] = $r;
+            $max = max($max, $r['range'][1]);
+        }
+        if (!$rows) {
+            return '';
+        }
+        $steps = array_values(array_filter(array(10, 15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 150, 170, 190, 200, 210, 220, 250, 300),
+            function ($w) use ($max) { return $w <= $max; }));
+        $stores = array();
+        foreach (array_keys(self::STORES) as $s) {
+            foreach ($rows as $r) {
+                if ($r['s'] === $s) {
+                    $stores[] = $s;
+                    break;
+                }
+            }
+        }
+        $h  = '<div class="kurabe-guide"><table><thead><tr><th scope="col">取り付けたい幅</th>';
+        foreach ($stores as $s) {
+            $h .= '<th scope="col"><span class="kurabe-store kurabe-' . self::STORES[$s] . '">' . esc_html(self::label($s)) . '</span></th>';
+        }
+        $h .= '</tr></thead><tbody>';
+        foreach ($steps as $w) {
+            $h .= '<tr><th scope="row">' . $w . 'cm</th>';
+            foreach ($stores as $s) {
+                $hit = array_filter($rows, function ($r) use ($s, $w) {
+                    return $r['s'] === $s && $r['range'][0] <= $w && $w <= $r['range'][1];
+                });
+                if (!$hit) {
+                    $h .= '<td class="kurabe-dim">なし</td>';
+                    continue;
+                }
+                $ps = array_map(function ($r) { return (int) $r['p']; }, $hit);
+                $h .= '<td><b>' . min($ps) . '円</b>から<span class="kurabe-sub">' . count($hit) . '種</span></td>';
+            }
+            $h .= '</tr>';
+        }
+        $h .= '</tbody></table></div>';
+        return $h;
     }
 
     private static function part_shop($d)
