@@ -2,7 +2,7 @@
 .kurabe-source,.kurabe-stats,.kurabe-table,.kurabe-scale,.kurabe-shop{
   --k-ink:#1E2A33;--k-ink2:#56636E;--k-line:#D3DADF;--k-line2:#E6EAED;--k-bg:#F4F6F7;--k-surface:#fff;
   --k-accent:#3C5566;--k-tag:#F2C744;--k-tag-ink:#3A2E05;--k-mesh:#B4C1CA;
-  --k-daiso:#f5008c;--k-cando:#e94709;--k-watts:#f8b300;--k-watts-ink:#3a2a00;
+  --k-daiso:#f5008c;--k-cando:#e94709;--k-watts:#6a5246;--k-watts-ink:#fff;
   --k-note:#FFF8DD;--k-note-line:#EAD58A;
   box-sizing:border-box;
 }
@@ -30,7 +30,7 @@
 .kurabe-bar-legend b{font-weight:700}
 .kurabe-t-daiso{color:var(--k-daiso)}
 .kurabe-t-cando{color:var(--k-cando)}
-.kurabe-t-watts{color:#b07d00}
+.kurabe-t-watts{color:var(--k-watts)}
 .kurabe-bar-note{font-size:13px;color:var(--k-ink2);margin-top:4px}
 .kurabe-stats-rest{border-left:1px solid var(--k-line2);padding-left:26px}
 .kurabe-stats-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:9px 0;border-bottom:1px solid var(--k-line2)}
@@ -60,7 +60,7 @@
 .kurabe-table th button[data-dir="desc"]::after{content:" ↓";opacity:1}
 .kurabe-num{font-variant-numeric:tabular-nums;white-space:nowrap}
 .kurabe-text{min-width:11em;color:var(--k-ink2)}
-/* 店名バッジは各社のブランド色（公式サイトのCSSの値） */
+/* 店名バッジは各社のブランド色（DAISO・Can★Doは公式サイトのCSS、Wattsはロゴの茶色） */
 .kurabe-store{display:inline-block;font-size:13.5px;font-weight:700;padding:2px 9px;border-radius:3px;white-space:nowrap;letter-spacing:.02em}
 .kurabe-daiso{color:#fff;background:var(--k-daiso)}
 .kurabe-cando{color:#fff;background:var(--k-cando)}
@@ -75,7 +75,7 @@
 .kurabe-table td a{color:var(--k-accent);font-weight:700;white-space:nowrap}
 .kurabe-empty{padding:20px;text-align:center;color:var(--k-ink2);border:1px solid var(--k-line);border-top:0;margin:0}
 
-.kurabe-guide{--k-ink:#1E2A33;--k-ink2:#56636E;--k-line:#D3DADF;--k-line2:#E6EAED;--k-bg:#F4F6F7;--k-surface:#fff;--k-daiso:#f5008c;--k-cando:#e94709;--k-watts:#f8b300;--k-watts-ink:#3a2a00;overflow-x:auto;background:var(--k-surface);border:1px solid var(--k-line);margin:1em 0 1.5em}
+.kurabe-guide{--k-ink:#1E2A33;--k-ink2:#56636E;--k-line:#D3DADF;--k-line2:#E6EAED;--k-bg:#F4F6F7;--k-surface:#fff;--k-daiso:#f5008c;--k-cando:#e94709;--k-watts:#6a5246;--k-watts-ink:#fff;overflow-x:auto;background:var(--k-surface);border:1px solid var(--k-line);margin:1em 0 1.5em}
 .kurabe-guide table{border-collapse:collapse;width:100%;min-width:420px;font-size:15px;line-height:1.5;margin:0;border:0}
 .kurabe-guide th,.kurabe-guide td{padding:8px 12px;border:0;border-bottom:1px solid var(--k-line2);text-align:center;background:none;font-variant-numeric:tabular-nums;white-space:nowrap}
 .kurabe-guide thead th{background:var(--k-bg)}
