@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.0.6
+ * Version:     1.0.7
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.0.6';
+    const VERSION  = '1.0.7';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -203,11 +203,43 @@ class Kurabe_Db
         if (empty($d['stats'])) {
             return '';
         }
-        $h = '<div class="kurabe-stats" aria-label="数字で見る">';
-        foreach ($d['stats'] as $s) {
-            $h .= '<div class="kurabe-stat"><div class="kurabe-k">' . esc_html($s['k']) . '</div><div class="kurabe-v">' . esc_html($s['v']) . '<small>' . esc_html(isset($s['u']) ? $s['u'] : '') . '</small></div></div>';
+        $main = $d['stats'][0];
+        $rest = array_slice($d['stats'], 1);
+        $per = array();                              // 店ごとの掲載数（同じ商品は各店で数える）
+        foreach (array_keys(self::STORES) as $st) {
+            $n = 0;
+            foreach ($d['rows'] as $r) {
+                if ($r['s'] === $st) {
+                    $n++;
+                }
+            }
+            if ($n) {
+                $per[$st] = $n;
+            }
         }
-        return $h . '</div>';
+        $h  = '<div class="kurabe-stats"><div class="kurabe-stats-main">';
+        $h .= '<div class="kurabe-k">' . esc_html($main['k']) . '</div>';
+        $h .= '<div class="kurabe-v kurabe-v-main">' . esc_html($main['v']) . '<small>' . esc_html(isset($main['u']) ? $main['u'] : '') . '</small></div>';
+        if ($per) {
+            $h .= '<div class="kurabe-bar" aria-hidden="true">';
+            foreach ($per as $st => $n) {
+                $h .= '<span class="kurabe-bar-' . self::STORES[$st] . '" style="flex:' . (int) $n . '"></span>';
+            }
+            $h .= '</div><div class="kurabe-bar-legend">';
+            foreach ($per as $st => $n) {
+                $h .= '<span><b class="kurabe-t-' . self::STORES[$st] . '">' . esc_html(self::label($st)) . '</b> ' . (int) $n . '</span>';
+            }
+            $h .= '</div>';
+            if (count($per) > 1 && array_sum($per) !== (int) $main['v']) {
+                $h .= '<div class="kurabe-bar-note">店ごとの数は、同じ商品を各店で数えています。</div>';
+            }
+        }
+        $h .= '</div><div class="kurabe-stats-rest">';
+        foreach ($rest as $x) {
+            $h .= '<div class="kurabe-stats-row"><span class="kurabe-k">' . esc_html($x['k']) . '</span><span class="kurabe-v">' . esc_html($x['v']) . '<small>' . esc_html(isset($x['u']) ? $x['u'] : '') . '</small></span></div>';
+        }
+        $h .= '</div></div>';
+        return $h;
     }
 
     private static function part_table($d)
