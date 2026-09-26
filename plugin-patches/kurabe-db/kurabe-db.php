@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.0.5
+ * Version:     1.0.6
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.0.5';
+    const VERSION  = '1.0.6';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -205,7 +205,7 @@ class Kurabe_Db
         }
         $h = '<div class="kurabe-stats" aria-label="数字で見る">';
         foreach ($d['stats'] as $s) {
-            $h .= '<div class="kurabe-stat"><div class="kurabe-v">' . esc_html($s['v']) . '<small>' . esc_html(isset($s['u']) ? $s['u'] : '') . '</small></div><div class="kurabe-k">' . esc_html($s['k']) . '</div></div>';
+            $h .= '<div class="kurabe-stat"><div class="kurabe-k">' . esc_html($s['k']) . '</div><div class="kurabe-v">' . esc_html($s['v']) . '<small>' . esc_html(isset($s['u']) ? $s['u'] : '') . '</small></div></div>';
         }
         return $h . '</div>';
     }
