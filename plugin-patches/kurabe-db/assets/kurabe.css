@@ -69,8 +69,15 @@
 .kurabe-guide td b{color:var(--k-ink)}
 .kurabe-guide .kurabe-sub{display:inline;margin-left:6px}
 .kurabe-guide .kurabe-dim{color:#A7B0B7}
-.kurabe-scale{background:var(--k-surface);border:1px solid var(--k-line);padding:14px;overflow-x:auto;margin:1em 0 1.5em}
-.kurabe-scale svg{display:block;max-width:none;height:auto}
+.kurabe-scale{background:var(--k-surface);border:1px solid var(--k-line);padding:20px 16px;margin:1em 0 1.5em}
+.kurabe-scale-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:28px 16px}
+.kurabe-scale-item{margin:0;display:flex;flex-direction:column;align-items:center;text-align:center;min-width:0}
+.kurabe-scale-stage{height:var(--k-stage,180px);max-height:190px;display:flex;align-items:flex-end;justify-content:center;width:100%}
+.kurabe-scale-box{box-sizing:border-box;border:3px solid var(--k-accent);border-radius:3px;background:var(--k-bg);max-width:100%}
+.kurabe-scale-box.kurabe-mesh{background-color:var(--k-surface);background-image:linear-gradient(var(--k-mesh) 1px,transparent 1px),linear-gradient(90deg,var(--k-mesh) 1px,transparent 1px);background-size:var(--k-cell) var(--k-cell)}
+.kurabe-scale-item figcaption{margin-top:8px;font-size:12px;line-height:1.5;color:var(--k-ink2);overflow-wrap:anywhere}
+.kurabe-scale-item figcaption b{display:block;font-size:13px;color:var(--k-ink);font-variant-numeric:tabular-nums}
+.kurabe-scale-item figcaption span{display:block}
 .kurabe-legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--k-ink2);margin-top:10px}
 .kurabe-legend i{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:6px;vertical-align:-1px}
 

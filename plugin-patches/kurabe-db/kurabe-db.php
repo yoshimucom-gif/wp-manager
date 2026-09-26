@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.0.4
+ * Version:     1.0.5
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.0.4';
+    const VERSION  = '1.0.5';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -175,7 +175,11 @@ class Kurabe_Db
 
     private static function part_source($d)
     {
-        $n = count($d['rows']);
+        $uniq = array();
+        foreach ($d['rows'] as $r) {                 // 同じ商品（JAN）は1件として数える
+            $uniq[!empty($r['jan']) ? $r['jan'] : $r['u']] = true;
+        }
+        $n = count($uniq);
         $stores = array();
         foreach (array_keys(self::STORES) as $s) {
             foreach ($d['rows'] as $r) {
@@ -187,7 +191,7 @@ class Kurabe_Db
         }
         $h  = '<dl class="kurabe-source" aria-label="データの出どころ">';
         $h .= '<div><dt>最終確認</dt><dd><time datetime="' . esc_attr($d['checked']) . '">' . esc_html(self::date_ja($d['checked'])) . '</time></dd></div>';
-        $h .= '<div><dt>出典</dt><dd>' . esc_html(implode('・', $stores)) . 'の公式通販（' . $n . '件）</dd></div>';
+        $h .= '<div><dt>出典</dt><dd>' . esc_html(implode('・', $stores)) . 'の公式通販（' . $n . '種）</dd></div>';
         $h .= '<div><dt>照合</dt><dd>JANコード（商品のバーコード番号）で同じ商品を判定</dd></div>';
         $h .= '<div><dt>空欄</dt><dd>公式に記載のない項目は推測で埋めず「記載なし」と表示</dd></div>';
         $h .= '</dl>';
@@ -311,7 +315,7 @@ class Kurabe_Db
             return self::range_guide($d);
         }
         $item = isset($d['item']) ? $d['item'] : '';
-        return '<div class="kurabe-scale"' . self::data_attr($d) . '><svg role="img" aria-label="' . esc_attr($item) . 'のサイズを同じ縮尺で並べた図"></svg><div class="kurabe-legend"></div></div>';
+        return '<div class="kurabe-scale"' . self::data_attr($d) . '><div class="kurabe-scale-grid" role="img" aria-label="' . esc_attr($item) . 'のサイズを同じ縮尺で並べた図"></div><div class="kurabe-legend"></div></div>';
     }
 
     /* 伸縮する品目（突っ張り棒など）の早見表：取り付けたい幅ごとに、各社で何円から何種あるか */
