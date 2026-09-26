@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.0.1
+ * Version:     1.0.2
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,14 +23,13 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.0.1';
+    const VERSION  = '1.0.2';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
     /* 店名バッジと絞り込みに出す表記（各社のロゴ表記） */
     const LABELS   = array('ダイソー' => 'DAISO', 'キャンドゥ' => 'Can★Do', 'ワッツ' => 'Watts');
 
-    private static $json_printed = false;
     private static $used = false;
 
     public static function boot()
@@ -125,12 +124,14 @@ class Kurabe_Db
         if (!method_exists(__CLASS__, $fn)) {
             return '';
         }
-        $html = self::$fn($d);
-        if (!self::$json_printed && in_array($a['part'], array('table', 'scale'), true)) {
-            self::$json_printed = true;
-            $html .= '<script type="application/json" id="kurabe-json">' . wp_json_encode(self::client_data($d), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) . '</script>';
-        }
-        return $html;
+        return self::$fn($d);
+    }
+
+    /* 絞り込みと縮尺図が使うデータ。本文中の <script> はサイトによって削られるため、
+       表・図の要素の data 属性に持たせる */
+    private static function data_attr($d)
+    {
+        return ' data-kurabe="' . esc_attr(wp_json_encode(self::client_data($d), JSON_UNESCAPED_UNICODE)) . '"';
     }
 
     private static function client_data($d)
@@ -212,7 +213,7 @@ class Kurabe_Db
         }
         ksort($prices);
 
-        $h  = '<div class="kurabe-table" data-mode="' . esc_attr($mode) . '">';
+        $h  = '<div class="kurabe-table" data-mode="' . esc_attr($mode) . '"' . self::data_attr($d) . '>';
         $h .= '<p class="kurabe-stamp">' . esc_html(self::date_ja($d['checked'])) . '時点で、ダイソーネットストア・Can★Doネットショップ・ワッツオンラインに掲載されている情報です。店頭の品ぞろえとは違う場合があります。商品写真は各社の公式ページでご覧ください。</p>';
 
         $h .= '<div class="kurabe-filters">';
@@ -298,7 +299,7 @@ class Kurabe_Db
             return '';
         }
         $item = isset($d['item']) ? $d['item'] : '';
-        return '<div class="kurabe-scale"><svg role="img" aria-label="' . esc_attr($item) . 'のサイズを同じ縮尺で並べた図"></svg><div class="kurabe-legend"></div></div>';
+        return '<div class="kurabe-scale"' . self::data_attr($d) . '><svg role="img" aria-label="' . esc_attr($item) . 'のサイズを同じ縮尺で並べた図"></svg><div class="kurabe-legend"></div></div>';
     }
 
     private static function part_shop($d)

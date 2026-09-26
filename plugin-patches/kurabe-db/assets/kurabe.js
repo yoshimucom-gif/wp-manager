@@ -1,9 +1,9 @@
 /* 100均くらべ：一覧表の絞り込み・並べ替えと縮尺図 */
 (function () {
-  var jsonEl = document.getElementById('kurabe-json');
-  if (!jsonEl) return;
+  var src = document.querySelector('[data-kurabe]');
+  if (!src) return;
   var D;
-  try { D = JSON.parse(jsonEl.textContent); } catch (e) { return; }
+  try { D = JSON.parse(src.getAttribute('data-kurabe')); } catch (e) { return; }
   var COL = { 'ダイソー': 'var(--k-daiso)', 'キャンドゥ': 'var(--k-cando)', 'ワッツ': 'var(--k-watts)' };
   var LBL = { 'ダイソー': 'DAISO', 'キャンドゥ': 'Can★Do', 'ワッツ': 'Watts' };
   var lbl = function (s) { return LBL[s] || s; };
