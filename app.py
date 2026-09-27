@@ -6420,6 +6420,7 @@ PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugin-do
 PLUGIN_DOWNLOADS = {
     'mikata-seminar-feed': {'file': 'mikata-seminar-feed-1.0.0.zip', 'name': 'ミカタセミナー新着', 'version': '1.0.0'},
     'kurabe-db': {'file': 'kurabe-db-1.1.0.zip', 'name': '100均くらべ 比較データ表示', 'version': '1.1.0'},
+    'suit-kurabe-db': {'file': 'suit-kurabe-db-1.0.0.zip', 'name': 'スーツくらべ 比較データ表示', 'version': '1.0.0'},
     'kyutoki-shindan': {
         'file': 'kyutoki-shindan-1.0.2.zip',
         'name': '給湯器エラーコード診断',
@@ -6514,6 +6515,8 @@ def download_plugin(plugin_key):
 # 各プラグインがここを叩き、新バージョンを検知して自動更新する。
 PLUGIN_UPDATE_META = {
     'kurabe-db': {'plugin_basename': 'kurabe-db/kurabe-db.php',
+              'tested': '6.7', 'requires': '6.0', 'requires_php': '7.4', 'author': 'Keys'},
+    'suit-kurabe-db': {'plugin_basename': 'suit-kurabe-db/suit-kurabe-db.php',
               'tested': '6.7', 'requires': '6.0', 'requires_php': '7.4', 'author': 'Keys'},
     'mikata-seminar-feed': {'plugin_basename': 'mikata-seminar-feed/mikata-seminar-feed.php',
               'tested': '6.7', 'requires': '6.0', 'requires_php': '7.4', 'author': 'ミカタ株式会社'},

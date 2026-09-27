@@ -1,0 +1,118 @@
+/* スーツくらべ 比較データの部品だけを描く。見出し・本文・フォントはテーマに任せる。
+   店のブランド色はCSSにハードコードせず、PHPが style="--kurabe-c:#..." で渡す（無ければ灰色） */
+.kurabe-source,.kurabe-stats,.kurabe-table,.kurabe-scale,.kurabe-shop,.kurabe-list,.kurabe-related{
+  --k-ink:#1E2A33;--k-ink2:#56636E;--k-line:#D3DADF;--k-line2:#E6EAED;--k-bg:#F4F6F7;--k-surface:#fff;
+  --k-accent:#3C5566;--k-tag:#F2C744;--k-tag-ink:#3A2E05;--k-mesh:#B4C1CA;
+  --k-note:#FFF8DD;--k-note-line:#EAD58A;
+  box-sizing:border-box;
+}
+.kurabe-source *,.kurabe-stats *,.kurabe-table *,.kurabe-scale *,.kurabe-shop *,.kurabe-list *{box-sizing:border-box}
+
+.kurabe-source{display:flex;flex-wrap:wrap;margin:0 0 1.5em;padding:0;border:1px solid var(--k-line);background:var(--k-surface);font-size:14px;line-height:1.6}
+.kurabe-source>div{display:flex;gap:8px;padding:8px 14px;border-right:1px solid var(--k-line2);flex:1 1 auto;margin:0}
+.kurabe-source>div:last-child{border-right:0}
+.kurabe-source dt{font-weight:700;color:var(--k-accent);white-space:nowrap;margin:0}
+.kurabe-source dd{margin:0;color:var(--k-ink2)}
+.kurabe-source time{font-weight:700;color:var(--k-ink)}
+@media (max-width:640px){.kurabe-source>div{flex:1 1 100%;border-right:0;border-bottom:1px solid var(--k-line2)}.kurabe-source>div:last-child{border-bottom:0}}
+
+.kurabe-stats{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:28px;align-items:center;margin:1.8em 0;padding:4px 0}
+/* 案C：左に掲載数と店ごとの内訳、右に残りの数字を罫線の行で並べる（箱にしない） */
+.kurabe-k{font-size:13.5px;color:var(--k-ink2);line-height:1.5}
+.kurabe-v{font-weight:700;font-variant-numeric:tabular-nums;line-height:1.2;color:var(--k-ink);font-size:24px;white-space:nowrap}
+.kurabe-v small{font-size:15px;font-weight:700;margin-left:3px}
+.kurabe-v-main{font-size:46px;line-height:1.1;margin-top:2px}
+.kurabe-bar{display:flex;height:10px;margin:12px 0 8px;border-radius:2px;overflow:hidden}
+.kurabe-bar-seg{background:var(--kurabe-c,#666)}
+.kurabe-bar-legend{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:14px;color:var(--k-ink2)}
+.kurabe-bar-legend b{font-weight:700}
+.kurabe-t{color:var(--kurabe-c,#666)}
+.kurabe-bar-note{font-size:13px;color:var(--k-ink2);margin-top:4px}
+.kurabe-stats-rest{border-left:1px solid var(--k-line2);padding-left:26px}
+.kurabe-stats-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:9px 0;border-bottom:1px solid var(--k-line2)}
+.kurabe-stats-row:last-child{border-bottom:0}
+@media (max-width:640px){.kurabe-stats{grid-template-columns:1fr;gap:14px}.kurabe-stats-rest{border-left:0;padding-left:0;border-top:1px solid var(--k-line2)}.kurabe-v-main{font-size:40px}}
+
+.kurabe-stamp{background:var(--k-note);border:1px solid var(--k-note-line);padding:10px 14px;font-size:14.5px;line-height:1.7;margin:0 0 1em}
+.kurabe-filters{display:flex;flex-wrap:wrap;gap:12px 28px;align-items:flex-end;margin:0 0 12px}
+.kurabe-fgroup{display:flex;flex-direction:column;gap:6px}
+.kurabe-flabel{font-size:13.5px;color:var(--k-ink2);font-weight:700}
+.kurabe-chips{display:flex;flex-wrap:wrap;gap:6px}
+.kurabe-chip{font:inherit;font-size:14px;line-height:1.6;border:1px solid var(--k-line);background:var(--k-surface);color:var(--k-ink);padding:3px 12px;border-radius:999px;cursor:pointer;margin:0;box-shadow:none}
+.kurabe-chip[aria-pressed="true"]{background:var(--k-accent);border-color:var(--k-accent);color:#fff}
+.kurabe-chip-store[aria-pressed="true"]{background:var(--kurabe-c,#666);border-color:var(--kurabe-c,#666);color:#fff}
+.kurabe-fit{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:14px}
+.kurabe-fit input{width:76px;font:inherit;font-size:15px;padding:3px 8px;margin:0;border:1px solid var(--k-line);background:var(--k-surface);color:var(--k-ink);border-radius:3px}
+.kurabe-chip:focus-visible,.kurabe-fit input:focus-visible,.kurabe-table th button:focus-visible{outline:2px solid var(--k-tag);outline-offset:2px}
+.kurabe-count{font-size:14px;color:var(--k-ink2);margin:0 0 6px}
+.kurabe-count b{color:var(--k-ink)}
+
+.kurabe-tablebox{overflow-x:auto;background:var(--k-surface);border:1px solid var(--k-line);margin:0}
+.kurabe-table table{border-collapse:collapse;width:100%;min-width:760px;font-size:15px;line-height:1.6;margin:0;border:0}
+.kurabe-table th,.kurabe-table td{padding:9px 11px;text-align:left;vertical-align:top;border:0;border-bottom:1px solid var(--k-line2);background:none}
+.kurabe-table thead th{font-size:13.5px;color:var(--k-ink2);font-weight:700;background:var(--k-bg);white-space:nowrap}
+.kurabe-table th button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;box-shadow:none}
+.kurabe-table th button::after{content:" ↕";opacity:.45}
+.kurabe-table th button[data-dir="asc"]::after{content:" ↑";opacity:1}
+.kurabe-table th button[data-dir="desc"]::after{content:" ↓";opacity:1}
+.kurabe-num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.kurabe-text{min-width:11em;color:var(--k-ink2)}
+/* 店名バッジ：ブランド色はデータ（stores配列のcolor）から --kurabe-c で受け取る */
+.kurabe-store{display:inline-block;font-size:13.5px;font-weight:700;padding:2px 9px;border-radius:3px;white-space:nowrap;letter-spacing:.02em;color:#fff;background:var(--kurabe-c,#666)}
+.kurabe-price{display:inline-block;background:var(--k-bg);border:1px solid var(--k-line);color:var(--k-ink);font-weight:700;padding:0 8px;border-radius:2px}
+.kurabe-was{font-size:13px;color:var(--k-ink2);font-weight:400;margin-right:4px}
+.kurabe-sub{display:block;font-size:13px;color:var(--k-ink2);margin-top:2px;white-space:normal}
+.kurabe-sub b{color:var(--k-accent)}
+.kurabe-dim{color:var(--k-ink2)}
+.kurabe-table td a{color:var(--k-accent);font-weight:700;white-space:nowrap}
+.kurabe-empty{padding:20px;text-align:center;color:var(--k-ink2);border:1px solid var(--k-line);border-top:0;margin:0}
+
+.kurabe-guide{--k-ink:#1E2A33;--k-ink2:#56636E;--k-line:#D3DADF;--k-line2:#E6EAED;--k-bg:#F4F6F7;--k-surface:#fff;overflow-x:auto;background:var(--k-surface);border:1px solid var(--k-line);margin:1em 0 1.5em}
+.kurabe-guide table{border-collapse:collapse;width:100%;min-width:420px;font-size:15px;line-height:1.5;margin:0;border:0}
+.kurabe-guide th,.kurabe-guide td{padding:8px 12px;border:0;border-bottom:1px solid var(--k-line2);text-align:center;background:none;font-variant-numeric:tabular-nums;white-space:nowrap}
+.kurabe-guide thead th{background:var(--k-bg)}
+.kurabe-guide tbody th{text-align:left;font-weight:700;color:var(--k-ink)}
+.kurabe-guide td b{color:var(--k-ink)}
+.kurabe-guide .kurabe-sub{display:inline;margin-left:6px}
+.kurabe-guide .kurabe-dim{color:#A7B0B7}
+.kurabe-scale{background:var(--k-surface);border:1px solid var(--k-line);padding:20px 16px;margin:1em 0 1.5em}
+.kurabe-scale-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:28px 16px}
+.kurabe-scale-item{margin:0;display:flex;flex-direction:column;align-items:center;text-align:center;min-width:0}
+.kurabe-scale-stage{height:var(--k-stage,180px);max-height:190px;display:flex;align-items:flex-end;justify-content:center;width:100%}
+.kurabe-scale-box{box-sizing:border-box;border:3px solid var(--k-accent);border-radius:3px;background:var(--k-bg);max-width:100%}
+.kurabe-scale-box.kurabe-mesh{background-color:var(--k-surface);background-image:linear-gradient(var(--k-mesh) 1px,transparent 1px),linear-gradient(90deg,var(--k-mesh) 1px,transparent 1px);background-size:var(--k-cell) var(--k-cell)}
+.kurabe-scale-item figcaption{margin-top:8px;font-size:13.5px;line-height:1.5;color:var(--k-ink2);overflow-wrap:anywhere}
+.kurabe-scale-item figcaption b{display:block;font-size:15px;color:var(--k-ink);font-variant-numeric:tabular-nums}
+.kurabe-scale-item figcaption span{display:block}
+.kurabe-legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13.5px;color:var(--k-ink2);margin-top:10px}
+.kurabe-legend i{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+
+.kurabe-shop{border:1px solid var(--k-line);background:var(--k-surface);margin:1em 0 .5em}
+.kurabe-shop-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;padding:12px 16px;border-bottom:1px solid var(--k-line2)}
+.kurabe-shop-row:last-child{border-bottom:0}
+.kurabe-shop-cond{display:flex;flex-direction:column;line-height:1.5}
+.kurabe-shop-cond b{font-size:16px;color:var(--k-ink)}
+.kurabe-shop-cond span{font-size:13.5px;color:var(--k-ink2)}
+.kurabe-shop-links{display:flex;flex-wrap:wrap;gap:8px 18px}
+.kurabe-shop-links a{color:var(--k-accent);font-weight:700;font-size:15px;white-space:nowrap}
+.kurabe-shop-links a::after{content:" ›"}
+.kurabe-adnote{font-size:13.5px;color:#56636E;margin:.5em 0 1.5em}
+
+/* 関連する品目：箱にせず、文字のリンクを折り返して並べる */
+.kurabe-related{margin:0 0 1.5em}
+.kurabe-related-label{font-size:13.5px;font-weight:700;color:#56636E;margin:1.2em 0 .4em}
+.kurabe-links{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px 22px}
+.kurabe-links li{margin:0;padding:0}
+.kurabe-links a{font-weight:700}
+.kurabe-links span{font-size:13.5px;color:#56636E;margin-left:6px}
+
+/* カテゴリー・店名タグの一覧 */
+.kurabe-list{margin:0 0 2em}
+.kurabe-list-lead{font-size:15px;color:var(--k-ink2);margin:0 0 .8em}
+.kurabe-list table{border-collapse:collapse;width:100%;min-width:520px;font-size:15px;line-height:1.6;margin:0;border:0}
+.kurabe-list th,.kurabe-list td{padding:10px 12px;border:0;border-bottom:1px solid var(--k-line2);text-align:left;background:none}
+.kurabe-list thead th{background:var(--k-bg);font-size:13.5px}
+.kurabe-list .kurabe-c{text-align:center;width:14%}
+.kurabe-list td a{font-weight:700;color:var(--k-accent)}
+.kurabe-list .kurabe-t{font-weight:700}
+.kurabe-none{color:#B4BCC2}
