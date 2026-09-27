@@ -1,12 +1,12 @@
 /* 100均くらべ 比較データの部品だけを描く。見出し・本文・フォントはテーマに任せる */
-.kurabe-source,.kurabe-stats,.kurabe-table,.kurabe-scale,.kurabe-shop{
+.kurabe-source,.kurabe-stats,.kurabe-table,.kurabe-scale,.kurabe-shop,.kurabe-list,.kurabe-related{
   --k-ink:#1E2A33;--k-ink2:#56636E;--k-line:#D3DADF;--k-line2:#E6EAED;--k-bg:#F4F6F7;--k-surface:#fff;
   --k-accent:#3C5566;--k-tag:#F2C744;--k-tag-ink:#3A2E05;--k-mesh:#B4C1CA;
   --k-daiso:#f5008c;--k-cando:#e94709;--k-watts:#6a5246;--k-watts-ink:#fff;
   --k-note:#FFF8DD;--k-note-line:#EAD58A;
   box-sizing:border-box;
 }
-.kurabe-source *,.kurabe-stats *,.kurabe-table *,.kurabe-scale *,.kurabe-shop *{box-sizing:border-box}
+.kurabe-source *,.kurabe-stats *,.kurabe-table *,.kurabe-scale *,.kurabe-shop *,.kurabe-list *{box-sizing:border-box}
 
 .kurabe-source{display:flex;flex-wrap:wrap;margin:0 0 1.5em;padding:0;border:1px solid var(--k-line);background:var(--k-surface);font-size:14px;line-height:1.6}
 .kurabe-source>div{display:flex;gap:8px;padding:8px 14px;border-right:1px solid var(--k-line2);flex:1 1 auto;margin:0}
@@ -113,3 +113,14 @@
 .kurabe-links li{margin:0;padding:0}
 .kurabe-links a{font-weight:700}
 .kurabe-links span{font-size:13.5px;color:#56636E;margin-left:6px}
+
+/* カテゴリー・店名タグの一覧（案A） */
+.kurabe-list{margin:0 0 2em}
+.kurabe-list-lead{font-size:15px;color:var(--k-ink2);margin:0 0 .8em}
+.kurabe-list table{border-collapse:collapse;width:100%;min-width:520px;font-size:15px;line-height:1.6;margin:0;border:0}
+.kurabe-list th,.kurabe-list td{padding:10px 12px;border:0;border-bottom:1px solid var(--k-line2);text-align:left;background:none}
+.kurabe-list thead th{background:var(--k-bg);font-size:13.5px}
+.kurabe-list .kurabe-c{text-align:center;width:14%}
+.kurabe-list td a{font-weight:700;color:var(--k-accent)}
+.kurabe-list .kurabe-t-daiso,.kurabe-list .kurabe-t-cando,.kurabe-list .kurabe-t-watts{font-weight:700}
+.kurabe-none{color:#B4BCC2}

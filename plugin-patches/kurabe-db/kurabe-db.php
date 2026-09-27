@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.0.9
+ * Version:     1.1.0
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.0.9';
+    const VERSION  = '1.1.0';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -40,6 +40,8 @@ class Kurabe_Db
         add_action('admin_menu', array(__CLASS__, 'admin_menu'));
         add_action('admin_init', array(__CLASS__, 'admin_init'));
         add_filter('diver_single_side_items', array(__CLASS__, 'side_items'));
+        add_action('diver_main_before', array(__CLASS__, 'archive_table'), 20);
+        add_shortcode('kurabe_list', array(__CLASS__, 'list_shortcode'));
     }
 
     /* 比較ページは「サイズ：幅広」で組む。re:Diverは幅広のとき記事横の縦並びボタン
@@ -55,7 +57,7 @@ class Kurabe_Db
     public static function register_meta()
     {
         foreach (array('post', 'page') as $type) {
-            foreach (array('kurabe_item', 'kurabe_group', 'kurabe_parent', 'kurabe_count') as $k) {
+            foreach (array('kurabe_item', 'kurabe_group', 'kurabe_parent', 'kurabe_count', 'kurabe_stores') as $k) {
                 register_post_meta($type, $k, array(
                     'type'          => 'string',
                     'single'        => true,
@@ -474,6 +476,90 @@ class Kurabe_Db
             $h .= '<p class="kurabe-related-label">同じ売り場の品目</p>' . self::link_list($same);
         }
         return $h . '</div>';
+    }
+
+    /* カテゴリー・店名タグの一覧ページ：品目×3社の掲載数の表（吉村さん案A）
+       公開済みの比較ページだけを拾う。店名タグのページはその店の掲載数の多い順 */
+    public static function archive_table()
+    {
+        if (!(is_category() || is_tag()) || is_paged()) {
+            return;
+        }
+        $term = get_queried_object();
+        if (!$term || empty($term->term_id)) {
+            return;
+        }
+        echo self::list_html(array('taxonomy' => $term->taxonomy, 'term' => $term->term_id));
+    }
+
+    public static function list_shortcode($atts)
+    {
+        $a = shortcode_atts(array('category' => '', 'tag' => ''), $atts, 'kurabe_list');
+        if ($a['tag']) {
+            $t = get_term_by('slug', $a['tag'], 'post_tag');
+        } else {
+            $t = get_term_by('slug', $a['category'], 'category');
+        }
+        return $t ? self::list_html(array('taxonomy' => $t->taxonomy, 'term' => $t->term_id)) : '';
+    }
+
+    private static function list_html($q)
+    {
+        $posts = get_posts(array(
+            'post_type'        => 'post',
+            'post_status'      => 'publish',
+            'posts_per_page'   => -1,
+            'meta_key'         => 'kurabe_item',
+            'tax_query'        => array(array('taxonomy' => $q['taxonomy'], 'field' => 'term_id', 'terms' => (int) $q['term'])),
+            'suppress_filters' => true,
+        ));
+        if (!$posts) {
+            return '';
+        }
+        $sort_store = '';
+        if ($q['taxonomy'] === 'post_tag') {
+            $slug = get_term((int) $q['term'])->slug;
+            $sort_store = array_search($slug, self::STORES, true) ?: '';
+        }
+        $rows = array();
+        foreach ($posts as $p) {
+            $per = json_decode((string) get_post_meta($p->ID, 'kurabe_stores', true), true);
+            $rows[] = array(
+                'url'   => get_permalink($p),
+                'item'  => get_post_meta($p->ID, 'kurabe_item', true),
+                'total' => (int) get_post_meta($p->ID, 'kurabe_count', true),
+                'per'   => is_array($per) ? $per : array(),
+            );
+        }
+        usort($rows, function ($a, $b) use ($sort_store) {
+            if ($sort_store) {
+                $x = isset($a['per'][$sort_store]) ? $a['per'][$sort_store] : 0;
+                $y = isset($b['per'][$sort_store]) ? $b['per'][$sort_store] : 0;
+                if ($x !== $y) {
+                    return $y - $x;
+                }
+            }
+            return $b['total'] - $a['total'];
+        });
+        wp_enqueue_style('kurabe-db');
+        $lead = $sort_store
+            ? esc_html(self::label($sort_store)) . 'の公式通販に載っている品目を、' . esc_html(self::label($sort_store)) . 'の掲載数の多い順に並べています。'
+            : 'ダイソー・キャンドゥ・ワッツの公式通販に載っている品目を、掲載数の多い順に並べています。';
+        $h  = '<div class="kurabe-list"><p class="kurabe-list-lead">' . count($rows) . '品目。' . $lead . '</p>';
+        $h .= '<div class="kurabe-tablebox"><table><thead><tr><th scope="col">品目</th>';
+        foreach (self::STORES as $st => $cls) {
+            $h .= '<th scope="col" class="kurabe-c"><span class="kurabe-store kurabe-' . $cls . '">' . esc_html(self::label($st)) . '</span></th>';
+        }
+        $h .= '<th scope="col" class="kurabe-c">合計</th></tr></thead><tbody>';
+        foreach ($rows as $r) {
+            $h .= '<tr><td><a href="' . esc_url($r['url']) . '">100均' . esc_html($r['item']) . '</a></td>';
+            foreach (self::STORES as $st => $cls) {
+                $n = isset($r['per'][$st]) ? (int) $r['per'][$st] : 0;
+                $h .= '<td class="kurabe-c kurabe-num">' . ($n ? '<span class="kurabe-t-' . $cls . '">' . $n . '</span>' : '<span class="kurabe-none">—</span>') . '</td>';
+            }
+            $h .= '<td class="kurabe-c kurabe-num">' . $r['total'] . '種</td></tr>';
+        }
+        return $h . '</tbody></table></div></div>';
     }
 
     private static function part_shop($d)
