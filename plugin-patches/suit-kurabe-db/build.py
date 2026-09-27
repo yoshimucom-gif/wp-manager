@@ -35,6 +35,10 @@ def main(ver):
     names = zipfile.ZipFile(out).namelist()
     assert not [n for n in names if "\\" in n], names
     assert f"{SLUG}/suit-kurabe-db.php" in names
+    # 固定URL用の別名（バージョンが上がっても配布URLが変わらない）
+    latest = os.path.join(dl, f"{SLUG}-latest.zip")
+    with open(out, "rb") as src, open(latest, "wb") as dst:
+        dst.write(src.read())
 
     a = os.path.join(REPO, "app.py")
     s = open(a, encoding="utf-8", newline="").read()
