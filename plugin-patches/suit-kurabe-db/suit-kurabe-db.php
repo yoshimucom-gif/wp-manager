@@ -2,7 +2,7 @@
 /**
  * Plugin Name: スーツくらべ 比較データ表示
  * Description: スーツ量販店の比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。店の定義（名前・表記・色）はデータ側の stores 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.0.0
+ * Version:     1.0.1
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: suit-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Suit_Kurabe_Db
 {
-    const VERSION  = '1.0.0';
+    const VERSION  = '1.0.1';
     const META     = 'kurabe_data';
     const OPT      = 'suit_kurabe_db_settings';
 
@@ -108,6 +108,7 @@ class Suit_Kurabe_Db
                     'slug'  => isset($st['slug']) && $st['slug'] !== '' ? $st['slug'] : 'other',
                     'label' => isset($st['label']) && $st['label'] !== '' ? $st['label'] : $st['s'],
                     'color' => isset($st['color']) ? (string) $st['color'] : '',
+                    'count' => isset($st['count']) ? (int) $st['count'] : 0,   // その店の真の該当数（表が抜粋のときrowsと違う）
                 );
             }
         }
@@ -249,11 +250,15 @@ class Suit_Kurabe_Db
 
     private static function part_source($d)
     {
-        $uniq = array();
-        foreach ($d['rows'] as $r) {                 // 同じ商品（JAN）は1件として数える
-            $uniq[!empty($r['jan']) ? $r['jan'] : $r['u']] = true;
+        if (!empty($d['total'])) {                   // 表が抜粋のときは全該当数（build_dataが数えた値）
+            $n = (int) $d['total'];
+        } else {
+            $uniq = array();
+            foreach ($d['rows'] as $r) {             // 同じ商品（JAN）は1件として数える
+                $uniq[!empty($r['jan']) ? $r['jan'] : $r['u']] = true;
+            }
+            $n = count($uniq);
         }
-        $n = count($uniq);
         $stores = self::stores($d);
         $names  = array();
         foreach (self::present_stores($d, $stores) as $s) {
@@ -282,12 +287,14 @@ class Suit_Kurabe_Db
         $main = $d['stats'][0];
         $rest = array_slice($d['stats'], 1);
         $stores = self::stores($d);
-        $per = array();                              // 店ごとの掲載数（同じ商品は各店で数える）
+        $per = array();                              // 店ごとの掲載数（stores[].count＝真の該当数を優先。表が抜粋でも集計は全件）
         foreach (self::present_stores($d, $stores) as $st) {
-            $n = 0;
-            foreach ($d['rows'] as $r) {
-                if ($r['s'] === $st) {
-                    $n++;
+            $n = isset($stores[$st]['count']) ? (int) $stores[$st]['count'] : 0;
+            if (!$n) {
+                foreach ($d['rows'] as $r) {
+                    if ($r['s'] === $st) {
+                        $n++;
+                    }
                 }
             }
             if ($n) {
@@ -341,6 +348,9 @@ class Suit_Kurabe_Db
 
         $h  = '<div class="kurabe-table" data-mode="' . esc_attr($mode) . '"' . self::data_attr($d) . '>';
         $h .= '<p class="kurabe-stamp">' . esc_html(self::date_ja($d['checked'])) . '時点で、' . esc_html(implode('・', $names)) . 'の公式通販に掲載されている情報です。店頭の品ぞろえとは違う場合があります。</p>';
+        if (!empty($d['table_note'])) {
+            $h .= '<p class="kurabe-stamp">' . esc_html($d['table_note']) . '</p>';
+        }
 
         $h .= '<div class="kurabe-filters">';
         $h .= '<div class="kurabe-fgroup"><span class="kurabe-flabel">店</span><div class="kurabe-chips" data-filter="s">';
