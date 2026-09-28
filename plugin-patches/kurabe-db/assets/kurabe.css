@@ -123,3 +123,7 @@
 .kurabe-list td a{font-weight:700;color:var(--k-accent)}
 .kurabe-list .kurabe-t-daiso,.kurabe-list .kurabe-t-cando,.kurabe-list .kurabe-t-watts{font-weight:700}
 .kurabe-none{color:#B4BCC2}
+
+/* 商品名のリンク：文字色は本文と同じにして、下線で押せることを示す */
+.kurabe-table a.kurabe-pname{color:var(--k-ink);font-weight:700;white-space:normal;text-decoration:underline;text-decoration-color:#B4BCC2;text-underline-offset:3px}
+.kurabe-table a.kurabe-pname:hover{text-decoration-color:var(--k-ink)}
