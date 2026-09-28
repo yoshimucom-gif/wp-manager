@@ -140,3 +140,16 @@
   .kurabe-table tbody td:nth-child(2){display:block;text-align:left;border-top:0;padding:0 0 8px;font-size:16px}
   .kurabe-table tbody td.kurabe-text{min-width:0;color:var(--k-ink)}
 }
+
+/* 1.0.4: サイトの追加CSS（複製元から残る table/td/th への border・padding の !important）が
+   カードの外枠を消し、行ごとに線を引いていた。比較表の中だけ打ち消す（サイト全体の設定は触らない）。
+   カードは外枠＋影で1枚ずつ区切り、中は線を引かずに項目名と値を並べる */
+@media (max-width:640px){
+  .kurabe-table table{border:0!important}
+  .kurabe-table thead tr,.kurabe-table tbody{border:0!important}
+  .kurabe-table thead th{border:0!important;padding:0!important}
+  .kurabe-table tbody tr{border:1px solid var(--k-line)!important;border-radius:6px;box-shadow:0 1px 3px rgb(0 0 0/.08)!important;margin:0 0 16px;padding:12px 14px 8px}
+  .kurabe-table tbody td,.kurabe-table tbody tr:first-child td{border:0!important;padding:3px 0!important}
+  .kurabe-table tbody td.kurabe-td-store{padding:0 0 6px!important}
+  .kurabe-table tbody td:nth-child(2){padding:0 0 10px!important;margin:0 0 6px;border-bottom:1px solid var(--k-line2)!important}
+}
