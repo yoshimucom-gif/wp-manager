@@ -6419,7 +6419,7 @@ def favicon():
 PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugin-downloads')
 PLUGIN_DOWNLOADS = {
     'mikata-seminar-feed': {'file': 'mikata-seminar-feed-1.0.0.zip', 'name': 'ミカタセミナー新着', 'version': '1.0.0'},
-    'kurabe-db': {'file': 'kurabe-db-1.1.4.zip', 'name': '100均くらべ 比較データ表示', 'version': '1.1.4'},
+    'kurabe-db': {'file': 'kurabe-db-1.1.5.zip', 'name': '100均くらべ 比較データ表示', 'version': '1.1.5'},
     'suit-kurabe-db': {'file': 'suit-kurabe-db-1.0.6.zip', 'name': 'スーツくらべ 比較データ表示', 'version': '1.0.6'},
     'catalog-kurabe-db': {'file': 'catalog-kurabe-db-1.0.3.zip', 'name': 'カタログギフトくらべ 比較データ表示', 'version': '1.0.3'},
     'kyutoki-shindan': {

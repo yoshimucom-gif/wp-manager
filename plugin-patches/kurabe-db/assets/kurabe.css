@@ -127,3 +127,6 @@
 /* 商品名のリンク：文字色は本文と同じにして、下線で押せることを示す */
 .kurabe-table a.kurabe-pname{color:var(--k-ink);font-weight:700;white-space:normal;text-decoration:underline;text-decoration-color:#B4BCC2;text-underline-offset:3px}
 .kurabe-table a.kurabe-pname:hover{text-decoration-color:var(--k-ink)}
+
+/* 数字欄を re:Diver のコンテナブロックで囲んだときは、コンテナの余白に任せる */
+.dbp-container .kurabe-stats{margin:0;padding:0}

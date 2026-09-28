@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.1.4
+ * Version:     1.1.5
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.1.4';
+    const VERSION  = '1.1.5';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -358,7 +358,7 @@ class Kurabe_Db
             $sortable = !empty($cl['sort']);
             $h .= '<th scope="col">' . ($sortable ? '<button type="button" data-sort="' . esc_attr($key) . '">' . esc_html($cl['label']) . '</button>' : esc_html($cl['label'])) . '</th>';
         }
-        $h .= '<th scope="col">公式</th></tr></thead><tbody>';
+        $h .= '</tr></thead><tbody>';          // 公式ページへは商品名のリンクで飛ぶので「公式」列は置かない（吉村さん指定）
 
         foreach ($d['rows'] as $i => $r) {
             $attrs = ' data-i="' . $i . '" data-s="' . esc_attr($r['s']) . '" data-p="' . esc_attr(isset($r['p']) ? $r['p'] : '') . '"';
@@ -389,7 +389,7 @@ class Kurabe_Db
                 $h .= $v !== '' && $v !== null ? esc_html($v) . ($from ? '<span class="kurabe-sub">' . esc_html($from) . 'の掲載値</span>' : '') : '<span class="kurabe-dim">記載なし</span>';
                 $h .= '</td>';
             }
-            $h .= '<td><a href="' . esc_url($r['u']) . '" target="_blank" rel="noopener">商品ページ</a></td></tr>';
+            $h .= '</tr>';
         }
         $h .= '</tbody></table></div>';
         $h .= '<p class="kurabe-empty" hidden>条件に合う商品がありません。条件をゆるめてみてください。</p>';
