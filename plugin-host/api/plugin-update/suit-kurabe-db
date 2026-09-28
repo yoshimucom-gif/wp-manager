@@ -2,14 +2,14 @@
   "name": "スーツくらべ 比較データ表示",
   "slug": "suit-kurabe-db",
   "plugin": "suit-kurabe-db/suit-kurabe-db.php",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "tested": "6.7",
   "requires": "6.0",
   "requires_php": "7.4",
   "author": "Keys",
-  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/suit-kurabe-db-1.0.7.zip",
+  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/suit-kurabe-db-1.0.8.zip",
   "sections": {
     "description": "スーツくらべ 比較データ表示 本体。GitHub から自動更新します。",
-    "changelog": "最新バージョン 1.0.7"
+    "changelog": "最新バージョン 1.0.8"
   }
 }

@@ -370,22 +370,22 @@ class Kurabe_Db
             }
             $cls = isset(self::STORES[$r['s']]) ? self::STORES[$r['s']] : 'other';
             $h .= '<tr' . $attrs . '>';
-            $h .= '<td><span class="kurabe-store kurabe-' . $cls . '">' . esc_html(self::label($r['s'])) . '</span></td>';
+            $h .= '<td class="kurabe-td-store"><span class="kurabe-store kurabe-' . $cls . '">' . esc_html(self::label($r['s'])) . '</span></td>';
             // 商品名から公式の商品ページへ（別タブ）。吉村さん指定
-            $h .= '<td><a class="kurabe-pname" href="' . esc_url($r['u']) . '" target="_blank" rel="noopener">' . esc_html($r['n']) . '</a>';
+            $h .= '<td class="kurabe-td-name"><a class="kurabe-pname" href="' . esc_url($r['u']) . '" target="_blank" rel="noopener">' . esc_html($r['n']) . '</a>';
             if (!empty($r['same'])) {
                 // JANコードは本文に出さず、マウスを乗せたときだけ出す（吉村さん指定）
                 $h .= '<span class="kurabe-sub" title="JANコード ' . esc_attr($r['jan']) . '">' . esc_html(implode('・', array_map(array(__CLASS__, 'label'), $r['same']))) . 'でも同じ商品を販売</span>';
             }
             $h .= '</td>';
             if ($mode !== 'none') {
-                $h .= '<td class="kurabe-num">' . (!empty($r['size_txt']) ? esc_html($r['size_txt']) : '<span class="kurabe-dim">記載なし</span>') . '</td>';
+                $h .= '<td class="kurabe-num" data-label="' . esc_attr($label) . '">' . (!empty($r['size_txt']) ? esc_html($r['size_txt']) : '<span class="kurabe-dim">記載なし</span>') . '</td>';
             }
-            $h .= '<td class="kurabe-num">' . (isset($r['p']) && $r['p'] !== null ? '<span class="kurabe-price">' . esc_html($r['p']) . '円</span>' : '<span class="kurabe-dim">記載なし</span>') . '</td>';
+            $h .= '<td class="kurabe-num" data-label="価格（税込）">' . (isset($r['p']) && $r['p'] !== null ? '<span class="kurabe-price">' . esc_html($r['p']) . '円</span>' : '<span class="kurabe-dim">記載なし</span>') . '</td>';
             foreach ($cols as $key => $cl) {
                 $v = isset($r[$key]) ? $r[$key] : '';
                 $from = isset($r['from'][$key]) ? $r['from'][$key] : '';
-                $h .= '<td class="' . (!empty($cl['sort']) ? 'kurabe-num' : 'kurabe-text') . '">';
+                $h .= '<td class="' . (!empty($cl['sort']) ? 'kurabe-num' : 'kurabe-text') . '" data-label="' . esc_attr($cl['label']) . '">';
                 $h .= $v !== '' && $v !== null ? esc_html($v) . ($from ? '<span class="kurabe-sub">' . esc_html($from) . 'の掲載値</span>' : '') : '<span class="kurabe-dim">記載なし</span>';
                 $h .= '</td>';
             }

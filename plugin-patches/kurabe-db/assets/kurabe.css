@@ -130,3 +130,26 @@
 
 /* 数字欄を re:Diver のコンテナブロックで囲んだときは、コンテナの余白に任せる */
 .dbp-container .kurabe-stats{margin:0;padding:0}
+
+/* スマホはカード型（カタログくらべと同じ作り・吉村さん指定 2026-09-28）。1商品＝1枚、横スクロールなし。
+   見出し行は並び替えボタンだけを丸いボタンとして残す。絞り込みで消える行は hidden 属性のまま */
+@media (max-width:640px){
+  .kurabe-table .kurabe-tablebox{overflow:visible;border:0;background:none}
+  .kurabe-table table{display:block;min-width:0;width:100%}
+  .kurabe-table thead,.kurabe-table tbody{display:block}
+  .kurabe-table thead tr{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+  .kurabe-table thead th{display:none;padding:0;background:none;border:0}
+  .kurabe-table thead th:has(button){display:block}
+  .kurabe-table thead th button{font-size:13.5px;border:1px solid var(--k-line);border-radius:999px;padding:3px 12px;background:var(--k-surface);color:var(--k-ink)}
+  .kurabe-table thead th button[data-dir]{background:var(--k-accent);border-color:var(--k-accent);color:#fff}
+  .kurabe-table tbody tr{display:block;background:var(--k-surface);border:1px solid var(--k-line);border-radius:4px;margin:0 0 10px;padding:12px 14px 6px}
+  .kurabe-table tbody tr[hidden]{display:none}
+  .kurabe-table tbody td{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border:0;border-top:1px solid var(--k-line2);text-align:right;min-width:0;white-space:normal}
+  .kurabe-table tbody td::before{content:attr(data-label);flex:0 0 auto;font-size:13.5px;color:var(--k-ink2);font-weight:700;text-align:left}
+  .kurabe-table tbody td.kurabe-td-store{border-top:0;padding:0 0 4px;justify-content:flex-start}
+  .kurabe-table tbody td.kurabe-td-store::before,.kurabe-table tbody td.kurabe-td-name::before{content:none}
+  .kurabe-table tbody td.kurabe-td-name{display:block;text-align:left;border-top:0;padding:0 0 8px;font-size:16px}
+  .kurabe-table tbody td.kurabe-text{min-width:0;color:var(--k-ink)}
+  .kurabe-table tbody td .kurabe-sub{text-align:right}
+  .kurabe-table tbody td.kurabe-td-name .kurabe-sub{text-align:left}
+}

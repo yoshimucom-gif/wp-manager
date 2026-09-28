@@ -2,7 +2,7 @@
 /**
  * Plugin Name: スーツくらべ 比較データ表示
  * Description: スーツ量販店の比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。店の定義（名前・表記・色）はデータ側の stores 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.0.7
+ * Version:     1.0.8
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: suit-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Suit_Kurabe_Db
 {
-    const VERSION  = '1.0.7';
+    const VERSION  = '1.0.8';
     const META     = 'kurabe_data';
     const OPT      = 'suit_kurabe_db_settings';
 
@@ -39,6 +39,20 @@ class Suit_Kurabe_Db
         add_filter('diver_single_side_items', array(__CLASS__, 'side_items'));
         add_action('diver_main_before', array(__CLASS__, 'archive_table'), 20);
         add_shortcode('kurabe_list', array(__CLASS__, 'list_shortcode'));
+        add_action('suit_kurabe_selfupdate', array(__CLASS__, 'selfupdate'));
+    }
+
+    /* 新版の即時適用: rdh/v1 で cron オプションにこのフックの実行予約を入れ、wp-cron.php を叩くと、
+       更新キャッシュを捨てて配信元を見に行き、WP標準の自動更新をその場で走らせる。
+       （通常の自動更新は半日周期＋12時間の鮮度ガードがあり、リリース直後に反映されないため） */
+    public static function selfupdate()
+    {
+        delete_transient('suit_kurabe_db_updater_' . md5(plugin_basename(__FILE__)));
+        delete_site_transient('update_plugins');
+        wp_update_plugins();
+        if (function_exists('wp_maybe_auto_update')) {
+            wp_maybe_auto_update();
+        }
     }
 
     /* 比較ページは「サイズ：幅広」で組む。re:Diverは幅広のとき記事横の縦並びボタン
