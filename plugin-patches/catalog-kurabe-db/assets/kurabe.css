@@ -65,6 +65,9 @@
 .kurabe-sub b{color:var(--k-accent)}
 .kurabe-dim{color:var(--k-ink2)}
 .kurabe-table td a{color:var(--k-accent);font-weight:700;white-space:nowrap}
+/* 商品名そのものをリンクにする形（name_link）。長い名前は折り返す */
+.kurabe-table td a.kurabe-pname-link{white-space:normal;text-decoration:underline;text-underline-offset:3px}
+.kurabe-table td a.kurabe-pname-link::after{content:"";display:inline-block;width:.8em;height:.8em;margin-left:4px;vertical-align:-1px;background:currentColor;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M14 3h7v7h-2V6.4l-9.3 9.3-1.4-1.4L17.6 5H14V3zM5 5h6v2H5v12h12v-6h2v8H3V5h2z'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M14 3h7v7h-2V6.4l-9.3 9.3-1.4-1.4L17.6 5H14V3zM5 5h6v2H5v12h12v-6h2v8H3V5h2z'/%3E%3C/svg%3E") center/contain no-repeat}
 .kurabe-empty{padding:20px;text-align:center;color:var(--k-ink2);border:1px solid var(--k-line);border-top:0;margin:0}
 
 .kurabe-guide{--k-ink:#1E2A33;--k-ink2:#56636E;--k-line:#D3DADF;--k-line2:#E6EAED;--k-bg:#F4F6F7;--k-surface:#fff;overflow-x:auto;background:var(--k-surface);border:1px solid var(--k-line);margin:1em 0 1.5em}

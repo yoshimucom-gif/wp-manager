@@ -2,7 +2,7 @@
 /**
  * Plugin Name: カタログギフトくらべ 比較データ表示
  * Description: カタログギフトの比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。発行会社・ブランドの定義（名前・表記・色）と絞り込みの軸はデータ側の stores / filters 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.0.1
+ * Version:     1.0.2
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: catalog-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Catalog_Kurabe_Db
 {
-    const VERSION  = '1.0.1';
+    const VERSION  = '1.0.2';
     const META     = 'kurabe_data';
     const OPT      = 'catalog_kurabe_db_settings';
 
@@ -405,9 +405,11 @@ class Catalog_Kurabe_Db
             $sortable = !empty($cl['sort']);
             $h .= '<th scope="col">' . ($sortable ? '<button type="button" data-sort="' . esc_attr($key) . '">' . esc_html($cl['label']) . '</button>' : esc_html($cl['label'])) . '</th>';
         }
-        $h .= '<th scope="col">公式</th></tr></thead><tbody>';
+        $namelink = !empty($d['name_link']);         // 商品名そのものを公式ページへのリンクにする（右端の「公式」列は出さない）
+        $h .= ($namelink ? '' : '<th scope="col">公式</th>') . '</tr></thead><tbody>';
 
         foreach ($d['rows'] as $i => $r) {
+            $rel = !empty($r['aff']) ? 'nofollow sponsored noopener' : 'noopener';
             $attrs = ' data-i="' . $i . '" data-s="' . esc_attr($r['s']) . '" data-p="' . esc_attr(isset($r['p']) ? $r['p'] : '') . '"';
             $attrs .= ' data-sz="' . esc_attr(isset($r['sz']) ? $r['sz'] : '') . '"';
             foreach ($filters as $fl) {
@@ -423,7 +425,11 @@ class Catalog_Kurabe_Db
             }
             $h .= '<tr' . $attrs . '>';
             $h .= '<td><span class="kurabe-store kurabe-' . esc_attr(self::slug($stores, $r['s'])) . '"' . self::color_style($stores, $r['s']) . '>' . esc_html(self::label($stores, $r['s'])) . '</span></td>';
-            $h .= '<td><span class="kurabe-pname">' . esc_html($r['n']) . '</span>';
+            if ($namelink && !empty($r['u'])) {
+                $h .= '<td><a class="kurabe-pname kurabe-pname-link" href="' . esc_url($r['u']) . '" target="_blank" rel="' . $rel . '">' . esc_html($r['n']) . '</a>';
+            } else {
+                $h .= '<td><span class="kurabe-pname">' . esc_html($r['n']) . '</span>';
+            }
             if (!empty($r['note'])) {
                 $h .= '<span class="kurabe-sub">' . esc_html($r['note']) . '</span>';
             }
@@ -450,7 +456,10 @@ class Catalog_Kurabe_Db
                 $h .= $v !== '' && $v !== null ? esc_html($v) . ($from ? '<span class="kurabe-sub">' . esc_html($from) . 'の掲載値</span>' : '') : '<span class="kurabe-dim">記載なし</span>';
                 $h .= '</td>';
             }
-            $h .= '<td><a href="' . esc_url($r['u']) . '" target="_blank" rel="' . (!empty($r['aff']) ? 'nofollow sponsored noopener' : 'noopener') . '">' . esc_html(isset($r['u_label']) ? $r['u_label'] : '商品ページ') . '</a></td></tr>';
+            if (!$namelink) {
+                $h .= '<td><a href="' . esc_url($r['u']) . '" target="_blank" rel="' . $rel . '">' . esc_html(isset($r['u_label']) ? $r['u_label'] : '商品ページ') . '</a></td>';
+            }
+            $h .= '</tr>';
         }
         $h .= '</tbody></table></div>';
         $h .= '<p class="kurabe-empty" hidden>条件に合う商品がありません。条件をゆるめてみてください。</p>';

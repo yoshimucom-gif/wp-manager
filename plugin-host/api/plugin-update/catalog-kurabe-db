@@ -2,14 +2,14 @@
   "name": "カタログギフトくらべ 比較データ表示",
   "slug": "catalog-kurabe-db",
   "plugin": "catalog-kurabe-db/catalog-kurabe-db.php",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "tested": "6.7",
   "requires": "6.0",
   "requires_php": "7.4",
   "author": "Keys",
-  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/catalog-kurabe-db-1.0.1.zip",
+  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/catalog-kurabe-db-1.0.2.zip",
   "sections": {
     "description": "カタログギフトくらべ 比較データ表示 本体。GitHub から自動更新します。",
-    "changelog": "最新バージョン 1.0.1"
+    "changelog": "最新バージョン 1.0.2"
   }
 }
