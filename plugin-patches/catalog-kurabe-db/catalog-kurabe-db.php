@@ -2,7 +2,7 @@
 /**
  * Plugin Name: カタログギフトくらべ 比較データ表示
  * Description: カタログギフトの比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。発行会社・ブランドの定義（名前・表記・色）と絞り込みの軸はデータ側の stores / filters 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.0.0
+ * Version:     1.0.1
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: catalog-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Catalog_Kurabe_Db
 {
-    const VERSION  = '1.0.0';
+    const VERSION  = '1.0.1';
     const META     = 'kurabe_data';
     const OPT      = 'catalog_kurabe_db_settings';
 
@@ -340,7 +340,7 @@ class Catalog_Kurabe_Db
         $prices  = array();
         foreach ($d['rows'] as $r) {
             if (isset($r['p']) && $r['p'] !== null) {
-                $prices[(int) $r['p']] = true;
+                $prices[(int) str_replace(',', '', (string) $r['p'])] = true;   // 「5,390」のような文字列でも数として扱う
             }
         }
         ksort($prices);
@@ -376,7 +376,7 @@ class Catalog_Kurabe_Db
         if (count($prices) > 1 && count($prices) <= 8) {
             $h .= '<div class="kurabe-fgroup"><span class="kurabe-flabel">価格</span><div class="kurabe-chips" data-filter="p">';
             foreach (array_keys($prices) as $p) {
-                $h .= '<button type="button" class="kurabe-chip" data-v="' . esc_attr($p) . '" aria-pressed="true">' . esc_html($p) . '円</button>';
+                $h .= '<button type="button" class="kurabe-chip" data-v="' . esc_attr($p) . '" aria-pressed="true">' . esc_html(number_format($p)) . '円</button>';
             }
             $h .= '</div></div>';
         }
@@ -439,7 +439,7 @@ class Catalog_Kurabe_Db
                 if (!empty($r['p_regular'])) {
                     $h .= '<s class="kurabe-was">通常' . esc_html($r['p_regular']) . '円</s> ';
                 }
-                $h .= '<span class="kurabe-price">' . esc_html($r['p']) . '円</span></td>';
+                $h .= '<span class="kurabe-price">' . esc_html(is_numeric($r['p']) ? number_format((float) $r['p']) : $r['p']) . '円</span></td>';
             } else {
                 $h .= '<td class="kurabe-num"><span class="kurabe-dim">記載なし</span></td>';
             }
