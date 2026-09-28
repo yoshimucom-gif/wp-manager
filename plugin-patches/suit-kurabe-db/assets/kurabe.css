@@ -16,7 +16,8 @@
 .kurabe-source time{font-weight:700;color:var(--k-ink)}
 @media (max-width:640px){.kurabe-source>div{flex:1 1 100%;border-right:0;border-bottom:1px solid var(--k-line2)}.kurabe-source>div:last-child{border-bottom:0}}
 
-.kurabe-stats{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:28px;align-items:center;margin:1.8em 0;padding:4px 0}
+/* 数字欄は1つのコンテナ箱で包む（吉村さん選定・案2） */
+.kurabe-stats{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:28px;align-items:center;margin:1.8em 0;padding:22px 26px;border:1px solid var(--k-line);border-radius:10px;background:var(--k-surface)}
 /* 案C：左に掲載数と店ごとの内訳、右に残りの数字を罫線の行で並べる（箱にしない） */
 .kurabe-k{font-size:13.5px;color:var(--k-ink2);line-height:1.5}
 .kurabe-v{font-weight:700;font-variant-numeric:tabular-nums;line-height:1.2;color:var(--k-ink);font-size:24px;white-space:nowrap}
@@ -31,7 +32,7 @@
 .kurabe-stats-rest{border-left:1px solid var(--k-line2);padding-left:26px}
 .kurabe-stats-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:9px 0;border-bottom:1px solid var(--k-line2)}
 .kurabe-stats-row:last-child{border-bottom:0}
-@media (max-width:640px){.kurabe-stats{grid-template-columns:1fr;gap:14px}.kurabe-stats-rest{border-left:0;padding-left:0;border-top:1px solid var(--k-line2)}.kurabe-v-main{font-size:40px}}
+@media (max-width:640px){.kurabe-stats{grid-template-columns:1fr;gap:14px;padding:18px 16px}.kurabe-stats-rest{border-left:0;padding-left:0;border-top:1px solid var(--k-line2);padding-top:6px}.kurabe-v-main{font-size:40px}}
 
 .kurabe-stamp{background:var(--k-note);border:1px solid var(--k-note-line);padding:10px 14px;font-size:14.5px;line-height:1.7;margin:0 0 1em}
 .kurabe-filters{display:flex;flex-wrap:wrap;gap:12px 28px;align-items:flex-end;margin:0 0 12px}

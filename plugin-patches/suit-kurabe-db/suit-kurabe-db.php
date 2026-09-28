@@ -2,7 +2,7 @@
 /**
  * Plugin Name: スーツくらべ 比較データ表示
  * Description: スーツ量販店の比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。店の定義（名前・表記・色）はデータ側の stores 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.0.2
+ * Version:     1.0.3
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: suit-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Suit_Kurabe_Db
 {
-    const VERSION  = '1.0.2';
+    const VERSION  = '1.0.3';
     const META     = 'kurabe_data';
     const OPT      = 'suit_kurabe_db_settings';
 
@@ -358,13 +358,37 @@ class Suit_Kurabe_Db
             $h .= '<button type="button" class="kurabe-chip kurabe-chip-store kurabe-chip-' . esc_attr(self::slug($stores, $s)) . '"' . self::color_style($stores, $s) . ' data-v="' . esc_attr($s) . '" aria-pressed="true">' . esc_html(self::label($stores, $s)) . '</button>';
         }
         $h .= '</div></div>';
-        if (count($prices) > 1 && count($prices) <= 8) {
-            // 価格の種類が少ないとき（100均型）だけチップを出す。スーツのように数十種あると邪魔になる
-            $h .= '<div class="kurabe-fgroup"><span class="kurabe-flabel">価格</span><div class="kurabe-chips" data-filter="p">';
+        if (count($prices) > 1) {
+            // 価格は1円刻みではなく価格帯で絞る（吉村さん指示）。商品がある帯だけチップを出す
+            $ranges = array(
+                array(0, 3000, '〜3,000円'),
+                array(3000, 5000, '3,000〜5,000円'),
+                array(5000, 10000, '5,000円〜1万円'),
+                array(10000, 20000, '1〜2万円'),
+                array(20000, 30000, '2〜3万円'),
+                array(30000, 50000, '3〜5万円'),
+                array(50000, 0, '5万円〜'),
+            );
+            $have = array();
             foreach (array_keys($prices) as $p) {
-                $h .= '<button type="button" class="kurabe-chip" data-v="' . esc_attr($p) . '" aria-pressed="true">' . esc_html(number_format($p)) . '円</button>';
+                foreach ($ranges as $i => $rg) {
+                    if ($p >= $rg[0] && ($rg[1] === 0 || $p < $rg[1])) {
+                        $have[$i] = true;
+                        break;
+                    }
+                }
             }
-            $h .= '</div></div>';
+            if (count($have) > 1) {
+                $h .= '<div class="kurabe-fgroup"><span class="kurabe-flabel">価格</span><div class="kurabe-chips" data-filter="p">';
+                foreach ($ranges as $i => $rg) {
+                    if (empty($have[$i])) {
+                        continue;
+                    }
+                    $v = $rg[0] . '-' . ($rg[1] === 0 ? '' : $rg[1]);
+                    $h .= '<button type="button" class="kurabe-chip" data-v="' . esc_attr($v) . '" aria-pressed="true">' . esc_html($rg[2]) . '</button>';
+                }
+                $h .= '</div></div>';
+            }
         }
         $fit = isset($d['fit']) ? $d['fit'] : null;
         if ($fit && !empty($fit['inputs'])) {

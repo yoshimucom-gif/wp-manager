@@ -73,10 +73,25 @@
       });
     }
     function num(tr, k) { var v = tr.getAttribute('data-' + k); return v === '' || v == null ? null : parseFloat(v); }
+    /* 価格チップは「3000-5000」「50000-」のような価格帯。行の価格がONの帯のどれかに入れば表示 */
+    function pOK(tr) {
+      if (!hasP) return true;
+      var v = tr.getAttribute('data-p');
+      if (v === '' || v == null) return true;   /* 価格の記載なしは価格では絞らない */
+      var p = parseFloat(v), hit = false;
+      Object.keys(state.p).forEach(function (k) {
+        if (!state.p[k]) return;
+        var m = k.split('-');
+        var lo = parseFloat(m[0] || '0');
+        var hi = m[1] === '' ? Infinity : parseFloat(m[1]);
+        if (p >= lo && p < hi) hit = true;
+      });
+      return hit;
+    }
     function render() {
       var shown = trs.filter(function (tr) {
         var row = D.rows[+tr.getAttribute('data-i')];
-        var ok = state.s[tr.getAttribute('data-s')] && (!hasP || state.p[tr.getAttribute('data-p')]) && fits(row);
+        var ok = state.s[tr.getAttribute('data-s')] && pOK(tr) && fits(row);
         tr.hidden = !ok;
         return ok;
       });
