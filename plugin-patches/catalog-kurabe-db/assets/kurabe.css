@@ -101,6 +101,9 @@
 .kurabe-shop-links a::after{content:" ›"}
 .kurabe-adnote{font-size:13.5px;color:#56636E;margin:.5em 0 1.5em}
 
+/* 表の行からシリーズページへのサイト内リンク（コース名の公式リンクとは別） */
+.kurabe-table a.kurabe-series-link{display:inline-block;margin-top:3px;font-size:13px;font-weight:700;color:var(--k-accent);white-space:nowrap}
+.kurabe-table a.kurabe-series-link::after{content:" ›"}
 /* 関連する品目：箱にせず、文字のリンクを折り返して並べる */
 .kurabe-related{margin:0 0 1.5em}
 .kurabe-related-label{font-size:13.5px;font-weight:700;color:#56636E;margin:1.2em 0 .4em}

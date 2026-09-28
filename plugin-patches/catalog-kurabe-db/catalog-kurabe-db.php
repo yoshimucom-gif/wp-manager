@@ -2,7 +2,7 @@
 /**
  * Plugin Name: カタログギフトくらべ 比較データ表示
  * Description: カタログギフトの比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。発行会社・ブランドの定義（名前・表記・色）と絞り込みの軸はデータ側の stores / filters 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.0.5
+ * Version:     1.1.0
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: catalog-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Catalog_Kurabe_Db
 {
-    const VERSION  = '1.0.5';
+    const VERSION  = '1.1.0';
     const META     = 'kurabe_data';
     const OPT      = 'catalog_kurabe_db_settings';
 
@@ -54,7 +54,7 @@ class Catalog_Kurabe_Db
     public static function register_meta()
     {
         foreach (array('post', 'page') as $type) {
-            foreach (array('kurabe_item', 'kurabe_group', 'kurabe_parent', 'kurabe_count', 'kurabe_stores') as $k) {
+            foreach (array('kurabe_item', 'kurabe_group', 'kurabe_parent', 'kurabe_count', 'kurabe_stores', 'kurabe_axes') as $k) {
                 register_post_meta($type, $k, array(
                     'type'          => 'string',
                     'single'        => true,
@@ -433,6 +433,12 @@ class Catalog_Kurabe_Db
             if (!empty($r['note'])) {
                 $h .= '<span class="kurabe-sub">' . esc_html($r['note']) . '</span>';
             }
+            if (!empty($r['sr'])) {                  // シリーズの公開ページがあれば、表の行からサイト内リンク
+                $sp = self::series_page($r['sr']);
+                if ($sp && (int) $sp['id'] !== (int) get_the_ID()) {
+                    $h .= '<a class="kurabe-sub kurabe-series-link" href="' . esc_url($sp['url']) . '">' . esc_html($sp['label']) . 'の全コース</a>';
+                }
+            }
             if (!empty($r['same'])) {
                 $h .= '<span class="kurabe-sub"><b>' . esc_html(implode('・', $r['same'])) . '</b>でも同じ商品を販売' . (!empty($r['jan']) ? '（JAN ' . esc_html($r['jan']) . '）' : '') . '</span>';
             }
@@ -567,8 +573,158 @@ class Catalog_Kurabe_Db
         return $h . '</ul>';
     }
 
+    /* ---------- 軸（予算・ジャンル・シーン・シリーズ）で張る内部リンク ----------
+       投稿メタ kurabe_axes（JSON）: {"kind":"budget|genre|scene|combo|series|issuer|guide",
+         "budget":5000, "genre":"グルメ", "scene":"香典返し", "series":"リンベル|プレゼンテージ",
+         "issuer":"リンベル", "pmin":3080, "pmax":55000, "label":"プレゼンテージ"}
+       リンク先は公開済みページだけ（プレビュー中は下書きも）。文言は相手ページの kurabe_item */
+
+    private static $axes_cache = null;
+
+    private static function all_axes()
+    {
+        if (self::$axes_cache !== null) {
+            return self::$axes_cache;
+        }
+        $status = array('publish');
+        if (function_exists('is_preview') && is_preview() && current_user_can('edit_posts')) {
+            $status[] = 'draft';
+        }
+        $posts = get_posts(array(
+            'post_type' => 'post', 'post_status' => $status, 'posts_per_page' => -1,
+            'meta_key' => 'kurabe_axes', 'suppress_filters' => true, 'fields' => 'ids',
+        ));
+        $out = array();
+        foreach ($posts as $pid) {
+            $a = json_decode((string) get_post_meta($pid, 'kurabe_axes', true), true);
+            if (!is_array($a) || empty($a['kind'])) {
+                continue;
+            }
+            $a['id'] = (int) $pid;
+            $a['url'] = get_permalink($pid);
+            $item = get_post_meta($pid, 'kurabe_item', true);
+            $a['name'] = $item ? $item : get_the_title($pid);
+            $out[] = $a;
+        }
+        return self::$axes_cache = $out;
+    }
+
+    private static function series_page($key)
+    {
+        foreach (self::all_axes() as $a) {
+            if ($a['kind'] === 'series' && isset($a['series']) && $a['series'] === $key) {
+                return array('id' => $a['id'], 'url' => $a['url'], 'label' => !empty($a['label']) ? $a['label'] : $a['name']);
+            }
+        }
+        return null;
+    }
+
+    private static function pick($fn, $limit = 8)
+    {
+        $out = array();
+        foreach (self::all_axes() as $a) {
+            if ($fn($a)) {
+                $out[] = $a;
+            }
+        }
+        return array_slice($out, 0, $limit);
+    }
+
+    private static function axis_list($items)
+    {
+        $h = '<ul class="kurabe-links">';
+        foreach ($items as $a) {
+            $h .= '<li><a href="' . esc_url($a['url']) . '">' . esc_html($a['name']) . '</a></li>';
+        }
+        return $h . '</ul>';
+    }
+
+    private static function related_by_axes($me, $d)
+    {
+        $id = get_the_ID();
+        $not_me = function ($a) use ($id) { return $a['id'] !== (int) $id; };
+        $by_budget = function ($x, $y) { return (isset($x['budget']) ? $x['budget'] : 0) - (isset($y['budget']) ? $y['budget'] : 0); };
+        $groups = array();
+        $k = $me['kind'];
+        $b = isset($me['budget']) ? (int) $me['budget'] : 0;
+        $g = isset($me['genre']) ? $me['genre'] : '';
+        $s = isset($me['scene']) ? $me['scene'] : '';
+
+        if ($k === 'budget') {
+            $bud = self::pick(function ($a) use ($not_me) { return $a['kind'] === 'budget' && $not_me($a); }, 99);
+            usort($bud, $by_budget);
+            $lower = array_values(array_filter($bud, function ($a) use ($b) { return $a['budget'] < $b; }));
+            $upper = array_values(array_filter($bud, function ($a) use ($b) { return $a['budget'] > $b; }));
+            $near = array_merge(array_slice($lower, -2), array_slice($upper, 0, 2));
+            $groups['前後の予算'] = $near;
+            $groups['この予算で用途・ジャンルを絞る'] = self::pick(function ($a) use ($b, $not_me) {
+                return $a['kind'] === 'combo' && isset($a['budget']) && (int) $a['budget'] === $b && $not_me($a);
+            });
+        } elseif ($k === 'genre' || $k === 'scene') {
+            $key = $k;
+            $val = $k === 'genre' ? $g : $s;
+            $sub = self::pick(function ($a) use ($key, $val, $not_me) {
+                return $a['kind'] === 'combo' && isset($a[$key]) && $a[$key] === $val && $not_me($a);
+            }, 99);
+            usort($sub, $by_budget);
+            $groups['予算で絞る'] = array_slice($sub, 0, 8);
+            $groups[$k === 'genre' ? 'ほかのジャンル' : 'ほかのシーン'] = self::pick(function ($a) use ($key, $not_me) {
+                return $a['kind'] === $key && $not_me($a);
+            }, 10);
+        } elseif ($k === 'combo') {
+            $groups['もっと広く比べる'] = self::pick(function ($a) use ($b, $g, $s) {
+                return ($a['kind'] === 'budget' && $b && isset($a['budget']) && (int) $a['budget'] === $b)
+                    || ($a['kind'] === 'genre' && $g && isset($a['genre']) && $a['genre'] === $g)
+                    || ($a['kind'] === 'scene' && $s && isset($a['scene']) && $a['scene'] === $s);
+            });
+            $sib = self::pick(function ($a) use ($b, $g, $s, $not_me) {
+                if ($a['kind'] !== 'combo' || !$not_me($a)) {
+                    return false;
+                }
+                $sameB = $b && isset($a['budget']) && (int) $a['budget'] === $b;
+                $sameG = $g && isset($a['genre']) && $a['genre'] === $g;
+                $sameS = $s && isset($a['scene']) && $a['scene'] === $s;
+                return $sameB || $sameG || $sameS;
+            }, 99);
+            usort($sib, $by_budget);
+            $groups['近い組み合わせ'] = array_slice($sib, 0, 8);
+        } elseif ($k === 'series' || $k === 'issuer') {
+            $iss = isset($me['issuer']) ? $me['issuer'] : '';
+            $groups['同じ発行会社のシリーズ'] = self::pick(function ($a) use ($iss, $not_me) {
+                return in_array($a['kind'], array('series', 'issuer'), true) && isset($a['issuer']) && $a['issuer'] === $iss && $not_me($a);
+            }, 10);
+            $lo = isset($me['pmin']) ? (int) $me['pmin'] : 0;
+            $hi = isset($me['pmax']) ? (int) $me['pmax'] : 0;
+            if ($lo && $hi) {
+                $bud = self::pick(function ($a) use ($lo, $hi) {
+                    return $a['kind'] === 'budget' && isset($a['budget']) && $a['budget'] >= $lo * 0.8 && $a['budget'] <= $hi;
+                }, 99);
+                usort($bud, $by_budget);
+                $groups['このシリーズのコースがある予算'] = array_slice($bud, 0, 8);
+            }
+        } elseif ($k === 'guide') {
+            $groups['ほかの基礎知識'] = self::pick(function ($a) use ($not_me) { return $a['kind'] === 'guide' && $not_me($a); }, 10);
+        }
+        $groups = array_filter($groups);
+        if (!$groups) {
+            return '';
+        }
+        $name = !empty($me['name']) ? $me['name'] : (isset($d['item']) ? $d['item'] : '');
+        $h = '<h2 class="wp-block-heading">' . esc_html($name) . 'とあわせて見たいページ</h2><div class="kurabe-related">';
+        foreach ($groups as $label => $items) {
+            $h .= '<p class="kurabe-related-label">' . esc_html($label) . '</p>' . self::axis_list($items);
+        }
+        return $h . '</div>';
+    }
+
     private static function part_related($d)
     {
+        $me = json_decode((string) get_post_meta(get_the_ID(), 'kurabe_axes', true), true);
+        if (is_array($me) && !empty($me['kind'])) {
+            $item = get_post_meta(get_the_ID(), 'kurabe_item', true);
+            $me['name'] = $item ? $item : (isset($d['item']) ? $d['item'] : '');
+            return self::related_by_axes($me, $d);
+        }
         $id     = get_the_ID();
         $item   = get_post_meta($id, 'kurabe_item', true);
         $group  = get_post_meta($id, 'kurabe_group', true);
