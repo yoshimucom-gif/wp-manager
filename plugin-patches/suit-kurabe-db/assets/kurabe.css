@@ -65,8 +65,11 @@
 /* 商品名＝公式商品ページへのリンク。リンクと分かるよう下線を出す（色はテーマのリンク色に任せる）。
    td a の nowrap（旧「商品ページ」リンク用）を打ち消して折り返す。列幅は240〜340pxに収める
    （nowrapのままだと長い商品名で列が1,000px超に膨らみ、他の列が横スクロールの先に消える。2026-09-28実測） */
-.kurabe-pname{display:inline-block;min-width:240px;max-width:340px;white-space:normal;overflow-wrap:anywhere;text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px}
+.kurabe-pname{white-space:normal;overflow-wrap:anywhere;text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px}
 .kurabe-pname:hover{text-decoration-thickness:2px}
+/* 商品列＝店バッジ＋商品名。列幅はここで確保する（リンク側のinline-blockだとバッジと段が割れる） */
+.kurabe-table td.kurabe-td-item{min-width:280px;max-width:400px}
+.kurabe-td-item .kurabe-store{margin-right:6px;vertical-align:baseline}
 .kurabe-table td.kurabe-text{min-width:160px}
 .kurabe-sub{display:block;font-size:13px;color:var(--k-ink2);margin-top:2px;white-space:normal}
 .kurabe-sub b{color:var(--k-accent)}
@@ -137,9 +140,9 @@
   .kurabe-table tbody tr[hidden]{display:none}
   .kurabe-table tbody td{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:5px 0;border:0;text-align:right;min-width:0;white-space:normal}
   .kurabe-table tbody td::before{content:attr(data-label);flex:0 0 auto;font-size:13.5px;color:var(--k-ink2);font-weight:700;text-align:left}
-  .kurabe-table tbody td.kurabe-td-store{padding:0 0 4px;justify-content:flex-start}
-  .kurabe-table tbody td.kurabe-td-store::before,.kurabe-table tbody td:nth-child(2)::before{content:none}
-  .kurabe-table tbody td:nth-child(2){display:block;text-align:left;border-top:0;padding:0 0 8px;font-size:16px}
+  .kurabe-table tbody td.kurabe-td-item::before{content:none}
+  .kurabe-table tbody td.kurabe-td-item{display:block;text-align:left;padding:0 0 8px;font-size:16px;min-width:0;max-width:none}
+  .kurabe-td-item .kurabe-store{display:table;margin:0 0 6px}
   .kurabe-table tbody td.kurabe-text{min-width:0;color:var(--k-ink)}
   .kurabe-pname{display:inline;min-width:0;max-width:none}
   .kurabe-price{background:var(--k-surface)}   /* カードが灰色になったぶん価格チップは白で浮かせる */

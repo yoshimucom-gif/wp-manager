@@ -2,7 +2,7 @@
 /**
  * Plugin Name: スーツくらべ 比較データ表示
  * Description: スーツ量販店の比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。店の定義（名前・表記・色）はデータ側の stores 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.1.0
+ * Version:     1.1.1
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: suit-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Suit_Kurabe_Db
 {
-    const VERSION  = '1.1.0';
+    const VERSION  = '1.1.1';
     const META     = 'kurabe_data';
     const OPT      = 'suit_kurabe_db_settings';
 
@@ -438,7 +438,7 @@ class Suit_Kurabe_Db
 
         $h .= '<p class="kurabe-count" aria-live="polite"><b>' . count($d['rows']) . '</b> 件を表示中</p>';
         $h .= '<div class="kurabe-tablebox"><table><thead><tr>';
-        $h .= '<th scope="col">店</th><th scope="col">商品名</th>';
+        $h .= '<th scope="col">商品</th>';
         if ($mode !== 'none') {
             $h .= '<th scope="col"><button type="button" data-sort="sz">' . esc_html($label) . '</button></th>';
         }
@@ -458,9 +458,10 @@ class Suit_Kurabe_Db
                 }
             }
             $h .= '<tr' . $attrs . '>';
-            $h .= '<td class="kurabe-td-store"><span class="kurabe-store kurabe-' . esc_attr(self::slug($stores, $r['s'])) . '"' . self::color_style($stores, $r['s']) . '>' . esc_html(self::label($stores, $r['s'])) . '</span></td>';
-            // 商品名＝公式商品ページへのリンク（右端の「公式」列は気づかれないため廃止・吉村さん指示）
-            $h .= '<td><a class="kurabe-pname" href="' . esc_url($r['u']) . '" target="_blank" rel="noopener">' . esc_html($r['n']) . '</a>';
+            // 店バッジ＋商品名を1つの列にまとめる（吉村さん指示・2026-09-28）。
+            // 商品名＝公式商品ページへのリンク（右端の「公式」列は廃止済み）
+            $h .= '<td class="kurabe-td-item"><span class="kurabe-store kurabe-' . esc_attr(self::slug($stores, $r['s'])) . '"' . self::color_style($stores, $r['s']) . '>' . esc_html(self::label($stores, $r['s'])) . '</span> ';
+            $h .= '<a class="kurabe-pname" href="' . esc_url($r['u']) . '" target="_blank" rel="noopener">' . esc_html($r['n']) . '</a>';
             if (!empty($r['same'])) {
                 $h .= '<span class="kurabe-sub"><b>' . esc_html(implode('・', $r['same'])) . '</b>でも同じ商品を販売' . (!empty($r['jan']) ? '（JAN ' . esc_html($r['jan']) . '）' : '') . '</span>';
             }
