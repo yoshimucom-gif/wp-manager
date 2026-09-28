@@ -71,6 +71,9 @@
 .kurabe-table td.kurabe-td-item{min-width:280px;max-width:400px}
 .kurabe-td-item .kurabe-store{margin-right:6px;vertical-align:baseline}
 .kurabe-table td.kurabe-text{min-width:160px}
+/* 本文用の囲い枠（イオン案内など、見出しにしない補足。「5つ目の見出しに見える」対策 2026-09-28） */
+p.kurabe-aside{border:1px solid #D3DADF;border-radius:8px;background:#F4F6F7;padding:14px 18px;line-height:1.9}
+p.kurabe-aside strong{display:block;margin-bottom:4px}
 .kurabe-sub{display:block;font-size:13px;color:var(--k-ink2);margin-top:2px;white-space:normal}
 .kurabe-sub b{color:var(--k-accent)}
 .kurabe-dim{color:var(--k-ink2)}
