@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.1.2
+ * Version:     1.1.3
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.1.2';
+    const VERSION  = '1.1.3';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -40,6 +40,8 @@ class Kurabe_Db
         add_action('admin_menu', array(__CLASS__, 'admin_menu'));
         add_action('admin_init', array(__CLASS__, 'admin_init'));
         add_filter('diver_single_side_items', array(__CLASS__, 'side_items'));
+        add_filter('get_post_metadata', array(__CLASS__, 'layout_title_normal'), 10, 4);
+        add_action('diver_single_main_section', array(__CLASS__, 'full_width_header'), 5);
         add_action('diver_main_before', array(__CLASS__, 'archive_table'), 20);
         add_shortcode('kurabe_list', array(__CLASS__, 'list_shortcode'));
     }
@@ -50,6 +52,49 @@ class Kurabe_Db
     public static function side_items($items)
     {
         return is_singular() && get_post_meta(get_the_ID(), self::META, true) ? array() : $items;
+    }
+
+    /* 比較ページは「サイズ：幅広」＋タイトルは通常の見た目（吉村さん指定）。
+       re:Diver は幅広のとき通常のタイトル欄を出さない（ビッグだけ出す）ので、
+       表示のときだけタイトルの設定を「ビッグ」→「デフォルト」に読み替え、
+       テーマと同じタイトル欄をここで出し直す */
+    private static $reading_layout = false;
+
+    public static function layout_title_normal($value, $object_id, $meta_key, $single)
+    {
+        if ($meta_key !== 'diver_single_layout' || is_admin() || self::$reading_layout) {
+            return $value;
+        }
+        self::$reading_layout = true;
+        $has  = get_post_meta($object_id, self::META, true);
+        $meta = get_post_meta($object_id, 'diver_single_layout', true);
+        self::$reading_layout = false;
+        if (!$has || !is_array($meta) || !isset($meta['title']) || $meta['title'] !== 'big') {
+            return $value;
+        }
+        $meta['title'] = 'default';
+        return array($meta);
+    }
+
+    public static function full_width_header()
+    {
+        if (!is_singular()) {
+            return;
+        }
+        $id = get_the_ID();
+        if (!get_post_meta($id, self::META, true)) {
+            return;
+        }
+        $meta = get_post_meta($id, 'diver_single_layout', true);
+        if (!is_array($meta) || !isset($meta['size']) || $meta['size'] !== 'full' || (isset($meta['title']) && $meta['title'] === 'hide')) {
+            return;
+        }
+        ob_start();
+        do_action('diver_single_main_header', $id);
+        $header = ob_get_clean();
+        if ($header) {
+            echo '<header class="article-header -inner-content alignfull has-gap-column:10 is-position-relative">' . $header . '</header>';
+        }
     }
 
     /* ---------- データ ---------- */
