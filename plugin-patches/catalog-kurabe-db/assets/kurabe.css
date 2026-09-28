@@ -150,6 +150,6 @@
   .kurabe-table thead th{border:0!important;padding:0!important}
   .kurabe-table tbody tr{border:1px solid var(--k-line)!important;border-radius:6px;box-shadow:0 1px 3px rgb(0 0 0/.08)!important;margin:0 0 16px;padding:12px 14px 8px}
   .kurabe-table tbody td,.kurabe-table tbody tr:first-child td{border:0!important;padding:3px 0!important}
-  .kurabe-table tbody td.kurabe-td-store{padding:0 0 6px!important}
-  .kurabe-table tbody td:nth-child(2){padding:0 0 10px!important;margin:0 0 6px;border-bottom:1px solid var(--k-line2)!important}
+  .kurabe-table tbody tr td.kurabe-td-store,.kurabe-table tbody tr:first-child td.kurabe-td-store{padding:0 0 6px!important}
+  .kurabe-table tbody tr td:nth-child(2),.kurabe-table tbody tr:first-child td:nth-child(2){padding:0 0 10px!important;margin:0 0 6px;border-bottom:1px solid var(--k-line2)!important}
 }
