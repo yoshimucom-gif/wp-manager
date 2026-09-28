@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.1.0
+ * Version:     1.1.1
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.1.0';
+    const VERSION  = '1.1.1';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -174,7 +174,7 @@ class Kurabe_Db
         );
     }
 
-    private static function label($s)
+    public static function label($s)
     {
         return isset(self::LABELS[$s]) ? self::LABELS[$s] : $s;
     }
@@ -328,7 +328,8 @@ class Kurabe_Db
             $h .= '<td><span class="kurabe-store kurabe-' . $cls . '">' . esc_html(self::label($r['s'])) . '</span></td>';
             $h .= '<td><span class="kurabe-pname">' . esc_html($r['n']) . '</span>';
             if (!empty($r['same'])) {
-                $h .= '<span class="kurabe-sub"><b>' . esc_html(implode('・', $r['same'])) . '</b>でも同じ商品を販売（JAN ' . esc_html($r['jan']) . '）</span>';
+                // JANコードは本文に出さず、マウスを乗せたときだけ出す（吉村さん指定）
+                $h .= '<span class="kurabe-sub" title="JANコード ' . esc_attr($r['jan']) . '">' . esc_html(implode('・', array_map(array(__CLASS__, 'label'), $r['same']))) . 'でも同じ商品を販売</span>';
             }
             $h .= '</td>';
             if ($mode !== 'none') {
