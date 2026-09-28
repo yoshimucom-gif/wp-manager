@@ -2,7 +2,7 @@
 /**
  * Plugin Name: スーツくらべ 比較データ表示
  * Description: スーツ量販店の比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。店の定義（名前・表記・色）はデータ側の stores 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.0.3
+ * Version:     1.0.4
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: suit-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Suit_Kurabe_Db
 {
-    const VERSION  = '1.0.3';
+    const VERSION  = '1.0.4';
     const META     = 'kurabe_data';
     const OPT      = 'suit_kurabe_db_settings';
 
@@ -415,7 +415,7 @@ class Suit_Kurabe_Db
             $sortable = !empty($cl['sort']);
             $h .= '<th scope="col">' . ($sortable ? '<button type="button" data-sort="' . esc_attr($key) . '">' . esc_html($cl['label']) . '</button>' : esc_html($cl['label'])) . '</th>';
         }
-        $h .= '<th scope="col">公式</th></tr></thead><tbody>';
+        $h .= '</tr></thead><tbody>';
 
         foreach ($d['rows'] as $i => $r) {
             $attrs = ' data-i="' . $i . '" data-s="' . esc_attr($r['s']) . '" data-p="' . esc_attr(isset($r['p']) ? $r['p'] : '') . '"';
@@ -427,7 +427,8 @@ class Suit_Kurabe_Db
             }
             $h .= '<tr' . $attrs . '>';
             $h .= '<td><span class="kurabe-store kurabe-' . esc_attr(self::slug($stores, $r['s'])) . '"' . self::color_style($stores, $r['s']) . '>' . esc_html(self::label($stores, $r['s'])) . '</span></td>';
-            $h .= '<td><span class="kurabe-pname">' . esc_html($r['n']) . '</span>';
+            // 商品名＝公式商品ページへのリンク（右端の「公式」列は気づかれないため廃止・吉村さん指示）
+            $h .= '<td><a class="kurabe-pname" href="' . esc_url($r['u']) . '" target="_blank" rel="noopener">' . esc_html($r['n']) . '</a>';
             if (!empty($r['same'])) {
                 $h .= '<span class="kurabe-sub"><b>' . esc_html(implode('・', $r['same'])) . '</b>でも同じ商品を販売' . (!empty($r['jan']) ? '（JAN ' . esc_html($r['jan']) . '）' : '') . '</span>';
             }
@@ -452,7 +453,7 @@ class Suit_Kurabe_Db
                 $h .= $v !== '' && $v !== null ? esc_html($v) . ($from ? '<span class="kurabe-sub">' . esc_html($from) . 'の掲載値</span>' : '') : '<span class="kurabe-dim">記載なし</span>';
                 $h .= '</td>';
             }
-            $h .= '<td><a href="' . esc_url($r['u']) . '" target="_blank" rel="noopener">商品ページ</a></td></tr>';
+            $h .= '</tr>';
         }
         $h .= '</tbody></table></div>';
         $h .= '<p class="kurabe-empty" hidden>条件に合う商品がありません。条件をゆるめてみてください。</p>';
