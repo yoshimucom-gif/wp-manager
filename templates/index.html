@@ -1978,6 +1978,17 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.56 / auto-inserter v0.19.0 (2026-09-28) — 📍 任意の場所に挿入するショートコード</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>新ショートコード</strong>: <code>[affiros_ai_card]</code> (属性: <code>count</code>=表示件数1〜5 / <code>title</code>=見出し接尾辞・空で見出しなし)。本文の好きな位置に置くと、そこに記事内カードが表示時描画される。</li>
+              <li><strong>モード切替</strong>: 本文にこのショートコードがある記事は、挿入処理 (個別・一括・公開時自動・月次リフレッシュ) が位置ルールでの焼き込みをやめて<strong>商品データの更新だけ</strong>を行う。既存の焼き込みカードは自動で剥がす (二重表示防止)。見出し差し替え・セールマイクロコピーは展開後の the_content フィルタがそのまま効く。</li>
+              <li><strong>整合</strong>: 一括スキャンのカード枚数にショートコードを含める (消失扱いにしない)。設定⑨にショートコード早見表を統合 (記事内/サイドバー)。</li>
+              <li><strong>設計判断</strong>: 別プラグイン化はしない (カード描画・商品キャッシュ・API設定・セール表示を全部共有するため。<code>[affiros_ai_top]</code> と同じ流儀)。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.18.0 → 0.19.0 / <code>APP_VERSION</code> 1.9.55 → 1.9.56。スタブテスト12項目PASS。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.55 / auto-inserter v0.18.0 (2026-09-14) — 🗑 除外記事のカード一括削除＋wp_slash修正</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: 除外カテゴリー/タグを設定する前に挿入されてしまったカードを消す手段が個別 (記事編集画面) しかなかった。</li>

@@ -323,10 +323,24 @@ function affiros_ai_render_settings_page() {
         });
         </script>
 
-        <h2>⑨ サイドバー用ショートコード</h2>
+        <h2>⑨ ショートコード</h2>
+        <div style="max-width:680px;background:#fff;border:1px solid #ccd0d4;border-radius:4px;padding:16px 20px;font-size:13px;line-height:1.9;margin-bottom:16px">
+            <p style="margin-top:0"><strong>記事内カードを任意の場所に置く</strong>: 本文の好きな位置に「ショートコード」ブロックで書くと、そこにカードが表示されます。</p>
+            <table class="widefat striped" style="max-width:640px">
+                <thead><tr><th style="width:280px">書き方</th><th>動作</th></tr></thead>
+                <tbody>
+                    <tr><td><code>[affiros_ai_card]</code></td><td>その位置に記事内カード (設定の表示件数)</td></tr>
+                    <tr><td><code>[affiros_ai_card count="2"]</code></td><td>表示件数を個別指定 (1〜5)</td></tr>
+                    <tr><td><code>[affiros_ai_card title="で迷ったらこれ"]</code></td><td>見出し接尾辞を個別指定 (<code>title=""</code> で見出しなし)</td></tr>
+                </tbody>
+            </table>
+            <p style="margin-bottom:0" class="description">
+                本文にこのショートコードがある記事は、挿入処理 (個別・一括・公開時自動・月次リフレッシュ) が<strong>位置ルールでの焼き込みをやめて商品データの更新だけ</strong>を行い、表示はショートコードの位置で行われます (既存の焼き込みカードは自動で剥がされます)。<br>
+                商品データが未取得の記事では何も表示しません。まず「今すぐ挿入」または一括適用で商品を取得してください。
+            </p>
+        </div>
         <div style="max-width:680px;background:#fff;border:1px solid #ccd0d4;border-radius:4px;padding:16px 20px;font-size:13px;line-height:1.9">
-            <p style="margin-top:0">
-                表示中の記事に挿入済みの商品をコンパクトカード（画像・商品名・価格・Amazon/楽天ボタン）で表示します。<br>
+            <p style="margin-top:0"><strong>サイドバーに1位商品を置く</strong>: 表示中の記事に挿入済みの商品をコンパクトカードで表示します。<br>
                 <strong>外観 → ウィジェット</strong> でサイドバーに「ショートコード」ブロックを追加して、以下を書くだけ。設置は1回、記事ごとに自動でその記事の商品に切り替わります。
             </p>
             <table class="widefat striped" style="max-width:640px">

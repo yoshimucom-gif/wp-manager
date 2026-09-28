@@ -487,8 +487,10 @@ add_action('wp_ajax_affiros_ai_scan', function () {
         $last_insert = get_post_meta($post_id, AFFIROS_AI_META_LAST_INSERT_AT, true);
         $excluded = get_post_meta($post_id, AFFIROS_AI_META_EXCLUDED, true);
 
-        // 本文のカード枚数を実測 (挿入済のはずなのに0枚 = 他プロセスの上書きで消失)
-        $cards = substr_count((string)$post_obj->post_content, 'affiros-ai-card-start');
+        // 本文のカード枚数を実測 (挿入済のはずなのに0枚 = 他プロセスの上書きで消失)。
+        // ショートコード [affiros_ai_card] は表示時描画なので枚数に含める (消失扱いにしない)
+        $cards = substr_count((string)$post_obj->post_content, 'affiros-ai-card-start')
+               + substr_count((string)$post_obj->post_content, '[affiros_ai_card');
 
         if ($excluded === 'yes') {
             $state = 'excluded'; $stats['excluded']++;

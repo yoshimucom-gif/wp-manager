@@ -52,6 +52,46 @@ function affiros_ai_top_html($post_id, $rank = 1, $title = null) {
     return affiros_ai_sale_decorate($html);
 }
 
+/**
+ * 記事内カードを任意の場所に置くショートコード (v0.19.0)
+ *
+ * [affiros_ai_card]                      — 記事内カード (Amazon/楽天比較・設定の表示件数)
+ * [affiros_ai_card count="2"]            — 表示件数を個別指定
+ * [affiros_ai_card title="はどれを選ぶ？"] — 見出し接尾辞を個別指定 (title="" で見出しなし)
+ *
+ * 本文にこれがある記事は、挿入処理が位置ルール (H2直前/まとめ直下) での
+ * 焼き込みをやめて商品データの更新だけを行い、表示はこのショートコードが担う。
+ * 見出し差し替え・セールマイクロコピーは the_content フィルタが展開後に適用する。
+ */
+add_shortcode('affiros_ai_card', function ($atts) {
+    if (!is_singular('post')) return '';
+    $post_id = get_queried_object_id();
+    if (!$post_id) return '';
+
+    $data = get_post_meta($post_id, AFFIROS_AI_META_PRODUCTS, true);
+    if (!is_array($data)) $data = json_decode((string)$data, true);
+    if (empty($data) || (empty($data['amazon']) && empty($data['rakuten']))) return '';
+
+    $atts = shortcode_atts(['count' => 0, 'title' => null], $atts, 'affiros_ai_card');
+    $settings = affiros_ai_get_settings();
+    $count = intval($atts['count']) > 0
+        ? max(1, min(5, intval($atts['count'])))
+        : max(1, min(5, intval($settings['products_count'] ?? 3)));
+
+    return Affiros_AI_Card_Renderer::render(
+        $data['amazon'] ?? [],
+        $data['rakuten'] ?? [],
+        [
+            'keyword'    => $data['keyword'] ?? get_post_meta($post_id, AFFIROS_AI_META_KEYWORD, true),
+            'updated_at' => $data['fetched_at'] ?? '',
+            'count'      => $count,
+            'amazon_partner_tag'   => $settings['amazon_partner_tag']   ?? '',
+            'rakuten_affiliate_id' => $settings['rakuten_affiliate_id'] ?? '',
+            'card_heading_suffix'  => $atts['title'] !== null ? $atts['title'] : ($settings['card_heading_suffix'] ?? ''),
+        ]
+    );
+});
+
 add_shortcode('affiros_ai_top', function ($atts) {
     $atts = shortcode_atts([
         'rank'  => 1,

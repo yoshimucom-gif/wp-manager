@@ -130,6 +130,35 @@ class Affiros_AI_Inserter {
             update_post_meta($post_id, AFFIROS_AI_META_PRODUCTS, $products_data);
         }
 
+        // ショートコード挿入モード (v0.19.0): 本文に [affiros_ai_card] があれば
+        // 位置ルールでの焼き込みはせず、置いた場所で表示時にショートコードが描画する。
+        // 商品データの更新 (上のキャッシュ処理) はこのモードでも同じように行われるので、
+        // 月次リフレッシュ・再挿入・公開時自動もそのまま効く。
+        if (strpos($post->post_content, '[affiros_ai_card') !== false) {
+            // 旧い焼き込みカードが残っていれば剥がす (ショートコードと二重表示になるため)
+            $stripped = self::strip_existing_cards($post->post_content);
+            if ($stripped !== $post->post_content) {
+                $upd = wp_update_post(wp_slash(['ID' => $post_id, 'post_content' => $stripped]), true);
+                if (is_wp_error($upd)) {
+                    return self::fail($post_id, 'wp_update_post 失敗: ' . $upd->get_error_message());
+                }
+            }
+            update_post_meta($post_id, AFFIROS_AI_META_LAST_INSERT_AT, current_time('mysql'));
+            self::clear_last_error($post_id);
+
+            $msg = 'ショートコード描画 (商品データ更新)';
+            if ($partial_error !== '') $msg .= " ⚠️ {$partial_error}";
+            if ($keyword_note !== '')  $msg .= " 🔁 {$keyword_note}";
+            if (!empty($source_note))  $msg .= " 📊 {$source_note}";
+            return self::result(true, $msg, [
+                'changed' => true,
+                'keyword' => $keyword,
+                'insertions' => substr_count($post->post_content, '[affiros_ai_card'),
+                'amazon_count' => count($products_data['amazon'] ?? []),
+                'rakuten_count' => count($products_data['rakuten'] ?? []),
+            ]);
+        }
+
         // カードHTML生成
         $card_html = Affiros_AI_Card_Renderer::render(
             $products_data['amazon'] ?? [],

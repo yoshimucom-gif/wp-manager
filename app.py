@@ -235,7 +235,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.9.55'
+APP_VERSION = '1.9.56'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -6458,9 +6458,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.1.6',
     },
     'auto-inserter': {
-        'file': 'affiros-auto-inserter-0.18.0.zip',
+        'file': 'affiros-auto-inserter-0.19.0.zip',
         'name': 'Affiros オートインサーター',
-        'version': '0.18.0',
+        'version': '0.19.0',
     },
     'decoration-formatter': {
         'file': 'decoration-formatter-1.0.31.zip',
