@@ -2,7 +2,7 @@
 /**
  * Plugin Name: スーツくらべ 比較データ表示
  * Description: スーツ量販店の比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。店の定義（名前・表記・色）はデータ側の stores 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.0.1
+ * Version:     1.0.2
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: suit-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Suit_Kurabe_Db
 {
-    const VERSION  = '1.0.1';
+    const VERSION  = '1.0.2';
     const META     = 'kurabe_data';
     const OPT      = 'suit_kurabe_db_settings';
 
@@ -358,10 +358,11 @@ class Suit_Kurabe_Db
             $h .= '<button type="button" class="kurabe-chip kurabe-chip-store kurabe-chip-' . esc_attr(self::slug($stores, $s)) . '"' . self::color_style($stores, $s) . ' data-v="' . esc_attr($s) . '" aria-pressed="true">' . esc_html(self::label($stores, $s)) . '</button>';
         }
         $h .= '</div></div>';
-        if (count($prices) > 1) {
+        if (count($prices) > 1 && count($prices) <= 8) {
+            // 価格の種類が少ないとき（100均型）だけチップを出す。スーツのように数十種あると邪魔になる
             $h .= '<div class="kurabe-fgroup"><span class="kurabe-flabel">価格</span><div class="kurabe-chips" data-filter="p">';
             foreach (array_keys($prices) as $p) {
-                $h .= '<button type="button" class="kurabe-chip" data-v="' . esc_attr($p) . '" aria-pressed="true">' . esc_html($p) . '円</button>';
+                $h .= '<button type="button" class="kurabe-chip" data-v="' . esc_attr($p) . '" aria-pressed="true">' . esc_html(number_format($p)) . '円</button>';
             }
             $h .= '</div></div>';
         }
@@ -413,9 +414,10 @@ class Suit_Kurabe_Db
             if (isset($r['p']) && $r['p'] !== null) {
                 $h .= '<td class="kurabe-num">';
                 if (!empty($r['p_regular'])) {
-                    $h .= '<s class="kurabe-was">通常' . esc_html($r['p_regular']) . '円</s> ';
+                    // 値下げ品は2段表示：上段に取り消し線の通常価格、下段に現在価格
+                    $h .= '<s class="kurabe-was">通常' . esc_html(number_format((int) $r['p_regular'])) . '円</s>';
                 }
-                $h .= '<span class="kurabe-price">' . esc_html($r['p']) . '円</span></td>';
+                $h .= '<span class="kurabe-price">' . esc_html(number_format((int) $r['p'])) . '円</span></td>';
             } else {
                 $h .= '<td class="kurabe-num"><span class="kurabe-dim">記載なし</span></td>';
             }
