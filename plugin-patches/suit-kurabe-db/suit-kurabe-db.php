@@ -2,7 +2,7 @@
 /**
  * Plugin Name: スーツくらべ 比較データ表示
  * Description: スーツ量販店の比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。店の定義（名前・表記・色）はデータ側の stores 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.0.6
+ * Version:     1.0.7
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: suit-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Suit_Kurabe_Db
 {
-    const VERSION  = '1.0.6';
+    const VERSION  = '1.0.7';
     const META     = 'kurabe_data';
     const OPT      = 'suit_kurabe_db_settings';
 
@@ -37,7 +37,6 @@ class Suit_Kurabe_Db
         add_action('admin_menu', array(__CLASS__, 'admin_menu'));
         add_action('admin_init', array(__CLASS__, 'admin_init'));
         add_filter('diver_single_side_items', array(__CLASS__, 'side_items'));
-        add_filter('the_content', array(__CLASS__, 'inject_title'), 4);
         add_action('diver_main_before', array(__CLASS__, 'archive_table'), 20);
         add_shortcode('kurabe_list', array(__CLASS__, 'list_shortcode'));
     }
@@ -48,52 +47,6 @@ class Suit_Kurabe_Db
     public static function side_items($items)
     {
         return is_singular() && get_post_meta(get_the_ID(), self::META, true) ? array() : $items;
-    }
-
-    /* テーマ仕様: サイズ「幅広」はタイトル・パンくず・投稿メタを一切出さない（実測 2026-09-28。
-       タイトル「デフォルト」でも出ない。「ビッグ」は大きすぎると差し戻し）。
-       そこで、幅広の比較ページでは通常デザインと同じマークアップのヘッダーを本文先頭に差し込む。
-       クラス構成は size=none 時の実物から採取（article-header / single-post-title 等） */
-    public static function inject_title($content)
-    {
-        if (!is_singular('post') || !in_the_loop() || !is_main_query()) {
-            return $content;
-        }
-        $id = get_the_ID();
-        if (!get_post_meta($id, self::META, true)) {
-            return $content;
-        }
-        $lay = get_post_meta($id, 'diver_single_layout', true);
-        if (!is_array($lay) || !isset($lay['size']) || $lay['size'] !== 'full') {
-            return $content;
-        }
-        if (isset($lay['title']) && $lay['title'] === 'big') {
-            return $content;   // ビッグタイトル運用のページには二重に出さない
-        }
-        $h  = '<header class="article-header -inner-content alignfull has-gap-column:20 is-position-relative">';
-        $h .= '<div class="post-meta l-flex is-flex-wrap is-align-items-center has-gap:10 is-font-size:s">';
-        $cats = get_the_category($id);
-        if ($cats) {
-            $h .= "<span class='post-meta-item post_meta_category p-cats l-flex is-flex-wrap'>";
-            foreach ($cats as $c) {
-                $h .= '<a class="p-cat-item bg-accent is-omit-line:1 p-cat-' . (int) $c->term_id . '" href="' . esc_url(get_category_link($c)) . '" rel="category tag">' . esc_html($c->name) . '</a>';
-            }
-            $h .= '</span>';
-        }
-        $h .= "<span class='post-meta-item post_meta_modified'><time class=\"post-meta-item p-date post-modified\" datetime=\"" . esc_attr(get_the_modified_date('Y-m-d', $id)) . '">' . esc_html(get_the_modified_date('Y年n月j日', $id)) . '</time></span>';
-        $h .= "<span aria-label='当メディアはAmazonアソシエイト、楽天アフィリエイトを始めとした各種アフィリエイトプログラムに参加しています。記事で紹介している商品を購入すると、売上の一部が弊社に還元されます。' class='post-meta-item post_meta_prtag js-hover-tooltip'><span class='material-icon'>&#xe88e;</span>PR</span>";
-        $h .= '</div>';
-        $h .= '<h1 class="single-post-title entry-title">' . esc_html(get_the_title($id)) . '</h1>';
-        $tags = get_the_tags($id);
-        if ($tags) {
-            $h .= '<div class="post-meta l-flex is-flex-wrap is-align-items-center has-gap:10 is-font-size:s"><span class="post-meta-item post_meta_tag">';
-            foreach ($tags as $t) {
-                $h .= "<a class='post-tag' rel='tag' href='" . esc_url(get_tag_link($t)) . "'>" . esc_html($t->name) . '</a>';
-            }
-            $h .= '</span></div>';
-        }
-        $h .= '</header>';
-        return $h . $content;
     }
 
     /* ---------- データ ---------- */
@@ -473,7 +426,7 @@ class Suit_Kurabe_Db
                 }
             }
             $h .= '<tr' . $attrs . '>';
-            $h .= '<td><span class="kurabe-store kurabe-' . esc_attr(self::slug($stores, $r['s'])) . '"' . self::color_style($stores, $r['s']) . '>' . esc_html(self::label($stores, $r['s'])) . '</span></td>';
+            $h .= '<td class="kurabe-td-store"><span class="kurabe-store kurabe-' . esc_attr(self::slug($stores, $r['s'])) . '"' . self::color_style($stores, $r['s']) . '>' . esc_html(self::label($stores, $r['s'])) . '</span></td>';
             // 商品名＝公式商品ページへのリンク（右端の「公式」列は気づかれないため廃止・吉村さん指示）
             $h .= '<td><a class="kurabe-pname" href="' . esc_url($r['u']) . '" target="_blank" rel="noopener">' . esc_html($r['n']) . '</a>';
             if (!empty($r['same'])) {
@@ -481,22 +434,22 @@ class Suit_Kurabe_Db
             }
             $h .= '</td>';
             if ($mode !== 'none') {
-                $h .= '<td class="kurabe-num">' . (!empty($r['size_txt']) ? esc_html($r['size_txt']) : '<span class="kurabe-dim">記載なし</span>') . '</td>';
+                $h .= '<td class="kurabe-num" data-label="' . esc_attr($label) . '">' . (!empty($r['size_txt']) ? esc_html($r['size_txt']) : '<span class="kurabe-dim">記載なし</span>') . '</td>';
             }
             if (isset($r['p']) && $r['p'] !== null) {
-                $h .= '<td class="kurabe-num">';
+                $h .= '<td class="kurabe-num" data-label="価格（税込）">';
                 if (!empty($r['p_regular'])) {
                     // 値下げ品は2段表示：上段に取り消し線の通常価格、下段に現在価格
                     $h .= '<s class="kurabe-was">通常' . esc_html(number_format((int) $r['p_regular'])) . '円</s>';
                 }
                 $h .= '<span class="kurabe-price">' . esc_html(number_format((int) $r['p'])) . '円</span></td>';
             } else {
-                $h .= '<td class="kurabe-num"><span class="kurabe-dim">記載なし</span></td>';
+                $h .= '<td class="kurabe-num" data-label="価格（税込）"><span class="kurabe-dim">記載なし</span></td>';
             }
             foreach ($cols as $key => $cl) {
                 $v = isset($r[$key]) ? $r[$key] : '';
                 $from = isset($r['from'][$key]) ? $r['from'][$key] : '';
-                $h .= '<td class="' . (!empty($cl['sort']) ? 'kurabe-num' : 'kurabe-text') . '">';
+                $h .= '<td class="' . (!empty($cl['sort']) ? 'kurabe-num' : 'kurabe-text') . '" data-label="' . esc_attr($cl['label']) . '">';
                 $h .= $v !== '' && $v !== null ? esc_html($v) . ($from ? '<span class="kurabe-sub">' . esc_html($from) . 'の掲載値</span>' : '') : '<span class="kurabe-dim">記載なし</span>';
                 $h .= '</td>';
             }
