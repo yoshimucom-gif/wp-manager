@@ -2,14 +2,14 @@
   "name": "100均くらべ 比較データ表示",
   "slug": "kurabe-db",
   "plugin": "kurabe-db/kurabe-db.php",
-  "version": "1.1.7",
+  "version": "1.1.8",
   "tested": "6.7",
   "requires": "6.0",
   "requires_php": "7.4",
   "author": "Keys",
-  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/kurabe-db-1.1.7.zip",
+  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/kurabe-db-1.1.8.zip",
   "sections": {
     "description": "100均くらべ 比較データ表示 本体。GitHub から自動更新します。",
-    "changelog": "最新バージョン 1.1.7"
+    "changelog": "最新バージョン 1.1.8"
   }
 }

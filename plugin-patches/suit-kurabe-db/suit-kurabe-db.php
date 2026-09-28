@@ -2,7 +2,7 @@
 /**
  * Plugin Name: スーツくらべ 比較データ表示
  * Description: スーツ量販店の比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。店の定義（名前・表記・色）はデータ側の stores 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.0.9
+ * Version:     1.1.0
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: suit-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Suit_Kurabe_Db
 {
-    const VERSION  = '1.0.9';
+    const VERSION  = '1.1.0';
     const META     = 'kurabe_data';
     const OPT      = 'suit_kurabe_db_settings';
 
@@ -40,11 +40,29 @@ class Suit_Kurabe_Db
         add_action('diver_main_before', array(__CLASS__, 'archive_table'), 20);
         add_shortcode('kurabe_list', array(__CLASS__, 'list_shortcode'));
         add_action('suit_kurabe_selfupdate', array(__CLASS__, 'selfupdate'));
+        add_action('rest_api_init', array(__CLASS__, 'rest_selfupdate'));
     }
 
-    /* 新版の即時適用: rdh/v1 で cron オプションにこのフックの実行予約を入れ、wp-cron.php を叩くと、
-       更新キャッシュを捨てて配信元を見に行き、WP標準の自動更新をその場で走らせる。
-       （通常の自動更新は半日周期＋12時間の鮮度ガードがあり、リリース直後に反映されないため） */
+    /* 新版の即時適用の窓口（管理者のアプリケーションパスワードで叩く）:
+       POST /wp-json/skdb/v1/selfupdate → 更新キャッシュを捨てて配信元を確認し、
+       WP標準の自動更新をその場で走らせる。通常の自動更新は半日周期＋12時間の
+       鮮度ガードがあり、リリース直後に反映されないため。
+       （当初のrdh/v1でcronオプションに予約を書く案は、rdhがcronを書き込み禁止にしていて不可） */
+    public static function rest_selfupdate()
+    {
+        register_rest_route('skdb/v1', '/selfupdate', array(
+            'methods'             => 'POST',
+            'permission_callback' => function () {
+                return current_user_can('update_plugins');
+            },
+            'callback'            => function () {
+                $before = self::VERSION;
+                self::selfupdate();
+                return array('ok' => true, 'version_before' => $before);
+            },
+        ));
+    }
+
     public static function selfupdate()
     {
         delete_transient('suit_kurabe_db_updater_' . md5(plugin_basename(__FILE__)));
