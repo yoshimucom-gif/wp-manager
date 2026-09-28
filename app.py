@@ -6419,9 +6419,9 @@ def favicon():
 PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugin-downloads')
 PLUGIN_DOWNLOADS = {
     'mikata-seminar-feed': {'file': 'mikata-seminar-feed-1.0.0.zip', 'name': 'ミカタセミナー新着', 'version': '1.0.0'},
-    'kurabe-db': {'file': 'kurabe-db-1.1.6.zip', 'name': '100均くらべ 比較データ表示', 'version': '1.1.6'},
+    'kurabe-db': {'file': 'kurabe-db-1.1.7.zip', 'name': '100均くらべ 比較データ表示', 'version': '1.1.7'},
     'suit-kurabe-db': {'file': 'suit-kurabe-db-1.0.8.zip', 'name': 'スーツくらべ 比較データ表示', 'version': '1.0.8'},
-    'catalog-kurabe-db': {'file': 'catalog-kurabe-db-1.0.3.zip', 'name': 'カタログギフトくらべ 比較データ表示', 'version': '1.0.3'},
+    'catalog-kurabe-db': {'file': 'catalog-kurabe-db-1.0.4.zip', 'name': 'カタログギフトくらべ 比較データ表示', 'version': '1.0.4'},
     'kyutoki-shindan': {
         'file': 'kyutoki-shindan-1.0.2.zip',
         'name': '給湯器エラーコード診断',

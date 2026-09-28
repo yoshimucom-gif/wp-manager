@@ -153,3 +153,16 @@
   .kurabe-table tbody td .kurabe-sub{text-align:right}
   .kurabe-table tbody td.kurabe-td-name .kurabe-sub{text-align:left}
 }
+
+/* サイトの追加CSS（複製元から残る table/td/th への border・padding の !important）が、スマホのカードの中に
+   行ごとの線を引く（カタログくらべ・スーツで起きた現象）。比較表の中だけ打ち消す（サイト全体の設定は触らない）。
+   カードは外枠＋影で1枚ずつ区切り、中は商品名の下の1本以外は線を引かない */
+@media (max-width:640px){
+  .kurabe-table table{border:0!important}
+  .kurabe-table thead tr,.kurabe-table tbody{border:0!important}
+  .kurabe-table thead th{border:0!important;padding:0!important}
+  .kurabe-table tbody tr{border:1px solid var(--k-line)!important;border-radius:6px;box-shadow:0 1px 3px rgb(0 0 0/.08)!important;margin:0 0 16px;padding:12px 14px 8px}
+  .kurabe-table tbody td,.kurabe-table tbody tr:first-child td{border:0!important;padding:3px 0!important}
+  .kurabe-table tbody td.kurabe-td-store{padding:0 0 6px!important}
+  .kurabe-table tbody td.kurabe-td-name{padding:0 0 10px!important;margin:0 0 6px;border-bottom:1px solid var(--k-line2)!important}
+}
