@@ -122,10 +122,12 @@ p.kurabe-aside strong{display:block;margin-bottom:4px}
 /* カテゴリー・店名タグの一覧 */
 .kurabe-list{margin:0 0 2em}
 .kurabe-list-lead{font-size:15px;color:var(--k-ink2);margin:0 0 .8em}
-.kurabe-list table{border-collapse:collapse;width:100%;min-width:520px;font-size:15px;line-height:1.6;margin:0;border:0}
+.kurabe-list table{border-collapse:collapse;width:100%;min-width:680px;font-size:15px;line-height:1.6;margin:0;border:0}
 .kurabe-list th,.kurabe-list td{padding:10px 12px;border:0;border-bottom:1px solid var(--k-line2);text-align:left;background:none}
 .kurabe-list thead th{background:var(--k-bg);font-size:13.5px}
-.kurabe-list .kurabe-c{text-align:center;width:14%}
+.kurabe-list .kurabe-c{text-align:center}
+/* 品目名の列がつぶれて縦書きにならないよう最小幅を確保（2026-09-29 吉村さん指摘） */
+.kurabe-list th:first-child,.kurabe-list td:first-child{min-width:8.5em}
 
 /* スマホはカード型（catalog-kurabe-dbで吉村さん選択の案Aを移植・2026-09-28）。1商品＝1枚、
    横スクロールなし。見出し行は並び替えボタンだけを丸いボタンとして残す。絞り込みはhiddenで消える */

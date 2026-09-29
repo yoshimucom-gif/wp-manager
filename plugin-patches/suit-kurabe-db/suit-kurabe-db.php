@@ -2,7 +2,7 @@
 /**
  * Plugin Name: スーツくらべ 比較データ表示
  * Description: スーツ量販店の比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。店の定義（名前・表記・色）はデータ側の stores 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.1.2
+ * Version:     1.1.3
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: suit-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Suit_Kurabe_Db
 {
-    const VERSION  = '1.1.2';
+    const VERSION  = '1.1.3';
     const META     = 'kurabe_data';
     const OPT      = 'suit_kurabe_db_settings';
 
@@ -661,13 +661,21 @@ class Suit_Kurabe_Db
         if (!$posts) {
             return '';
         }
-        /* 店定義は各ページの kurabe_data の stores をマージして使う（先勝ち） */
-        $storemap = array();
+        /* 店定義は各ページの kurabe_data の stores をマージして使う。
+           各ページのstoresは店マスタ順の部分列なので、いちばん店数の多いページの並びを
+           土台にしてから残りを足す（先勝ちだけだと最初のページに無い店が末尾に落ちて
+           マスタ順が崩れる。2026-09-29 吉村さん指摘＝ユニクロは最後・青山が先頭側） */
+        $base = array();
         $rows = array();
+        $maps = array();
         foreach ($posts as $p) {
             $d = self::data($p->ID);
             if ($d) {
-                $storemap += self::stores($d);
+                $m = self::stores($d);
+                $maps[] = $m;
+                if (count($m) > count($base)) {
+                    $base = $m;
+                }
             }
             $per = json_decode((string) get_post_meta($p->ID, 'kurabe_stores', true), true);
             $rows[] = array(
@@ -676,6 +684,10 @@ class Suit_Kurabe_Db
                 'total' => (int) get_post_meta($p->ID, 'kurabe_count', true),
                 'per'   => is_array($per) ? $per : array(),
             );
+        }
+        $storemap = $base;
+        foreach ($maps as $m) {
+            $storemap += $m;
         }
         /* 列＝定義済みの店＋（定義に無いが集計に出てくる店） */
         $cols = $storemap;
@@ -715,14 +727,14 @@ class Suit_Kurabe_Db
         foreach ($cols as $st => $c) {
             $h .= '<th scope="col" class="kurabe-c"><span class="kurabe-store kurabe-' . esc_attr($c['slug']) . '"' . self::color_style($cols, $st) . '>' . esc_html($c['label']) . '</span></th>';
         }
-        $h .= '<th scope="col" class="kurabe-c">合計</th></tr></thead><tbody>';
+        $h .= '</tr></thead><tbody>';
         foreach ($rows as $r) {
             $h .= '<tr><td><a href="' . esc_url($r['url']) . '">' . esc_html($r['item']) . '</a></td>';
             foreach ($cols as $st => $c) {
                 $n = isset($r['per'][$st]) ? (int) $r['per'][$st] : 0;
                 $h .= '<td class="kurabe-c kurabe-num">' . ($n ? '<span class="kurabe-t"' . self::color_style($cols, $st) . '>' . $n . '</span>' : '<span class="kurabe-none">—</span>') . '</td>';
             }
-            $h .= '<td class="kurabe-c kurabe-num">' . $r['total'] . '種</td></tr>';
+            $h .= '</tr>';
         }
         return $h . '</tbody></table></div></div>';
     }
