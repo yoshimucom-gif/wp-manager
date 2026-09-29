@@ -1978,6 +1978,15 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.57 / auto-inserter v0.19.1 (2026-09-29) — メタボックスにショートコードモード表示</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>指摘</strong>: ショートコードを貼った後「このボタンでいいのか」「ショートコードから挿入の機能が要るのでは」と迷う。機能自体は同じボタンが自動判定するが、モードが画面に見えなかった。</li>
+              <li><strong>変更</strong>: 記事編集画面のメタボックスに <strong>「📍 ショートコード挿入モード (N箇所)」</strong> を表示 (本文に [affiros_ai_card] がある記事だけ)。「今すぐ挿入」の確認ダイアログに<strong>「未保存の内容は反映されない・ショートコード追加後は先に保存」</strong>の注意を追加 (保存前に押すと通常位置へ焼き込まれる事故のガード)。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.19.0 → 0.19.1 / <code>APP_VERSION</code> 1.9.56 → 1.9.57。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.56 / auto-inserter v0.19.0 (2026-09-28) — 📍 任意の場所に挿入するショートコード</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>新ショートコード</strong>: <code>[affiros_ai_card]</code> (属性: <code>count</code>=表示件数1〜5 / <code>title</code>=見出し接尾辞・空で見出しなし)。本文の好きな位置に置くと、そこに記事内カードが表示時描画される。</li>

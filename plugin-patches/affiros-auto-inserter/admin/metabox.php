@@ -27,8 +27,15 @@ function affiros_ai_render_metabox($post) {
     $last_insert = get_post_meta($post->ID, AFFIROS_AI_META_LAST_INSERT_AT, true);
     $last_error  = get_post_meta($post->ID, AFFIROS_AI_META_LAST_ERROR, true);
     $is_ranking  = Affiros_AI_Ranking_Detector::is_ranking($post);
+    $sc_count    = substr_count((string)$post->post_content, '[affiros_ai_card');
     ?>
     <div style="font-size:12px;line-height:1.7">
+        <?php if ($sc_count > 0): ?>
+            <div style="background:#e8f5e9;color:#1b5e20;padding:6px 8px;border-radius:3px;margin-bottom:8px;">
+                📍 ショートコード挿入モード (<?php echo intval($sc_count); ?>箇所)<br>
+                <small>「今すぐ挿入」は商品データの取得・更新だけを行い、カードは [affiros_ai_card] の位置に表示されます</small>
+            </div>
+        <?php endif; ?>
         <?php if ($excluded === 'yes'): ?>
             <div style="background:#fff3e0;color:#8a5800;padding:6px 8px;border-radius:3px;margin-bottom:8px;">除外設定中 (自動挿入されません)</div>
         <?php elseif ($is_ranking): ?>
@@ -78,7 +85,7 @@ function affiros_ai_render_metabox($post) {
         });
 
         $('#ai-mb-apply').on('click', async function () {
-            if (!confirm('この記事に商品カードを挿入します。実行しますか？')) return;
+            if (!confirm('この記事に商品カードを挿入します。\n※ 編集中の未保存内容は反映されません。ショートコードを追加・移動した場合は先に「下書き保存/更新」してから実行してください。\n実行しますか？')) return;
             $(this).prop('disabled', true).text('実行中...');
             $('#ai-mb-status').text('');
             try {
