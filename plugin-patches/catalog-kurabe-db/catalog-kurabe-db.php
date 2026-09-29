@@ -2,7 +2,7 @@
 /**
  * Plugin Name: カタログギフトくらべ 比較データ表示
  * Description: カタログギフトの比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。発行会社・ブランドの定義（名前・表記・色）と絞り込みの軸はデータ側の stores / filters 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.1.0
+ * Version:     1.1.1
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: catalog-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Catalog_Kurabe_Db
 {
-    const VERSION  = '1.1.0';
+    const VERSION  = '1.1.1';
     const META     = 'kurabe_data';
     const OPT      = 'catalog_kurabe_db_settings';
 
@@ -710,7 +710,9 @@ class Catalog_Kurabe_Db
             return '';
         }
         $name = !empty($me['name']) ? $me['name'] : (isset($d['item']) ? $d['item'] : '');
-        $h = '<h2 class="wp-block-heading">' . esc_html($name) . 'とあわせて見たいページ</h2><div class="kurabe-related">';
+        // シリーズ名「プレゼンテージ カタログギフト」は見出しで「プレゼンテージのカタログギフト」と読ませる
+        $name = preg_replace('/\s+カタログギフト$/u', 'のカタログギフト', $name);
+        $h = '<h3 class="wp-block-heading">' . esc_html($name) . 'とあわせて見たいページ</h3><div class="kurabe-related">';
         foreach ($groups as $label => $items) {
             $h .= '<p class="kurabe-related-label">' . esc_html($label) . '</p>' . self::axis_list($items);
         }
@@ -742,7 +744,7 @@ class Catalog_Kurabe_Db
             return '';
         }
         $name = $item ? $item : (isset($d['item']) ? $d['item'] : '');
-        $h = '<h2 class="wp-block-heading">' . esc_html($name) . 'とあわせて比べたい品目</h2><div class="kurabe-related">';
+        $h = '<h3 class="wp-block-heading">' . esc_html($name) . 'とあわせて比べたい品目</h3><div class="kurabe-related">';
         if ($pair) {
             $h .= '<p class="kurabe-related-label">一緒に使う品目</p>' . self::link_list($pair);
         }
