@@ -6421,7 +6421,7 @@ PLUGIN_DOWNLOADS = {
     'mikata-seminar-feed': {'file': 'mikata-seminar-feed-1.0.0.zip', 'name': 'ミカタセミナー新着', 'version': '1.0.0'},
     'kurabe-db': {'file': 'kurabe-db-1.1.8.zip', 'name': '100均くらべ 比較データ表示', 'version': '1.1.8'},
     'suit-kurabe-db': {'file': 'suit-kurabe-db-1.1.3.zip', 'name': 'スーツくらべ 比較データ表示', 'version': '1.1.3'},
-    'catalog-kurabe-db': {'file': 'catalog-kurabe-db-1.1.1.zip', 'name': 'カタログギフトくらべ 比較データ表示', 'version': '1.1.1'},
+    'catalog-kurabe-db': {'file': 'catalog-kurabe-db-1.1.2.zip', 'name': 'カタログギフトくらべ 比較データ表示', 'version': '1.1.2'},
     'kyutoki-shindan': {
         'file': 'kyutoki-shindan-1.0.2.zip',
         'name': '給湯器エラーコード診断',
