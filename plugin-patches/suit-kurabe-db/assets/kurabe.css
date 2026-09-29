@@ -11,8 +11,10 @@
 .kurabe-source{display:flex;flex-wrap:wrap;margin:0 0 1.5em;padding:0;border:1px solid var(--k-line);background:var(--k-surface);font-size:14px;line-height:1.6}
 .kurabe-source>div{display:flex;gap:8px;padding:8px 14px;border-right:1px solid var(--k-line2);flex:1 1 auto;margin:0}
 .kurabe-source>div:last-child{border-right:0}
-.kurabe-source dt{font-weight:700;color:var(--k-accent);white-space:nowrap;margin:0}
-.kurabe-source dd{margin:0;color:var(--k-ink2)}
+/* 見出し（出典等）は縮めない。縮むと nowrap の文字が右の本文に重なる
+   （カタログギフトくらべのスマホで実際に崩れた 2026-09-29。同対策を移植） */
+.kurabe-source dt{font-weight:700;color:var(--k-accent);white-space:nowrap;margin:0;flex:0 0 auto;min-width:max-content}
+.kurabe-source dd{margin:0;color:var(--k-ink2);flex:1 1 0;min-width:0}
 .kurabe-source time{font-weight:700;color:var(--k-ink)}
 @media (max-width:640px){.kurabe-source>div{flex:1 1 100%;border-right:0;border-bottom:1px solid var(--k-line2)}.kurabe-source>div:last-child{border-bottom:0}}
 
