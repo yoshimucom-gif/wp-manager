@@ -1978,6 +1978,15 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.58 / auto-inserter v0.19.2 (2026-09-29) — 挿入結果の表示をわかりやすく</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>指摘</strong>: ショートコード挿入後の結果が「ショートコード描画 (商品データ更新)」で伝わらない。メタボックスのキーワード/最終挿入も再読み込みまで古いままで「何も変わらない」ように見える。</li>
+              <li><strong>変更</strong>: 結果メッセージを <strong>「✓ 挿入されました (ショートコードN箇所に表示)」</strong> に。成功時は<strong>キーワード・最終挿入の表示をその場で更新</strong> (再読み込み不要)。ヒントも「カードはプレビュー/公開ページに表示されます (編集画面内には出ません)」と明示。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.19.1 → 0.19.2 / <code>APP_VERSION</code> 1.9.57 → 1.9.58。スタブテスト12項目PASS。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.57 / auto-inserter v0.19.1 (2026-09-29) — メタボックスにショートコードモード表示</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>指摘</strong>: ショートコードを貼った後「このボタンでいいのか」「ショートコードから挿入の機能が要るのでは」と迷う。機能自体は同じボタンが自動判定するが、モードが画面に見えなかった。</li>

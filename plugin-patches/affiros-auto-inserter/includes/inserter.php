@@ -146,14 +146,15 @@ class Affiros_AI_Inserter {
             update_post_meta($post_id, AFFIROS_AI_META_LAST_INSERT_AT, current_time('mysql'));
             self::clear_last_error($post_id);
 
-            $msg = 'ショートコード描画 (商品データ更新)';
+            $sc_count = substr_count($post->post_content, '[affiros_ai_card');
+            $msg = "挿入されました (ショートコード{$sc_count}箇所に表示)";
             if ($partial_error !== '') $msg .= " ⚠️ {$partial_error}";
             if ($keyword_note !== '')  $msg .= " 🔁 {$keyword_note}";
             if (!empty($source_note))  $msg .= " 📊 {$source_note}";
             return self::result(true, $msg, [
                 'changed' => true,
                 'keyword' => $keyword,
-                'insertions' => substr_count($post->post_content, '[affiros_ai_card'),
+                'insertions' => $sc_count,
                 'amazon_count' => count($products_data['amazon'] ?? []),
                 'rakuten_count' => count($products_data['rakuten'] ?? []),
             ]);

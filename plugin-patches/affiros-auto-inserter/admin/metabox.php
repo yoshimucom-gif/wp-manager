@@ -42,8 +42,8 @@ function affiros_ai_render_metabox($post) {
             <div style="background:#e7f3ff;color:#0057a3;padding:6px 8px;border-radius:3px;margin-bottom:8px;">ランキング記事と判定 → スキップ対象</div>
         <?php endif; ?>
 
-        <div>キーワード: <strong><?php echo esc_html($keyword ?: '(未抽出)'); ?></strong></div>
-        <div>最終挿入: <strong><?php echo esc_html($last_insert ?: '(未挿入)'); ?></strong></div>
+        <div>キーワード: <strong id="ai-mb-keyword"><?php echo esc_html($keyword ?: '(未抽出)'); ?></strong></div>
+        <div>最終挿入: <strong id="ai-mb-last"><?php echo esc_html($last_insert ?: '(未挿入)'); ?></strong></div>
         <?php if ($last_error): ?>
             <div style="color:#c62828;margin-top:4px;">⚠️ 前回エラー: <?php echo esc_html($last_error); ?></div>
         <?php endif; ?>
@@ -95,7 +95,14 @@ function affiros_ai_render_metabox($post) {
                     post_id: postId,
                 });
                 if (res && res.success) {
-                    $('#ai-mb-status').html('<span style="color:#0a7a2f;font-weight:600">✓ ' + escapeHtml(res.data.message || '完了') + '</span><br><small>ページを再読み込みして確認してください</small>');
+                    // キーワード・最終挿入の表示をその場で更新 (再読み込み不要に)
+                    if (res.data && res.data.keyword) $('#ai-mb-keyword').text(res.data.keyword);
+                    if (!res.data || !res.data.skipped) $('#ai-mb-last').text('たった今');
+                    const isSc = /ショートコード/.test((res.data && res.data.message) || '');
+                    const hint = isSc
+                        ? 'カードは記事の<strong>プレビュー/公開ページ</strong>のショートコード位置に表示されます (編集画面内には出ません)'
+                        : 'ページを再読み込みすると本文にカードが入っています';
+                    $('#ai-mb-status').html('<span style="color:#0a7a2f;font-weight:600">✓ ' + escapeHtml(res.data.message || '完了') + '</span><br><small>' + hint + '</small>');
                 } else {
                     $('#ai-mb-status').html('<span style="color:#c62828">✗ ' + escapeHtml(res.data || 'failed') + '</span>');
                 }
