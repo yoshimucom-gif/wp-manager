@@ -42,7 +42,18 @@ def main(ver):
     s, n = pat.subn(lambda m: m.group(1) + f"{SLUG}-{ver}.zip" + m.group(2) + ver + m.group(3), s)
     assert n == 1, f"app.py の置換件数が想定外: {n}"
     open(a, "w", encoding="utf-8", newline="").write(s)
+
+    # 配信情報（本番の自動更新が見るファイル）も同じ版に書き換える。
+    # これを上げ忘れると本番に更新が届かない（2026-09-29 1.1.9 で半日届かなかった）
+    import json
+    h = os.path.join(REPO, "plugin-host", "api", "plugin-update", SLUG)
+    info = json.load(open(h, encoding="utf-8"))
+    info["version"] = ver
+    info["download_url"] = f"https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/{SLUG}-{ver}.zip"
+    info.setdefault("sections", {})["changelog"] = f"最新バージョン {ver}"
+    open(h, "w", encoding="utf-8", newline="\n").write(json.dumps(info, ensure_ascii=False, indent=2) + "\n")
     print("built", out, names)
+    print("コミットに必ず含める:", os.path.relpath(h, REPO))
 
 
 if __name__ == "__main__":
