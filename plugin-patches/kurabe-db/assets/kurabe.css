@@ -46,6 +46,8 @@
 .kurabe-genre ul{list-style:none;margin:0;padding:0}
 .kurabe-genre li{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:0;padding:6px 0;border-bottom:1px solid var(--k-line2)}
 .kurabe-genre li::before{display:none}
+.kurabe-genre li a{color:var(--k-ink);text-decoration:none}
+.kurabe-genre li a:hover{text-decoration:underline;opacity:1}
 .kurabe-genre li span{font-size:14px;color:var(--k-ink2);white-space:nowrap;font-variant-numeric:tabular-nums}
 .kurabe-genre-more{display:inline-block;margin-top:.6em;font-size:15px;font-weight:700}
 
