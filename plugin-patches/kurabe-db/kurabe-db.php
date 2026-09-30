@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.3.1
+ * Version:     1.3.2
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.3.1';
+    const VERSION  = '1.3.2';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -739,7 +739,7 @@ class Kurabe_Db
             $link = get_term_link($g['term']);
             $n = count($g['rows']);
             // 1ジャンルずつ re:Diver のコンテナ（dbp/container と同じ出力）で囲む（吉村さん指定 2026-09-30）
-            $h .= '<section class="kurabe-genre wp-block-dbp-container padding-block:30 padding-inline:30 has-background dbp-container" style="box-shadow:1.66px 2.5px 5px rgb(0 0 0/.1)">'
+            $h .= '<section class="kurabe-genre wp-block-dbp-container padding-block:30 padding-inline:30 dbp-container">'
                 . '<div class="dbp-container__inner"><h3 class="kurabe-genre-name"><a href="' . esc_url($link) . '">' . esc_html($g['term']->name) . '</a></h3><ul>';
             foreach (array_slice($g['rows'], 0, $max) as $r) {
                 $h .= '<li><a href="' . esc_url($r['url']) . '">' . esc_html($r['item']) . '</a><span>' . $r['total'] . '種</span></li>';

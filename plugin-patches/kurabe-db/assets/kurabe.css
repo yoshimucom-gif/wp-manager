@@ -2,7 +2,7 @@
 .kurabe-source,.kurabe-stats,.kurabe-table,.kurabe-scale,.kurabe-shop,.kurabe-list,.kurabe-related,
 .kurabe-top-stats,.kurabe-genres,.kurabe-top-stores{
   --k-ink:#1E2A33;--k-ink2:#56636E;--k-line:#D3DADF;--k-line2:#E6EAED;--k-bg:#F4F6F7;--k-surface:#fff;
-  --k-accent:#3C5566;--k-tag:#F2C744;--k-tag-ink:#3A2E05;--k-mesh:#B4C1CA;
+  --k-accent:#3C3C3C;--k-tag:#F2C744;--k-tag-ink:#3A2E05;--k-mesh:#B4C1CA;
   --k-daiso:#f5008c;--k-cando:#e94709;--k-watts:#6a5246;--k-watts-ink:#fff;
   --k-note:#FFF8DD;--k-note-line:#EAD58A;
   box-sizing:border-box;
@@ -28,7 +28,7 @@
 .kurabe-showcase-go{display:inline-block;margin-top:6px;font-weight:700;font-size:15px;color:var(--k-accent)}
 .kurabe-showcase-go::after{content:" →"}
 .kurabe-showcase *{box-sizing:border-box}
-.kurabe-showcase{--k-ink:#1E2A33;--k-ink2:#56636E;--k-line:#D3DADF;--k-bg:#EEF1F3;--k-accent:#3C5566;--k-daiso:#f5008c;--k-cando:#e94709;--k-watts:#6a5246}
+.kurabe-showcase{--k-ink:#1E2A33;--k-ink2:#56636E;--k-line:#D3DADF;--k-bg:#EFEFEF;--k-accent:#3C3C3C;--k-daiso:#f5008c;--k-cando:#e94709;--k-watts:#6a5246}
 
 .kurabe-genres{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:34px 40px}
 .kurabe-genre{margin:0}
@@ -36,12 +36,12 @@
   border-bottom:2px solid var(--k-ink);background:none}
 .kurabe-genre-name a{color:var(--k-ink);text-decoration:none}
 /* ジャンルごとに見出しの下線の色を変える（全部同じ線にしない） */
-.kurabe-genre:nth-child(6n+1) .kurabe-genre-name{border-bottom-color:#1D9E75}
-.kurabe-genre:nth-child(6n+2) .kurabe-genre-name{border-bottom-color:#D85A30}
-.kurabe-genre:nth-child(6n+3) .kurabe-genre-name{border-bottom-color:#534AB7}
-.kurabe-genre:nth-child(6n+4) .kurabe-genre-name{border-bottom-color:#BA7517}
-.kurabe-genre:nth-child(6n+5) .kurabe-genre-name{border-bottom-color:#185FA5}
-.kurabe-genre:nth-child(6n) .kurabe-genre-name{border-bottom-color:#993556}
+/* 下線はロゴの3色（ピンク・朱色・黄色）を順に回す */
+.kurabe-genre:nth-child(3n+1) .kurabe-genre-name{border-bottom-color:#E60C6C}
+.kurabe-genre:nth-child(3n+2) .kurabe-genre-name{border-bottom-color:#DE3C12}
+.kurabe-genre:nth-child(3n) .kurabe-genre-name{border-bottom-color:#F0A800}
+/* コンテナは白地・薄い線の枠・影なし（吉村さん指定 2026-09-30）。TOPのジャンルと記事の数字欄 */
+.kurabe-genre.dbp-container,.dbp-container:has(.kurabe-stats){background:#fff !important;border:1px solid #E2E2E2;box-shadow:none !important}
 .kurabe-genre-name span{font-size:14px;font-weight:400;color:var(--k-ink2);white-space:nowrap}
 .kurabe-genre ul{list-style:none;margin:0;padding:0}
 .kurabe-genre li{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:0;padding:6px 0;border-bottom:1px solid var(--k-line2)}
@@ -65,7 +65,7 @@
 @media (max-width:640px){.kurabe-top-stores{grid-template-columns:1fr;gap:14px}
   .kurabe-showcase{padding:18px 16px}.kurabe-showcase-row{grid-template-columns:66px 1fr auto;gap:8px}.kurabe-showcase-v{min-width:0;font-size:20px}}
 /* TOPの区画（固定ページ本文に <style> を入れると ConoHa WAF が 403 にするので、ここに置く） */
-.kt-alt{background:#F4F6F7}
+.kt-alt{background:#F6F5F3}
 .kt-hero h1.wp-block-heading{margin-bottom:.3em}
 .kt-hero .wp-block-search{max-width:640px}
 .kt-hero .wp-block-dbp-column{align-items:center}
