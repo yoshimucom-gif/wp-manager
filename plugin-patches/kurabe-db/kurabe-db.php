@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.2.9
+ * Version:     1.3.0
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.2.9';
+    const VERSION  = '1.3.0';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -633,8 +633,8 @@ class Kurabe_Db
         unset($seen['']);
         $goods = count($seen);
         // 語の途中で折り返さないよう短く1行に収める（「比べてい／ます」と割れた・2026-09-30）
-        return '<p class="kurabe-top-stats"><b>' . number_format(count($posts)) . '</b>の比較表・<b>' . number_format($goods)
-            . '</b>商品を掲載</p>';
+        // 数字は「何商品を載せているか」だけにする（吉村さん指定 2026-09-30）
+        return '<p class="kurabe-top-stats"><b>' . number_format($goods) . '</b>商品を掲載</p>';
     }
 
     /* TOPの見本：1品目を3社の色の棒で比べる。物差しは品目の形で選ぶ
@@ -724,15 +724,17 @@ class Kurabe_Db
             });
             $link = get_term_link($g['term']);
             $n = count($g['rows']);
-            $h .= '<section class="kurabe-genre"><h3 class="kurabe-genre-name"><a href="' . esc_url($link) . '">' . esc_html($g['term']->name) . '</a><span>' . $n . '件</span></h3><ul>';
+            // 1ジャンルずつ re:Diver のコンテナ（dbp/container と同じ出力）で囲む（吉村さん指定 2026-09-30）
+            $h .= '<section class="kurabe-genre wp-block-dbp-container padding-block:30 padding-inline:30 has-background dbp-container" style="box-shadow:1.66px 2.5px 5px rgb(0 0 0/.1)">'
+                . '<div class="dbp-container__inner"><h3 class="kurabe-genre-name"><a href="' . esc_url($link) . '">' . esc_html($g['term']->name) . '</a></h3><ul>';
             foreach (array_slice($g['rows'], 0, $max) as $r) {
                 $h .= '<li><a href="' . esc_url($r['url']) . '">' . esc_html($r['item']) . '</a><span>' . $r['total'] . '種</span></li>';
             }
             $h .= '</ul>';
             if ($n > $max) {
-                $h .= '<a class="kurabe-genre-more" href="' . esc_url($link) . '">' . esc_html($g['term']->name) . 'の' . $n . '件をすべて見る</a>';
+                $h .= '<a class="kurabe-genre-more" href="' . esc_url($link) . '">' . esc_html($g['term']->name) . 'をすべて見る</a>';
             }
-            $h .= '</section>';
+            $h .= '</div></section>';
         }
         return $h . '</div>';
     }
@@ -741,18 +743,23 @@ class Kurabe_Db
     {
         $h = '<div class="kurabe-top-stores">';
         foreach (self::STORES as $st => $cls) {
-            $n = 0;
+            // その店の商品数（比較表をまたいだ重複はJANコードで除く）
+            $seen = array();
             foreach ($posts as $p) {
-                $per = json_decode((string) get_post_meta($p->ID, 'kurabe_stores', true), true);
-                if (!empty($per[$st])) {
-                    $n++;
+                $d = json_decode((string) get_post_meta($p->ID, self::META, true), true);
+                foreach ((is_array($d) && !empty($d['rows'])) ? $d['rows'] : array() as $r) {
+                    if ($r['s'] === $st) {
+                        $seen[!empty($r['jan']) ? $r['jan'] : (isset($r['u']) ? $r['u'] : '')] = 1;
+                    }
                 }
             }
+            unset($seen['']);
+            $n = number_format(count($seen));
             $term = get_term_by('slug', $cls, 'post_tag');
             $link = $term ? get_term_link($term) : '';
             $h .= '<a class="kurabe-top-store kurabe-top-store-' . $cls . '" href="' . esc_url(is_wp_error($link) ? '' : $link) . '">'
                 . '<span class="kurabe-store kurabe-' . $cls . '">' . esc_html(self::label($st)) . '</span>'
-                . '<span class="kurabe-top-store-n">' . $n . '<small>件の比較表に掲載</small></span>'
+                . '<span class="kurabe-top-store-n">' . $n . '<small>商品を掲載</small></span>'
                 . '<span class="kurabe-top-store-go">' . esc_html(self::label($st)) . 'の比較表一覧へ</span></a>';
         }
         return $h . '</div>';

@@ -31,7 +31,7 @@
 .kurabe-showcase{--k-ink:#1E2A33;--k-ink2:#56636E;--k-line:#D3DADF;--k-bg:#EEF1F3;--k-accent:#3C5566;--k-daiso:#f5008c;--k-cando:#e94709;--k-watts:#6a5246}
 
 .kurabe-genres{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:34px 40px}
-.kurabe-genre{margin:0;padding:0}
+.kurabe-genre{margin:0}
 .kurabe-genre-name{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:0 0 .5em;padding:0 0 .45em;
   border-bottom:2px solid var(--k-ink);background:none}
 .kurabe-genre-name a{color:var(--k-ink);text-decoration:none}
