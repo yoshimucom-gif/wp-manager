@@ -42,6 +42,10 @@
 .kurabe-top-store-go{font-size:15px;font-weight:700;color:var(--k-accent)}
 .kurabe-top-store-go::after{content:" →"}
 @media (max-width:640px){.kurabe-top-stores{grid-template-columns:1fr;gap:14px}.kurabe-top-v{font-size:28px}}
+/* TOPの区画（固定ページ本文に <style> を入れると ConoHa WAF が 403 にするので、ここに置く） */
+.kt-alt{background:#F4F6F7}
+.kt-hero h1.wp-block-heading{margin-bottom:.3em}
+.kt-hero .wp-block-search{max-width:640px}
 
 .kurabe-source{display:flex;flex-wrap:wrap;margin:0 0 1.5em;padding:0;border:1px solid var(--k-line);background:var(--k-surface);font-size:14px;line-height:1.6}
 .kurabe-source>div{display:flex;gap:8px;padding:8px 14px;border-right:1px solid var(--k-line2);flex:1 1 auto;margin:0}
