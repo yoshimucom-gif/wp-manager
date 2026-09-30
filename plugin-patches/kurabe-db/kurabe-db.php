@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.3.0
+ * Version:     1.3.1
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.3.0';
+    const VERSION  = '1.3.1';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -46,6 +46,20 @@ class Kurabe_Db
         add_shortcode('kurabe_list', array(__CLASS__, 'list_shortcode'));
         add_shortcode('kurabe_top', array(__CLASS__, 'top_shortcode'));
         add_action('rest_api_init', array(__CLASS__, 'rest_selfupdate'));
+        add_filter('wp_robots', array(__CLASS__, 'robots_while_private'), 999);
+    }
+
+    /* 「検索エンジンがサイトをインデックスしないようにする」がオンの間は、全ページに noindex を付ける。
+       re:Diver は記事ごとの設定（既定 noindex=false）でサイト全体の設定を上書きし、
+       公開前なのに robots が「nofollow」だけになっていた（2026-09-30 実測）。
+       公開時にこの設定をオフにすれば、ここは何もしなくなる */
+    public static function robots_while_private($robots)
+    {
+        if ((string) get_option('blog_public') === '0') {
+            $robots['noindex']  = true;
+            $robots['nofollow'] = true;
+        }
+        return $robots;
     }
 
     /* 新版の即時適用の窓口（管理者のアプリケーションパスワードで叩く）:
