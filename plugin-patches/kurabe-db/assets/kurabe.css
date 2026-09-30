@@ -11,18 +11,37 @@
 .kurabe-top-stats *,.kurabe-genres *,.kurabe-top-stores *{box-sizing:border-box}
 
 /* ---------- TOPページ [kurabe_top] ：箱で囲まず、罫線と余白で区切る ---------- */
-.kurabe-top-stats{display:flex;flex-wrap:wrap;gap:12px 40px;margin:1.2em 0}
-.kurabe-top-stats>div{display:flex;flex-direction:column;gap:2px;padding-left:14px;border-left:3px solid var(--k-accent)}
-.kurabe-top-stats>div:nth-child(3){border-left-color:var(--k-cando)}
-.kurabe-top-v{font-size:32px;font-weight:700;line-height:1.2;color:var(--k-ink);font-variant-numeric:tabular-nums}
-.kurabe-top-v small{font-size:16px;margin-left:2px}
-.kurabe-top-k{font-size:14px;color:var(--k-ink2)}
+.kurabe-top-stats{margin:.8em 0 0;color:var(--k-ink2)}
+.kurabe-top-stats b{font-size:22px;color:var(--k-ink);font-variant-numeric:tabular-nums;margin:0 2px}
+
+/* 見本（1品目を3社の色の棒で比べる）＝TOPの主役 */
+.kurabe-showcase{background:#fff;border:1px solid var(--k-line);border-top:4px solid var(--k-ink);border-radius:0 0 8px 8px;padding:22px 24px 20px;
+  box-shadow:0 10px 30px rgb(30 42 51/.10)}
+.kurabe-showcase-head{font-weight:700;font-size:18px;margin:0 0 14px;color:var(--k-ink)}
+.kurabe-showcase-head span{font-weight:400;font-size:15px;color:var(--k-ink2);margin-left:4px}
+.kurabe-showcase-row{display:grid;grid-template-columns:80px 1fr auto;align-items:center;gap:12px;margin:0 0 12px}
+.kurabe-showcase-store{font-weight:700;font-size:16px}
+.kurabe-showcase-bar{height:16px;background:var(--k-bg);border-radius:3px;overflow:hidden}
+.kurabe-showcase-bar i{display:block;height:100%;border-radius:3px}
+.kurabe-showcase-v{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--k-ink);min-width:88px;text-align:right}
+.kurabe-showcase-v small{font-size:14px;font-weight:400;margin-left:2px;color:var(--k-ink2)}
+.kurabe-showcase-go{display:inline-block;margin-top:6px;font-weight:700;font-size:15px;color:var(--k-accent)}
+.kurabe-showcase-go::after{content:" →"}
+.kurabe-showcase *{box-sizing:border-box}
+.kurabe-showcase{--k-ink:#1E2A33;--k-ink2:#56636E;--k-line:#D3DADF;--k-bg:#EEF1F3;--k-accent:#3C5566;--k-daiso:#f5008c;--k-cando:#e94709;--k-watts:#6a5246}
 
 .kurabe-genres{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:34px 40px}
 .kurabe-genre{margin:0;padding:0}
 .kurabe-genre-name{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:0 0 .5em;padding:0 0 .45em;
   border-bottom:2px solid var(--k-ink);background:none}
 .kurabe-genre-name a{color:var(--k-ink);text-decoration:none}
+/* ジャンルごとに見出しの下線の色を変える（全部同じ線にしない） */
+.kurabe-genre:nth-child(6n+1) .kurabe-genre-name{border-bottom-color:#1D9E75}
+.kurabe-genre:nth-child(6n+2) .kurabe-genre-name{border-bottom-color:#D85A30}
+.kurabe-genre:nth-child(6n+3) .kurabe-genre-name{border-bottom-color:#534AB7}
+.kurabe-genre:nth-child(6n+4) .kurabe-genre-name{border-bottom-color:#BA7517}
+.kurabe-genre:nth-child(6n+5) .kurabe-genre-name{border-bottom-color:#185FA5}
+.kurabe-genre:nth-child(6n) .kurabe-genre-name{border-bottom-color:#993556}
 .kurabe-genre-name span{font-size:14px;font-weight:400;color:var(--k-ink2);white-space:nowrap}
 .kurabe-genre ul{list-style:none;margin:0;padding:0}
 .kurabe-genre li{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:0;padding:6px 0;border-bottom:1px solid var(--k-line2)}
@@ -41,11 +60,14 @@
 .kurabe-top-store-n small{font-size:15px;font-weight:400;margin-left:4px;color:var(--k-ink2)}
 .kurabe-top-store-go{font-size:15px;font-weight:700;color:var(--k-accent)}
 .kurabe-top-store-go::after{content:" →"}
-@media (max-width:640px){.kurabe-top-stores{grid-template-columns:1fr;gap:14px}.kurabe-top-v{font-size:28px}}
+@media (max-width:640px){.kurabe-top-stores{grid-template-columns:1fr;gap:14px}
+  .kurabe-showcase{padding:18px 16px}.kurabe-showcase-row{grid-template-columns:66px 1fr auto;gap:8px}.kurabe-showcase-v{min-width:0;font-size:20px}}
 /* TOPの区画（固定ページ本文に <style> を入れると ConoHa WAF が 403 にするので、ここに置く） */
 .kt-alt{background:#F4F6F7}
 .kt-hero h1.wp-block-heading{margin-bottom:.3em}
 .kt-hero .wp-block-search{max-width:640px}
+.kt-hero .wp-block-dbp-column{align-items:center}
+.kt-hero h1.wp-block-heading{font-size:clamp(26px,3vw,36px);line-height:1.45}
 
 .kurabe-source{display:flex;flex-wrap:wrap;margin:0 0 1.5em;padding:0;border:1px solid var(--k-line);background:var(--k-surface);font-size:14px;line-height:1.6}
 .kurabe-source>div{display:flex;gap:8px;padding:8px 14px;border-right:1px solid var(--k-line2);flex:1 1 auto;margin:0}

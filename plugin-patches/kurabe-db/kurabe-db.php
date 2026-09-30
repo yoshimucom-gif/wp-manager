@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.2.3
+ * Version:     1.2.4
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.2.3';
+    const VERSION  = '1.2.4';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -602,7 +602,7 @@ class Kurabe_Db
 
     public static function top_shortcode($atts)
     {
-        $a = shortcode_atts(array('part' => 'genres', 'max' => 10), $atts, 'kurabe_top');
+        $a = shortcode_atts(array('part' => 'genres', 'max' => 10, 'item' => '突っ張り棒'), $atts, 'kurabe_top');
         $posts = self::top_posts();
         if (!$posts) {
             return '';
@@ -610,6 +610,9 @@ class Kurabe_Db
         wp_enqueue_style('kurabe-db');
         if ($a['part'] === 'stats') {
             return self::top_stats($posts);
+        }
+        if ($a['part'] === 'showcase') {
+            return self::top_showcase($posts, $a['item']);
         }
         if ($a['part'] === 'stores') {
             return self::top_stores($posts);
@@ -623,16 +626,66 @@ class Kurabe_Db
         foreach ($posts as $p) {
             $goods += (int) get_post_meta($p->ID, 'kurabe_count', true);
         }
-        $cells = array(
-            array(number_format(count($posts)), '品目', '比べている品目'),
-            array(number_format($goods), '種', '比べた商品（同じ商品は1種）'),
-            array('3', '社', 'ダイソー・キャンドゥ・ワッツ'),
-        );
-        $h = '<div class="kurabe-top-stats">';
-        foreach ($cells as $c) {
-            $h .= '<div><span class="kurabe-top-v">' . esc_html($c[0]) . '<small>' . esc_html($c[1]) . '</small></span><span class="kurabe-top-k">' . esc_html($c[2]) . '</span></div>';
+        return '<p class="kurabe-top-stats"><b>' . number_format(count($posts)) . '</b>品目・<b>' . number_format($goods)
+            . '</b>種の商品を、3社の公式データで比べています</p>';
+    }
+
+    /* TOPの見本：1品目を3社の色の棒で比べる。物差しは品目の形で選ぶ
+       （伸縮＝いちばん長く伸びる長さ／平面・立体＝いちばん長い辺／それ以外＝掲載数） */
+    private static function top_showcase($posts, $item)
+    {
+        $post = null;
+        foreach ($posts as $p) {
+            if (get_post_meta($p->ID, 'kurabe_item', true) === $item) {
+                $post = $p;
+                break;
+            }
         }
-        return $h . '</div>';
+        if (!$post) {
+            return '';
+        }
+        $d = json_decode((string) get_post_meta($post->ID, self::META, true), true);
+        if (!is_array($d) || empty($d['rows'])) {
+            return '';
+        }
+        $mode = isset($d['mode']) ? $d['mode'] : 'none';
+        $val = array();
+        $cnt = array();
+        foreach ($d['rows'] as $r) {
+            $s = $r['s'];
+            $cnt[$s] = (isset($cnt[$s]) ? $cnt[$s] : 0) + 1;
+            $v = 0;
+            if ($mode === 'range' && !empty($r['range'])) {
+                $v = (float) max($r['range']);
+            } elseif (($mode === '2d' || $mode === '3d') && !empty($r['dims'])) {
+                $v = (float) max($r['dims']);
+            }
+            if ($v > (isset($val[$s]) ? $val[$s] : 0)) {
+                $val[$s] = $v;
+            }
+        }
+        if ($val) {
+            $what = $mode === 'range' ? 'いちばん長く伸びる長さ' : 'いちばん長い辺';
+            $unit = 'cm';
+        } else {
+            $val = $cnt;
+            $what = '公式通販の掲載数';
+            $unit = '種';
+        }
+        $top = max($val);
+        $h = '<div class="kurabe-showcase"><p class="kurabe-showcase-head">例：100均の' . esc_html($item) . '　<span>' . esc_html($what) . '</span></p>';
+        foreach (self::STORES as $st => $cls) {
+            if (!isset($val[$st])) {
+                continue;
+            }
+            $w = $top ? max(8, round($val[$st] / $top * 100)) : 0;
+            $num = rtrim(rtrim(number_format($val[$st], 1, '.', ''), '0'), '.');
+            $h .= '<div class="kurabe-showcase-row"><span class="kurabe-showcase-store kurabe-t-' . $cls . '">' . esc_html(self::label($st)) . '</span>'
+                . '<span class="kurabe-showcase-bar"><i class="kurabe-bar-' . $cls . '" style="width:' . $w . '%"></i></span>'
+                . '<span class="kurabe-showcase-v">' . esc_html($num) . '<small>' . $unit . '</small></span></div>';
+        }
+        $h .= '<a class="kurabe-showcase-go" href="' . esc_url(get_permalink($post)) . '">100均' . esc_html($item) . 'の' . count($d['rows']) . '件を1枚の表で見る</a></div>';
+        return $h;
     }
 
     private static function top_genres($posts, $max)
