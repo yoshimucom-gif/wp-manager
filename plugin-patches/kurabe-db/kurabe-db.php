@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.2.8
+ * Version:     1.2.9
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.2.8';
+    const VERSION  = '1.2.9';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -622,10 +622,16 @@ class Kurabe_Db
 
     private static function top_stats($posts)
     {
-        $goods = 0;
+        // 2つの比較表に同じ商品が載ることがある（2026-09-30 実測で228商品）。JANコード（無ければ商品URL）で重複を除いて数える
+        $seen = array();
         foreach ($posts as $p) {
-            $goods += (int) get_post_meta($p->ID, 'kurabe_count', true);
+            $d = json_decode((string) get_post_meta($p->ID, self::META, true), true);
+            foreach ((is_array($d) && !empty($d['rows'])) ? $d['rows'] : array() as $r) {
+                $seen[!empty($r['jan']) ? $r['jan'] : (isset($r['u']) ? $r['u'] : '')] = 1;
+            }
         }
+        unset($seen['']);
+        $goods = count($seen);
         // 語の途中で折り返さないよう短く1行に収める（「比べてい／ます」と割れた・2026-09-30）
         return '<p class="kurabe-top-stats"><b>' . number_format(count($posts)) . '</b>の比較表・<b>' . number_format($goods)
             . '</b>商品を掲載</p>';
