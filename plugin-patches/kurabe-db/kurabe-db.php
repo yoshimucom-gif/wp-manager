@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.2.2
+ * Version:     1.2.3
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.2.2';
+    const VERSION  = '1.2.3';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -67,7 +67,16 @@ class Kurabe_Db
                 if (function_exists('wp_maybe_auto_update')) {
                     wp_maybe_auto_update();
                 }
-                return array('ok' => true, 'version_before' => $before);
+                /* 更新の途中でWPはプラグインを無効にし、自分自身を更新したリクエストでは有効に戻らない
+                   （2026-09-30 1.2.1 で無効のまま残った）。新しいファイルを読み込まずに有効の一覧へ戻す */
+                $base   = plugin_basename(__FILE__);
+                $active = (array) get_option('active_plugins', array());
+                $was    = in_array($base, $active, true);
+                if (!$was) {
+                    $active[] = $base;
+                    update_option('active_plugins', array_values(array_unique($active)));
+                }
+                return array('ok' => true, 'version_before' => $before, 'reactivated' => !$was);
             },
         ));
     }
