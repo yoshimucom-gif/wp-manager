@@ -1,12 +1,47 @@
 /* 100均くらべ 比較データの部品だけを描く。見出し・本文・フォントはテーマに任せる */
-.kurabe-source,.kurabe-stats,.kurabe-table,.kurabe-scale,.kurabe-shop,.kurabe-list,.kurabe-related{
+.kurabe-source,.kurabe-stats,.kurabe-table,.kurabe-scale,.kurabe-shop,.kurabe-list,.kurabe-related,
+.kurabe-top-stats,.kurabe-genres,.kurabe-top-stores{
   --k-ink:#1E2A33;--k-ink2:#56636E;--k-line:#D3DADF;--k-line2:#E6EAED;--k-bg:#F4F6F7;--k-surface:#fff;
   --k-accent:#3C5566;--k-tag:#F2C744;--k-tag-ink:#3A2E05;--k-mesh:#B4C1CA;
   --k-daiso:#f5008c;--k-cando:#e94709;--k-watts:#6a5246;--k-watts-ink:#fff;
   --k-note:#FFF8DD;--k-note-line:#EAD58A;
   box-sizing:border-box;
 }
-.kurabe-source *,.kurabe-stats *,.kurabe-table *,.kurabe-scale *,.kurabe-shop *,.kurabe-list *{box-sizing:border-box}
+.kurabe-source *,.kurabe-stats *,.kurabe-table *,.kurabe-scale *,.kurabe-shop *,.kurabe-list *,
+.kurabe-top-stats *,.kurabe-genres *,.kurabe-top-stores *{box-sizing:border-box}
+
+/* ---------- TOPページ [kurabe_top] ：箱で囲まず、罫線と余白で区切る ---------- */
+.kurabe-top-stats{display:flex;flex-wrap:wrap;gap:12px 40px;margin:1.2em 0}
+.kurabe-top-stats>div{display:flex;flex-direction:column;gap:2px;padding-left:14px;border-left:3px solid var(--k-accent)}
+.kurabe-top-stats>div:nth-child(3){border-left-color:var(--k-cando)}
+.kurabe-top-v{font-size:32px;font-weight:700;line-height:1.2;color:var(--k-ink);font-variant-numeric:tabular-nums}
+.kurabe-top-v small{font-size:16px;margin-left:2px}
+.kurabe-top-k{font-size:14px;color:var(--k-ink2)}
+
+.kurabe-genres{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:34px 40px}
+.kurabe-genre{margin:0;padding:0}
+.kurabe-genre-name{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:0 0 .5em;padding:0 0 .45em;
+  border-bottom:2px solid var(--k-ink);background:none}
+.kurabe-genre-name a{color:var(--k-ink);text-decoration:none}
+.kurabe-genre-name span{font-size:14px;font-weight:400;color:var(--k-ink2);white-space:nowrap}
+.kurabe-genre ul{list-style:none;margin:0;padding:0}
+.kurabe-genre li{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:0;padding:6px 0;border-bottom:1px solid var(--k-line2)}
+.kurabe-genre li::before{display:none}
+.kurabe-genre li span{font-size:14px;color:var(--k-ink2);white-space:nowrap;font-variant-numeric:tabular-nums}
+.kurabe-genre-more{display:inline-block;margin-top:.6em;font-size:15px;font-weight:700}
+
+.kurabe-top-stores{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.kurabe-top-store{display:flex;flex-direction:column;gap:10px;padding:18px 0 4px;border-top:4px solid var(--k-accent);color:var(--k-ink);text-decoration:none}
+.kurabe-top-store:hover{opacity:1}
+.kurabe-top-store-daiso{border-top-color:var(--k-daiso)}
+.kurabe-top-store-cando{border-top-color:var(--k-cando)}
+.kurabe-top-store-watts{border-top-color:var(--k-watts)}
+.kurabe-top-store .kurabe-store{align-self:flex-start;font-size:16px;padding:4px 12px}
+.kurabe-top-store-n{font-size:30px;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums}
+.kurabe-top-store-n small{font-size:15px;font-weight:400;margin-left:4px;color:var(--k-ink2)}
+.kurabe-top-store-go{font-size:15px;font-weight:700;color:var(--k-accent)}
+.kurabe-top-store-go::after{content:" →"}
+@media (max-width:640px){.kurabe-top-stores{grid-template-columns:1fr;gap:14px}.kurabe-top-v{font-size:28px}}
 
 .kurabe-source{display:flex;flex-wrap:wrap;margin:0 0 1.5em;padding:0;border:1px solid var(--k-line);background:var(--k-surface);font-size:14px;line-height:1.6}
 .kurabe-source>div{display:flex;gap:8px;padding:8px 14px;border-right:1px solid var(--k-line2);flex:1 1 auto;margin:0}

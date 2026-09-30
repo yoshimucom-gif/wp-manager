@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.2.0
+ * Version:     1.2.1
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.2.0';
+    const VERSION  = '1.2.1';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -44,6 +44,7 @@ class Kurabe_Db
         add_action('diver_single_main_section', array(__CLASS__, 'full_width_header'), 5);
         add_action('diver_main_before', array(__CLASS__, 'archive_table'), 20);
         add_shortcode('kurabe_list', array(__CLASS__, 'list_shortcode'));
+        add_shortcode('kurabe_top', array(__CLASS__, 'top_shortcode'));
         add_action('rest_api_init', array(__CLASS__, 'rest_selfupdate'));
     }
 
@@ -573,6 +574,118 @@ class Kurabe_Db
             $t = get_term_by('slug', $a['category'], 'category');
         }
         return $t ? self::list_html(array('taxonomy' => $t->taxonomy, 'term' => $t->term_id)) : '';
+    }
+
+    /* ---------- TOPページの部品 [kurabe_top part="stats|genres|stores"] ----------
+       公開済みの品目ページだけを数える。編集できる人がプレビューで見るときだけ下書きも含める */
+
+    private static function top_posts()
+    {
+        $status = current_user_can('edit_posts') ? array('publish', 'draft', 'pending', 'future') : array('publish');
+        return get_posts(array(
+            'post_type'        => 'post',
+            'post_status'      => $status,
+            'posts_per_page'   => -1,
+            'meta_key'         => 'kurabe_item',
+            'suppress_filters' => true,
+        ));
+    }
+
+    public static function top_shortcode($atts)
+    {
+        $a = shortcode_atts(array('part' => 'genres', 'max' => 10), $atts, 'kurabe_top');
+        $posts = self::top_posts();
+        if (!$posts) {
+            return '';
+        }
+        wp_enqueue_style('kurabe-db');
+        if ($a['part'] === 'stats') {
+            return self::top_stats($posts);
+        }
+        if ($a['part'] === 'stores') {
+            return self::top_stores($posts);
+        }
+        return self::top_genres($posts, max(1, (int) $a['max']));
+    }
+
+    private static function top_stats($posts)
+    {
+        $goods = 0;
+        foreach ($posts as $p) {
+            $goods += (int) get_post_meta($p->ID, 'kurabe_count', true);
+        }
+        $cells = array(
+            array(number_format(count($posts)), '品目', '比べている品目'),
+            array(number_format($goods), '種', '比べた商品（同じ商品は1種）'),
+            array('3', '社', 'ダイソー・キャンドゥ・ワッツ'),
+        );
+        $h = '<div class="kurabe-top-stats">';
+        foreach ($cells as $c) {
+            $h .= '<div><span class="kurabe-top-v">' . esc_html($c[0]) . '<small>' . esc_html($c[1]) . '</small></span><span class="kurabe-top-k">' . esc_html($c[2]) . '</span></div>';
+        }
+        return $h . '</div>';
+    }
+
+    private static function top_genres($posts, $max)
+    {
+        $by = array();
+        foreach ($posts as $p) {
+            $cats = get_the_category($p->ID);
+            if (!$cats) {
+                continue;
+            }
+            $c = $cats[0];
+            if (!isset($by[$c->term_id])) {
+                $by[$c->term_id] = array('term' => $c, 'rows' => array());
+            }
+            $by[$c->term_id]['rows'][] = array(
+                'url'   => get_permalink($p),
+                'item'  => get_post_meta($p->ID, 'kurabe_item', true),
+                'total' => (int) get_post_meta($p->ID, 'kurabe_count', true),
+            );
+        }
+        uasort($by, function ($x, $y) {
+            return count($y['rows']) - count($x['rows']);
+        });
+        $h = '<div class="kurabe-genres">';
+        foreach ($by as $g) {
+            usort($g['rows'], function ($x, $y) {
+                return $y['total'] - $x['total'];
+            });
+            $link = get_term_link($g['term']);
+            $n = count($g['rows']);
+            $h .= '<section class="kurabe-genre"><h3 class="kurabe-genre-name"><a href="' . esc_url($link) . '">' . esc_html($g['term']->name) . '</a><span>' . $n . '品目</span></h3><ul>';
+            foreach (array_slice($g['rows'], 0, $max) as $r) {
+                $h .= '<li><a href="' . esc_url($r['url']) . '">' . esc_html($r['item']) . '</a><span>' . $r['total'] . '種</span></li>';
+            }
+            $h .= '</ul>';
+            if ($n > $max) {
+                $h .= '<a class="kurabe-genre-more" href="' . esc_url($link) . '">' . esc_html($g['term']->name) . 'の' . $n . '品目をすべて見る</a>';
+            }
+            $h .= '</section>';
+        }
+        return $h . '</div>';
+    }
+
+    private static function top_stores($posts)
+    {
+        $h = '<div class="kurabe-top-stores">';
+        foreach (self::STORES as $st => $cls) {
+            $n = 0;
+            foreach ($posts as $p) {
+                $per = json_decode((string) get_post_meta($p->ID, 'kurabe_stores', true), true);
+                if (!empty($per[$st])) {
+                    $n++;
+                }
+            }
+            $term = get_term_by('slug', $cls, 'post_tag');
+            $link = $term ? get_term_link($term) : '';
+            $h .= '<a class="kurabe-top-store kurabe-top-store-' . $cls . '" href="' . esc_url(is_wp_error($link) ? '' : $link) . '">'
+                . '<span class="kurabe-store kurabe-' . $cls . '">' . esc_html(self::label($st)) . '</span>'
+                . '<span class="kurabe-top-store-n">' . $n . '<small>品目に掲載</small></span>'
+                . '<span class="kurabe-top-store-go">' . esc_html(self::label($st)) . 'の品目一覧へ</span></a>';
+        }
+        return $h . '</div>';
     }
 
     private static function list_html($q)
