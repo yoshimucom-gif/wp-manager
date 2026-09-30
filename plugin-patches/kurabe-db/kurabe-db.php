@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.2.4
+ * Version:     1.2.5
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.2.4';
+    const VERSION  = '1.2.5';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -655,7 +655,8 @@ class Kurabe_Db
             $s = $r['s'];
             $cnt[$s] = (isset($cnt[$s]) ? $cnt[$s] : 0) + 1;
             $v = 0;
-            if ($mode === 'range' && !empty($r['range'])) {
+            // 床と天井の間に立てる縦型は、記事の数字欄と同じく「横に渡せる幅」から外す（build_data.py と同じ決まり）
+            if ($mode === 'range' && !empty($r['range']) && mb_strpos($r['n'], '縦') === false) {
                 $v = (float) max($r['range']);
             } elseif (($mode === '2d' || $mode === '3d') && !empty($r['dims'])) {
                 $v = (float) max($r['dims']);
