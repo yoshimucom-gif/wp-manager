@@ -2,7 +2,7 @@
 /**
  * Plugin Name: スーツくらべ 比較データ表示
  * Description: スーツ量販店の比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。店の定義（名前・表記・色）はデータ側の stores 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.1.4
+ * Version:     1.2.0
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: suit-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Suit_Kurabe_Db
 {
-    const VERSION  = '1.1.4';
+    const VERSION  = '1.2.0';
     const META     = 'kurabe_data';
     const OPT      = 'suit_kurabe_db_settings';
 
@@ -461,7 +461,8 @@ class Suit_Kurabe_Db
             // 店バッジ＋商品名を1つの列にまとめる（吉村さん指示・2026-09-28）。
             // 商品名＝公式商品ページへのリンク（右端の「公式」列は廃止済み）
             $h .= '<td class="kurabe-td-item"><span class="kurabe-store kurabe-' . esc_attr(self::slug($stores, $r['s'])) . '"' . self::color_style($stores, $r['s']) . '>' . esc_html(self::label($stores, $r['s'])) . '</span> ';
-            $h .= '<a class="kurabe-pname" href="' . esc_url($r['u']) . '" target="_blank" rel="noopener">' . esc_html($r['n']) . '</a>';
+            list($purl, $prel) = self::aff_link($r['u'], self::slug($stores, $r['s']));
+            $h .= '<a class="kurabe-pname" href="' . esc_url($purl) . '" target="_blank" rel="' . esc_attr($prel) . '">' . esc_html($r['n']) . '</a>';
             if (!empty($r['same'])) {
                 $h .= '<span class="kurabe-sub"><b>' . esc_html(implode('・', $r['same'])) . '</b>でも同じ商品を販売' . (!empty($r['jan']) ? '（JAN ' . esc_html($r['jan']) . '）' : '') . '</span>';
             }
@@ -737,6 +738,26 @@ class Suit_Kurabe_Db
             $h .= '</tr>';
         }
         return $h . '</tbody></table></div></div>';
+    }
+
+    /* 店ごとのアフィリエイト変換（ASP承認後に有効化する。2026-09-30）
+       option skdb_affiliate = { 店slug: リダイレクト型プレフィックス } を rdh/v1 で入れる。
+       例: {"psfa": "https://px.a8.net/svt/ejp?a8mat=XXXXX+YYYYY&a8ejpredirect="}
+       プレフィックスの後ろに公式商品URLをURLエンコードして付ける。
+       未設定の店は素の公式リンクのまま（rel も noopener のみ） */
+    private static function aff_link($url, $slug)
+    {
+        static $conf = null;
+        if ($conf === null) {
+            $conf = get_option('skdb_affiliate');
+            if (!is_array($conf)) {
+                $conf = array();
+            }
+        }
+        if (empty($conf[$slug]) || !is_string($conf[$slug]) || strpos($conf[$slug], 'https://') !== 0) {
+            return array($url, 'noopener');
+        }
+        return array($conf[$slug] . rawurlencode($url), 'nofollow sponsored noopener');
     }
 
     private static function part_shop($d)
