@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.4.2
+ * Version:     1.4.3
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.4.2';
+    const VERSION  = '1.4.3';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -799,10 +799,20 @@ class Kurabe_Db
             $h .= '<div class="kurabe-season-panel" role="tabpanel" id="kurabe-season-' . $i . '"' . ($i ? ' hidden' : '') . '>';
             foreach ($t['cards'] as $c) {
                 $h .= '<a class="kurabe-season-card" href="' . esc_url($c['url']) . '"><span class="kurabe-season-name">100均の' . esc_html($c['item']) . '</span>'
-                    . '<span class="kurabe-season-total">' . $c['total'] . '<small>種を比較</small></span><span class="kurabe-season-stores">';
+                    . '<span class="kurabe-season-total">' . $c['total'] . '<small>種を比較</small></span>';
+                // 3社の割合を1本の帯で見せる（吉村さん案A 2026-10-01）
+                $sum = array_sum(array_map('intval', $c['per']));
+                $h .= '<span class="kurabe-season-bar">';
                 foreach (self::STORES as $st => $cls) {
                     $n = isset($c['per'][$st]) ? (int) $c['per'][$st] : 0;
-                    $h .= '<span class="kurabe-season-st' . ($n ? '' : ' is-none') . '"><i class="kurabe-bar-' . $cls . '"></i>' . esc_html(self::label($st)) . ' ' . ($n ? $n : '—') . '</span>';
+                    if ($n && $sum) {
+                        $h .= '<i class="kurabe-bar-' . $cls . '" style="width:' . round($n / $sum * 100, 1) . '%"></i>';
+                    }
+                }
+                $h .= '</span><span class="kurabe-season-stores">';
+                foreach (self::STORES as $st => $cls) {
+                    $n = isset($c['per'][$st]) ? (int) $c['per'][$st] : 0;
+                    $h .= '<span class="kurabe-season-st' . ($n ? '' : ' is-none') . '">' . esc_html(self::label($st)) . ' ' . ($n ? $n : '—') . '</span>';
                 }
                 $h .= '</span></a>';
             }
