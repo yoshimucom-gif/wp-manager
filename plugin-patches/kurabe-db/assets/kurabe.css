@@ -41,7 +41,7 @@
 .kurabe-genre:nth-child(3n+2) .kurabe-genre-name{border-bottom-color:#DE3C12}
 .kurabe-genre:nth-child(3n) .kurabe-genre-name{border-bottom-color:#F0A800}
 /* コンテナは白地・薄い線の枠・影なし（吉村さん指定 2026-09-30）。TOPのジャンルと記事の数字欄 */
-.kurabe-genre.dbp-container,.dbp-container:has(.kurabe-stats){background:#fff !important;border:1px solid #E2E2E2;box-shadow:none !important}
+.kurabe-genre.dbp-container,.dbp-container:has(.kurabe-stats){background:#F7F8F9 !important;border:1px solid #E2E2E2;box-shadow:none !important}
 .kurabe-genre-name span{font-size:14px;font-weight:400;color:var(--k-ink2);white-space:nowrap}
 .kurabe-genre ul{list-style:none;margin:0;padding:0}
 .kurabe-genre li{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:0;padding:6px 0;border-bottom:1px solid var(--k-line2)}
