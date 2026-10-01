@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.4.8
+ * Version:     1.5.0
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.4.8';
+    const VERSION  = '1.5.0';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -628,6 +628,9 @@ class Kurabe_Db
         if ($a['part'] === 'showcase') {
             return self::top_showcase($posts, $a['item']);
         }
+        if ($a['part'] === 'sidebox') {
+            return self::top_sidebox($posts);
+        }
         if ($a['part'] === 'season') {
             wp_enqueue_script('kurabe-db');
             return self::top_season($posts, (string) $a['tabs']);
@@ -653,6 +656,44 @@ class Kurabe_Db
         // 語の途中で折り返さないよう短く1行に収める（「比べてい／ます」と割れた・2026-09-30）
         // 数字は「何商品を載せているか」だけにする（吉村さん指定 2026-09-30）
         return '<p class="kurabe-top-stats"><b>' . number_format($goods) . '</b>商品を掲載</p>';
+    }
+
+    /* サイドバーの「サイトの強み」の箱（PR TIMES のサイドバーの「9,000万PV/月」の箱の形・吉村さん 2026-10-01）
+       商品数は公開済みの比較表から重複を除いて数える */
+    private static function top_sidebox($posts)
+    {
+        $seen = array();
+        foreach ($posts as $p) {
+            if ($p->post_status !== 'publish') {
+                continue;
+            }
+            $d = json_decode((string) get_post_meta($p->ID, self::META, true), true);
+            foreach ((is_array($d) && !empty($d['rows'])) ? $d['rows'] : array() as $r) {
+                $seen[!empty($r['jan']) ? $r['jan'] : (isset($r['u']) ? $r['u'] : '')] = 1;
+            }
+        }
+        unset($seen['']);
+        $ico = array(
+            'box'   => '<path d="M4 8l8-4 8 4v9l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v9"/>',
+            'shop'  => '<path d="M3 9h18l-1.5-5h-15z"/><path d="M5 9v11h14V9M10 20v-6h4v6"/>',
+            'code'  => '<path d="M4 5v14M7 5v14M10 5v14M14 5v14M16 5v14M20 5v14"/>',
+            'check' => '<path d="M6 3h9l4 4v14H6z"/><path d="M9 13l2 2 4-4"/>',
+        );
+        $rows = array(
+            array('box', '3社の公式通販から集めた', number_format(count($seen)) . '商品'),
+            array('shop', '比べているお店', 'ダイソー・キャンドゥ・ワッツ'),
+            array('code', '同じ商品はバーコードで照合', 'JANコードで突き合わせ'),
+            array('check', '公式に書いていない値は', '推測で埋めない'),
+        );
+        $logo = wp_get_attachment_image_url((int) get_theme_mod('custom_logo'), 'medium');
+        $h  = '<div class="kurabe-sidebox"><p class="kurabe-sidebox-lead">100均3社を公式データで比べる</p>';
+        $h .= $logo ? '<p class="kurabe-sidebox-logo"><img src="' . esc_url($logo) . '" alt="100均くらべ" width="220" height="55" loading="lazy"></p>' : '';
+        foreach ($rows as $r) {
+            $h .= '<div class="kurabe-sidebox-row"><svg viewBox="0 0 24 24" aria-hidden="true">' . $ico[$r[0]] . '</svg><div><span>' . esc_html($r[1]) . '</span><b>' . esc_html($r[2]) . '</b></div></div>';
+        }
+        $h .= '<p class="kurabe-sidebox-note">だから、売り場で迷わない。</p><p class="kurabe-sidebox-q">データの集め方と掲載の考え方は</p>'
+            . '<a class="kurabe-sidebox-btn" href="' . esc_url(home_url('/data-policy/')) . '">こちら</a></div>';
+        return $h;
     }
 
     /* TOPの見本：1品目を3社の色の棒で比べる。物差しは品目の形で選ぶ
