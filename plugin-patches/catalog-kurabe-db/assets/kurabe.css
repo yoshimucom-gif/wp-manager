@@ -219,7 +219,7 @@
 @media (max-width:640px){.kurabe-showcase-row{grid-template-columns:max-content 1fr auto;gap:8px}.kurabe-showcase-store{font-size:14px}}
 
 /* カタログギフト診断（[kurabe_shindan]・2026-10-01 1問ずつの形に作り直し） */
-.kurabe-shindan{--k-ink:#1E2A33;--k-ink2:#56636E;--k-line:#D3DADF;--k-line2:#E6EAED;--k-bg:#F4F6F7;--k-surface:#fff;--k-accent:#3C5566;--k-tag:#F2C744;--k-note:#FFF8DD;--k-note-line:#EAD58A;margin:1.5em 0;color:var(--k-ink);scroll-margin-top:90px}
+.kurabe-shindan{--k-ink:#1E2A33;--k-ink2:#56636E;--k-line:#D3DADF;--k-line2:#E6EAED;--k-bg:#F4F6F7;--k-surface:#fff;--k-accent:#3C5566;--k-tag:#F2C744;--k-note:#FFF8DD;--k-note-line:#EAD58A;margin:1.5em 0;color:var(--k-ink);scroll-margin-top:170px}
 .kurabe-shindan *{box-sizing:border-box}
 .ks-panel{background:var(--k-surface);border:1px solid var(--k-line);border-radius:10px;padding:28px 30px 22px}
 .ks-progress{display:flex;align-items:center;gap:14px;margin:0 0 18px}

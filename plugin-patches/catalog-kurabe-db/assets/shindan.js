@@ -80,7 +80,7 @@
 
     function top() {
       var r = box.getBoundingClientRect();
-      if (r.top < 0 || r.top > window.innerHeight * 0.6) { box.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+      if (r.top < 160 || r.top > window.innerHeight * 0.6) { box.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
     }
     function showQ() {
       var q = QS[step], h = '<div class="ks-panel">';
