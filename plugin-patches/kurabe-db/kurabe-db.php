@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.5.0
+ * Version:     1.5.1
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.5.0';
+    const VERSION  = '1.5.1';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -680,10 +680,10 @@ class Kurabe_Db
             'check' => '<path d="M6 3h9l4 4v14H6z"/><path d="M9 13l2 2 4-4"/>',
         );
         $rows = array(
-            array('box', '3社の公式通販から集めた', number_format(count($seen)) . '商品'),
-            array('shop', '比べているお店', 'ダイソー・キャンドゥ・ワッツ'),
-            array('code', '同じ商品はバーコードで照合', 'JANコードで突き合わせ'),
-            array('check', '公式に書いていない値は', '推測で埋めない'),
+            array('box', '公式通販から集めた', number_format(count($seen)) . '商品'),
+            array('shop', 'ダイソー・キャンドゥ・ワッツ', '3社を横並び'),
+            array('code', '同じ商品はバーコードで', 'JANで照合'),
+            array('check', '公式に無い値は', '推測しない'),
         );
         $logo = wp_get_attachment_image_url((int) get_theme_mod('custom_logo'), 'medium');
         $h  = '<div class="kurabe-sidebox"><p class="kurabe-sidebox-lead">100均3社を公式データで比べる</p>';
@@ -691,7 +691,7 @@ class Kurabe_Db
         foreach ($rows as $r) {
             $h .= '<div class="kurabe-sidebox-row"><svg viewBox="0 0 24 24" aria-hidden="true">' . $ico[$r[0]] . '</svg><div><span>' . esc_html($r[1]) . '</span><b>' . esc_html($r[2]) . '</b></div></div>';
         }
-        $h .= '<p class="kurabe-sidebox-note">だから、売り場で迷わない。</p><p class="kurabe-sidebox-q">データの集め方と掲載の考え方は</p>'
+        $h .= '<p class="kurabe-sidebox-note">だから、売り場で迷わない。</p><p class="kurabe-sidebox-q">データの集め方は</p>'
             . '<a class="kurabe-sidebox-btn" href="' . esc_url(home_url('/data-policy/')) . '">こちら</a></div>';
         return $h;
     }
