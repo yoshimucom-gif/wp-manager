@@ -26,45 +26,97 @@
       });
   }
 
-  function chips(name, items, cur) {
-    return items.map(function (it) {
-      return '<button type="button" class="kurabe-chip" data-q="' + name + '" data-v="' + esc(it[0]) + '" aria-pressed="' + (String(it[0]) === String(cur) ? 'true' : 'false') + '">' + esc(it[1]) + '</button>';
-    }).join('');
+  /* 1問ずつ出す（2026-10-01 吉村さん「デザインみにくい」→ 5問を一度に並べるのをやめた）。
+     答えを押すと次の問いへ進み、5問目のあとに結果。結果の上の「条件」から押した問いだけを選び直せる */
+  var SUB = {   // 選択肢の下に添える一言（どれもデータの絞り方の説明で、品物の良し悪しは書かない）
+    g: ['ジャンルで絞らない', '食品・雑貨・体験などが1冊にそろう', '肉・お酒・スイーツなど食べ物だけ', '食事・体験・宿泊から選ぶ', '出産祝い向けの子ども用品', '生活雑貨のカタログ'],
+    f: ['形で絞らない', '写真の載った本の形で渡す', '申込用のカードだけを渡す', 'URLをメールやSNSで送る'],
+    p: { items: '掲載点数の多い順', total: '送料込みの価格の安い順', hagaki: 'ハガキで申し込めるコースを先に', expiry: '申込の有効期限の長い順' }
+  };
+  var QS = [
+    { k: 's', t: 'どんな用途で贈りますか', hint: '各社の公式通販がその用途向けとして案内しているコースから選びます。' },
+    { k: 'b', t: '予算はいくらですか', hint: '本体の税込価格で選びます。送料込みの金額は結果に出します。' },
+    { k: 'g', t: '中身の好みはありますか', hint: '' },
+    { k: 'f', t: 'どの形で渡しますか', hint: '' },
+    { k: 'p', t: 'いちばん重視することは何ですか', hint: '結果の並び順が変わります。' }
+  ];
+
+  function tile(q, val, label, sub, cur) {
+    return '<button type="button" class="ks-opt" data-q="' + q + '" data-v="' + esc(val) + '" aria-pressed="' + (String(val) === String(cur) ? 'true' : 'false') + '">' +
+      '<span class="ks-opt-l">' + esc(label) + '</span>' + (sub ? '<span class="ks-opt-s">' + esc(sub) + '</span>' : '') + '</button>';
+  }
+
+  function options(d, q, cur) {
+    if (q === 's') {
+      var h = '';
+      d.sceneGroups.forEach(function (g) {
+        h += '<p class="ks-group">' + esc(g[0]) + '</p><div class="ks-grid">' +
+          g[1].map(function (i) { return tile('s', i, d.scenes[i], '', cur); }).join('') + '</div>';
+      });
+      return h + '<p class="ks-group">そのほか</p><div class="ks-grid">' + tile('s', -1, '決まっていない・ほかの用途', '', cur) + '</div>';
+    }
+    if (q === 'b') {
+      return '<div class="ks-grid ks-grid-b">' + d.budgets.map(function (b, i) { return tile('b', i, b[0], '', cur); }).join('') + '</div>';
+    }
+    if (q === 'g') {
+      return '<div class="ks-grid ks-grid-wide">' + d.genres.map(function (g, i) { return tile('g', i, g[0], SUB.g[i], cur); }).join('') + '</div>';
+    }
+    if (q === 'f') {
+      return '<div class="ks-grid ks-grid-wide">' + d.formats.map(function (f, i) { return tile('f', i, f, SUB.f[i], cur); }).join('') + '</div>';
+    }
+    return '<div class="ks-grid ks-grid-wide">' + d.priorities.map(function (p) { return tile('p', p[0], p[1], SUB.p[p[0]], cur); }).join('') + '</div>';
+  }
+
+  function answerLabel(d, k, val) {
+    if (k === 's') { return Number(val) < 0 ? '用途は未定' : d.scenes[val]; }
+    if (k === 'b') { return d.budgets[val][0]; }
+    if (k === 'g') { return Number(val) === 0 ? '中身はこだわらない' : d.genres[val][0]; }
+    if (k === 'f') { return Number(val) === 0 ? '形はこだわらない' : d.formats[val]; }
+    return d.priorities.filter(function (p) { return p[0] === val; })[0][1];
   }
 
   function render(box, d) {
-    var st = { s: null, b: null, g: '0', f: '0', p: 'items' };
-    var h = '';
-    h += '<div class="ks-q"><p class="ks-qt"><span class="ks-no">1</span>どんな用途で贈りますか</p>';
-    d.sceneGroups.forEach(function (g) {
-      h += '<div class="ks-sub"><span class="ks-subl">' + esc(g[0]) + '</span><div class="kurabe-chips">' +
-        chips('s', g[1].map(function (i) { return [i, d.scenes[i]]; }), null) + '</div></div>';
-    });
-    h += '<div class="ks-sub"><span class="ks-subl">そのほか</span><div class="kurabe-chips">' + chips('s', [['-1', '決まっていない・ほかの用途']], null) + '</div></div></div>';
-    h += '<div class="ks-q"><p class="ks-qt"><span class="ks-no">2</span>予算はいくらですか<small>（本体の税込価格）</small></p><div class="kurabe-chips">' +
-      chips('b', d.budgets.map(function (b, i) { return [i, b[0]]; }), null) + '</div></div>';
-    h += '<div class="ks-q"><p class="ks-qt"><span class="ks-no">3</span>中身の好みはありますか</p><div class="kurabe-chips">' +
-      chips('g', d.genres.map(function (g, i) { return [i, g[0]]; }), '0') + '</div></div>';
-    h += '<div class="ks-q"><p class="ks-qt"><span class="ks-no">4</span>どの形で渡しますか</p><div class="kurabe-chips">' +
-      chips('f', d.formats.map(function (f, i) { return [i, i === 3 ? 'eギフト（URLで送る）' : f]; }), '0') + '</div></div>';
-    h += '<div class="ks-q"><p class="ks-qt"><span class="ks-no">5</span>いちばん重視することは何ですか</p><div class="kurabe-chips">' +
-      chips('p', d.priorities, 'items') + '</div></div>';
-    h += '<div class="ks-out" aria-live="polite"><p class="ks-wait">1の用途と2の予算を選ぶと、ここにおすすめのコースが出ます。</p></div>';
-    box.innerHTML = h;
-    var out = box.querySelector('.ks-out');
+    var st = { s: null, b: null, g: null, f: null, p: null }, step = 0, done = false;
+
+    function top() {
+      var r = box.getBoundingClientRect();
+      if (r.top < 0 || r.top > window.innerHeight * 0.6) { box.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    }
+    function showQ() {
+      var q = QS[step], h = '<div class="ks-panel">';
+      h += '<div class="ks-progress"><span class="ks-step">質問 ' + (step + 1) + ' / ' + QS.length + '</span><span class="ks-bar">';
+      for (var i = 0; i < QS.length; i++) { h += '<i class="' + (i <= step ? 'on' : '') + '"></i>'; }
+      h += '</span></div>';
+      h += '<p class="ks-title">' + esc(q.t) + '</p>' + (q.hint ? '<p class="ks-hint">' + esc(q.hint) + '</p>' : '');
+      h += options(d, q.k, st[q.k]);
+      h += '<div class="ks-nav">' + (step > 0 && !done ? '<button type="button" class="ks-back" data-act="back">← ひとつ前の質問へ</button>' : '') +
+        (done ? '<button type="button" class="ks-back" data-act="result">選び直さずに結果へ戻る</button>' : '') + '</div>';
+      box.innerHTML = h + '</div>';
+    }
+    function showResult() {
+      var h = '<div class="ks-cond"><span class="ks-cond-l">選んだ条件</span>';
+      QS.forEach(function (q, i) {
+        h += '<button type="button" class="ks-cond-b" data-act="edit" data-i="' + i + '">' + esc(answerLabel(d, q.k, st[q.k])) + '</button>';
+      });
+      h += '<button type="button" class="ks-reset" data-act="reset">最初からやり直す</button></div>';
+      box.innerHTML = h + '<div class="ks-out" aria-live="polite">' + result(d, st) + '</div>';
+    }
+
     box.addEventListener('click', function (e) {
-      var b = e.target.closest('button[data-q]');
-      if (!b) { return; }
-      var q = b.getAttribute('data-q');
-      box.querySelectorAll('button[data-q="' + q + '"]').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
-      st[q] = b.getAttribute('data-v');
-      if (st.s !== null && st.b !== null) {
-        out.innerHTML = result(d, st);
-        if (q === 's' || q === 'b') {
-          if (out.getBoundingClientRect().top > window.innerHeight) { out.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-        }
-      }
+      var b = e.target.closest('button');
+      if (!b || !box.contains(b)) { return; }
+      var act = b.getAttribute('data-act');
+      if (b.hasAttribute('data-q')) {
+        st[b.getAttribute('data-q')] = b.getAttribute('data-v');
+        if (done || step === QS.length - 1) { done = true; showResult(); } else { step++; showQ(); }
+      } else if (act === 'back') { step--; showQ(); }
+      else if (act === 'edit') { step = Number(b.getAttribute('data-i')); showQ(); }
+      else if (act === 'result') { showResult(); }
+      else if (act === 'reset') { st = { s: null, b: null, g: null, f: null, p: null }; step = 0; done = false; showQ(); }
+      else { return; }
+      top();
     });
+    showQ();
   }
 
   function filter(d, c) {
