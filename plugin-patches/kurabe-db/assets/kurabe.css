@@ -53,8 +53,10 @@
 .kurabe-genre-more{display:inline-block;margin-top:.6em;font-size:14px;font-weight:700}
 
 .kurabe-top-stores{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
-.kurabe-top-store{display:flex;flex-direction:column;gap:10px;padding:18px 0 4px;border-top:4px solid var(--k-accent);color:var(--k-ink);text-decoration:none}
-.kurabe-top-store:hover{opacity:1}
+/* お店ごとに白い箱（吉村さん 2026-10-01「それぞれボックスにしちゃえば」）。ジャンルの箱と同じ細い線・影なし */
+.kurabe-top-store{display:flex;flex-direction:column;gap:10px;padding:20px 22px 18px;background:#fff;border:1px solid #E2E2E2;border-top:4px solid var(--k-accent);border-radius:2px;color:var(--k-ink);text-decoration:none}
+.kurabe-top-store:hover{opacity:1;border-color:#C9C9C9}
+.kurabe-top-store-go{margin-top:auto;padding-top:12px;border-top:1px solid #EEE}
 .kurabe-top-store-daiso{border-top-color:var(--k-daiso)}
 .kurabe-top-store-cando{border-top-color:var(--k-cando)}
 .kurabe-top-store-watts{border-top-color:var(--k-watts)}
