@@ -2,7 +2,7 @@
 /**
  * Plugin Name: カタログギフトくらべ 比較データ表示
  * Description: カタログギフトの比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。発行会社・ブランドの定義（名前・表記・色）と絞り込みの軸はデータ側の stores / filters 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.2.19
+ * Version:     1.2.20
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: catalog-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Catalog_Kurabe_Db
 {
-    const VERSION  = '1.2.19';
+    const VERSION  = '1.2.20';
     const META     = 'kurabe_data';
     const OPT      = 'catalog_kurabe_db_settings';
 
@@ -1000,6 +1000,12 @@ class Catalog_Kurabe_Db
         return $h;
     }
 
+    /* TOPのカテゴリの枠の見出し（カテゴリ名だけだと何の予算別か分からないので「カタログギフト」を入れる） */
+    private static $GROUP_HEAD = array(
+        '予算別' => '予算別のカタログギフト', 'シーン別' => 'シーン別のカタログギフト', 'ジャンル別' => 'ジャンル別のカタログギフト',
+        'ブランド別' => 'ブランド別のカタログギフト', 'シリーズ' => 'シリーズ別のカタログギフト', '基礎知識' => 'カタログギフトの基礎知識',
+    );
+
     /* カテゴリ（予算別・シーン別…）ごとにコンテナで囲み、比較ページをコース数の多い順に並べる */
     private static function top_groups($posts, $max, $order)
     {
@@ -1038,8 +1044,9 @@ class Catalog_Kurabe_Db
             $link = get_term_link($g['term']);
             $n = count($g['rows']);
             $h .= '<section class="kurabe-genre wp-block-dbp-container padding-block:30 padding-inline:30 dbp-container">'
-                . '<div class="dbp-container__inner"><h3 class="kurabe-genre-name"><a href="' . esc_url(is_wp_error($link) ? '' : $link) . '">'
-                . esc_html($name) . '</a><span>比較表 ' . $n . '本</span></h3><ul>';   // 「◯ページ」はページ番号に読める（吉村さん 2026-10-01）
+                // 見出し（h3）はカテゴリ名だけ。本数は見出しの外に置く（見出しの文字が「予算別比較表 21本」にならないように・2026-10-01）
+                . '<div class="dbp-container__inner"><div class="kurabe-genre-name"><h3><a href="' . esc_url(is_wp_error($link) ? '' : $link) . '">'
+                . esc_html(isset(self::$GROUP_HEAD[$name]) ? self::$GROUP_HEAD[$name] : $name) . '</a></h3><span>比較表 ' . $n . '本</span></div><ul>';
             foreach (array_slice($g['rows'], 0, $max) as $r) {
                 $h .= '<li><a href="' . esc_url($r['url']) . '">' . esc_html(preg_replace('/\s+カタログギフト$/u', 'のカタログギフト', $r['item'])) . '</a>'
                     . ($r['total'] ? '<span>' . $r['total'] . 'コース</span>' : '') . '</li>';

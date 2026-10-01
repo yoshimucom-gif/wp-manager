@@ -338,3 +338,13 @@
 .kurabe-top-stores .kurabe-top-store:hover{filter:brightness(1.06);opacity:1}
 @media (max-width:900px){.kurabe-top-stores{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:640px){.kurabe-top-stores{grid-template-columns:1fr;gap:10px}}
+
+/* TOPのカテゴリの枠：見出し（h3）と本数を分けた（2026-10-01）。見た目は前と同じ1行 */
+.kurabe-genre-name h3{margin:0;padding:0;border:0;background:none;font-size:18px;line-height:1.4}
+.kurabe-genre-name h3::before,.kurabe-genre-name h3::after{content:none}
+/* TOP最上部の見出し1は小さく置く（100均くらべと同じ） */
+.kt-season h1.wp-block-heading{font-size:15px;font-weight:700;color:#666;margin:0 0 .6em;letter-spacing:.04em;padding:0;background:none;border:0}
+.kt-season h2.wp-block-heading{font-size:20px;margin:0 0 .6em;padding:0;background:none;border:0;color:#333}
+.kt-season h2.wp-block-heading::before,.kt-season h2.wp-block-heading::after{content:none}
+/* ビッグフッターのサイト紹介の題は見出しにしない（全ページに同じh2が出るため）。見た目は前の見出しと同じ */
+.kt-about-title{font-weight:700;font-size:clamp(22px,2.4vw,30px);line-height:1.45;text-align:center;margin:0 0 .8em;color:#333}
