@@ -108,6 +108,12 @@
 .kurabe-season-st.is-none{color:#AAA;background:#fff;border:1px solid #DDD;padding:0 5px}
 /* TOPの区画（固定ページ本文に <style> を入れると ConoHa WAF が 403 にするので、ここに置く） */
 .kt-alt{background:#F9F9F9}   /* 吉村さん指定 2026-10-01 */
+/* サイドバーを出しているページでは本文側の背景色を付けない（吉村さん 2026-10-01） */
+:is(.l-sidebar-right,.l-sidebar-left) .kt-alt:not(#bigfooter *){background:none}
+/* サイト紹介はビッグフッターの先頭に置き、フッター直前の帯として画面幅いっぱいに出す */
+#bigfooter:has(.kt-about){padding-top:0}
+#bigfooter .kt-about{margin-inline:calc(50% - 50vw);margin-bottom:40px;color:#333;text-align:left}
+#bigfooter .kt-about a:not(.kurabe-store){color:#C40A5B}
 .kt-hero h2.wp-block-heading{margin-bottom:.3em;background:none;color:inherit;padding:0}
 /* TOPの一番上の見出し1は、PR TIMES の一言のように小さく置く */
 .kt-season h1.wp-block-heading{font-size:15px;font-weight:700;color:#666;margin:0 0 .6em;letter-spacing:.04em}
