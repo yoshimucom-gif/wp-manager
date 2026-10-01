@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.5.8
+ * Version:     1.5.9
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.5.8';
+    const VERSION  = '1.5.9';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -47,6 +47,20 @@ class Kurabe_Db
         add_shortcode('kurabe_top', array(__CLASS__, 'top_shortcode'));
         add_action('rest_api_init', array(__CLASS__, 'rest_selfupdate'));
         add_filter('wp_robots', array(__CLASS__, 'robots_while_private'), 999);
+        add_action('wp_head', array(__CLASS__, 'tag_meta_description'), 2);
+    }
+
+    /* re:Diver はカテゴリの説明文は meta description に出すが、タグ（店名）では何も出さない。
+       タグの説明文を同じ形で出す（2026-10-01 店名タグにSEO説明文を入れたため） */
+    public static function tag_meta_description()
+    {
+        if (!is_tag()) {
+            return;
+        }
+        $d = trim(wp_strip_all_tags(term_description()));
+        if ($d !== '') {
+            echo '<meta name="description" content="' . esc_attr($d) . '">' . "\n";
+        }
     }
 
     /* 「検索エンジンがサイトをインデックスしないようにする」がオンの間は、全ページに noindex を付ける。
