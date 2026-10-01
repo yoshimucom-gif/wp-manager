@@ -2,7 +2,7 @@
 /**
  * Plugin Name: カタログギフトくらべ 比較データ表示
  * Description: カタログギフトの比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。発行会社・ブランドの定義（名前・表記・色）と絞り込みの軸はデータ側の stores / filters 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.2.4
+ * Version:     1.2.5
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: catalog-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Catalog_Kurabe_Db
 {
-    const VERSION  = '1.2.4';
+    const VERSION  = '1.2.5';
     const META     = 'kurabe_data';
     const OPT      = 'catalog_kurabe_db_settings';
 
@@ -245,6 +245,13 @@ class Catalog_Kurabe_Db
     {
         $a = shortcode_atts(array('part' => 'table'), $atts, 'kurabe');
         $d = self::data();
+        if (!$d && $a['part'] === 'related') {
+            // 表の無い基礎知識ページでも関連欄は出す（kurabe_axes だけで組める・2026-10-01）
+            $raw = json_decode((string) get_post_meta(get_the_ID(), self::META, true), true);
+            $d = is_array($raw) ? $raw : array('item' => get_the_title());
+            wp_enqueue_style('catalog-kurabe-db');
+            return self::part_related($d);
+        }
         if (!$d) {
             return '';
         }
