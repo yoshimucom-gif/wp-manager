@@ -57,6 +57,15 @@
 .kurabe-top-store{display:flex;flex-direction:column;gap:10px;padding:20px 22px 18px;background:#fff;border:1px solid #E2E2E2;border-top:4px solid var(--k-accent);border-radius:2px;color:var(--k-ink);text-decoration:none}
 .kurabe-top-store:hover{opacity:1;border-color:#C9C9C9}
 .kurabe-top-store-go{margin-top:auto;padding-top:12px;border-top:1px solid #EEE}
+/* 箱全体を各社の色で塗り、枠線なし・白文字。店名は白い枠線のラベル（吉村さん 2026-10-01） */
+.kurabe-top-stores .kurabe-top-store{border:0;color:#fff}
+.kurabe-top-stores .kurabe-top-store-daiso{background:var(--k-daiso)}
+.kurabe-top-stores .kurabe-top-store-cando{background:var(--k-cando)}
+.kurabe-top-stores .kurabe-top-store-watts{background:var(--k-watts)}
+.kurabe-top-stores .kurabe-top-store .kurabe-store{background:transparent;color:#fff;border:1.5px solid #fff}
+.kurabe-top-stores .kurabe-top-store-n small{color:#fff;opacity:.9}
+.kurabe-top-stores .kurabe-top-store-go{color:#fff;border-top-color:rgba(255,255,255,.35)}
+.kurabe-top-stores .kurabe-top-store:hover{filter:brightness(1.06)}
 .kurabe-top-store-daiso{border-top-color:var(--k-daiso)}
 .kurabe-top-store-cando{border-top-color:var(--k-cando)}
 .kurabe-top-store-watts{border-top-color:var(--k-watts)}
