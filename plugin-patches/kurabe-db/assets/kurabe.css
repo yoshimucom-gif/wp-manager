@@ -48,10 +48,10 @@ aside .kurabe-top-store-go{font-size:14px;padding-top:8px}
 .kurabe-genre:nth-child(3n) .kurabe-genre-name{border-bottom-color:#F0A800}
 /* 下線をやめて、頭にジャンルのアイコン（吉村さん 2026-10-01）。アイコンの色はロゴの3色を順に回す */
 .kurabe-genres .kurabe-genre-name{justify-content:flex-start;align-items:center;gap:10px;border-bottom:0;padding:0;margin:0 0 .6em}
-.kurabe-genre-name .kurabe-genre-ico{flex:0 0 34px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;background:#FDE7F0;color:#E60C6C;font-size:0}
+.kurabe-genre-name .kurabe-genre-ico{flex:0 0 34px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;background:#EDEDED;color:#333;font-size:0}
 .kurabe-genre-ico svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
-.kurabe-genre:nth-child(3n+2) .kurabe-genre-ico{background:#FCE9E2;color:#DE3C12}
-.kurabe-genre:nth-child(3n) .kurabe-genre-ico{background:#FDF3D9;color:#C98C00}
+/* アイコンはモノトーン（差し色は3社の色だけ・吉村さん 2026-10-01） */
+
 /* コンテナは白地・薄い線の枠・影なし（吉村さん指定 2026-09-30）。TOPのジャンルと記事の数字欄 */
 .kurabe-genre.dbp-container,.dbp-container:has(.kurabe-stats){background:#F7F8F9 !important;border:1px solid #E2E2E2;box-shadow:none !important}
 .kurabe-genre-name span{font-size:14px;font-weight:400;color:var(--k-ink2);white-space:nowrap}
@@ -89,9 +89,9 @@ aside .kurabe-top-store-go{font-size:14px;padding-top:8px}
 @media (max-width:640px){.kurabe-top-stores{grid-template-columns:1fr;gap:14px}
   .kurabe-showcase{padding:18px 16px}.kurabe-showcase-row{grid-template-columns:66px 1fr auto;gap:8px}.kurabe-showcase-v{min-width:0;font-size:20px}}
 /* サイドバーの「サイトの強み」の箱（PR TIMES のサイドバーの箱の形） */
-.kurabe-sidebox{background:#FCE4EF;padding:18px 14px 20px;text-align:center;color:#333;border-radius:2px}
+.kurabe-sidebox{background:#F2F2F2;padding:18px 14px 20px;text-align:center;color:#333;border-radius:2px}
 .kurabe-sidebox *{box-sizing:border-box}
-.kurabe-sidebox-lead{margin:0;font-weight:700;font-size:15px;color:#C40A5B}
+.kurabe-sidebox-lead{margin:0;font-weight:700;font-size:15px;color:#333}
 .kurabe-sidebox-logo{margin:4px 0 14px}
 .kurabe-sidebox-logo img{max-width:200px;height:auto;display:inline-block}
 .kurabe-sidebox-row{display:flex;align-items:center;gap:12px;background:#fff;padding:10px 12px;margin:0 0 8px;text-align:left}
@@ -99,18 +99,18 @@ aside .kurabe-top-store-go{font-size:14px;padding-top:8px}
 .kurabe-sidebox-row span{display:block;font-size:13.5px;color:#555;line-height:1.4}
 .kurabe-sidebox-row b{display:block;font-size:19px;line-height:1.35;color:#222}
 .kurabe-sidebox-note{margin:14px 0 2px;font-weight:700;font-size:16px}
-.kurabe-sidebox-q{margin:16px 0 10px;font-weight:700;font-size:17px;color:#C40A5B}
+.kurabe-sidebox-q{margin:16px 0 10px;font-weight:700;font-size:17px;color:#333}
 .kurabe-sidebox{--k-daiso:#f5008c;--k-cando:#e94709;--k-watts:#6a5246;--k-watts-ink:#fff}
 .kurabe-sidebox-labels{display:flex !important;flex-wrap:wrap;gap:4px;margin-bottom:4px}
 .kurabe-sidebox-labels .kurabe-store{font-style:normal;font-size:12px;padding:1px 7px;line-height:1.6}
 .kurabe-sidebox-search{display:flex;gap:6px;margin:0}
 .kurabe-sidebox-search input{flex:1;min-width:0;height:44px;padding:0 12px;border:1px solid #E2E2E2;border-radius:2px;background:#fff;font-size:15px;color:#333}
 .kurabe-sidebox-search button{flex:0 0 auto;height:44px;padding:0 16px;border:0;border-radius:2px;background:#3C3C3C;color:#fff;font-weight:700;font-size:15px;cursor:pointer}
-.kurabe-sidebox-search button:hover{background:#E60C6C}
+.kurabe-sidebox-search button:hover{background:#000}
 .kurabe-sidebox-btn{display:inline-block;background:#3C3C3C;color:#fff !important;font-weight:700;font-size:15px;padding:11px 56px;text-decoration:none;border-radius:2px}
-.kurabe-sidebox-btn:hover{opacity:1;background:#E60C6C}
+.kurabe-sidebox-btn:hover{opacity:1;background:#000}
 /* 旬の100均（タブでカードを切り替える） */
-.kurabe-season{--k-ink:#333;--k-ink2:#666;--k-line:#E2E2E2;--k-daiso:#f5008c;--k-cando:#e94709;--k-watts:#6a5246;--k-pink:#E60C6C}
+.kurabe-season{--k-ink:#333;--k-ink2:#666;--k-line:#E2E2E2;--k-daiso:#f5008c;--k-cando:#e94709;--k-watts:#6a5246;--k-pink:#333}
 /* タグは PR TIMES のようにパリっと：角を立て、# を付け、選んでいるものだけ塗る（吉村さん 2026-10-01） */
 .kurabe-season-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 18px;padding:0 0 14px;border-bottom:2px solid var(--k-ink)}
 /* 選んでいないタグは枠線なし・薄いグレーの地（白い箱の枠線が並ぶと線が多く見える・吉村さん 2026-10-01） */
