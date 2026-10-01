@@ -2,7 +2,7 @@
 /**
  * Plugin Name: カタログギフトくらべ 比較データ表示
  * Description: カタログギフトの比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。発行会社・ブランドの定義（名前・表記・色）と絞り込みの軸はデータ側の stores / filters 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.2.13
+ * Version:     1.2.14
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: catalog-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Catalog_Kurabe_Db
 {
-    const VERSION  = '1.2.13';
+    const VERSION  = '1.2.14';
     const META     = 'kurabe_data';
     const OPT      = 'catalog_kurabe_db_settings';
 
@@ -918,7 +918,47 @@ class Catalog_Kurabe_Db
         if ($a['part'] === 'brands') {
             return self::top_brands($posts);
         }
+        if ($a['part'] === 'sidebox') {
+            return self::top_sidebox($a['courses']);
+        }
         return self::top_groups($posts, max(1, (int) $a['max']), array_map('trim', explode(',', $a['order'])));
+    }
+
+    /* サイドバーの「サイトの強み」の箱（100均くらべの [kurabe_top part=sidebox] と同じ形・2026-10-01 吉村さん「まねして」）
+       コース数はTOPの数字と同じく入稿時にDBから計算して courses で渡す。締めは検索窓と診断への入口 */
+    private static function top_sidebox($courses)
+    {
+        $ico = array(
+            'box'   => '<path d="M4 8l8-4 8 4v9l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v9"/>',
+            'shop'  => '<path d="M3 9h18l-1.5-5h-15z"/><path d="M5 9v11h14V9M10 20v-6h4v6"/>',
+            'form'  => '<path d="M4 4h10v16H4z"/><path d="M16 7h4v13h-4M7 8h4M7 12h4"/>',
+            'check' => '<path d="M6 3h9l4 4v14H6z"/><path d="M9 13l2 2 4-4"/>',
+        );
+        $labels = '';
+        foreach (array('リンベル' => '#8E2A3B', 'ハーモニック' => '#2E5E8C', 'シャディ' => '#1F7A6B', '大和' => '#6B5B3E') as $n => $c) {
+            $labels .= '<i class="kurabe-store" style="--kurabe-c:' . $c . '">' . esc_html($n) . '</i>';
+        }
+        $rows = array(
+            array('box', '<span>公式通販から集めた</span>', ($courses !== '' ? $courses : '—') . 'コース'),
+            array('shop', '<span class="kurabe-sidebox-labels">' . $labels . '</span>', '各社を横並び'),
+            array('form', '<span>冊子・カード・eギフトは</span>', '形態ごとに比較'),
+            array('check', '<span>公式に無い値は</span>', '推測しない'),
+        );
+        $logo = wp_get_attachment_image_url((int) get_theme_mod('custom_logo'), 'medium');
+        $h  = '<div class="kurabe-sidebox"><p class="kurabe-sidebox-lead">カタログギフトを公式データで比べる</p>';
+        $h .= $logo ? '<p class="kurabe-sidebox-logo"><img src="' . esc_url($logo) . '" alt="カタログギフトくらべ" width="220" height="55" loading="lazy"></p>' : '';
+        foreach ($rows as $r) {
+            $h .= '<div class="kurabe-sidebox-row"><svg viewBox="0 0 24 24" aria-hidden="true">' . $ico[$r[0]] . '</svg><div>' . $r[1] . '<b>' . esc_html($r[2]) . '</b></div></div>';
+        }
+        $h .= '<p class="kurabe-sidebox-q">カタログ名・コース名で調べる</p>'
+            . '<form class="kurabe-sidebox-search" role="search" method="get" action="' . esc_url(home_url('/')) . '">'
+            . '<input type="search" name="s" placeholder="例：プレゼンテージ" aria-label="サイト内検索">'
+            . '<button type="submit">検索</button></form>';
+        $sd = get_page_by_path('shindan');
+        if ($sd && $sd->post_status === 'publish') {
+            $h .= '<p class="kurabe-sidebox-go"><a href="' . esc_url(get_permalink($sd)) . '">用途と予算から選ぶ<b>カタログギフト診断</b></a></p>';
+        }
+        return $h . '</div>';
     }
 
     /* 見本：1つの比較ページで、発行会社ごとの「いちばん多い掲載点数」を各社の色の棒で並べる（ポイント制は除く） */

@@ -293,3 +293,25 @@
 .kurabe-shindan-link{margin:0 0 12px;font-size:14.5px}
 .kurabe-shindan-link a{display:inline-block;border:1px solid #D3DADF;background:#F4F6F7;padding:6px 14px;border-radius:999px;color:#1E2A33;text-decoration:none}
 .kurabe-shindan-link b{color:#3C5566;margin:0 2px}
+
+/* サイドバーの強みの箱（100均くらべと同じ形・2026-10-01） */
+.kurabe-sidebox{background:#F2F2F2;padding:18px 14px 20px;text-align:center;color:#333;border-radius:2px}
+.kurabe-sidebox *{box-sizing:border-box}
+.kurabe-sidebox-lead{margin:0;font-weight:700;font-size:15px;color:#333}
+.kurabe-sidebox-logo{margin:4px 0 14px}
+.kurabe-sidebox-logo img{max-width:200px;height:auto;display:inline-block}
+.kurabe-sidebox-row{display:flex;align-items:center;gap:12px;background:#fff;padding:10px 12px;margin:0 0 8px;text-align:left}
+.kurabe-sidebox-row svg{flex:0 0 32px;width:32px;height:32px;fill:none;stroke:#3C3C3C;stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round}
+.kurabe-sidebox-row span{display:block;font-size:13.5px;color:#555;line-height:1.4}
+.kurabe-sidebox-row b{display:block;font-size:19px;line-height:1.35;color:#222}
+.kurabe-sidebox-labels{display:flex !important;flex-wrap:wrap;gap:4px;margin-bottom:4px}
+.kurabe-sidebox-labels .kurabe-store{font-style:normal;font-size:12px;padding:1px 7px;line-height:1.6;background:var(--kurabe-c,#666);color:#fff;border-radius:2px}
+.kurabe-sidebox-q{margin:16px 0 10px;font-weight:700;font-size:17px;color:#333}
+.kurabe-sidebox-search{display:flex;gap:6px;margin:0}
+.kurabe-sidebox-search input{flex:1;min-width:0;height:44px;padding:0 12px;border:1px solid #E2E2E2;border-radius:2px;background:#fff;font-size:15px;color:#333}
+.kurabe-sidebox-search button{flex:0 0 auto;height:44px;padding:0 16px;border:0;border-radius:2px;background:#3C3C3C;color:#fff;font-weight:700;font-size:15px;cursor:pointer}
+.kurabe-sidebox-search button:hover{background:#000}
+.kurabe-sidebox-go{margin:12px 0 0}
+.kurabe-sidebox-go a{display:block;background:#fff;border:1px solid #D3DADF;border-radius:2px;padding:10px 12px;color:#333;text-decoration:none;font-size:14px}
+.kurabe-sidebox-go a b{display:block;font-size:16px;color:#3C5566}
+.kurabe-sidebox-go a:hover{border-color:#3C5566}
