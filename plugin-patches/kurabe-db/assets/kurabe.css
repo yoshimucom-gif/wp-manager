@@ -69,10 +69,11 @@
 .kurabe-season{--k-ink:#333;--k-ink2:#666;--k-line:#E2E2E2;--k-daiso:#f5008c;--k-cando:#e94709;--k-watts:#6a5246;--k-pink:#E60C6C}
 /* タグは PR TIMES のようにパリっと：角を立て、# を付け、選んでいるものだけ塗る（吉村さん 2026-10-01） */
 .kurabe-season-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 18px;padding:0 0 14px;border-bottom:2px solid var(--k-ink)}
-.kurabe-season-tab{font:inherit;font-size:15px;font-weight:700;line-height:1.3;padding:8px 14px;border-radius:2px;border:1px solid #CFCFCF;
-  background:#fff;color:var(--k-ink);cursor:pointer;margin:0;box-shadow:none;letter-spacing:.02em}
+/* 選んでいないタグは枠線なし・薄いグレーの地（白い箱の枠線が並ぶと線が多く見える・吉村さん 2026-10-01） */
+.kurabe-season-tab{font:inherit;font-size:15px;font-weight:700;line-height:1.3;padding:8px 14px;border-radius:2px;border:0;
+  background:#F0F0F0;color:var(--k-ink);cursor:pointer;margin:0;box-shadow:none;letter-spacing:.02em}
 .kurabe-season-tab::before{content:"#";margin-right:2px;color:var(--k-pink)}
-.kurabe-season-tab:hover{border-color:var(--k-pink)}
+.kurabe-season-tab:hover{background:#E6E6E6}
 .kurabe-season-tab[aria-selected="true"]{background:var(--k-pink);border-color:var(--k-pink);color:#fff}
 .kurabe-season-tab[aria-selected="true"]::before{color:#fff}
 .kurabe-season-panel{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
