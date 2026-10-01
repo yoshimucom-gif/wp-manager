@@ -195,7 +195,19 @@
 .kurabe-top-store-n small{font-size:15px;font-weight:400;margin-left:4px;color:var(--k-ink2)}
 .kurabe-top-store-go{font-size:15px;font-weight:700;color:var(--k-accent)}
 .kurabe-top-store-go::after{content:" →"}
-.kt-alt{background:#F6F5F3}
+/* TOPの区画（100均くらべと同じ組み方・2026-10-01 吉村さん「まねして」） */
+.kt-alt{background:#F9F9F9}
+/* サイドバーを出しているページでは本文側の背景色を付けない */
+:is(.l-sidebar-right,.l-sidebar-left) .kt-alt:not(#bigfooter *){background:none}
+/* 背景の帯が無いので、帯用の上下余白（padding-block:70）と左右の余白を詰め、本文列の幅いっぱいに使う。区画の間だけ空ける */
+:is(.l-sidebar-right,.l-sidebar-left) #main .dbp-section > .dbp-section__inner{padding:0 0 56px}
+/* サイト紹介はビッグフッターの先頭に置き、フッター直前の帯として画面幅いっぱいに出す。
+   ビッグフッターの文字色（サブカラー地の白）を受け継がないよう、帯の中は濃い文字に戻す */
+#bigfooter:has(.kt-about){padding-top:0}
+#bigfooter .kt-about{margin-inline:0;max-width:none;margin-bottom:40px;color:#333;text-align:left}
+#bigfooter .kt-about :is(h2,p,li,span:not(.kurabe-store),label,small,b){color:#333}
+#bigfooter .kt-about a:not(.kurabe-store){color:#333;text-decoration:underline}
+.kt-hero h2.wp-block-heading{margin-bottom:.3em;background:none;color:inherit;padding:0;font-size:clamp(24px,2.6vw,32px);line-height:1.45}
 .kt-hero .wp-block-search{max-width:640px}
 .kt-hero .wp-block-dbp-column{align-items:center}
 .kt-hero h1.wp-block-heading{font-size:clamp(26px,3vw,36px);line-height:1.45;margin-bottom:.3em;word-break:auto-phrase}
