@@ -234,7 +234,7 @@
 .ks-group+.ks-grid{margin-top:0}
 .ks-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px 14px;margin-top:16px;align-items:start}
 .ks-col{display:flex;flex-direction:column;gap:8px;min-width:0}
-.ks-col .ks-group{margin:0 0 2px;padding:0 0 6px;border-bottom:2px solid var(--k-accent);color:var(--k-ink)}
+.ks-col .ks-group{margin:0 0 4px;padding:9px 12px;background:#E6EDF1;border-left:4px solid var(--k-accent);border-radius:4px;color:var(--k-ink);font-size:15.5px;letter-spacing:.06em;line-height:1.4}
 .ks-other{margin-top:16px;display:grid;grid-template-columns:minmax(0,320px)}
 .ks-grid-b{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
 .ks-grid-wide{grid-template-columns:repeat(auto-fill,minmax(220px,1fr));margin-top:16px}
