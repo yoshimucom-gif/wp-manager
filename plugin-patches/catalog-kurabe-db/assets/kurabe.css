@@ -157,3 +157,47 @@
   .kurabe-table tbody tr td.kurabe-td-store,.kurabe-table tbody tr:first-child td.kurabe-td-store{padding:0 0 6px!important}
   .kurabe-table tbody tr td:nth-child(2),.kurabe-table tbody tr:first-child td:nth-child(2){padding:0 0 10px!important;margin:0 0 6px;border-bottom:1px solid var(--k-line2)!important}
 }
+
+/* ---------- TOPページの部品 [kurabe_top]（100均くらべのTOPと同じ作り。色は各ページの発行会社の色を --kurabe-c で受け取る） ---------- */
+.kurabe-top-stats,.kurabe-genres,.kurabe-top-stores,.kurabe-showcase{--k-ink:#1E2A33;--k-ink2:#56636E;--k-line:#D3DADF;--k-line2:#E6EAED;--k-bg:#EFEFEF;--k-accent:#3C5566;box-sizing:border-box}
+.kurabe-top-stats *,.kurabe-genres *,.kurabe-top-stores *,.kurabe-showcase *{box-sizing:border-box}
+.kurabe-top-stats{margin:.8em 0 0;color:var(--k-ink2)}
+.kurabe-top-stats b{font-size:22px;color:var(--k-ink);font-variant-numeric:tabular-nums;margin:0 2px}
+.kurabe-showcase{background:#fff;border:1px solid var(--k-line);border-top:4px solid var(--k-ink);border-radius:0 0 8px 8px;padding:22px 24px 20px}
+.kurabe-showcase-head{font-weight:700;font-size:18px;margin:0 0 14px;color:var(--k-ink)}
+.kurabe-showcase-head span{display:block;font-weight:400;font-size:15px;color:var(--k-ink2);margin-top:2px}
+.kurabe-showcase-row{display:grid;grid-template-columns:120px 1fr auto;align-items:center;gap:12px;margin:0 0 12px}
+.kurabe-showcase-store{font-weight:700;font-size:15px;line-height:1.3}
+.kurabe-showcase-bar{height:16px;background:var(--k-bg);border-radius:3px;overflow:hidden}
+.kurabe-showcase-bar i{display:block;height:100%;border-radius:3px;background:var(--kurabe-c,#666)}
+.kurabe-showcase-v{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--k-ink);min-width:80px;text-align:right}
+.kurabe-showcase-v small{font-size:14px;font-weight:400;margin-left:2px;color:var(--k-ink2)}
+.kurabe-showcase-go{display:inline-block;margin-top:6px;font-weight:700;font-size:15px;color:var(--k-accent)}
+.kurabe-showcase-go::after{content:" →"}
+.kurabe-genres{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:30px 34px}
+.kurabe-genre{margin:0}
+.kurabe-genre.dbp-container{background:#fff !important;border:1px solid #E2E2E2;box-shadow:none !important}
+.kurabe-genre-name{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:0 0 .5em;padding:0 0 .45em;border-bottom:3px solid var(--k-accent);font-size:18px}
+.kurabe-genre-name a{color:var(--k-ink);text-decoration:none}
+.kurabe-genre-name span{font-size:14px;font-weight:400;color:var(--k-ink2);white-space:nowrap}
+.kurabe-genre ul{list-style:none;margin:0;padding:0;font-size:calc(1em - 2px)}
+.kurabe-genre li{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:0;padding:6px 0;border-bottom:1px solid var(--k-line2)}
+.kurabe-genre li::before{display:none}
+.kurabe-genre li a{color:var(--k-ink);text-decoration:none}
+.kurabe-genre li a:hover{text-decoration:underline;opacity:1}
+.kurabe-genre li span{font-size:13px;color:var(--k-ink2);white-space:nowrap;font-variant-numeric:tabular-nums}
+.kurabe-genre-more{display:inline-block;margin-top:.6em;font-size:14px;font-weight:700}
+.kurabe-top-stores{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:22px}
+.kurabe-top-store{display:flex;flex-direction:column;gap:10px;padding:16px 0 4px;border-top:4px solid var(--kurabe-c,var(--k-accent));color:var(--k-ink);text-decoration:none}
+.kurabe-top-store:hover{opacity:1}
+.kurabe-top-store .kurabe-store{align-self:flex-start;font-size:15px;padding:4px 12px}
+.kurabe-top-store-n{font-size:28px;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums}
+.kurabe-top-store-n small{font-size:15px;font-weight:400;margin-left:4px;color:var(--k-ink2)}
+.kurabe-top-store-go{font-size:15px;font-weight:700;color:var(--k-accent)}
+.kurabe-top-store-go::after{content:" →"}
+.kt-alt{background:#F6F5F3}
+.kt-hero .wp-block-search{max-width:640px}
+.kt-hero .wp-block-dbp-column{align-items:center}
+.kt-hero h1.wp-block-heading{font-size:clamp(26px,3vw,36px);line-height:1.45;margin-bottom:.3em;word-break:auto-phrase}
+@media (max-width:640px){.kurabe-top-stores{grid-template-columns:1fr 1fr;gap:14px}.kurabe-top-store-n{font-size:22px}
+  .kurabe-showcase{padding:18px 16px}.kurabe-showcase-row{grid-template-columns:86px 1fr auto;gap:8px}.kurabe-showcase-v{min-width:0;font-size:18px}}

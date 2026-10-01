@@ -2,7 +2,7 @@
 /**
  * Plugin Name: カタログギフトくらべ 比較データ表示
  * Description: カタログギフトの比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。発行会社・ブランドの定義（名前・表記・色）と絞り込みの軸はデータ側の stores / filters 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.1.3
+ * Version:     1.2.0
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: catalog-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Catalog_Kurabe_Db
 {
-    const VERSION  = '1.1.3';
+    const VERSION  = '1.2.0';
     const META     = 'kurabe_data';
     const OPT      = 'catalog_kurabe_db_settings';
 
@@ -39,6 +39,7 @@ class Catalog_Kurabe_Db
         add_filter('diver_single_side_items', array(__CLASS__, 'side_items'));
         add_action('diver_main_before', array(__CLASS__, 'archive_table'), 20);
         add_shortcode('kurabe_list', array(__CLASS__, 'list_shortcode'));
+        add_shortcode('kurabe_top', array(__CLASS__, 'top_shortcode'));
     }
 
     /* 比較ページは「サイズ：幅広」で組む。re:Diverは幅広のとき記事横の縦並びボタン
@@ -770,6 +771,176 @@ class Catalog_Kurabe_Db
             return;
         }
         echo self::list_html(array('taxonomy' => $term->taxonomy, 'term' => $term->term_id));
+    }
+
+    /* ---------- TOPページの部品 [kurabe_top part="stats|showcase|groups|brands"] ----------
+       100均くらべのTOP（吉村さんが選んだB案）と同じ並び。公開済みの比較ページだけを使い、
+       編集できる人がプレビューで見るときだけ下書きも含める */
+
+    private static function top_posts()
+    {
+        $status = current_user_can('edit_posts') ? array('publish', 'draft', 'pending', 'future') : array('publish');
+        return get_posts(array(
+            'post_type'        => 'post',
+            'post_status'      => $status,
+            'posts_per_page'   => -1,
+            'meta_key'         => 'kurabe_axes',
+            'suppress_filters' => true,
+        ));
+    }
+
+    public static function top_shortcode($atts)
+    {
+        $a = shortcode_atts(array('part' => 'groups', 'max' => 8, 'item' => '', 'courses' => '', 'issuers' => '',
+                                  'order' => '予算別,シーン別,ジャンル別,ブランド別,シリーズ,基礎知識'), $atts, 'kurabe_top');
+        wp_enqueue_style('catalog-kurabe-db');
+        if ($a['part'] === 'stats') {
+            // 数字はDBから入稿時に計算して渡す（ページをまたいだ重複を除いたコース数・発行会社数）
+            return '<p class="kurabe-top-stats"><b>' . esc_html($a['courses']) . '</b>コース・<b>' . esc_html($a['issuers'])
+                . '</b>社の公式データを掲載</p>';
+        }
+        $posts = self::top_posts();
+        if (!$posts) {
+            return '';
+        }
+        if ($a['part'] === 'showcase') {
+            return self::top_showcase($posts, $a['item']);
+        }
+        if ($a['part'] === 'brands') {
+            return self::top_brands($posts);
+        }
+        return self::top_groups($posts, max(1, (int) $a['max']), array_map('trim', explode(',', $a['order'])));
+    }
+
+    /* 見本：1つの比較ページで、発行会社ごとの「いちばん多い掲載点数」を各社の色の棒で並べる（ポイント制は除く） */
+    private static function top_showcase($posts, $item)
+    {
+        $post = null;
+        foreach ($posts as $p) {
+            if (get_post_meta($p->ID, 'kurabe_item', true) === $item) {
+                $post = $p;
+                break;
+            }
+        }
+        $d = $post ? self::data($post->ID) : null;
+        if (!$d) {
+            return '';
+        }
+        $stores = self::stores($d);
+        $val = array();
+        foreach ($d['rows'] as $r) {
+            if (!isset($r['items_n']) || !is_numeric($r['items_n']) || mb_strpos($r['n'], 'ポイント') !== false) {
+                continue;
+            }
+            $val[$r['s']] = max(isset($val[$r['s']]) ? $val[$r['s']] : 0, (int) $r['items_n']);
+        }
+        if (!$val) {
+            return '';
+        }
+        arsort($val);
+        $top = max($val);
+        $h = '<div class="kurabe-showcase"><p class="kurabe-showcase-head">例：' . esc_html($item) . '　<span>発行会社ごとのいちばん多い掲載点数</span></p>';
+        foreach (array_slice($val, 0, 6, true) as $s => $v) {
+            $w = $top ? max(8, round($v / $top * 100)) : 0;
+            $h .= '<div class="kurabe-showcase-row"><span class="kurabe-showcase-store kurabe-t"' . self::color_style($stores, $s) . '>' . esc_html(self::label($stores, $s)) . '</span>'
+                . '<span class="kurabe-showcase-bar"><i' . self::color_style($stores, $s, 'width:' . $w . '%') . '></i></span>'
+                . '<span class="kurabe-showcase-v">' . number_format($v) . '<small>点</small></span></div>';
+        }
+        $n = isset($d['courses']) ? (int) $d['courses'] : count($d['rows']);
+        $h .= '<a class="kurabe-showcase-go" href="' . esc_url(get_permalink($post)) . '">' . esc_html($item) . 'の' . $n . 'コースを1枚の表で見る</a></div>';
+        return $h;
+    }
+
+    /* カテゴリ（予算別・シーン別…）ごとにコンテナで囲み、比較ページをコース数の多い順に並べる */
+    private static function top_groups($posts, $max, $order)
+    {
+        $by = array();
+        foreach ($posts as $p) {
+            $cats = get_the_category($p->ID);
+            if (!$cats) {
+                continue;
+            }
+            $c = $cats[0];
+            if (!isset($by[$c->name])) {
+                $by[$c->name] = array('term' => $c, 'rows' => array());
+            }
+            $by[$c->name]['rows'][] = array(
+                'url'   => get_permalink($p),
+                'item'  => get_post_meta($p->ID, 'kurabe_item', true) ?: get_the_title($p),
+                'total' => (int) get_post_meta($p->ID, 'kurabe_count', true),
+                'axes'  => json_decode((string) get_post_meta($p->ID, 'kurabe_axes', true), true),
+            );
+        }
+        $h = '<div class="kurabe-genres">';
+        foreach ($order as $name) {
+            if (empty($by[$name])) {
+                continue;
+            }
+            $g = $by[$name];
+            // 予算別は金額の順、それ以外はコース数の多い順
+            usort($g['rows'], function ($x, $y) use ($name) {
+                if ($name === '予算別') {
+                    $bx = isset($x['axes']['budget']) ? (int) $x['axes']['budget'] : 0;
+                    $by_ = isset($y['axes']['budget']) ? (int) $y['axes']['budget'] : 0;
+                    return $bx === $by_ ? $y['total'] - $x['total'] : $bx - $by_;
+                }
+                return $y['total'] - $x['total'];
+            });
+            $link = get_term_link($g['term']);
+            $n = count($g['rows']);
+            $h .= '<section class="kurabe-genre wp-block-dbp-container padding-block:30 padding-inline:30 dbp-container">'
+                . '<div class="dbp-container__inner"><h3 class="kurabe-genre-name"><a href="' . esc_url(is_wp_error($link) ? '' : $link) . '">'
+                . esc_html($name) . '</a><span>' . $n . 'ページ</span></h3><ul>';
+            foreach (array_slice($g['rows'], 0, $max) as $r) {
+                $h .= '<li><a href="' . esc_url($r['url']) . '">' . esc_html(preg_replace('/\s+カタログギフト$/u', 'のカタログギフト', $r['item'])) . '</a>'
+                    . ($r['total'] ? '<span>' . $r['total'] . 'コース</span>' : '') . '</li>';
+            }
+            $h .= '</ul>';
+            if ($n > $max && !is_wp_error($link)) {
+                $h .= '<a class="kurabe-genre-more" href="' . esc_url($link) . '">' . esc_html($name) . 'をすべて見る</a>';
+            }
+            $h .= '</div></section>';
+        }
+        return $h . '</div>';
+    }
+
+    /* 発行会社・ブランド別のページ（kind=issuer）をカードで並べる。色はそのページの比較データの発行会社の色 */
+    private static function top_brands($posts)
+    {
+        $cards = array();
+        foreach ($posts as $p) {
+            $ax = json_decode((string) get_post_meta($p->ID, 'kurabe_axes', true), true);
+            if (!is_array($ax) || (isset($ax['kind']) ? $ax['kind'] : '') !== 'issuer') {
+                continue;
+            }
+            $d = self::data($p->ID);
+            $stores = $d ? self::stores($d) : array();
+            $iss = isset($ax['issuer']) ? $ax['issuer'] : '';
+            $color = isset($stores[$iss]) ? self::color_style($stores, $iss) : '';
+            if (!$color && $stores) {
+                $first = array_keys($stores)[0];
+                foreach ($stores as $k => $st) {
+                    if (!empty($st['count'])) {
+                        $first = $k;
+                        break;
+                    }
+                }
+                $color = self::color_style($stores, $first);
+            }
+            $cards[] = array('url' => get_permalink($p), 'name' => preg_replace('/百貨店$/u', '', $iss), 'label' => isset($ax['label']) ? $ax['label'] : $iss,
+                             'n' => (int) get_post_meta($p->ID, 'kurabe_count', true), 'style' => $color);
+        }
+        usort($cards, function ($x, $y) {
+            return $y['n'] - $x['n'];
+        });
+        $h = '<div class="kurabe-top-stores">';
+        foreach ($cards as $c) {
+            $h .= '<a class="kurabe-top-store"' . $c['style'] . ' href="' . esc_url($c['url']) . '">'
+                . '<span class="kurabe-store"' . $c['style'] . '>' . esc_html($c['name']) . '</span>'
+                . '<span class="kurabe-top-store-n">' . number_format($c['n']) . '<small>コース</small></span>'
+                . '<span class="kurabe-top-store-go">' . esc_html($c['label']) . 'へ</span></a>';
+        }
+        return $h . '</div>';
     }
 
     public static function list_shortcode($atts)
