@@ -2,7 +2,7 @@
 /**
  * Plugin Name: カタログギフトくらべ 比較データ表示
  * Description: カタログギフトの比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。発行会社・ブランドの定義（名前・表記・色）と絞り込みの軸はデータ側の stores / filters 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.2.2
+ * Version:     1.2.3
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: catalog-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Catalog_Kurabe_Db
 {
-    const VERSION  = '1.2.2';
+    const VERSION  = '1.2.3';
     const META     = 'kurabe_data';
     const OPT      = 'catalog_kurabe_db_settings';
 
@@ -1047,6 +1047,11 @@ class Catalog_Kurabe_Db
                 }
             }
         }
+        /* 並び：予算別のページは金額の順、それ以外はコース数の多い順（店タグの一覧はその店の件数の順） */
+        foreach ($posts as $k => $p) {
+            $ax = json_decode((string) get_post_meta($p->ID, 'kurabe_axes', true), true);
+            $rows[$k]['budget'] = is_array($ax) && isset($ax['budget']) ? (int) $ax['budget'] : 0;
+        }
         usort($rows, function ($a, $b) use ($sort_store) {
             if ($sort_store) {
                 $x = isset($a['per'][$sort_store]) ? $a['per'][$sort_store] : 0;
@@ -1055,25 +1060,37 @@ class Catalog_Kurabe_Db
                     return $y - $x;
                 }
             }
+            if ($a['budget'] && $b['budget'] && $a['budget'] !== $b['budget']) {
+                return $a['budget'] - $b['budget'];
+            }
             return $b['total'] - $a['total'];
         });
         wp_enqueue_style('catalog-kurabe-db');
+        /* 発行会社が15社あり、会社ごとの列にすると比較ページ名が数文字で折り返す（2026-10-01）。
+           「比較ページ・コース数・載っている発行会社（コース数の多い順のバッジ）」の3列にする */
+        $budgeted = count(array_filter($rows, function ($r) { return $r['budget'] > 0; })) === count($rows);
         $lead = $sort_store
-            ? esc_html($cols[$sort_store]['label']) . 'の公式通販に載っている品目を、' . esc_html($cols[$sort_store]['label']) . 'の掲載数の多い順に並べています。'
-            : '各社の公式通販に載っている品目を、掲載数の多い順に並べています。';
-        $h  = '<div class="kurabe-list"><p class="kurabe-list-lead">' . count($rows) . '品目。' . $lead . '</p>';
-        $h .= '<div class="kurabe-tablebox"><table><thead><tr><th scope="col">品目</th>';
-        foreach ($cols as $st => $c) {
-            $h .= '<th scope="col" class="kurabe-c"><span class="kurabe-store kurabe-' . esc_attr($c['slug']) . '"' . self::color_style($cols, $st) . '>' . esc_html($c['label']) . '</span></th>';
-        }
-        $h .= '<th scope="col" class="kurabe-c">合計</th></tr></thead><tbody>';
+            ? esc_html($cols[$sort_store]['label']) . 'のカタログギフトが載っている比較ページを、件数の多い順に並べています。'
+            : ($budgeted ? '各社の公式通販のカタログギフトを比べたページを、予算の順に並べています。'
+                         : '各社の公式通販のカタログギフトを比べたページを、載っているコースの多い順に並べています。');
+        $h  = '<div class="kurabe-list"><p class="kurabe-list-lead">' . count($rows) . 'ページ。' . $lead . '</p>';
+        $h .= '<div class="kurabe-tablebox"><table class="kurabe-list-table"><thead><tr><th scope="col">比較ページ</th>'
+            . '<th scope="col" class="kurabe-c">コース数</th><th scope="col">載っている発行会社</th></tr></thead><tbody>';
         foreach ($rows as $r) {
-            $h .= '<tr><td><a href="' . esc_url($r['url']) . '">' . esc_html($r['item']) . '</a></td>';
-            foreach ($cols as $st => $c) {
-                $n = isset($r['per'][$st]) ? (int) $r['per'][$st] : 0;
-                $h .= '<td class="kurabe-c kurabe-num">' . ($n ? '<span class="kurabe-t"' . self::color_style($cols, $st) . '>' . $n . '</span>' : '<span class="kurabe-none">—</span>') . '</td>';
+            $per = $r['per'];
+            arsort($per);
+            $badges = '';
+            foreach (array_slice($per, 0, 6, true) as $st => $n) {
+                $label = isset($cols[$st]) ? $cols[$st]['label'] : $st;
+                $badges .= '<span class="kurabe-store"' . self::color_style($cols, $st) . '>' . esc_html($label) . '</span> ';
             }
-            $h .= '<td class="kurabe-c kurabe-num">' . $r['total'] . '種</td></tr>';
+            if (count($per) > 6) {
+                $badges .= '<span class="kurabe-list-more">ほか' . (count($per) - 6) . '社</span>';
+            }
+            $name = preg_replace('/\s+カタログギフト$/u', 'のカタログギフト', $r['item']);
+            $h .= '<tr><td class="kurabe-list-name"><a href="' . esc_url($r['url']) . '">' . esc_html($name) . '</a></td>'
+                . '<td class="kurabe-c kurabe-num">' . ($r['total'] ? $r['total'] . 'コース' : '—') . '</td>'
+                . '<td class="kurabe-list-badges">' . $badges . '</td></tr>';
         }
         return $h . '</tbody></table></div></div>';
     }

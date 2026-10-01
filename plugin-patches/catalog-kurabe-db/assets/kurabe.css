@@ -207,3 +207,9 @@
 .kurabe-genre.dbp-container,.dbp-container:has(.kurabe-stats){background:#fff !important;border:1px solid #E2E2E2;box-shadow:none !important}
 .kt-hero .kurabe-store{font-size:15px;vertical-align:.1em;margin:0 2px}
 .kurabe-genre:nth-child(3n+1) .kurabe-genre-name{border-bottom-color:var(--k-accent)}
+/* カテゴリ・タグの一覧（比較ページ・コース数・発行会社バッジの3列） */
+.kurabe-list-table td.kurabe-list-name{min-width:12em;font-weight:700}
+.kurabe-list-table td.kurabe-list-badges{line-height:2}
+.kurabe-list-table .kurabe-store{font-size:12px;padding:1px 7px;margin:0 2px 2px 0}
+.kurabe-list-more{font-size:12px;color:#56636E;white-space:nowrap}
+@media (max-width:640px){.kurabe-list-table td.kurabe-list-name{min-width:8em}}
