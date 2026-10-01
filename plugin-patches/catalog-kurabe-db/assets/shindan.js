@@ -47,16 +47,21 @@
   }
 
   function options(d, q, cur) {
+    // 用途と予算は、グループを列にして見出しの下に選択肢を縦に並べる（2026-10-01 吉村さん指定）
+    function cols(groups, q, label) {
+      return '<div class="ks-cols">' + groups.map(function (g) {
+        return '<div class="ks-col"><p class="ks-group">' + esc(g[0]) + '</p>' +
+          g[1].map(function (i) { return tile(q, i, label(i), '', cur); }).join('') + '</div>';
+      }).join('') + '</div>';
+    }
     if (q === 's') {
-      var h = '';
-      d.sceneGroups.forEach(function (g) {
-        h += '<p class="ks-group">' + esc(g[0]) + '</p><div class="ks-grid">' +
-          g[1].map(function (i) { return tile('s', i, d.scenes[i], '', cur); }).join('') + '</div>';
-      });
-      return h + '<p class="ks-group">そのほか</p><div class="ks-grid">' + tile('s', -1, '決まっていない・ほかの用途', '', cur) + '</div>';
+      return cols(d.sceneGroups, 's', function (i) { return d.scenes[i]; }) +
+        '<div class="ks-other">' + tile('s', -1, '決まっていない・ほかの用途', '', cur) + '</div>';
     }
     if (q === 'b') {
-      return '<div class="ks-grid ks-grid-b">' + d.budgets.map(function (b, i) { return tile('b', i, b[0], '', cur); }).join('') + '</div>';
+      var bg = [['1万円未満', []], ['1万〜3万円前後', []], ['4万円以上', []]];
+      d.budgets.forEach(function (b, i) { bg[b[1] < 9500 ? 0 : b[1] < 38000 ? 1 : 2][1].push(i); });
+      return cols(bg, 'b', function (i) { return d.budgets[i][0]; });
     }
     if (q === 'g') {
       return '<div class="ks-grid ks-grid-wide">' + d.genres.map(function (g, i) { return tile('g', i, g[0], SUB.g[i], cur); }).join('') + '</div>';
