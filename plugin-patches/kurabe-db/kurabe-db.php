@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.5.9
+ * Version:     1.6.0
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.5.9';
+    const VERSION  = '1.6.0';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -703,7 +703,11 @@ class Kurabe_Db
         $h  = '<div class="kurabe-sidebox"><p class="kurabe-sidebox-lead">100均3社を公式データで比べる</p>';
         $h .= $logo ? '<p class="kurabe-sidebox-logo"><img src="' . esc_url($logo) . '" alt="100均くらべ" width="220" height="55" loading="lazy"></p>' : '';
         foreach ($rows as $r) {
-            $h .= '<div class="kurabe-sidebox-row"><svg viewBox="0 0 24 24" aria-hidden="true">' . $ico[$r[0]] . '</svg><div><span>' . esc_html($r[1]) . '</span><b>' . esc_html($r[2]) . '</b></div></div>';
+            // お店の行は店名を各社の色ラベルで出す（吉村さん 2026-10-01「ここラベルにしたら？」）
+            $sub = $r[0] === 'shop'
+                ? '<span class="kurabe-sidebox-labels"><i class="kurabe-store kurabe-daiso">DAISO</i><i class="kurabe-store kurabe-cando">Can★Do</i><i class="kurabe-store kurabe-watts">Watts</i></span>'
+                : '<span>' . esc_html($r[1]) . '</span>';
+            $h .= '<div class="kurabe-sidebox-row"><svg viewBox="0 0 24 24" aria-hidden="true">' . $ico[$r[0]] . '</svg><div>' . $sub . '<b>' . esc_html($r[2]) . '</b></div></div>';
         }
         // 箱の締めは検索窓（吉村さん 2026-10-01「データの集め方に遷移させてもなんも意味ない」）
         $h .= '<p class="kurabe-sidebox-q">探したい物の名前で比べる</p>'

@@ -88,6 +88,9 @@
 .kurabe-sidebox-row b{display:block;font-size:19px;line-height:1.35;color:#222}
 .kurabe-sidebox-note{margin:14px 0 2px;font-weight:700;font-size:16px}
 .kurabe-sidebox-q{margin:16px 0 10px;font-weight:700;font-size:17px;color:#C40A5B}
+.kurabe-sidebox{--k-daiso:#f5008c;--k-cando:#e94709;--k-watts:#6a5246;--k-watts-ink:#fff}
+.kurabe-sidebox-labels{display:flex !important;flex-wrap:wrap;gap:4px;margin-bottom:4px}
+.kurabe-sidebox-labels .kurabe-store{font-style:normal;font-size:12px;padding:1px 7px;line-height:1.6}
 .kurabe-sidebox-search{display:flex;gap:6px;margin:0}
 .kurabe-sidebox-search input{flex:1;min-width:0;height:44px;padding:0 12px;border:1px solid #E2E2E2;border-radius:2px;background:#fff;font-size:15px;color:#333}
 .kurabe-sidebox-search button{flex:0 0 auto;height:44px;padding:0 16px;border:0;border-radius:2px;background:#3C3C3C;color:#fff;font-weight:700;font-size:15px;cursor:pointer}
