@@ -348,3 +348,8 @@
 .kt-season h2.wp-block-heading::before,.kt-season h2.wp-block-heading::after{content:none}
 /* ビッグフッターのサイト紹介の題は見出しにしない（全ページに同じh2が出るため）。見た目は前の見出しと同じ */
 .kt-about-title{font-weight:700;font-size:clamp(22px,2.4vw,30px);line-height:1.45;text-align:center;margin:0 0 .8em;color:#333}
+
+/* 診断の質問の頭にオレンジの「?」（2026-10-01 吉村さん） */
+.ks-title{display:flex;align-items:center;gap:10px}
+.ks-title::before{content:"?";flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:#F08A24;color:#fff;font-size:18px;font-weight:700;line-height:1;font-family:Arial,sans-serif}
+@media (max-width:640px){.ks-title::before{width:26px;height:26px;font-size:16px}}
