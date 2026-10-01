@@ -145,7 +145,10 @@
       } else if (st.p === 'expiry') {
         why.push(v(r, 'expDays') == null ? '申込の有効期限の日数が書かれていないコースです（' + esc(v(r, 'expLabel') || '記載なし') + '）。' : '条件に合う' + N + 'コースのうち、申込の有効期限が' + ord(rank(x, 'expiry'), '長い') + 'コースです。');
       } else {
-        why.push(v(r, 'hagaki') === 1 ? '公式通販に、ハガキで申し込めると書かれているコースです（条件に合う' + N + 'コースのうち' + nHagaki + 'コース）。'
+        var hk = courses.filter(function (y) { return v(y.rep, 'hagaki') === 1; });
+        var hr = 1 + hk.filter(function (y) { return KEY.items(y.rep) > KEY.items(r); }).length;
+        why.push(v(r, 'hagaki') === 1 ? 'ハガキで申し込めると公式通販に書かれているコース（条件に合う' + N + 'コースのうち' + nHagaki + 'コース）の中で、' +
+          (v(r, 'items') == null ? '掲載点数の記載がないコースです。' : '掲載点数が' + ord(hr, '多い') + 'コースです。')
           : 'ハガキで申し込めるコースが条件の中に' + nHagaki + 'コースしかないため、ハガキ申込が「' + (v(r, 'hagaki') === 0 ? '不可' : '記載なし') + '」のコースも出しています。');
       }
       if (c.s >= 0) { why.push(esc(iss[0]) + 'の公式通販で「' + esc(d.scenes[c.s]) + '」向けとして案内されています。'); }

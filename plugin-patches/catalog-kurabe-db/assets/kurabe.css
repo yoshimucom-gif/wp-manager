@@ -252,5 +252,5 @@
 .ks-more{margin:14px 0 6px;font-weight:700}
 .ks-note{font-size:13px;color:var(--k-ink2);margin:6px 0 0}
 .kurabe-shindan-link{margin:0 0 12px;font-size:14.5px}
-.kurabe-shindan-link a{display:inline-block;border:1px solid var(--k-line);background:var(--k-bg);padding:6px 14px;border-radius:999px;color:var(--k-ink);text-decoration:none}
-.kurabe-shindan-link b{color:var(--k-accent);margin:0 2px}
+.kurabe-shindan-link a{display:inline-block;border:1px solid #D3DADF;background:#F4F6F7;padding:6px 14px;border-radius:999px;color:#1E2A33;text-decoration:none}
+.kurabe-shindan-link b{color:#3C5566;margin:0 2px}
