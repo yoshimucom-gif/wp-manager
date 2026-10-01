@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.6.1
+ * Version:     1.6.2
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.6.1';
+    const VERSION  = '1.6.2';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -672,6 +672,38 @@ class Kurabe_Db
         return '<p class="kurabe-top-stats"><b>' . number_format($goods) . '</b>商品を掲載</p>';
     }
 
+    /* TOPのジャンル見出しの頭に付ける線のアイコン（吉村さん 2026-10-01「くっきりした下線やめて、アイコンとかにできる？」）
+       ジャンル名で引く。無いジャンルは値札のアイコン */
+    private static function genre_icon($name)
+    {
+        $I = array(
+            '文具'                     => '<path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/>',
+            'バッグ・服飾雑貨'         => '<path d="M5 8h14l-1 12H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>',
+            '電気'                     => '<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>',
+            'キッチン用品'             => '<path d="M4 10h16v3a6 6 0 0 1-6 6h-4a6 6 0 0 1-6-6z"/><path d="M2 10h2M20 10h2M9 4v3M12 4v3M15 4v3"/>',
+            '化粧・ヘアケア'           => '<path d="M9 21h6v-9H9z"/><path d="M10 12V7l4-3v8"/>',
+            'ハンドメイド'             => '<circle cx="6" cy="7" r="3"/><circle cx="6" cy="17" r="3"/><path d="M8.5 8.5L20 19M8.5 15.5L20 5"/>',
+            '衛生・オーラル・バス用品' => '<path d="M12 3s6 7 6 11a6 6 0 0 1-12 0c0-4 6-11 6-11z"/>',
+            '行楽・レジャー'           => '<path d="M3 20L12 4l9 16z"/><path d="M9 20l3-6 3 6"/>',
+            '玩具・パーティー・スポーツ' => '<circle cx="12" cy="9" r="6"/><path d="M12 15l-1.5 2h3zM12 17c0 2-2 2-2 4"/>',
+            '収納'                     => '<path d="M4 5h16v14H4zM4 12h16M10 8.5h4M10 15.5h4"/>',
+            '靴・トラベル・雨具'       => '<path d="M3 12a9 9 0 0 1 18 0z"/><path d="M12 12v6a2 2 0 0 0 4 0"/>',
+            'リフォーム'               => '<path d="M3 21l9-9"/><path d="M10 6l4-3 7 7-3 4-3-3-2 2-3-3 2-2z"/>',
+            '工具・車・自転車'         => '<path d="M15 4a4 4 0 0 0-1 5l-9 9 2 2 9-9a4 4 0 0 0 5-1l-3-1-1-3z"/>',
+            'リビング'                 => '<path d="M4 11V8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3"/><path d="M2 11h20v6H2zM5 17v2M19 17v2"/>',
+            '掃除'                     => '<path d="M9 3h4v4H9zM8 7h6l1 14H7zM13 4h3"/>',
+            '衣料品'                   => '<path d="M8 3L3 6l2 4 3-1v12h8V9l3 1 2-4-5-3c0 2-2 3-4 3S8 5 8 3z"/>',
+            'インテリア'               => '<path d="M12 21v-8M7 21h10"/><path d="M12 13c-4 0-6-3-6-7 4 0 6 3 6 7zM12 11c0-4 2-6 6-6 0 4-2 6-6 6z"/>',
+            'キッチン消耗・日用品'     => '<rect x="5" y="4" width="10" height="16" rx="2"/><path d="M15 8h4v12h-4"/>',
+            '食器・テーブルウェア'     => '<path d="M5 8h12v5a6 6 0 0 1-12 0z"/><path d="M17 9h2a2 2 0 0 1 0 4h-2M4 21h14"/>',
+            '園芸・ペット'             => '<path d="M7 14h10l-1 7H8zM12 14V9"/><path d="M12 9c0-3 2-5 5-5 0 3-2 5-5 5zM12 11c0-2-2-4-4-4 0 2 2 4 4 4z"/>',
+            'ギフト'                   => '<path d="M4 9h16v4H4zM5 13h14v8H5zM12 9v12"/><path d="M12 9C10 5 6 5 6 8s6 1 6 1zM12 9c2-4 6-4 6-1s-6 1-6 1z"/>',
+            '洗濯'                     => '<path d="M10 5a2 2 0 1 1 2 2v1L3 15h18l-9-7"/>',
+        );
+        $p = isset($I[$name]) ? $I[$name] : '<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="7.5" r="1.5"/>';
+        return '<span class="kurabe-genre-ico" aria-hidden="true"><svg viewBox="0 0 24 24">' . $p . '</svg></span>';
+    }
+
     /* サイドバーの「サイトの強み」の箱（PR TIMES のサイドバーの「9,000万PV/月」の箱の形・吉村さん 2026-10-01）
        商品数は公開済みの比較表から重複を除いて数える */
     private static function top_sidebox($posts)
@@ -806,7 +838,8 @@ class Kurabe_Db
             $n = count($g['rows']);
             // 1ジャンルずつ re:Diver のコンテナ（dbp/container と同じ出力）で囲む（吉村さん指定 2026-09-30）
             $h .= '<section class="kurabe-genre wp-block-dbp-container padding-block:30 padding-inline:30 dbp-container">'
-                . '<div class="dbp-container__inner"><h3 class="kurabe-genre-name"><a href="' . esc_url($link) . '">' . esc_html($g['term']->name) . '</a></h3><ul>';
+                . '<div class="dbp-container__inner"><h3 class="kurabe-genre-name">' . self::genre_icon($g['term']->name)
+                . '<a href="' . esc_url($link) . '">' . esc_html($g['term']->name) . '</a></h3><ul>';
             foreach (array_slice($g['rows'], 0, $max) as $r) {
                 $h .= '<li><a href="' . esc_url($r['url']) . '">' . esc_html($r['item']) . '</a><span>' . $r['total'] . '種</span></li>';
             }
