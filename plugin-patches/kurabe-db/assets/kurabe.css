@@ -111,7 +111,7 @@
 /* サイドバーを出しているページでは本文側の背景色を付けない（吉村さん 2026-10-01） */
 :is(.l-sidebar-right,.l-sidebar-left) .kt-alt:not(#bigfooter *){background:none}
 /* 背景の帯が無いので、帯用の上下余白（padding-block:70）も詰める。区画の間だけ空ける */
-:is(.l-sidebar-right,.l-sidebar-left) #main .dbp-section > .dbp-section__inner{padding-top:0;padding-bottom:56px}
+:is(.l-sidebar-right,.l-sidebar-left) #main .dbp-section > .dbp-section__inner{padding:0 0 56px}   /* 左右の64pxも帯用。本文列の幅いっぱいに使う */
 /* サイト紹介はビッグフッターの先頭に置き、フッター直前の帯として画面幅いっぱいに出す */
 #bigfooter:has(.kt-about){padding-top:0}
 #bigfooter .kt-about{margin-inline:0;max-width:none;margin-bottom:40px;color:#333;text-align:left}
