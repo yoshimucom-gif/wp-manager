@@ -2,7 +2,7 @@
 /**
  * Plugin Name: カタログギフトくらべ 比較データ表示
  * Description: カタログギフトの比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。発行会社・ブランドの定義（名前・表記・色）と絞り込みの軸はデータ側の stores / filters 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.2.17
+ * Version:     1.2.18
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: catalog-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Catalog_Kurabe_Db
 {
-    const VERSION  = '1.2.17';
+    const VERSION  = '1.2.18';
     const META     = 'kurabe_data';
     const OPT      = 'catalog_kurabe_db_settings';
 
@@ -945,7 +945,7 @@ class Catalog_Kurabe_Db
             array('check', '<span>公式に無い値は</span>', '推測しない'),
         );
         $logo = wp_get_attachment_image_url((int) get_theme_mod('custom_logo'), 'medium');
-        $h  = '<div class="kurabe-sidebox"><p class="kurabe-sidebox-lead">カタログギフトを公式データで比べる</p>';
+        $h  = '<div class="kurabe-sidebox">';   // 箱の一言は不要（吉村さん 2026-10-01「いらない」）。ロゴから始める
         $h .= $logo ? '<p class="kurabe-sidebox-logo"><img src="' . esc_url($logo) . '" alt="カタログギフトくらべ" width="220" height="55" loading="lazy"></p>' : '';
         foreach ($rows as $r) {
             $h .= '<div class="kurabe-sidebox-row"><svg viewBox="0 0 24 24" aria-hidden="true">' . $ico[$r[0]] . '</svg><div>' . $r[1] . '<b>' . esc_html($r[2]) . '</b></div></div>';

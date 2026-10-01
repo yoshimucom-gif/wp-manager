@@ -310,7 +310,7 @@
 .kurabe-sidebox{background:#F2F2F2;padding:18px 14px 20px;text-align:center;color:#333;border-radius:2px}
 .kurabe-sidebox *{box-sizing:border-box}
 .kurabe-sidebox-lead{margin:0;font-weight:700;font-size:15px;color:#333}
-.kurabe-sidebox-logo{margin:4px 0 14px}
+.kurabe-sidebox-logo{margin:2px 0 14px}
 .kurabe-sidebox-logo img{max-width:200px;height:auto;display:inline-block}
 .kurabe-sidebox-row{display:flex;align-items:center;gap:12px;background:#fff;padding:10px 12px;margin:0 0 8px;text-align:left}
 .kurabe-sidebox-row svg{flex:0 0 32px;width:32px;height:32px;fill:none;stroke:#3C3C3C;stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round}
