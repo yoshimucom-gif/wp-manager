@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.6.7
+ * Version:     1.6.8
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.6.7';
+    const VERSION  = '1.6.8';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -48,6 +48,38 @@ class Kurabe_Db
         add_action('rest_api_init', array(__CLASS__, 'rest_selfupdate'));
         add_filter('wp_robots', array(__CLASS__, 'robots_while_private'), 999);
         add_action('wp_head', array(__CLASS__, 'tag_meta_description'), 2);
+        add_action('wp_head', array(__CLASS__, 'category_colors'), 99);
+    }
+
+    /* カテゴリの色を3社の色（差し色）で順に割り振る。カードのカテゴリラベル（.p-cat-ID）と、TOPのジャンルのアイコンで同じ色
+       （吉村さん 2026-10-01「カテゴリーのラベル、差し色で何か設定して」）。re:Diver にカテゴリ色の設定項目が無いので出力で当てる */
+    const CAT_COLORS = array(array('#f5008c', '#FDE6F2'), array('#e94709', '#FDECE5'), array('#6a5246', '#F0ECEA'));
+
+    public static function category_color_index($term_id)
+    {
+        static $map = null;
+        if ($map === null) {
+            $map = array();
+            $ids = get_terms(array('taxonomy' => 'category', 'hide_empty' => false, 'fields' => 'ids', 'orderby' => 'term_id'));
+            foreach (is_array($ids) ? $ids : array() as $i => $id) {
+                $map[(int) $id] = $i % 3;
+            }
+        }
+        return isset($map[(int) $term_id]) ? $map[(int) $term_id] : 0;
+    }
+
+    public static function category_colors()
+    {
+        $ids = get_terms(array('taxonomy' => 'category', 'hide_empty' => false, 'fields' => 'ids'));
+        if (!is_array($ids) || !$ids) {
+            return;
+        }
+        $css = '';
+        foreach ($ids as $id) {
+            $c = self::CAT_COLORS[self::category_color_index($id)];
+            $css .= '.p-cat-item.p-cat-' . (int) $id . '{background:' . $c[0] . ';color:#fff}';
+        }
+        echo '<style id="kurabe-cat-colors">' . $css . "</style>\n";
     }
 
     /* re:Diver はカテゴリの説明文は meta description に出すが、タグ（店名）では何も出さない。
@@ -674,7 +706,7 @@ class Kurabe_Db
 
     /* TOPのジャンル見出しの頭に付ける線のアイコン（吉村さん 2026-10-01「くっきりした下線やめて、アイコンとかにできる？」）
        ジャンル名で引く。無いジャンルは値札のアイコン */
-    private static function genre_icon($name)
+    private static function genre_icon($name, $term_id = 0)
     {
         $I = array(
             '文具'                     => '<path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/>',
@@ -701,7 +733,8 @@ class Kurabe_Db
             '洗濯'                     => '<path d="M10 5a2 2 0 1 1 2 2v1L3 15h18l-9-7"/>',
         );
         $p = isset($I[$name]) ? $I[$name] : '<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="7.5" r="1.5"/>';
-        return '<span class="kurabe-genre-ico" aria-hidden="true"><svg viewBox="0 0 24 24">' . $p . '</svg></span>';
+        $c = self::CAT_COLORS[self::category_color_index($term_id)];   // カードのカテゴリラベルと同じ色
+        return '<span class="kurabe-genre-ico" aria-hidden="true" style="color:' . $c[0] . ';background:' . $c[1] . '"><svg viewBox="0 0 24 24">' . $p . '</svg></span>';
     }
 
     /* サイドバーの「サイトの強み」の箱（PR TIMES のサイドバーの「9,000万PV/月」の箱の形・吉村さん 2026-10-01）
@@ -838,7 +871,7 @@ class Kurabe_Db
             $n = count($g['rows']);
             // 1ジャンルずつ re:Diver のコンテナ（dbp/container と同じ出力）で囲む（吉村さん指定 2026-09-30）
             $h .= '<section class="kurabe-genre wp-block-dbp-container padding-block:30 padding-inline:30 dbp-container">'
-                . '<div class="dbp-container__inner"><h3 class="kurabe-genre-name">' . self::genre_icon($g['term']->name)
+                . '<div class="dbp-container__inner"><h3 class="kurabe-genre-name">' . self::genre_icon($g['term']->name, $g['term']->term_id)
                 . '<a href="' . esc_url($link) . '">' . esc_html($g['term']->name) . '</a></h3><ul>';
             foreach (array_slice($g['rows'], 0, $max) as $r) {
                 $h .= '<li><a href="' . esc_url($r['url']) . '">' . esc_html($r['item']) . '</a><span>' . $r['total'] . '種</span></li>';
