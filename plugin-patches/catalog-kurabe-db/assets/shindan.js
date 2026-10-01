@@ -1,0 +1,182 @@
+/* カタログギフト診断（[kurabe_shindan]）。5問の答えで DB の行を絞り、コース単位で上位5件を出す。
+   選んだ理由の文は、条件に合うコースの中での順位（掲載点数・送料込み・有効期限）から機械的に作る。
+   データは REST（/wp-json/ckdb/v1/shindan/<投稿ID>）から読む。本文中の <script> はサイトによって削られるため */
+(function () {
+  'use strict';
+  var C = {};   // 列名 → 位置
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function yen(n) { return Number(n).toLocaleString('ja-JP'); }
+  function v(r, k) { return r[C[k]]; }
+  function total(r) { var s = v(r, 'ship'); return s == null ? null : v(r, 'price') + s; }
+
+  function init(box) {
+    fetch(box.getAttribute('data-src'), { credentials: 'same-origin' })
+      .then(function (res) { return res.json(); })
+      .then(function (d) {
+        if (!d || !d.rows) { throw new Error('no data'); }
+        d.cols.forEach(function (k, i) { C[k] = i; });
+        render(box, d);
+      })
+      .catch(function () {
+        box.innerHTML = '<p class="ks-error">診断のデータを読み込めませんでした。ページを再読み込みしてください。</p>';
+      });
+  }
+
+  function chips(name, items, cur) {
+    return items.map(function (it) {
+      return '<button type="button" class="kurabe-chip" data-q="' + name + '" data-v="' + esc(it[0]) + '" aria-pressed="' + (String(it[0]) === String(cur) ? 'true' : 'false') + '">' + esc(it[1]) + '</button>';
+    }).join('');
+  }
+
+  function render(box, d) {
+    var st = { s: null, b: null, g: '0', f: '0', p: 'items' };
+    var h = '';
+    h += '<div class="ks-q"><p class="ks-qt"><span class="ks-no">1</span>どんな用途で贈りますか</p>';
+    d.sceneGroups.forEach(function (g) {
+      h += '<div class="ks-sub"><span class="ks-subl">' + esc(g[0]) + '</span><div class="kurabe-chips">' +
+        chips('s', g[1].map(function (i) { return [i, d.scenes[i]]; }), null) + '</div></div>';
+    });
+    h += '<div class="ks-sub"><span class="ks-subl">そのほか</span><div class="kurabe-chips">' + chips('s', [['-1', '決まっていない・ほかの用途']], null) + '</div></div></div>';
+    h += '<div class="ks-q"><p class="ks-qt"><span class="ks-no">2</span>予算はいくらですか<small>（本体の税込価格）</small></p><div class="kurabe-chips">' +
+      chips('b', d.budgets.map(function (b, i) { return [i, b[0]]; }), null) + '</div></div>';
+    h += '<div class="ks-q"><p class="ks-qt"><span class="ks-no">3</span>中身の好みはありますか</p><div class="kurabe-chips">' +
+      chips('g', d.genres.map(function (g, i) { return [i, g[0]]; }), '0') + '</div></div>';
+    h += '<div class="ks-q"><p class="ks-qt"><span class="ks-no">4</span>どの形で渡しますか</p><div class="kurabe-chips">' +
+      chips('f', d.formats.map(function (f, i) { return [i, i === 3 ? 'eギフト（URLで送る）' : f]; }), '0') + '</div></div>';
+    h += '<div class="ks-q"><p class="ks-qt"><span class="ks-no">5</span>いちばん重視することは何ですか</p><div class="kurabe-chips">' +
+      chips('p', d.priorities, 'items') + '</div></div>';
+    h += '<div class="ks-out" aria-live="polite"><p class="ks-wait">1の用途と2の予算を選ぶと、ここにおすすめのコースが出ます。</p></div>';
+    box.innerHTML = h;
+    var out = box.querySelector('.ks-out');
+    box.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-q]');
+      if (!b) { return; }
+      var q = b.getAttribute('data-q');
+      box.querySelectorAll('button[data-q="' + q + '"]').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      st[q] = b.getAttribute('data-v');
+      if (st.s !== null && st.b !== null) {
+        out.innerHTML = result(d, st);
+        if (q === 's' || q === 'b') {
+          if (out.getBoundingClientRect().top > window.innerHeight) { out.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+        }
+      }
+    });
+  }
+
+  function filter(d, c) {
+    var b = d.budgets[c.b], genres = d.genres[c.g][1], fmt = d.formats[c.f];
+    return d.rows.filter(function (r) {
+      var p = v(r, 'price');
+      if (!c.wide && (p < b[1] || p > b[2])) { return false; }
+      if (c.wide && (p < d.budgets[Math.max(0, c.b - 1)][1] || p > d.budgets[Math.min(d.budgets.length - 1, c.b + 1)][2])) { return false; }
+      if (c.s >= 0 && v(r, 'scenes').indexOf(c.s) < 0) { return false; }
+      if (genres && genres.indexOf(v(r, 'genre')) < 0) { return false; }
+      if (c.f > 0 && v(r, 'format') !== fmt) { return false; }
+      return true;
+    });
+  }
+
+  var KEY = {
+    items: function (r) { var n = v(r, 'items'); return n == null ? -Infinity : n; },
+    total: function (r) { var t = total(r); return t == null ? -Infinity : -t; },
+    expiry: function (r) { var n = v(r, 'expDays'); return n == null ? -Infinity : n; },
+    hagaki: function (r) { return v(r, 'hagaki') === 1 ? 1 : 0; }
+  };
+  function cmp(p) {
+    var second = p === 'total' ? KEY.items : KEY.total;
+    if (p === 'hagaki') { second = KEY.items; }
+    return function (a, b) {
+      return (KEY[p](b) - KEY[p](a)) || (second(b) - second(a)) || (KEY.items(b) - KEY.items(a)) || (v(a, 'price') - v(b, 'price'));
+    };
+  }
+
+  function result(d, st) {
+    var c = { s: Number(st.s), b: Number(st.b), g: Number(st.g), f: Number(st.f), wide: false };
+    var steps = [
+      ['f', function () { c.f = 0; }, '渡し方'],
+      ['g', function () { c.g = 0; }, '中身の好み'],
+      ['b', function () { c.wide = true; }, '予算（前後の価格帯まで広げました）'],
+      ['s', function () { c.s = -1; }, '用途']
+    ];
+    var relaxed = [];
+    var rows = filter(d, c);
+    for (var i = 0; i < steps.length && !rows.length; i++) {
+      steps[i][1]();
+      rows = filter(d, c);
+      relaxed.push(steps[i][2]);
+    }
+    if (!rows.length) { return '<p class="ks-wait">条件に合うコースがありませんでした。予算を変えてみてください。</p>'; }
+
+    // コース単位にまとめる（同じコースの冊子・カード・eギフトは1件に。代表は重視することでいちばん良い行）
+    var sorter = cmp(st.p), g = {};
+    rows.forEach(function (r) { (g[v(r, 'course')] = g[v(r, 'course')] || []).push(r); });
+    var courses = Object.keys(g).map(function (k) {
+      var rs = g[k].slice().sort(sorter);
+      return { rep: rs[0], fmts: rs.map(function (r) { return v(r, 'format'); }).filter(function (x, i, a) { return x && a.indexOf(x) === i; }) };
+    });
+    courses.sort(function (a, b) { return sorter(a.rep, b.rep); });
+    var N = courses.length;
+    var issuers = {};
+    courses.forEach(function (x) { issuers[v(x.rep, 'issuer')] = true; });
+    var nHagaki = courses.filter(function (x) { return v(x.rep, 'hagaki') === 1; }).length;
+
+    function rank(x, key) {
+      var mine = KEY[key](x.rep);
+      return 1 + courses.filter(function (y) { return KEY[key](y.rep) > mine; }).length;
+    }
+    function ord(r, most) { return r === 1 ? 'いちばん' + most : r + '番目に' + most; }
+
+    var h = '<p class="ks-sum">条件に合うのは <b>' + N + '</b> コース（' + Object.keys(issuers).length + '社）です。' +
+      (N > 5 ? '「' + esc(d.priorities.filter(function (p) { return p[0] === st.p; })[0][1]) + '」の順に5つ出しています。' : '') + '</p>';
+    if (relaxed.length) {
+      h += '<p class="ks-relax">ぴったり合うコースが無かったため、' + esc(relaxed.join('・')) + 'の条件をゆるめて探しました。</p>';
+    }
+    h += '<ol class="ks-list">';
+    courses.slice(0, 5).forEach(function (x, i) {
+      var r = x.rep, iss = d.issuers[v(r, 'issuer')], t = total(r), why = [];
+      if (st.p === 'items') {
+        why.push(v(r, 'items') == null ? '掲載点数の記載がないコースです（ポイント制や体験型など）。' : '条件に合う' + N + 'コースのうち、掲載点数が' + ord(rank(x, 'items'), '多い') + 'コースです。');
+      } else if (st.p === 'total') {
+        why.push(t == null ? '送料の記載がないコースです。' : '条件に合う' + N + 'コースのうち、送料込みの価格が' + ord(rank(x, 'total'), '安い') + 'コースです。');
+      } else if (st.p === 'expiry') {
+        why.push(v(r, 'expDays') == null ? '申込の有効期限の日数が書かれていないコースです（' + esc(v(r, 'expLabel') || '記載なし') + '）。' : '条件に合う' + N + 'コースのうち、申込の有効期限が' + ord(rank(x, 'expiry'), '長い') + 'コースです。');
+      } else {
+        why.push(v(r, 'hagaki') === 1 ? '公式通販に、ハガキで申し込めると書かれているコースです（条件に合う' + N + 'コースのうち' + nHagaki + 'コース）。'
+          : 'ハガキで申し込めるコースが条件の中に' + nHagaki + 'コースしかないため、ハガキ申込が「' + (v(r, 'hagaki') === 0 ? '不可' : '記載なし') + '」のコースも出しています。');
+      }
+      if (c.s >= 0) { why.push(esc(iss[0]) + 'の公式通販で「' + esc(d.scenes[c.s]) + '」向けとして案内されています。'); }
+      h += '<li class="ks-card"><span class="ks-rank">' + (i + 1) + '</span><div class="ks-body">';
+      h += '<p class="ks-head"><span class="kurabe-store" style="--kurabe-c:' + esc(iss[1]) + '">' + esc(iss[0]) + '</span>' +
+        '<a class="ks-name" href="' + esc(v(r, 'url')) + '" target="_blank" rel="noopener">' + esc(v(r, 'name')) + '</a></p>';
+      h += '<p class="ks-why">' + why.join('') + '</p>';
+      h += '<dl class="ks-specs">' +
+        '<div><dt>価格（税込）</dt><dd>' + yen(v(r, 'price')) + '円</dd></div>' +
+        '<div><dt>送料込み</dt><dd>' + (t == null ? '記載なし' : yen(t) + '円' + (v(r, 'ship') === 0 ? '（送料無料）' : '')) + '</dd></div>' +
+        '<div><dt>掲載点数</dt><dd>' + (v(r, 'items') == null ? '記載なし' : yen(v(r, 'items')) + '点') + '</dd></div>' +
+        '<div><dt>申込の有効期限</dt><dd>' + esc(v(r, 'expLabel') || '記載なし') + '</dd></div>' +
+        '<div><dt>ハガキ申込</dt><dd>' + (v(r, 'hagaki') === 1 ? '可' : v(r, 'hagaki') === 0 ? '不可' : '記載なし') + '</dd></div>' +
+        '<div><dt>渡し方</dt><dd>' + esc(x.fmts.join('・') || '記載なし') + '</dd></div>' +
+        '</dl>';
+      h += '<a class="ks-btn" href="' + esc(v(r, 'url')) + '" target="_blank" rel="noopener">' + esc(iss[0]) + 'の公式通販で見る</a>';
+      h += '</div></li>';
+    });
+    h += '</ol>';
+    var L = d.links, link = null;
+    if (c.s >= 0 && !c.wide) { link = L['s:' + d.scenes[c.s] + '|b:' + c.b]; }
+    if (!link && c.s >= 0) { link = L['s:' + d.scenes[c.s]]; }
+    if (!link && !c.wide) { link = L['b:' + c.b]; }
+    if (!link) { link = L['g:' + c.g]; }
+    if (link) {
+      h += '<p class="ks-more"><a href="' + esc(link) + '">同じ条件のコースを比較表で全部見る</a></p>';
+    }
+    h += '<p class="ks-note">' + esc(d.checked.replace(/^(\d+)-0?(\d+)-0?(\d+)$/, '$1年$2月$3日')) + '時点の各社の公式通販の掲載値です。販売店によって価格や有効期限が変わる場合があります。</p>';
+    return h;
+  }
+
+  function boot() { document.querySelectorAll('.kurabe-shindan[data-src]').forEach(init); }
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', boot); } else { boot(); }
+})();

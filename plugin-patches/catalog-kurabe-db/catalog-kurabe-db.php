@@ -2,7 +2,7 @@
 /**
  * Plugin Name: カタログギフトくらべ 比較データ表示
  * Description: カタログギフトの比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。発行会社・ブランドの定義（名前・表記・色）と絞り込みの軸はデータ側の stores / filters 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.2.5
+ * Version:     1.2.6
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: catalog-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Catalog_Kurabe_Db
 {
-    const VERSION  = '1.2.5';
+    const VERSION  = '1.2.6';
     const META     = 'kurabe_data';
     const OPT      = 'catalog_kurabe_db_settings';
 
@@ -41,6 +41,8 @@ class Catalog_Kurabe_Db
         add_shortcode('kurabe_list', array(__CLASS__, 'list_shortcode'));
         add_shortcode('kurabe_top', array(__CLASS__, 'top_shortcode'));
         add_action('rest_api_init', array(__CLASS__, 'rest_selfupdate'));
+        add_action('rest_api_init', array(__CLASS__, 'rest_shindan'));
+        add_shortcode('kurabe_shindan', array(__CLASS__, 'shindan_shortcode'));
         add_filter('wp_robots', array(__CLASS__, 'robots_while_private'), 999);
     }
 
@@ -85,6 +87,59 @@ class Catalog_Kurabe_Db
                 return array('ok' => true, 'version_before' => $before, 'reactivated' => !$was);
             },
         ));
+    }
+
+    /* ---------- カタログギフト診断（2026-10-01） ----------
+       データ（診断用に詰めたDBの行・用途・予算・比較ページへのリンク）は、診断ページの投稿メタ kurabe_shindan に
+       JSON 文字列で入れる（kurabe/build_shindan.py --apply）。ページには部品だけを出し、データは REST で読む */
+    const SHINDAN = 'kurabe_shindan';
+
+    public static function rest_shindan()
+    {
+        register_rest_route('ckdb/v1', '/shindan/(?P<id>\d+)', array(
+            'methods'             => 'GET',
+            'permission_callback' => '__return_true',
+            'callback'            => function ($req) {
+                $id = (int) $req['id'];
+                if (get_post_status($id) !== 'publish' && !current_user_can('edit_post', $id)) {
+                    return new WP_Error('not_found', 'not found', array('status' => 404));
+                }
+                $d = json_decode((string) get_post_meta($id, self::SHINDAN, true), true);
+                if (!is_array($d)) {
+                    return new WP_Error('not_found', 'not found', array('status' => 404));
+                }
+                $res = new WP_REST_Response($d);
+                $res->header('Cache-Control', 'public, max-age=3600');
+                return $res;
+            },
+        ));
+    }
+
+    public static function shindan_shortcode()
+    {
+        $id = get_the_ID();
+        if (!$id || !get_post_meta($id, self::SHINDAN, true)) {
+            return '';
+        }
+        wp_enqueue_style('catalog-kurabe-db');
+        wp_enqueue_script('catalog-kurabe-shindan');
+        return '<div class="kurabe-shindan" data-src="' . esc_url(rest_url('ckdb/v1/shindan/' . $id)) . '">'
+            . '<p class="ks-wait">診断を読み込んでいます。</p>'
+            . '<noscript><p class="ks-wait">診断を使うには、ブラウザのJavaScriptを有効にしてください。</p></noscript></div>';
+    }
+
+    /* 比較表の上に出す診断への入口（診断ページが公開されているときだけ） */
+    private static function shindan_link()
+    {
+        static $url = null;
+        if ($url === null) {
+            $p = get_page_by_path('shindan');
+            $url = ($p && $p->post_status === 'publish') ? get_permalink($p) : '';
+        }
+        if (!$url || (int) get_the_ID() === (int) url_to_postid($url)) {
+            return '';
+        }
+        return '<p class="kurabe-shindan-link"><a href="' . esc_url($url) . '">用途と予算から選ぶなら<b>カタログギフト診断</b>（5問）</a></p>';
     }
 
     /* 比較ページは「サイズ：幅広」で組む。re:Diverは幅広のとき記事横の縦並びボタン
@@ -239,6 +294,7 @@ class Catalog_Kurabe_Db
         $url = plugin_dir_url(__FILE__) . 'assets/';
         wp_register_style('catalog-kurabe-db', $url . 'kurabe.css', array(), self::VERSION);
         wp_register_script('catalog-kurabe-db', $url . 'kurabe.js', array(), self::VERSION, true);
+        wp_register_script('catalog-kurabe-shindan', $url . 'shindan.js', array(), self::VERSION, true);
     }
 
     public static function shortcode($atts)
@@ -404,6 +460,7 @@ class Catalog_Kurabe_Db
         }
 
         $h  = '<div class="kurabe-table" data-mode="' . esc_attr($mode) . '"' . self::data_attr($d) . '>';
+        $h .= self::shindan_link();
         $h .= '<p class="kurabe-stamp">' . esc_html(self::date_ja($d['checked'])) . '時点で、' . esc_html(implode('・', $names)) . 'の公式通販に掲載されている情報です。' . esc_html(isset($d['stamp_note']) ? $d['stamp_note'] : '店頭の品ぞろえとは違う場合があります。') . '</p>';
         if (!empty($d['table_note'])) {
             $h .= '<p class="kurabe-stamp">' . esc_html($d['table_note']) . '</p>';

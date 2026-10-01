@@ -217,3 +217,40 @@
 .kurabe-showcase-row{grid-template-columns:max-content 1fr auto}
 .kurabe-showcase-store{white-space:nowrap}
 @media (max-width:640px){.kurabe-showcase-row{grid-template-columns:max-content 1fr auto;gap:8px}.kurabe-showcase-store{font-size:14px}}
+
+/* カタログギフト診断（[kurabe_shindan]・2026-10-01） */
+.kurabe-shindan{--k-ink:#1E2A33;--k-ink2:#56636E;--k-line:#D3DADF;--k-line2:#E6EAED;--k-bg:#F4F6F7;--k-surface:#fff;--k-accent:#3C5566;--k-tag:#F2C744;--k-note:#FFF8DD;--k-note-line:#EAD58A;margin:1.5em 0;color:var(--k-ink)}
+.kurabe-shindan *{box-sizing:border-box}
+.ks-q{background:var(--k-surface);border:1px solid var(--k-line);padding:16px 18px;margin:0 0 12px}
+.ks-qt{font-weight:700;font-size:16.5px;margin:0 0 10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ks-qt small{font-weight:400;font-size:13.5px;color:var(--k-ink2)}
+.ks-no{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:var(--k-accent);color:#fff;font-size:14px;flex:0 0 auto}
+.ks-sub{display:flex;gap:10px;align-items:flex-start;margin:0 0 8px}
+.ks-sub:last-child{margin-bottom:0}
+.ks-subl{flex:0 0 6.5em;font-size:13.5px;color:var(--k-ink2);font-weight:700;padding-top:5px}
+@media (max-width:640px){.ks-sub{flex-direction:column;gap:4px}.ks-subl{flex:none;padding-top:0}}
+.ks-out{margin-top:22px;scroll-margin-top:80px}
+.ks-wait,.ks-error{background:var(--k-bg);padding:14px 16px;margin:0;color:var(--k-ink2)}
+.ks-sum{font-size:16px;margin:0 0 6px}
+.ks-sum b{font-size:22px}
+.ks-relax{background:var(--k-note);border:1px solid var(--k-note-line);padding:8px 12px;font-size:14.5px;margin:0 0 10px}
+.ks-list{list-style:none;margin:10px 0 0;padding:0;counter-reset:none}
+.ks-card{display:flex;gap:14px;background:var(--k-surface);border:1px solid var(--k-line);padding:16px 18px;margin:0 0 12px}
+.ks-card::before,.ks-card::marker{content:none}
+.ks-rank{flex:0 0 auto;width:34px;height:34px;border-radius:50%;border:2px solid var(--k-accent);color:var(--k-accent);font-weight:700;display:flex;align-items:center;justify-content:center;font-size:16px}
+.ks-card:first-child .ks-rank{background:var(--k-tag);border-color:var(--k-tag);color:#3A2E05}
+.ks-body{flex:1 1 auto;min-width:0}
+.ks-head{margin:0 0 6px;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+.ks-name{font-weight:700;font-size:17px;color:var(--k-ink);text-decoration:underline;text-underline-offset:3px}
+.ks-why{margin:0 0 10px;font-size:15px;line-height:1.75}
+.ks-specs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin:0 0 12px;border-top:1px solid var(--k-line2)}
+.ks-specs>div{padding:7px 8px 7px 0;border-bottom:1px solid var(--k-line2)}
+.ks-specs dt{font-size:12.5px;color:var(--k-ink2);margin:0}
+.ks-specs dd{margin:0;font-weight:700;font-variant-numeric:tabular-nums;font-size:15px}
+@media (max-width:640px){.ks-specs{grid-template-columns:repeat(2,minmax(0,1fr))}.ks-card{padding:14px;gap:10px}.ks-rank{width:28px;height:28px;font-size:14px}}
+.ks-btn{display:inline-block;background:var(--k-accent);color:#fff!important;text-decoration:none;padding:8px 18px;border-radius:4px;font-weight:700;font-size:14.5px}
+.ks-more{margin:14px 0 6px;font-weight:700}
+.ks-note{font-size:13px;color:var(--k-ink2);margin:6px 0 0}
+.kurabe-shindan-link{margin:0 0 12px;font-size:14.5px}
+.kurabe-shindan-link a{display:inline-block;border:1px solid var(--k-line);background:var(--k-bg);padding:6px 14px;border-radius:999px;color:var(--k-ink);text-decoration:none}
+.kurabe-shindan-link b{color:var(--k-accent);margin:0 2px}
