@@ -147,19 +147,31 @@
   }
 
   function result(d, st) {
-    var c = { s: Number(st.s), b: Number(st.b), g: Number(st.g), f: Number(st.f), wide: false };
-    var steps = [
-      ['f', function () { c.f = 0; }, '渡し方'],
-      ['g', function () { c.g = 0; }, '中身の好み'],
-      ['b', function () { c.wide = true; }, '予算（前後の価格帯まで広げました）'],
-      ['s', function () { c.s = -1; }, '用途']
-    ];
-    var relaxed = [];
+    var base = { s: Number(st.s), b: Number(st.b), g: Number(st.g), f: Number(st.f), wide: false };
+    var c = base, relaxed = [];
     var rows = filter(d, c);
-    for (var i = 0; i < steps.length && !rows.length; i++) {
-      steps[i][1]();
-      rows = filter(d, c);
-      relaxed.push(steps[i][2]);
+    if (!rows.length) {
+      // ぴったり合うコースが無いときは、ゆるめる条件がいちばん少ない組み合わせから試す。
+      // 優先して残すのは 用途 → 予算 → 中身 → 渡し方。「こだわらない」を選んだ問いはゆるめたことにしない
+      var can = [];
+      if (base.f > 0) { can.push(['f', '渡し方']); }
+      if (base.g > 0) { can.push(['g', '中身の好み']); }
+      can.push(['b', '予算']);
+      if (base.s >= 0) { can.push(['s', '用途']); }
+      var W = { f: 1, g: 2, b: 4, s: 8 }, sets = [];
+      for (var m = 1; m < (1 << can.length); m++) {
+        var set = can.filter(function (x, i) { return m & (1 << i); });
+        sets.push({ set: set, n: set.length, w: set.reduce(function (a, x) { return a + W[x[0]]; }, 0) });
+      }
+      sets.sort(function (a, b) { return (a.n - b.n) || (a.w - b.w); });
+      for (var k = 0; k < sets.length && !rows.length; k++) {
+        c = { s: base.s, b: base.b, g: base.g, f: base.f, wide: false };
+        sets[k].set.forEach(function (x) {
+          if (x[0] === 'f') { c.f = 0; } else if (x[0] === 'g') { c.g = 0; } else if (x[0] === 'b') { c.wide = true; } else { c.s = -1; }
+        });
+        rows = filter(d, c);
+        if (rows.length) { relaxed = sets[k].set.map(function (x) { return x[1]; }); }
+      }
     }
     if (!rows.length) { return '<p class="ks-wait">条件に合うコースがありませんでした。予算を変えてみてください。</p>'; }
 
@@ -185,7 +197,7 @@
     var h = '<p class="ks-sum">条件に合うのは <b>' + N + '</b> コース（' + Object.keys(issuers).length + '社）です。' +
       (N > 5 ? '「' + esc(d.priorities.filter(function (p) { return p[0] === st.p; })[0][1]) + '」の順に5つ出しています。' : '') + '</p>';
     if (relaxed.length) {
-      h += '<p class="ks-relax">ぴったり合うコースが無かったため、' + esc(relaxed.join('・')) + 'の条件をゆるめて探しました。</p>';
+      h += '<p class="ks-relax">ぴったり合うコースが無かったため、' + esc(relaxed.join('・')) + 'の条件をゆるめて探しました。' + (c.wide ? '予算は、選んだ価格帯の前後まで広げています。' : '') + '</p>';
     }
     h += '<ol class="ks-list">';
     courses.slice(0, 5).forEach(function (x, i) {
@@ -201,7 +213,9 @@
         var hr = 1 + hk.filter(function (y) { return KEY.items(y.rep) > KEY.items(r); }).length;
         why.push(v(r, 'hagaki') === 1 ? 'ハガキで申し込めると公式通販に書かれているコース（条件に合う' + N + 'コースのうち' + nHagaki + 'コース）の中で、' +
           (v(r, 'items') == null ? '掲載点数の記載がないコースです。' : '掲載点数が' + ord(hr, '多い') + 'コースです。')
-          : 'ハガキで申し込めるコースが条件の中に' + nHagaki + 'コースしかないため、ハガキ申込が「' + (v(r, 'hagaki') === 0 ? '不可' : '記載なし') + '」のコースも出しています。');
+          : nHagaki === 0
+            ? '条件に合う' + N + 'コースには、ハガキで申し込めると公式通販に書かれているコースがありません。このコースのハガキ申込は「' + (v(r, 'hagaki') === 0 ? '不可' : '記載なし') + '」です。'
+            : 'ハガキで申し込めるコースが条件の中に' + nHagaki + 'コースしかないため、ハガキ申込が「' + (v(r, 'hagaki') === 0 ? '不可' : '記載なし') + '」のコースも出しています。');
       }
       if (c.s >= 0) { why.push(esc(iss[0]) + 'の公式通販で「' + esc(d.scenes[c.s]) + '」向けとして案内されています。'); }
       h += '<li class="ks-card"><span class="ks-rank">' + (i + 1) + '</span><div class="ks-body">';
