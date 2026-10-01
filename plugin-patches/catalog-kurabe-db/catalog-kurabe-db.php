@@ -2,7 +2,7 @@
 /**
  * Plugin Name: カタログギフトくらべ 比較データ表示
  * Description: カタログギフトの比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。発行会社・ブランドの定義（名前・表記・色）と絞り込みの軸はデータ側の stores / filters 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.2.0
+ * Version:     1.2.1
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: catalog-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Catalog_Kurabe_Db
 {
-    const VERSION  = '1.2.0';
+    const VERSION  = '1.2.1';
     const META     = 'kurabe_data';
     const OPT      = 'catalog_kurabe_db_settings';
 
@@ -40,6 +40,51 @@ class Catalog_Kurabe_Db
         add_action('diver_main_before', array(__CLASS__, 'archive_table'), 20);
         add_shortcode('kurabe_list', array(__CLASS__, 'list_shortcode'));
         add_shortcode('kurabe_top', array(__CLASS__, 'top_shortcode'));
+        add_action('rest_api_init', array(__CLASS__, 'rest_selfupdate'));
+        add_filter('wp_robots', array(__CLASS__, 'robots_while_private'), 999);
+    }
+
+    /* 「検索エンジンがサイトをインデックスしないようにする」がオンの間は、全ページに noindex を付ける。
+       re:Diver は記事ごとの設定（既定 noindex=false）でサイト全体の設定を上書きし、
+       公開前なのに robots が「nofollow」だけになる（100均くらべで 2026-09-30 実測）。
+       本公開でこの設定をオフにすれば、ここは何もしなくなる */
+    public static function robots_while_private($robots)
+    {
+        if ((string) get_option('blog_public') === '0') {
+            $robots['noindex']  = true;
+            $robots['nofollow'] = true;
+        }
+        return $robots;
+    }
+
+    /* 新版の即時適用の窓口（管理者のアプリケーションパスワードで叩く）: POST /wp-json/ckdb/v1/selfupdate
+       更新キャッシュを捨てて配信元を確認し、WP標準の自動更新をその場で走らせる（100均くらべ kdb/v1 と同じ作り） */
+    public static function rest_selfupdate()
+    {
+        register_rest_route('ckdb/v1', '/selfupdate', array(
+            'methods'             => 'POST',
+            'permission_callback' => function () {
+                return current_user_can('update_plugins');
+            },
+            'callback'            => function () {
+                $before = self::VERSION;
+                delete_transient('catalog_kurabe_db_updater_' . md5(plugin_basename(__FILE__)));
+                delete_site_transient('update_plugins');
+                wp_update_plugins();
+                if (function_exists('wp_maybe_auto_update')) {
+                    wp_maybe_auto_update();
+                }
+                // 更新の途中でWPはプラグインを無効にし、自分自身を更新したリクエストでは有効に戻らないので戻す
+                $base   = plugin_basename(__FILE__);
+                $active = (array) get_option('active_plugins', array());
+                $was    = in_array($base, $active, true);
+                if (!$was) {
+                    $active[] = $base;
+                    update_option('active_plugins', array_values(array_unique($active)));
+                }
+                return array('ok' => true, 'version_before' => $before, 'reactivated' => !$was);
+            },
+        ));
     }
 
     /* 比較ページは「サイズ：幅広」で組む。re:Diverは幅広のとき記事横の縦並びボタン
@@ -795,9 +840,9 @@ class Catalog_Kurabe_Db
                                   'order' => '予算別,シーン別,ジャンル別,ブランド別,シリーズ,基礎知識'), $atts, 'kurabe_top');
         wp_enqueue_style('catalog-kurabe-db');
         if ($a['part'] === 'stats') {
-            // 数字はDBから入稿時に計算して渡す（ページをまたいだ重複を除いたコース数・発行会社数）
-            return '<p class="kurabe-top-stats"><b>' . esc_html($a['courses']) . '</b>コース・<b>' . esc_html($a['issuers'])
-                . '</b>社の公式データを掲載</p>';
+            // 数字はDBから入稿時に計算して渡す（ページをまたいだ重複を除いたコース数）。
+            // 100均くらべで「数字は何を載せているかだけ」「語の途中で折り返さないよう短く1行」と指定（2026-09-30）
+            return '<p class="kurabe-top-stats"><b>' . esc_html($a['courses']) . '</b>コースを掲載</p>';
         }
         $posts = self::top_posts();
         if (!$posts) {

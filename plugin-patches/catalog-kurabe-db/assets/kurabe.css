@@ -201,3 +201,9 @@
 .kt-hero h1.wp-block-heading{font-size:clamp(26px,3vw,36px);line-height:1.45;margin-bottom:.3em;word-break:auto-phrase}
 @media (max-width:640px){.kurabe-top-stores{grid-template-columns:1fr 1fr;gap:14px}.kurabe-top-store-n{font-size:22px}
   .kurabe-showcase{padding:18px 16px}.kurabe-showcase-row{grid-template-columns:86px 1fr auto;gap:8px}.kurabe-showcase-v{min-width:0;font-size:18px}}
+/* 100均くらべで受けた指定をそろえる（2026-10-01）
+   ・コンテナは白地・薄い線の枠・影なし（TOPのカテゴリと記事の数字欄）
+   ・TOPの説明文の社名は各社の色のラベル（色は本文の style="--kurabe-c:…" で渡す） */
+.kurabe-genre.dbp-container,.dbp-container:has(.kurabe-stats){background:#fff !important;border:1px solid #E2E2E2;box-shadow:none !important}
+.kt-hero .kurabe-store{font-size:15px;vertical-align:.1em;margin:0 2px}
+.kurabe-genre:nth-child(3n+1) .kurabe-genre-name{border-bottom-color:var(--k-accent)}
