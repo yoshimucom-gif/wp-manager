@@ -2,7 +2,7 @@
 /**
  * Plugin Name: カタログギフトくらべ 比較データ表示
  * Description: カタログギフトの比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。発行会社・ブランドの定義（名前・表記・色）と絞り込みの軸はデータ側の stores / filters 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.2.18
+ * Version:     1.2.19
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: catalog-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Catalog_Kurabe_Db
 {
-    const VERSION  = '1.2.18';
+    const VERSION  = '1.2.19';
     const META     = 'kurabe_data';
     const OPT      = 'catalog_kurabe_db_settings';
 
@@ -1039,14 +1039,14 @@ class Catalog_Kurabe_Db
             $n = count($g['rows']);
             $h .= '<section class="kurabe-genre wp-block-dbp-container padding-block:30 padding-inline:30 dbp-container">'
                 . '<div class="dbp-container__inner"><h3 class="kurabe-genre-name"><a href="' . esc_url(is_wp_error($link) ? '' : $link) . '">'
-                . esc_html($name) . '</a><span>' . $n . 'ページ</span></h3><ul>';
+                . esc_html($name) . '</a><span>比較表 ' . $n . '本</span></h3><ul>';   // 「◯ページ」はページ番号に読める（吉村さん 2026-10-01）
             foreach (array_slice($g['rows'], 0, $max) as $r) {
                 $h .= '<li><a href="' . esc_url($r['url']) . '">' . esc_html(preg_replace('/\s+カタログギフト$/u', 'のカタログギフト', $r['item'])) . '</a>'
                     . ($r['total'] ? '<span>' . $r['total'] . 'コース</span>' : '') . '</li>';
             }
             $h .= '</ul>';
             if ($n > $max && !is_wp_error($link)) {
-                $h .= '<a class="kurabe-genre-more" href="' . esc_url($link) . '">' . esc_html($name) . 'をすべて見る</a>';
+                $h .= '<a class="kurabe-genre-more" href="' . esc_url($link) . '">' . esc_html($name) . 'の比較表をすべて見る</a>';
             }
             $h .= '</div></section>';
         }
@@ -1177,7 +1177,7 @@ class Catalog_Kurabe_Db
             ? esc_html($cols[$sort_store]['label']) . 'のカタログギフトが載っている比較ページを、件数の多い順に並べています。'
             : ($budgeted ? '各社の公式通販のカタログギフトを比べたページを、予算の順に並べています。'
                          : '各社の公式通販のカタログギフトを比べたページを、載っているコースの多い順に並べています。');
-        $h  = '<div class="kurabe-list"><p class="kurabe-list-lead">' . count($rows) . 'ページ。' . $lead . '</p>';
+        $h  = '<div class="kurabe-list"><p class="kurabe-list-lead">' . '比較表' . count($rows) . '本。' . $lead . '</p>';
         $h .= '<div class="kurabe-tablebox"><table class="kurabe-list-table"><thead><tr><th scope="col">比較ページ</th>'
             . '<th scope="col" class="kurabe-c">コース数</th><th scope="col">載っている発行会社</th></tr></thead><tbody>';
         foreach ($rows as $r) {
