@@ -213,3 +213,7 @@
 .kurabe-list-table .kurabe-store{font-size:12px;padding:1px 7px;margin:0 2px 2px 0}
 .kurabe-list-more{font-size:12px;color:#56636E;white-space:nowrap}
 @media (max-width:640px){.kurabe-list-table td.kurabe-list-name{min-width:8em}}
+/* TOPの見本：会社名を折り返さない（スマホで「ハーモニッ／ク」と割れた 2026-10-01）。名前の欄は一番長い名前に合わせる */
+.kurabe-showcase-row{grid-template-columns:max-content 1fr auto}
+.kurabe-showcase-store{white-space:nowrap}
+@media (max-width:640px){.kurabe-showcase-row{grid-template-columns:max-content 1fr auto;gap:8px}.kurabe-showcase-store{font-size:14px}}
