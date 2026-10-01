@@ -327,3 +327,14 @@
 .kurabe-sidebox-go a{display:block;background:#fff;border:1px solid #D3DADF;border-radius:2px;padding:10px 12px;color:#333;text-decoration:none;font-size:14px}
 .kurabe-sidebox-go a b{display:block;font-size:16px;color:#3C5566}
 .kurabe-sidebox-go a:hover{border-color:#3C5566}
+
+/* 発行会社・ブランドのカードを各社の色の塗りの箱に（100均くらべの店のカードと同じ形・2026-10-01 吉村さん「100均のここみたいに」） */
+.kurabe-top-stores{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.kurabe-top-stores .kurabe-top-store{gap:8px;padding:18px 22px 16px;border:0;border-radius:4px;background:var(--kurabe-c,#3C5566);color:#fff}
+.kurabe-top-stores .kurabe-top-store .kurabe-store{background:transparent;color:#fff;border:1.5px solid #fff;font-size:15px;padding:3px 12px}
+.kurabe-top-stores .kurabe-top-store-n{color:#fff}
+.kurabe-top-stores .kurabe-top-store-n small{color:#fff;opacity:.9}
+.kurabe-top-stores .kurabe-top-store-go{margin-top:auto;padding-top:10px;border-top:1px solid rgba(255,255,255,.35);color:#fff}
+.kurabe-top-stores .kurabe-top-store:hover{filter:brightness(1.06);opacity:1}
+@media (max-width:900px){.kurabe-top-stores{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.kurabe-top-stores{grid-template-columns:1fr;gap:10px}}
