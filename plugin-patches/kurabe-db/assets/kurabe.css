@@ -30,6 +30,12 @@
 .kurabe-showcase *{box-sizing:border-box}
 .kurabe-showcase{--k-ink:#1E2A33;--k-ink2:#56636E;--k-line:#D3DADF;--k-bg:#EFEFEF;--k-accent:#3C3C3C;--k-daiso:#f5008c;--k-cando:#e94709;--k-watts:#6a5246}
 
+/* お店の箱をサイドバーに置いたとき（幅280px）は縦に1列 */
+aside .kurabe-top-stores,.sidebar .kurabe-top-stores{grid-template-columns:1fr;gap:10px}
+aside .kurabe-top-stores .kurabe-top-store{padding:14px 16px 12px;gap:6px}
+aside .kurabe-top-store-n{font-size:24px}
+aside .kurabe-top-store .kurabe-store{font-size:14px;padding:2px 10px}
+aside .kurabe-top-store-go{font-size:14px;padding-top:8px}
 .kurabe-genres{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}   /* 箱の間を詰める（吉村さん 2026-10-01） */
 .kurabe-genre{margin:0}
 .kurabe-genre-name{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:0 0 .5em;padding:0 0 .45em;
