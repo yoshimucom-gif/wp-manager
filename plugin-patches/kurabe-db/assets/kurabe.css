@@ -85,7 +85,10 @@
 .kurabe-season-total small{font-size:14px;font-weight:400;color:var(--k-ink2);margin-left:3px}
 .kurabe-season-bar{display:flex;height:8px;border-radius:2px;overflow:hidden;background:#EFEFEF;margin-top:2px}
 .kurabe-season-bar i{display:block;height:100%}
-.kurabe-season-stores{display:flex;flex-wrap:nowrap;gap:4px;margin-top:2px}
+.kurabe-season-go{font-size:14px;color:var(--k-ink2)}
+.kurabe-season-go::after{content:" →"}
+.kurabe-season-card{gap:8px}
+.kurabe-season-stores{display:flex;flex-wrap:nowrap;gap:4px;margin:0 0 2px}
 .kurabe-season-st{font-size:13px;font-weight:700;color:#fff;padding:1px 6px;border-radius:2px;line-height:1.5;white-space:nowrap;letter-spacing:0}
 .kurabe-season-st.is-none{color:#AAA;background:#fff;border:1px solid #DDD;padding:0 5px}
 /* TOPの区画（固定ページ本文に <style> を入れると ConoHa WAF が 403 にするので、ここに置く） */
