@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.6.8
+ * Version:     1.6.9
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.6.8';
+    const VERSION  = '1.6.9';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -60,9 +60,12 @@ class Kurabe_Db
         static $map = null;
         if ($map === null) {
             $map = array();
-            $ids = get_terms(array('taxonomy' => 'category', 'hide_empty' => false, 'fields' => 'ids', 'orderby' => 'term_id'));
-            foreach (is_array($ids) ? $ids : array() as $i => $id) {
-                $map[(int) $id] = $i % 3;
+            $ids = get_terms(array('taxonomy' => 'category', 'hide_empty' => false, 'fields' => 'ids', 'orderby' => 'id'));
+            $ids = is_array($ids) ? array_map('intval', array_values($ids)) : array();
+            sort($ids);
+            $i = 0;
+            foreach ($ids as $id) {
+                $map[$id] = $i++ % 3;
             }
         }
         return isset($map[(int) $term_id]) ? $map[(int) $term_id] : 0;
