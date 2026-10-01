@@ -145,7 +145,7 @@ aside .kurabe-top-store-go{font-size:14px;padding-top:8px}
 /* サイト紹介はビッグフッターの先頭に置き、フッター直前の帯として画面幅いっぱいに出す */
 #bigfooter:has(.kt-about){padding-top:0}
 #bigfooter .kt-about{margin-inline:0;max-width:none;margin-bottom:40px;color:#333;text-align:left}
-#bigfooter .kt-about a:not(.kurabe-store){color:#C40A5B}
+#bigfooter .kt-about a:not(.kurabe-store){color:#333;text-decoration:underline}
 .kt-hero h2.wp-block-heading{margin-bottom:.3em;background:none;color:inherit;padding:0}
 /* TOPの一番上の見出し1は、PR TIMES の一言のように小さく置く */
 .kt-season h1.wp-block-heading{font-size:15px;font-weight:700;color:#666;margin:0 0 .6em;letter-spacing:.04em}
