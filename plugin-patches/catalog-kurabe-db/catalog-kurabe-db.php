@@ -2,7 +2,7 @@
 /**
  * Plugin Name: カタログギフトくらべ 比較データ表示
  * Description: カタログギフトの比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。発行会社・ブランドの定義（名前・表記・色）と絞り込みの軸はデータ側の stores / filters 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.2.1
+ * Version:     1.2.2
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: catalog-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Catalog_Kurabe_Db
 {
-    const VERSION  = '1.2.1';
+    const VERSION  = '1.2.2';
     const META     = 'kurabe_data';
     const OPT      = 'catalog_kurabe_db_settings';
 
@@ -885,7 +885,7 @@ class Catalog_Kurabe_Db
         arsort($val);
         $top = max($val);
         $h = '<div class="kurabe-showcase"><p class="kurabe-showcase-head">例：' . esc_html($item) . '　<span>発行会社ごとのいちばん多い掲載点数</span></p>';
-        foreach (array_slice($val, 0, 6, true) as $s => $v) {
+        foreach (array_slice($val, 0, 5, true) as $s => $v) {   // 上位5社（体験ギフトの数点の棒まで並ぶと見本として読みにくい）
             $w = $top ? max(8, round($v / $top * 100)) : 0;
             $h .= '<div class="kurabe-showcase-row"><span class="kurabe-showcase-store kurabe-t"' . self::color_style($stores, $s) . '>' . esc_html(self::label($stores, $s)) . '</span>'
                 . '<span class="kurabe-showcase-bar"><i' . self::color_style($stores, $s, 'width:' . $w . '%') . '></i></span>'
