@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.5.6
+ * Version:     1.5.7
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.5.6';
+    const VERSION  = '1.5.7';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -691,8 +691,11 @@ class Kurabe_Db
         foreach ($rows as $r) {
             $h .= '<div class="kurabe-sidebox-row"><svg viewBox="0 0 24 24" aria-hidden="true">' . $ico[$r[0]] . '</svg><div><span>' . esc_html($r[1]) . '</span><b>' . esc_html($r[2]) . '</b></div></div>';
         }
-        $h .= '<p class="kurabe-sidebox-note">だから、売り場で迷わない。</p><p class="kurabe-sidebox-q">データの集め方は</p>'
-            . '<a class="kurabe-sidebox-btn" href="' . esc_url(home_url('/data-policy/')) . '">こちら</a></div>';
+        // 箱の締めは検索窓（吉村さん 2026-10-01「データの集め方に遷移させてもなんも意味ない」）
+        $h .= '<p class="kurabe-sidebox-q">探したい物の名前で比べる</p>'
+            . '<form class="kurabe-sidebox-search" role="search" method="get" action="' . esc_url(home_url('/')) . '">'
+            . '<input type="search" name="s" placeholder="例：突っ張り棒" aria-label="サイト内検索">'
+            . '<button type="submit">検索</button></form></div>';
         return $h;
     }
 
