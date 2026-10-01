@@ -48,9 +48,13 @@ aside .kurabe-top-store-go{font-size:14px;padding-top:8px}
 .kurabe-genre:nth-child(3n) .kurabe-genre-name{border-bottom-color:#F0A800}
 /* 下線をやめて、頭にジャンルのアイコン（吉村さん 2026-10-01）。アイコンの色はロゴの3色を順に回す */
 .kurabe-genres .kurabe-genre-name{justify-content:flex-start;align-items:center;gap:10px;border-bottom:0;padding:0;margin:0 0 .6em}
-.kurabe-genre-name .kurabe-genre-ico{flex:0 0 34px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;background:#EDEDED;color:#333;font-size:0}
+.kurabe-genre-name .kurabe-genre-ico{flex:0 0 34px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;background:#FDE6F2;color:#f5008c;font-size:0}
 .kurabe-genre-ico svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
-/* アイコンはモノトーン（差し色は3社の色だけ・吉村さん 2026-10-01） */
+/* アイコンは3社の色を順に回す（吉村さん 2026-10-01「全部の色使ってまんべんなく」） */
+.kurabe-genre:nth-child(3n+2) .kurabe-genre-ico{background:#FDECE5;color:#e94709}
+.kurabe-genre:nth-child(3n) .kurabe-genre-ico{background:#F0ECEA;color:#6a5246}
+/* 記事カードの「NEW」はテーマの直書きの赤。設定項目が無いのでここで色だけ替える（ロゴのピンク） */
+.pb__title > .newlabel{color:#E60C6C}
 
 /* コンテナは白地・薄い線の枠・影なし（吉村さん指定 2026-09-30）。TOPのジャンルと記事の数字欄 */
 .kurabe-genre.dbp-container,.dbp-container:has(.kurabe-stats){background:#F7F8F9 !important;border:1px solid #E2E2E2;box-shadow:none !important}
