@@ -11,7 +11,7 @@ import os, re, sys, zipfile, glob
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 SLUG = "catalog-kurabe-db"
-FILES = ["catalog-kurabe-db.php", "includes/plugin-updater.php", "assets/kurabe.css", "assets/kurabe.js", "readme.txt"]
+FILES = ["catalog-kurabe-db.php", "includes/plugin-updater.php", "assets/kurabe.css", "assets/kurabe.js", "assets/shindan.js", "readme.txt"]
 
 
 def main(ver):
