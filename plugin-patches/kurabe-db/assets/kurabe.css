@@ -65,6 +65,23 @@
 .kurabe-top-store-go::after{content:" →"}
 @media (max-width:640px){.kurabe-top-stores{grid-template-columns:1fr;gap:14px}
   .kurabe-showcase{padding:18px 16px}.kurabe-showcase-row{grid-template-columns:66px 1fr auto;gap:8px}.kurabe-showcase-v{min-width:0;font-size:20px}}
+/* 旬の100均（タブでカードを切り替える） */
+.kurabe-season{--k-ink:#333;--k-ink2:#666;--k-line:#E2E2E2;--k-daiso:#f5008c;--k-cando:#e94709;--k-watts:#6a5246;--k-pink:#E60C6C}
+.kurabe-season-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
+.kurabe-season-tab{font:inherit;font-size:15px;font-weight:700;line-height:1.4;padding:7px 18px;border-radius:999px;border:1px solid var(--k-line);
+  background:#fff;color:var(--k-ink);cursor:pointer;margin:0;box-shadow:none}
+.kurabe-season-tab[aria-selected="true"]{background:var(--k-pink);border-color:var(--k-pink);color:#fff}
+.kurabe-season-panel{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.kurabe-season-panel[hidden]{display:none}
+.kurabe-season-card{display:flex;flex-direction:column;gap:6px;background:#fff;border:1px solid var(--k-line);border-radius:6px;padding:16px 18px;
+  color:var(--k-ink);text-decoration:none}
+.kurabe-season-card:hover{opacity:1;border-color:var(--k-pink)}
+.kurabe-season-name{font-weight:700;font-size:17px}
+.kurabe-season-total{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.2}
+.kurabe-season-total small{font-size:14px;font-weight:400;color:var(--k-ink2);margin-left:3px}
+.kurabe-season-stores{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13.5px;color:var(--k-ink2)}
+.kurabe-season-st i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:0}
+.kurabe-season-st.is-none{opacity:.45}
 /* TOPの区画（固定ページ本文に <style> を入れると ConoHa WAF が 403 にするので、ここに置く） */
 .kt-alt{background:#F6F5F3}
 .kt-hero h1.wp-block-heading{margin-bottom:.3em}

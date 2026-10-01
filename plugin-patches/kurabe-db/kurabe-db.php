@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.3.4
+ * Version:     1.4.0
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.3.4';
+    const VERSION  = '1.4.0';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -616,7 +616,7 @@ class Kurabe_Db
 
     public static function top_shortcode($atts)
     {
-        $a = shortcode_atts(array('part' => 'genres', 'max' => 10, 'item' => '突っ張り棒'), $atts, 'kurabe_top');
+        $a = shortcode_atts(array('part' => 'genres', 'max' => 10, 'item' => '突っ張り棒', 'tabs' => ''), $atts, 'kurabe_top');
         $posts = self::top_posts();
         if (!$posts) {
             return '';
@@ -627,6 +627,10 @@ class Kurabe_Db
         }
         if ($a['part'] === 'showcase') {
             return self::top_showcase($posts, $a['item']);
+        }
+        if ($a['part'] === 'season') {
+            wp_enqueue_script('kurabe-db');
+            return self::top_season($posts, (string) $a['tabs']);
         }
         if ($a['part'] === 'stores') {
             return self::top_stores($posts);
@@ -749,6 +753,60 @@ class Kurabe_Db
                 $h .= '<a class="kurabe-genre-more" href="' . esc_url($link) . '">' . esc_html($g['term']->name) . 'をすべて見る</a>';
             }
             $h .= '</div></section>';
+        }
+        return $h . '</div>';
+    }
+
+    /* 旬の100均（PR TIMES の「旬速」の形・吉村さん案 2026-10-01）
+       tabs="寒さ対策=ネックウォーマー,耳当て|ハロウィン=ろうそく,紙皿" の形で、タブ名と品目名を並べる。
+       公開済みの比較表だけをカードにする（品目が未公開ならそのカードは出ない・空のタブは出さない） */
+    private static function top_season($posts, $spec)
+    {
+        $by = array();
+        foreach ($posts as $p) {
+            $by[get_post_meta($p->ID, 'kurabe_item', true)] = $p;
+        }
+        $tabs = array();
+        foreach (array_filter(array_map('trim', explode('|', $spec))) as $chunk) {
+            $kv = explode('=', $chunk, 2);
+            if (count($kv) < 2) {
+                continue;
+            }
+            $cards = array();
+            foreach (array_filter(array_map('trim', explode(',', $kv[1]))) as $item) {
+                if (!isset($by[$item])) {
+                    continue;
+                }
+                $p   = $by[$item];
+                $per = json_decode((string) get_post_meta($p->ID, 'kurabe_stores', true), true);
+                $cards[] = array('item' => $item, 'url' => get_permalink($p), 'total' => (int) get_post_meta($p->ID, 'kurabe_count', true),
+                                 'per' => is_array($per) ? $per : array());
+            }
+            if ($cards) {
+                $tabs[] = array('name' => trim($kv[0]), 'cards' => $cards);
+            }
+        }
+        if (!$tabs) {
+            return '';
+        }
+        $h = '<div class="kurabe-season"><div class="kurabe-season-tabs" role="tablist">';
+        foreach ($tabs as $i => $t) {
+            $h .= '<button type="button" class="kurabe-season-tab" role="tab" aria-selected="' . ($i ? 'false' : 'true') . '" aria-controls="kurabe-season-' . $i . '">'
+                . esc_html($t['name']) . '</button>';
+        }
+        $h .= '</div>';
+        foreach ($tabs as $i => $t) {
+            $h .= '<div class="kurabe-season-panel" role="tabpanel" id="kurabe-season-' . $i . '"' . ($i ? ' hidden' : '') . '>';
+            foreach ($t['cards'] as $c) {
+                $h .= '<a class="kurabe-season-card" href="' . esc_url($c['url']) . '"><span class="kurabe-season-name">100均の' . esc_html($c['item']) . '</span>'
+                    . '<span class="kurabe-season-total">' . $c['total'] . '<small>種を比較</small></span><span class="kurabe-season-stores">';
+                foreach (self::STORES as $st => $cls) {
+                    $n = isset($c['per'][$st]) ? (int) $c['per'][$st] : 0;
+                    $h .= '<span class="kurabe-season-st' . ($n ? '' : ' is-none') . '"><i class="kurabe-bar-' . $cls . '"></i>' . esc_html(self::label($st)) . ' ' . ($n ? $n : '—') . '</span>';
+                }
+                $h .= '</span></a>';
+            }
+            $h .= '</div>';
         }
         return $h . '</div>';
     }

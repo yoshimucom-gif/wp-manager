@@ -131,3 +131,17 @@
     }).join('') + '<span><i style="background:var(--k-accent)"></i>複数の店にあるサイズ</span>' + (names[D.mode] ? '<span>' + names[D.mode] + '</span>' : '');
   }
 })();
+
+/* TOPの「旬の100均」：タブで比較表のカードを切り替える */
+(function () {
+  document.querySelectorAll('.kurabe-season').forEach(function (box) {
+    var tabs = box.querySelectorAll('.kurabe-season-tab');
+    var panels = box.querySelectorAll('.kurabe-season-panel');
+    tabs.forEach(function (t) {
+      t.addEventListener('click', function () {
+        tabs.forEach(function (x) { x.setAttribute('aria-selected', x === t ? 'true' : 'false'); });
+        panels.forEach(function (p) { p.hidden = p.id !== t.getAttribute('aria-controls'); });
+      });
+    });
+  });
+})();
