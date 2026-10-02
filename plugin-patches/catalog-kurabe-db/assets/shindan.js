@@ -31,7 +31,7 @@
   var SUB = {   // 選択肢の下に添える一言（どれもデータの絞り方の説明で、品物の良し悪しは書かない）
     g: ['ジャンルで絞らない', '食品・雑貨・体験などが1冊にそろう', '肉・お酒・スイーツなど食べ物だけ', '食事・体験・宿泊から選ぶ', '出産祝い向けの子ども用品', '生活雑貨のカタログ'],
     f: ['形で絞らない', '写真の載った本の形で渡す', '申込用のカードだけを渡す', 'URLをメールやSNSで送る'],
-    p: { items: '掲載点数の多い順', total: '送料込みの価格の安い順', hagaki: 'ハガキで申し込めるコースを先に', expiry: '申込の有効期限の長い順' }
+    p: { items: '選べる商品数の多い順', total: '送料込みの価格の安い順', hagaki: 'ハガキで申し込めるコースを先に', expiry: '申込の有効期限の長い順' }
   };
   var QS = [
     { k: 's', t: 'どんな用途で贈りますか', hint: '各社の公式通販がその用途向けとして案内しているコースから選びます。' },
@@ -208,7 +208,7 @@
     courses.slice(0, 5).forEach(function (x, i) {
       var r = x.rep, iss = d.issuers[v(r, 'issuer')], t = total(r), why = [];
       if (st.p === 'items') {
-        why.push(v(r, 'items') == null ? '掲載点数の記載がないコースです（ポイント制や体験型など）。' : '条件に合う' + N + 'コースのうち、掲載点数が' + ord(rank(x, 'items'), '多い') + 'コースです。');
+        why.push(v(r, 'items') == null ? '選べる商品数の記載がないコースです（ポイント制や体験型など）。' : '条件に合う' + N + 'コースのうち、選べる商品数が' + ord(rank(x, 'items'), '多い') + 'コースです。');
       } else if (st.p === 'total') {
         why.push(t == null ? '送料の記載がないコースです。' : '条件に合う' + N + 'コースのうち、送料込みの価格が' + ord(rank(x, 'total'), '安い') + 'コースです。');
       } else if (st.p === 'expiry') {
@@ -217,7 +217,7 @@
         var hk = courses.filter(function (y) { return v(y.rep, 'hagaki') === 1; });
         var hr = 1 + hk.filter(function (y) { return KEY.items(y.rep) > KEY.items(r); }).length;
         why.push(v(r, 'hagaki') === 1 ? 'ハガキで申し込めると公式通販に書かれているコース（条件に合う' + N + 'コースのうち' + nHagaki + 'コース）の中で、' +
-          (v(r, 'items') == null ? '掲載点数の記載がないコースです。' : '掲載点数が' + ord(hr, '多い') + 'コースです。')
+          (v(r, 'items') == null ? '選べる商品数の記載がないコースです。' : '選べる商品数が' + ord(hr, '多い') + 'コースです。')
           : nHagaki === 0
             ? '条件に合う' + N + 'コースには、ハガキで申し込めると公式通販に書かれているコースがありません。このコースのハガキ申込は「' + (v(r, 'hagaki') === 0 ? '不可' : '記載なし') + '」です。'
             : 'ハガキで申し込めるコースが条件の中に' + nHagaki + 'コースしかないため、ハガキ申込が「' + (v(r, 'hagaki') === 0 ? '不可' : '記載なし') + '」のコースも出しています。');
@@ -230,7 +230,7 @@
       h += '<dl class="ks-specs">' +
         '<div><dt>価格（税込）</dt><dd>' + yen(v(r, 'price')) + '円</dd></div>' +
         '<div><dt>送料込み</dt><dd>' + (t == null ? '記載なし' : yen(t) + '円' + (v(r, 'ship') === 0 ? '（送料無料）' : '')) + '</dd></div>' +
-        '<div><dt>掲載点数</dt><dd>' + (v(r, 'items') == null ? '記載なし' : yen(v(r, 'items')) + '点') + '</dd></div>' +
+        '<div><dt>選べる商品数</dt><dd>' + (v(r, 'items') == null ? '記載なし' : yen(v(r, 'items')) + '点') + '</dd></div>' +
         '<div><dt>申込の有効期限</dt><dd>' + esc(v(r, 'expLabel') || '記載なし') + '</dd></div>' +
         '<div><dt>ハガキ申込</dt><dd>' + (v(r, 'hagaki') === 1 ? '可' : v(r, 'hagaki') === 0 ? '不可' : '記載なし') + '</dd></div>' +
         '<div><dt>渡し方</dt><dd>' + esc(x.fmts.join('・') || '記載なし') + '</dd></div>' +
