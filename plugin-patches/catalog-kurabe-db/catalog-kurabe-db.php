@@ -2,7 +2,7 @@
 /**
  * Plugin Name: カタログギフトくらべ 比較データ表示
  * Description: カタログギフトの比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。発行会社・ブランドの定義（名前・表記・色）と絞り込みの軸はデータ側の stores / filters 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.2.22
+ * Version:     1.2.23
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: catalog-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Catalog_Kurabe_Db
 {
-    const VERSION  = '1.2.22';
+    const VERSION  = '1.2.23';
     const META     = 'kurabe_data';
     const OPT      = 'catalog_kurabe_db_settings';
 
@@ -44,6 +44,7 @@ class Catalog_Kurabe_Db
         add_action('rest_api_init', array(__CLASS__, 'rest_shindan'));
         add_shortcode('kurabe_shindan', array(__CLASS__, 'shindan_shortcode'));
         add_filter('wp_robots', array(__CLASS__, 'robots_while_private'), 999);
+        add_action('template_redirect', array(__CLASS__, 'redirect_www'), 1);
     }
 
     /* 「検索エンジンがサイトをインデックスしないようにする」がオンの間は、全ページに noindex を付ける。
@@ -57,6 +58,19 @@ class Catalog_Kurabe_Db
             $robots['nofollow'] = true;
         }
         return $robots;
+    }
+
+    /* www 付きで来たアクセスを、www なしの正式な住所へ恒久的に移す（301）。
+       サーバーで www の寄せが無く、www.catalog-kurabe.com でも同じページが200で開いていた（2026-10-02 公開前チェック） */
+    public static function redirect_www()
+    {
+        $host = isset($_SERVER['HTTP_HOST']) ? strtolower((string) $_SERVER['HTTP_HOST']) : '';
+        $home = strtolower((string) wp_parse_url(home_url(), PHP_URL_HOST));
+        if ($host && $home && $host === 'www.' . $home) {
+            $uri = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '/';
+            wp_redirect('https://' . $home . $uri, 301);
+            exit;
+        }
     }
 
     /* 新版の即時適用の窓口（管理者のアプリケーションパスワードで叩く）: POST /wp-json/ckdb/v1/selfupdate
