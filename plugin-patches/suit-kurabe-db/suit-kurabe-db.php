@@ -2,7 +2,7 @@
 /**
  * Plugin Name: スーツくらべ 比較データ表示
  * Description: スーツ量販店の比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。店の定義（名前・表記・色）はデータ側の stores 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.2.1
+ * Version:     1.2.2
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: suit-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Suit_Kurabe_Db
 {
-    const VERSION  = '1.2.1';
+    const VERSION  = '1.2.2';
     const META     = 'kurabe_data';
     const OPT      = 'suit_kurabe_db_settings';
 
@@ -225,6 +225,11 @@ class Suit_Kurabe_Db
         $url = plugin_dir_url(__FILE__) . 'assets/';
         wp_register_style('suit-kurabe-db', $url . 'kurabe.css', array(), self::VERSION);
         wp_register_script('suit-kurabe-db', $url . 'kurabe.js', array(), self::VERSION, true);
+        // TOP（固定ページ＋メインビジュアル）の区画 .kt-* の余白・見出し1の指定もこのCSSにある。
+        // TOPには [kurabe] が無いので、フロントページでは無条件に読み込む
+        if (is_front_page()) {
+            wp_enqueue_style('suit-kurabe-db');
+        }
     }
 
     public static function shortcode($atts)

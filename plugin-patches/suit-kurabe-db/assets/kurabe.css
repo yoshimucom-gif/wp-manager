@@ -162,3 +162,12 @@ p.kurabe-aside strong{display:block;margin-bottom:4px}
 .kurabe-list td a{font-weight:700;color:var(--k-accent)}
 .kurabe-list .kurabe-t{font-weight:700}
 .kurabe-none{color:#B4BCC2}
+
+/* ---- TOPの区画（build_top.py・100均くらべのTOPと同じ考え方。本文に<style>を置かずここに集約） ---- */
+/* サイドバーのある画面では背景の帯が無いので、帯用の上下余白（padding-block:70）を詰める。区画の間だけ空ける */
+:is(.l-sidebar-right,.l-sidebar-left) #main .dbp-section > .dbp-section__inner{padding:0 0 48px}
+/* メインビジュアル（売り場から探すタブ）の上下も詰める */
+.kt-season > .dbp-section__inner{padding-top:24px;padding-bottom:24px}
+/* TOPの一番上の見出し1は小さな一言として置く（主役はタブの一覧） */
+.kt-season h1.wp-block-heading{font-size:15px;font-weight:700;color:#666;margin:0 0 .6em;letter-spacing:.04em;line-height:1.6}
+
