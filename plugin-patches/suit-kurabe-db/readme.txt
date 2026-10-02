@@ -1,5 +1,5 @@
 === スーツくらべ 比較データ表示 ===
-Version: 1.2.2
+Version: 1.3.0
 
 スーツ量販店比較サイト（suit-hub.com）の品目ページに、各社の公式通販から取った
 比較データを表示します。100均くらべ用の kurabe-db をフォークし、店の定義を
@@ -25,6 +25,10 @@ stores に無い店名が rows に来たら灰色（#666）でフォールバッ
   [kurabe part="stats"]   数字4つ（帯グラフの色は stores の color）
   [kurabe part="table"]   絞り込みと並べ替えができる一覧表（行はサーバー側で出力）。
                           rows の p_regular があれば通常価格に取り消し線を付けて表示
+                          任意キー: price_label（価格欄の見出し。既定「価格（税込）」）／
+                          price_ranges（[[下限,上限(0=上限なし),表記],…]）／
+                          source_word（既定「公式通販」）／stamp_tail（表の注記の後半）／
+                          行の p_from（価格の後ろに「〜」）・p_note（価格の下の小さな注記）
   [kurabe part="related"] 関連する品目のリンク
   [kurabe part="shop"]    量販店にない条件の Amazon・楽天市場 検索リンクと広告表記
   [kurabe_list]           カテゴリー・店名タグの品目×掲載数一覧

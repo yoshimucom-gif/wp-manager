@@ -2,7 +2,7 @@
 /**
  * Plugin Name: スーツくらべ 比較データ表示
  * Description: スーツ量販店の比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。店の定義（名前・表記・色）はデータ側の stores 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.2.2
+ * Version:     1.3.0
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: suit-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Suit_Kurabe_Db
 {
-    const VERSION  = '1.2.2';
+    const VERSION  = '1.3.0';
     const META     = 'kurabe_data';
     const OPT      = 'suit_kurabe_db_settings';
 
@@ -285,6 +285,12 @@ class Suit_Kurabe_Db
         return $t ? date('Y年n月j日', $t) : esc_html($ymd);
     }
 
+    /* 出典の呼び方（量販店＝公式通販／オーダー専門店＝公式サイト）。データ側で指定 */
+    private static function word($d)
+    {
+        return isset($d['source_word']) && $d['source_word'] !== '' ? $d['source_word'] : '公式通販';
+    }
+
     private static function part_source($d)
     {
         if (!empty($d['total'])) {                   // 表が抜粋のときは全該当数（build_dataが数えた値）
@@ -303,7 +309,7 @@ class Suit_Kurabe_Db
         }
         $h  = '<dl class="kurabe-source" aria-label="データの出どころ">';
         $h .= '<div><dt>最終確認</dt><dd><time datetime="' . esc_attr($d['checked']) . '">' . esc_html(self::date_ja($d['checked'])) . '</time></dd></div>';
-        $h .= '<div><dt>出典</dt><dd>' . esc_html(implode('・', $names)) . 'の公式通販（' . $n . '種）</dd></div>';
+        $h .= '<div><dt>出典</dt><dd>' . esc_html(implode('・', $names)) . 'の' . esc_html(self::word($d)) . '（' . $n . '種）</dd></div>';
         if (!empty($d['source_extra']) && is_array($d['source_extra'])) {
             foreach ($d['source_extra'] as $x) {     // 任意の追加行（{dt,dd} の配列）
                 if (isset($x['dt'], $x['dd'])) {
@@ -368,6 +374,7 @@ class Suit_Kurabe_Db
         $mode  = isset($d['mode']) ? $d['mode'] : 'none';
         $cols  = isset($d['cols']) && is_array($d['cols']) ? $d['cols'] : array();
         $label = isset($d['size_label']) ? $d['size_label'] : 'サイズ（cm）';
+        $plabel = isset($d['price_label']) ? $d['price_label'] : '価格（税込）';
         $stores = self::stores($d);
 
         $prices  = array();
@@ -384,7 +391,7 @@ class Suit_Kurabe_Db
         }
 
         $h  = '<div class="kurabe-table" data-mode="' . esc_attr($mode) . '"' . self::data_attr($d) . '>';
-        $h .= '<p class="kurabe-stamp">' . esc_html(self::date_ja($d['checked'])) . '時点で、' . esc_html(implode('・', $names)) . 'の公式通販に掲載されている情報です。店頭の品ぞろえとは違う場合があります。</p>';
+        $h .= '<p class="kurabe-stamp">' . esc_html(self::date_ja($d['checked'])) . '時点で、' . esc_html(implode('・', $names)) . 'の' . esc_html(self::word($d)) . 'に掲載されている情報です。' . esc_html(isset($d['stamp_tail']) ? $d['stamp_tail'] : '店頭の品ぞろえとは違う場合があります。') . '</p>';
         if (!empty($d['table_note'])) {
             $h .= '<p class="kurabe-stamp">' . esc_html($d['table_note']) . '</p>';
         }
@@ -397,7 +404,7 @@ class Suit_Kurabe_Db
         $h .= '</div></div>';
         if (count($prices) > 1) {
             // 価格は1円刻みではなく価格帯で絞る（吉村さん指示）。商品がある帯だけチップを出す
-            $ranges = array(
+            $ranges = !empty($d['price_ranges']) && is_array($d['price_ranges']) ? $d['price_ranges'] : array(
                 array(0, 3000, '〜3,000円'),
                 array(3000, 5000, '3,000〜5,000円'),
                 array(5000, 10000, '5,000円〜1万円'),
@@ -447,7 +454,7 @@ class Suit_Kurabe_Db
         if ($mode !== 'none') {
             $h .= '<th scope="col"><button type="button" data-sort="sz">' . esc_html($label) . '</button></th>';
         }
-        $h .= '<th scope="col"><button type="button" data-sort="p">価格（税込）</button></th>';
+        $h .= '<th scope="col"><button type="button" data-sort="p">' . esc_html($plabel) . '</button></th>';
         foreach ($cols as $key => $cl) {
             $sortable = !empty($cl['sort']);
             $h .= '<th scope="col">' . ($sortable ? '<button type="button" data-sort="' . esc_attr($key) . '">' . esc_html($cl['label']) . '</button>' : esc_html($cl['label'])) . '</th>';
@@ -476,14 +483,19 @@ class Suit_Kurabe_Db
                 $h .= '<td class="kurabe-num" data-label="' . esc_attr($label) . '">' . (!empty($r['size_txt']) ? esc_html($r['size_txt']) : '<span class="kurabe-dim">記載なし</span>') . '</td>';
             }
             if (isset($r['p']) && $r['p'] !== null) {
-                $h .= '<td class="kurabe-num" data-label="価格（税込）">';
+                $h .= '<td class="kurabe-num" data-label="' . esc_attr($plabel) . '">';
                 if (!empty($r['p_regular'])) {
                     // 値下げ品は2段表示：上段に取り消し線の通常価格、下段に現在価格
                     $h .= '<s class="kurabe-was">通常' . esc_html(number_format((int) $r['p_regular'])) . '円</s>';
                 }
-                $h .= '<span class="kurabe-price">' . esc_html(number_format((int) $r['p'])) . '円</span></td>';
+                $h .= '<span class="kurabe-price">' . esc_html(number_format((int) $r['p'])) . '円' . (!empty($r['p_from']) ? '〜' : '') . '</span>';
+                if (!empty($r['p_note'])) {
+                    // 価格の条件（税表記・何着分の価格か等）。公式の表記どおりの短い注記
+                    $h .= '<span class="kurabe-sub">' . esc_html($r['p_note']) . '</span>';
+                }
+                $h .= '</td>';
             } else {
-                $h .= '<td class="kurabe-num" data-label="価格（税込）"><span class="kurabe-dim">記載なし</span></td>';
+                $h .= '<td class="kurabe-num" data-label="' . esc_attr($plabel) . '"><span class="kurabe-dim">記載なし</span></td>';
             }
             foreach ($cols as $key => $cl) {
                 $v = isset($r[$key]) ? $r[$key] : '';
