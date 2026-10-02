@@ -353,3 +353,9 @@
 .ks-title{display:flex;align-items:center;gap:10px}
 .ks-title::before{content:"?";flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:#F08A24;color:#fff;font-size:18px;font-weight:700;line-height:1;font-family:Arial,sans-serif}
 @media (max-width:640px){.ks-title::before{width:26px;height:26px;font-size:16px}}
+
+/* 診断の外枠を明るい地にして記事と区別する（2026-10-02 吉村さん「記事と同化してる」）。オレンジの「?」と同じ系統のクリーム色 */
+.ks-panel,.ks-cond{background:#FFF6EA;border-color:#F2D9B6}
+.ks-opt{border-color:#E8D7C0}
+.ks-opt:hover{background:#FFFDF9}
+.ks-bar i{background:#EBDCC8}
