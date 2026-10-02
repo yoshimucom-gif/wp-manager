@@ -108,9 +108,14 @@ p.kurabe-aside strong{display:block;margin-bottom:4px}
 .kurabe-shop-cond{display:flex;flex-direction:column;line-height:1.5}
 .kurabe-shop-cond b{font-size:16px;color:var(--k-ink)}
 .kurabe-shop-cond span{font-size:13.5px;color:var(--k-ink2)}
-.kurabe-shop-links{display:flex;flex-wrap:wrap;gap:8px 18px}
-.kurabe-shop-links a{color:var(--k-accent);font-weight:700;font-size:15px;white-space:nowrap}
-.kurabe-shop-links a::after{content:" ›"}
+.kurabe-shop-links{display:flex;flex-wrap:wrap;gap:8px 10px}
+/* 商品カード（affiros）の「Amazonで見る／楽天市場で見る」と同じ配色・形のボタン（2026-10-02 吉村さん指示） */
+.kurabe-shop-links a.kurabe-btn{display:inline-block;min-width:150px;padding:11px 16px;border-radius:6px;color:#fff;font-weight:700;font-size:14px;line-height:1.4;text-align:center;text-decoration:none;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.kurabe-shop-links a.kurabe-btn-amazon{background:linear-gradient(#ffa726,#fb8c00)}
+.kurabe-shop-links a.kurabe-btn-rakuten{background:linear-gradient(#d63a3a,#b71c1c)}
+.kurabe-shop-links a.kurabe-btn:hover{opacity:.88;color:#fff}
+.kurabe-shop-links a.kurabe-btn:visited{color:#fff}
+@media (max-width:600px){.kurabe-shop-links{width:100%}.kurabe-shop-links a.kurabe-btn{flex:1 1 0;min-width:0}}
 .kurabe-adnote{font-size:13.5px;color:#56636E;margin:.5em 0 1.5em}
 
 /* 関連する品目：箱にせず、文字のリンクを折り返して並べる */
