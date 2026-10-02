@@ -2,7 +2,7 @@
 /**
  * Plugin Name: カタログギフトくらべ 比較データ表示
  * Description: カタログギフトの比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。発行会社・ブランドの定義（名前・表記・色）と絞り込みの軸はデータ側の stores / filters 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.2.23
+ * Version:     1.2.24
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: catalog-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Catalog_Kurabe_Db
 {
-    const VERSION  = '1.2.23';
+    const VERSION  = '1.2.24';
     const META     = 'kurabe_data';
     const OPT      = 'catalog_kurabe_db_settings';
 
@@ -56,6 +56,13 @@ class Catalog_Kurabe_Db
         if ((string) get_option('blog_public') === '0') {
             $robots['noindex']  = true;
             $robots['nofollow'] = true;
+        }
+        // 記事一覧（表示設定の「投稿ページ」/articles/）は、カテゴリの一覧と同じ記事を並べるだけで、
+        // テーマがトップと同じ説明文を出し h1 も無い。検索の入口にはしない（リンクはたどらせる・2026-10-02 公開前チェック）
+        if (is_home() && !is_front_page()) {
+            $robots['noindex'] = true;
+            $robots['follow']  = true;
+            unset($robots['nofollow']);
         }
         return $robots;
     }
