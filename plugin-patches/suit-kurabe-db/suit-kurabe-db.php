@@ -2,7 +2,7 @@
 /**
  * Plugin Name: スーツくらべ 比較データ表示
  * Description: スーツ量販店の比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。店の定義（名前・表記・色）はデータ側の stores 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.3.2
+ * Version:     1.4.0
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: suit-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Suit_Kurabe_Db
 {
-    const VERSION  = '1.3.2';
+    const VERSION  = '1.4.0';
     const META     = 'kurabe_data';
     const OPT      = 'suit_kurabe_db_settings';
 
@@ -39,6 +39,7 @@ class Suit_Kurabe_Db
         add_filter('diver_single_side_items', array(__CLASS__, 'side_items'));
         add_action('diver_main_before', array(__CLASS__, 'archive_table'), 20);
         add_shortcode('kurabe_list', array(__CLASS__, 'list_shortcode'));
+        add_shortcode('kurabe_stores', array(__CLASS__, 'stores_shortcode'));
         add_action('suit_kurabe_selfupdate', array(__CLASS__, 'selfupdate'));
         add_action('rest_api_init', array(__CLASS__, 'rest_selfupdate'));
     }
@@ -671,6 +672,86 @@ class Suit_Kurabe_Db
             return;
         }
         echo self::list_html(array('taxonomy' => $term->taxonomy, 'term' => $term->term_id));
+    }
+
+    /* オーダースーツ専門店の店舗一覧（地域記事用）。データは option suit_kurabe_order_stores（JSON文字列）。
+       [kurabe_stores pref="大阪府" city="大阪市" addr="" label="大阪市"]
+       pref=都道府県（カンマ区切りで複数）、city=市区町村の先頭一致（カンマ区切り）、addr=住所に含む語（銀座など） */
+    public static function stores_shortcode($atts)
+    {
+        $a = shortcode_atts(array('pref' => '', 'city' => '', 'addr' => '', 'label' => ''), $atts, 'kurabe_stores');
+        $raw = get_option('suit_kurabe_order_stores', '');
+        $d = is_string($raw) ? json_decode($raw, true) : $raw;
+        if (!is_array($d) || empty($d['stores'])) {
+            return '';
+        }
+        wp_enqueue_style('suit-kurabe-db');
+        $prefs = array_filter(array_map('trim', explode(',', $a['pref'])));
+        $cities = array_filter(array_map('trim', explode(',', $a['city'])));
+        $addrs = array_filter(array_map('trim', explode(',', $a['addr'])));
+        $brands = isset($d['brands']) && is_array($d['brands']) ? $d['brands'] : array();
+        $hit = array();
+        foreach ($d['stores'] as $st) {
+            $pf = isset($st['pref']) ? $st['pref'] : '';
+            $ct = isset($st['city']) ? $st['city'] : '';
+            $ad = isset($st['address']) ? $st['address'] : '';
+            if ($prefs && !in_array($pf, $prefs, true)) {
+                continue;
+            }
+            if ($cities) {
+                $ok = false;
+                foreach ($cities as $c) {
+                    if ($c !== '' && strpos($ct, $c) === 0) {
+                        $ok = true;
+                        break;
+                    }
+                }
+                if (!$ok) {
+                    continue;
+                }
+            }
+            if ($addrs) {
+                $ok = false;
+                foreach ($addrs as $w) {
+                    if ($w !== '' && (strpos($ad, $w) !== false || strpos(isset($st['name']) ? $st['name'] : '', $w) !== false)) {
+                        $ok = true;
+                        break;
+                    }
+                }
+                if (!$ok) {
+                    continue;
+                }
+            }
+            $hit[] = $st;
+        }
+        $label = $a['label'] !== '' ? $a['label'] : implode('・', $prefs);
+        $date = isset($d['fetched']) ? self::date_ja($d['fetched']) : '';
+        $h = '<div class="kurabe-stores">';
+        if (!$hit) {
+            return $h . '<p class="kurabe-stamp">' . esc_html($date) . '時点の各社公式サイトの店舗一覧に、' . esc_html($label) . 'の店舗は載っていません。</p></div>';
+        }
+        $nb = count(array_unique(array_map(function ($x) { return $x['brand']; }, $hit)));
+        usort($hit, function ($x, $y) {
+            $k1 = (isset($x['city']) ? $x['city'] : '') . "	" . (isset($x['brand_name']) ? $x['brand_name'] : '') . "	" . $x['name'];
+            $k2 = (isset($y['city']) ? $y['city'] : '') . "	" . (isset($y['brand_name']) ? $y['brand_name'] : '') . "	" . $y['name'];
+            return strcmp($k1, $k2);
+        });
+        $h .= '<p class="kurabe-stamp">' . esc_html($date) . '時点の各社公式サイトの店舗一覧から、' . esc_html($label) . 'にある店舗を並べています（' . count($hit) . '店・' . $nb . '社）。営業時間や開店・閉店は変わることがあるので、来店の前に各店の公式ページで確かめてください。</p>';
+        $h .= '<div class="kurabe-tablebox"><table><thead><tr><th scope="col">店舗</th><th scope="col">住所</th><th scope="col">営業時間</th></tr></thead><tbody>';
+        foreach ($hit as $st) {
+            $b = isset($brands[$st['brand']]) ? $brands[$st['brand']] : array();
+            $color = isset($b['color']) ? $b['color'] : '#1b2a4a';
+            $bn = isset($st['brand_name']) ? $st['brand_name'] : $st['brand'];
+            $h .= '<tr><td class="kurabe-td-item"><span class="kurabe-store" style="--kurabe-c:' . esc_attr($color) . '">' . esc_html(isset($b['label']) ? $b['label'] : $bn) . '</span> ';
+            $h .= !empty($st['url']) ? '<a class="kurabe-pname" href="' . esc_url($st['url']) . '" target="_blank" rel="noopener">' . esc_html($st['name']) . '</a>' : esc_html($st['name']);
+            if (!empty($st['note'])) {
+                $h .= '<span class="kurabe-sub">' . esc_html($st['note']) . '</span>';
+            }
+            $h .= '</td><td class="kurabe-text" data-label="住所">' . esc_html(isset($st['address']) ? $st['address'] : '') . '</td>';
+            $h .= '<td class="kurabe-text" data-label="営業時間">' . (!empty($st['hours']) ? esc_html($st['hours']) : '<span class="kurabe-dim">記載なし</span>') . '</td></tr>';
+        }
+        $h .= '</tbody></table></div></div>';
+        return $h;
     }
 
     public static function list_shortcode($atts)

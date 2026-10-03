@@ -1,6 +1,6 @@
 /* スーツくらべ 比較データの部品だけを描く。見出し・本文・フォントはテーマに任せる。
    店のブランド色はCSSにハードコードせず、PHPが style="--kurabe-c:#..." で渡す（無ければ灰色） */
-.kurabe-source,.kurabe-stats,.kurabe-table,.kurabe-scale,.kurabe-shop,.kurabe-list,.kurabe-related{
+.kurabe-source,.kurabe-stats,.kurabe-table,.kurabe-stores,.kurabe-scale,.kurabe-shop,.kurabe-list,.kurabe-related{
   --k-ink:#1E2A33;--k-ink2:#56636E;--k-line:#D3DADF;--k-line2:#E6EAED;--k-bg:#F4F6F7;--k-surface:#fff;
   --k-accent:#3C5566;--k-tag:#F2C744;--k-tag-ink:#3A2E05;--k-mesh:#B4C1CA;
   --k-note:#FFF8DD;--k-note-line:#EAD58A;
@@ -47,18 +47,18 @@
 .kurabe-chip-store[aria-pressed="true"]{background:var(--kurabe-c,#666);border-color:var(--kurabe-c,#666);color:#fff}
 .kurabe-fit{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:14px}
 .kurabe-fit input{width:76px;font:inherit;font-size:15px;padding:3px 8px;margin:0;border:1px solid var(--k-line);background:var(--k-surface);color:var(--k-ink);border-radius:3px}
-.kurabe-chip:focus-visible,.kurabe-fit input:focus-visible,.kurabe-table th button:focus-visible{outline:2px solid var(--k-tag);outline-offset:2px}
+.kurabe-chip:focus-visible,.kurabe-fit input:focus-visible,:is(.kurabe-table,.kurabe-stores) th button:focus-visible{outline:2px solid var(--k-tag);outline-offset:2px}
 .kurabe-count{font-size:14px;color:var(--k-ink2);margin:0 0 6px}
 .kurabe-count b{color:var(--k-ink)}
 
 .kurabe-tablebox{overflow-x:auto;background:var(--k-surface);border:1px solid var(--k-line);margin:0}
-.kurabe-table table{border-collapse:collapse;width:100%;min-width:760px;font-size:15px;line-height:1.6;margin:0;border:0}
-.kurabe-table th,.kurabe-table td{padding:9px 11px;text-align:left;vertical-align:top;border:0;border-bottom:1px solid var(--k-line2);background:none}
-.kurabe-table thead th{font-size:13.5px;color:var(--k-ink2);font-weight:700;background:var(--k-bg);white-space:nowrap}
-.kurabe-table th button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;box-shadow:none}
-.kurabe-table th button::after{content:" ↕";opacity:.45}
-.kurabe-table th button[data-dir="asc"]::after{content:" ↑";opacity:1}
-.kurabe-table th button[data-dir="desc"]::after{content:" ↓";opacity:1}
+:is(.kurabe-table,.kurabe-stores) table{border-collapse:collapse;width:100%;min-width:760px;font-size:15px;line-height:1.6;margin:0;border:0}
+:is(.kurabe-table,.kurabe-stores) th,:is(.kurabe-table,.kurabe-stores) td{padding:9px 11px;text-align:left;vertical-align:top;border:0;border-bottom:1px solid var(--k-line2);background:none}
+:is(.kurabe-table,.kurabe-stores) thead th{font-size:13.5px;color:var(--k-ink2);font-weight:700;background:var(--k-bg);white-space:nowrap}
+:is(.kurabe-table,.kurabe-stores) th button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;box-shadow:none}
+:is(.kurabe-table,.kurabe-stores) th button::after{content:" ↕";opacity:.45}
+:is(.kurabe-table,.kurabe-stores) th button[data-dir="asc"]::after{content:" ↑";opacity:1}
+:is(.kurabe-table,.kurabe-stores) th button[data-dir="desc"]::after{content:" ↓";opacity:1}
 .kurabe-num{font-variant-numeric:tabular-nums;white-space:nowrap}
 .kurabe-text{min-width:11em;color:var(--k-ink2)}
 /* 店名バッジ：ブランド色はデータ（stores配列のcolor）から --kurabe-c で受け取る */
@@ -71,16 +71,16 @@
 .kurabe-pname{white-space:normal;overflow-wrap:anywhere;text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px}
 .kurabe-pname:hover{text-decoration-thickness:2px}
 /* 商品列＝店バッジ＋商品名。列幅はここで確保する（リンク側のinline-blockだとバッジと段が割れる） */
-.kurabe-table td.kurabe-td-item{min-width:280px;max-width:400px}
+:is(.kurabe-table,.kurabe-stores) td.kurabe-td-item{min-width:280px;max-width:400px}
 .kurabe-td-item .kurabe-store{margin-right:6px;vertical-align:baseline}
-.kurabe-table td.kurabe-text{min-width:160px}
+:is(.kurabe-table,.kurabe-stores) td.kurabe-text{min-width:160px}
 /* 本文用の囲い枠（イオン案内など、見出しにしない補足。「5つ目の見出しに見える」対策 2026-09-28） */
 p.kurabe-aside{border:1px solid #D3DADF;border-radius:8px;background:#F4F6F7;padding:14px 18px;line-height:1.9}
 p.kurabe-aside strong{display:block;margin-bottom:4px}
 .kurabe-sub{display:block;font-size:13px;color:var(--k-ink2);margin-top:2px;white-space:normal}
 .kurabe-sub b{color:var(--k-accent)}
 .kurabe-dim{color:var(--k-ink2)}
-.kurabe-table td a{color:var(--k-accent);font-weight:700}
+:is(.kurabe-table,.kurabe-stores) td a{color:var(--k-accent);font-weight:700}
 .kurabe-empty{padding:20px;text-align:center;color:var(--k-ink2);border:1px solid var(--k-line);border-top:0;margin:0}
 
 .kurabe-guide{--k-ink:#1E2A33;--k-ink2:#56636E;--k-line:#D3DADF;--k-line2:#E6EAED;--k-bg:#F4F6F7;--k-surface:#fff;overflow-x:auto;background:var(--k-surface);border:1px solid var(--k-line);margin:1em 0 1.5em}
@@ -140,23 +140,23 @@ p.kurabe-aside strong{display:block;margin-bottom:4px}
 /* スマホはカード型（catalog-kurabe-dbで吉村さん選択の案Aを移植・2026-09-28）。1商品＝1枚、
    横スクロールなし。見出し行は並び替えボタンだけを丸いボタンとして残す。絞り込みはhiddenで消える */
 @media (max-width:640px){
-  .kurabe-table .kurabe-tablebox{overflow:visible;border:0;background:none}
-  .kurabe-table table{display:block;min-width:0;width:100%}
-  .kurabe-table thead,.kurabe-table tbody{display:block}
-  .kurabe-table thead tr{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
-  .kurabe-table thead th{display:none;padding:0;background:none;border:0}
-  .kurabe-table thead th:has(button){display:block}
-  .kurabe-table thead th button{font-size:13.5px;border:1px solid var(--k-line);border-radius:999px;padding:3px 12px;background:var(--k-surface);color:var(--k-ink)}
-  .kurabe-table thead th button[data-dir]{background:var(--k-accent);border-color:var(--k-accent);color:#fff}
+  :is(.kurabe-table,.kurabe-stores) .kurabe-tablebox{overflow:visible;border:0;background:none}
+  :is(.kurabe-table,.kurabe-stores) table{display:block;min-width:0;width:100%}
+  :is(.kurabe-table,.kurabe-stores) thead,:is(.kurabe-table,.kurabe-stores) tbody{display:block}
+  :is(.kurabe-table,.kurabe-stores) thead tr{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+  :is(.kurabe-table,.kurabe-stores) thead th{display:none;padding:0;background:none;border:0}
+  :is(.kurabe-table,.kurabe-stores) thead th:has(button){display:block}
+  :is(.kurabe-table,.kurabe-stores) thead th button{font-size:13.5px;border:1px solid var(--k-line);border-radius:999px;padding:3px 12px;background:var(--k-surface);color:var(--k-ink)}
+  :is(.kurabe-table,.kurabe-stores) thead th button[data-dir]{background:var(--k-accent);border-color:var(--k-accent);color:#fff}
   /* カードは薄いグレーの面で塊として分け、中の区切り線は引かない（「線多くね？」2026-09-28） */
-  .kurabe-table tbody tr{display:block;background:var(--k-bg);border:0;border-radius:8px;margin:0 0 12px;padding:14px 16px 10px}
-  .kurabe-table tbody tr[hidden]{display:none}
-  .kurabe-table tbody td{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:5px 0;border:0;text-align:right;min-width:0;white-space:normal}
-  .kurabe-table tbody td::before{content:attr(data-label);flex:0 0 auto;font-size:13.5px;color:var(--k-ink2);font-weight:700;text-align:left}
-  .kurabe-table tbody td.kurabe-td-item::before{content:none}
-  .kurabe-table tbody td.kurabe-td-item{display:block;text-align:left;padding:0 0 8px;font-size:16px;min-width:0;max-width:none}
+  :is(.kurabe-table,.kurabe-stores) tbody tr{display:block;background:var(--k-bg);border:0;border-radius:8px;margin:0 0 12px;padding:14px 16px 10px}
+  :is(.kurabe-table,.kurabe-stores) tbody tr[hidden]{display:none}
+  :is(.kurabe-table,.kurabe-stores) tbody td{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:5px 0;border:0;text-align:right;min-width:0;white-space:normal}
+  :is(.kurabe-table,.kurabe-stores) tbody td::before{content:attr(data-label);flex:0 0 auto;font-size:13.5px;color:var(--k-ink2);font-weight:700;text-align:left}
+  :is(.kurabe-table,.kurabe-stores) tbody td.kurabe-td-item::before{content:none}
+  :is(.kurabe-table,.kurabe-stores) tbody td.kurabe-td-item{display:block;text-align:left;padding:0 0 8px;font-size:16px;min-width:0;max-width:none}
   .kurabe-td-item .kurabe-store{display:table;margin:0 0 6px}
-  .kurabe-table tbody td.kurabe-text{min-width:0;color:var(--k-ink)}
+  :is(.kurabe-table,.kurabe-stores) tbody td.kurabe-text{min-width:0;color:var(--k-ink)}
   .kurabe-pname{display:inline;min-width:0;max-width:none}
   .kurabe-price{background:var(--k-surface)}   /* カードが灰色になったぶん価格チップは白で浮かせる */
 }
@@ -172,3 +172,6 @@ p.kurabe-aside strong{display:block;margin-bottom:4px}
 /* TOPの一番上の見出し1は小さな一言として置く（主役はタブの一覧） */
 .kt-season h1.wp-block-heading{font-size:15px;font-weight:700;color:#666;margin:0 0 .6em;letter-spacing:.04em;line-height:1.6}
 
+
+.kurabe-stores{margin:1.2em 0 1.8em}
+.kurabe-stores td{vertical-align:top}
