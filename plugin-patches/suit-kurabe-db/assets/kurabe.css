@@ -175,3 +175,13 @@ p.kurabe-aside strong{display:block;margin-bottom:4px}
 
 .kurabe-stores{margin:1.2em 0 1.8em}
 .kurabe-stores td{vertical-align:top}
+/* 店舗一覧は住所が長く折り返すので本文より一段小さく（吉村さん「表の中 フォント少し小さく」2026-10-03） */
+.kurabe-stores table{font-size:13.5px;line-height:1.6}
+.kurabe-stores td.kurabe-td-item{font-size:14.5px}
+.kurabe-stores .kurabe-store{font-size:12.5px}
+/* 広告リンクのある店の「公式サイト」リンク（店名の下に小さく） */
+.kurabe-aff{display:block;margin-top:4px;font-size:13px;font-weight:700;text-decoration:underline;text-underline-offset:3px}
+@media (max-width:640px){
+  .kurabe-stores tbody td{font-size:13.5px}
+  .kurabe-stores tbody td.kurabe-td-item{font-size:15px}
+}

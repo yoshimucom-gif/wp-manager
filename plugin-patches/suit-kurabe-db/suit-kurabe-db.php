@@ -2,7 +2,7 @@
 /**
  * Plugin Name: スーツくらべ 比較データ表示
  * Description: スーツ量販店の比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。店の定義（名前・表記・色）はデータ側の stores 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.4.0
+ * Version:     1.4.1
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: suit-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Suit_Kurabe_Db
 {
-    const VERSION  = '1.4.0';
+    const VERSION  = '1.4.1';
     const META     = 'kurabe_data';
     const OPT      = 'suit_kurabe_db_settings';
 
@@ -731,12 +731,28 @@ class Suit_Kurabe_Db
             return $h . '<p class="kurabe-stamp">' . esc_html($date) . '時点の各社公式サイトの店舗一覧に、' . esc_html($label) . 'の店舗は載っていません。</p></div>';
         }
         $nb = count(array_unique(array_map(function ($x) { return $x['brand']; }, $hit)));
-        usort($hit, function ($x, $y) {
-            $k1 = (isset($x['city']) ? $x['city'] : '') . "	" . (isset($x['brand_name']) ? $x['brand_name'] : '') . "	" . $x['name'];
-            $k2 = (isset($y['city']) ? $y['city'] : '') . "	" . (isset($y['brand_name']) ? $y['brand_name'] : '') . "	" . $y['name'];
-            return strcmp($k1, $k2);
+        // 広告（アフィリエイト）リンクのある店（brands[*].aff）を先に。その中と残りは brands の並び→市区町村→店名の順
+        $order = array_flip(array_keys($brands));
+        $rank = function ($st) use ($brands, $order) {
+            $k = $st['brand'];
+            return array(empty($brands[$k]['aff']) ? 1 : 0, isset($order[$k]) ? $order[$k] : 999);
+        };
+        usort($hit, function ($x, $y) use ($rank) {
+            $c = $rank($x) <=> $rank($y);
+            if ($c !== 0) {
+                return $c;
+            }
+            return strcmp((isset($x['city']) ? $x['city'] : '') . "\t" . $x['name'], (isset($y['city']) ? $y['city'] : '') . "\t" . $y['name']);
         });
-        $h .= '<p class="kurabe-stamp">' . esc_html($date) . '時点の各社公式サイトの店舗一覧から、' . esc_html($label) . 'にある店舗を並べています（' . count($hit) . '店・' . $nb . '社）。営業時間や開店・閉店は変わることがあるので、来店の前に各店の公式ページで確かめてください。</p>';
+        $ads = array();
+        foreach ($hit as $st) {
+            $k = $st['brand'];
+            if (!empty($brands[$k]['aff'])) {
+                $ads[$k] = isset($brands[$k]['label']) ? $brands[$k]['label'] : $k;
+            }
+        }
+        $h .= '<p class="kurabe-stamp">' . esc_html($date) . '時点の各社公式サイトの店舗一覧から、' . esc_html($label) . 'にある店舗を並べています（' . count($hit) . '店・' . $nb . '社）。営業時間や開店・閉店は変わることがあるので、来店の前に各店の公式ページで確かめてください。'
+            . ($ads ? 'このうち' . esc_html(implode('・', $ads)) . 'の「公式サイト」のリンクは広告（アフィリエイト）リンクです。' : '') . '</p>';
         $h .= '<div class="kurabe-tablebox"><table><thead><tr><th scope="col">店舗</th><th scope="col">住所</th><th scope="col">営業時間</th></tr></thead><tbody>';
         foreach ($hit as $st) {
             $b = isset($brands[$st['brand']]) ? $brands[$st['brand']] : array();
@@ -746,6 +762,9 @@ class Suit_Kurabe_Db
             $h .= !empty($st['url']) ? '<a class="kurabe-pname" href="' . esc_url($st['url']) . '" target="_blank" rel="noopener">' . esc_html($st['name']) . '</a>' : esc_html($st['name']);
             if (!empty($st['note'])) {
                 $h .= '<span class="kurabe-sub">' . esc_html($st['note']) . '</span>';
+            }
+            if (!empty($b['aff'])) {
+                $h .= '<a class="kurabe-aff" href="' . esc_url($b['aff']) . '" target="_blank" rel="nofollow sponsored noopener">' . esc_html(isset($b['label']) ? $b['label'] : $bn) . ' 公式サイト</a>';
             }
             $h .= '</td><td class="kurabe-text" data-label="住所">' . esc_html(isset($st['address']) ? $st['address'] : '') . '</td>';
             $h .= '<td class="kurabe-text" data-label="営業時間">' . (!empty($st['hours']) ? esc_html($st['hours']) : '<span class="kurabe-dim">記載なし</span>') . '</td></tr>';
