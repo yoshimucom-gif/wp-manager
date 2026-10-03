@@ -132,7 +132,8 @@ aside .kurabe-top-store-go{font-size:14px;padding-top:8px}
 .kurabe-season-name{font-weight:700;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kurabe-season-total{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.2}
 .kurabe-season-total small{font-size:14px;font-weight:400;color:var(--k-ink2);margin-left:3px}
-.kurabe-season-bar{display:flex;height:8px;border-radius:2px;overflow:hidden;background:#EFEFEF;margin-top:2px}
+.kurabe-season-bar{display:flex;gap:2px;height:8px;background:transparent;margin-top:2px}
+.kurabe-season-bar i{border-radius:2px}
 .kurabe-season-bar i{display:block;height:100%}
 .kurabe-season-go{font-size:14px;color:var(--k-ink2)}
 .kurabe-season-go::after{content:" →"}
@@ -174,7 +175,9 @@ aside .kurabe-top-store-go{font-size:14px;padding-top:8px}
 .kurabe-v{font-weight:700;font-variant-numeric:tabular-nums;line-height:1.2;color:var(--k-ink);font-size:24px;white-space:nowrap}
 .kurabe-v small{font-size:15px;font-weight:700;margin-left:3px}
 .kurabe-v-main{font-size:46px;line-height:1.1;margin-top:2px}
-.kurabe-bar{display:flex;height:10px;margin:12px 0 8px;border-radius:2px;overflow:hidden}
+/* 3社の色の帯は、間に白い切れ目を入れて隣の店と色が混ざって見えないようにする（吉村さん 2026-10-03「色がわかりにくい。つながってて」） */
+.kurabe-bar{display:flex;gap:3px;height:12px;margin:12px 0 8px}
+.kurabe-bar > *{border-radius:3px;min-width:6px}
 .kurabe-bar-daiso{background:var(--k-daiso)}
 .kurabe-bar-cando{background:var(--k-cando)}
 .kurabe-bar-watts{background:var(--k-watts)}
