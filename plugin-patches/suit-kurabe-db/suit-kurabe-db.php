@@ -2,7 +2,7 @@
 /**
  * Plugin Name: スーツくらべ 比較データ表示
  * Description: スーツ量販店の比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。店の定義（名前・表記・色）はデータ側の stores 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.3.1
+ * Version:     1.3.2
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: suit-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Suit_Kurabe_Db
 {
-    const VERSION  = '1.3.1';
+    const VERSION  = '1.3.2';
     const META     = 'kurabe_data';
     const OPT      = 'suit_kurabe_db_settings';
 
@@ -358,28 +358,32 @@ class Suit_Kurabe_Db
         $h  = '<div class="kurabe-stats"><div class="kurabe-stats-main">';
         $h .= '<div class="kurabe-k">' . esc_html($main['k']) . '</div>';
         $h .= '<div class="kurabe-v kurabe-v-main">' . esc_html($main['v']) . '<small>' . esc_html(isset($main['u']) ? $main['u'] : '') . '</small></div>';
+        // 掲載数の帯は数字の欄の下に全幅で通す（左の欄の中だと8社の店名が1段に収まらない。2026-10-03）
+        $bar = '';
         if ($per) {
-            $h .= '<div class="kurabe-bar" aria-hidden="true">';
+            $bar .= '<div class="kurabe-stats-bar"><div class="kurabe-bar" aria-hidden="true">';
             foreach ($per as $st => $n) {
                 // 帯の中に店名を入れる（2026-10-03 吉村さん: 紺系が並んで見分けにくい）。区間は店名が収まる幅を下限にし、
                 // 文字色は背景の明るさで白／濃色を切り替える
                 $c = isset($stores[$st]['color']) ? $stores[$st]['color'] : '';
-                $h .= '<span class="kurabe-bar-seg"' . self::color_style($stores, $st, 'flex:' . (int) $n . ' 1 0;color:' . self::ink($c)) . '>' . esc_html(self::label($stores, $st)) . '</span>';
+                $bar .= '<span class="kurabe-bar-seg"' . self::color_style($stores, $st, 'flex:' . (int) $n . ' 1 0;color:' . self::ink($c)) . '>' . esc_html(self::label($stores, $st)) . '</span>';
             }
-            $h .= '</div><div class="kurabe-bar-legend">';
+            $bar .= '</div><div class="kurabe-bar-legend">';
             foreach ($per as $st => $n) {
-                $h .= '<span><b class="kurabe-t"' . self::color_style($stores, $st) . '>' . esc_html(self::label($stores, $st)) . '</b> ' . (int) $n . '</span>';
+                $bar .= '<span><b class="kurabe-t"' . self::color_style($stores, $st) . '>' . esc_html(self::label($stores, $st)) . '</b> ' . (int) $n . '</span>';
             }
-            $h .= '</div>';
+            $bar .= '</div>';
             if (count($per) > 1 && array_sum($per) !== (int) $main['v']) {
-                $h .= '<div class="kurabe-bar-note">店ごとの数は、同じ商品を各店で数えています。</div>';
+                $bar .= '<div class="kurabe-bar-note">店ごとの数は、同じ商品を各店で数えています。</div>';
             }
+            $bar .= '</div>';
         }
         $h .= '</div><div class="kurabe-stats-rest">';
         foreach ($rest as $x) {
             $h .= '<div class="kurabe-stats-row"><span class="kurabe-k">' . esc_html($x['k']) . '</span><span class="kurabe-v">' . esc_html($x['v']) . '<small>' . esc_html(isset($x['u']) ? $x['u'] : '') . '</small></span></div>';
         }
-        $h .= '</div></div>';
+        $h .= '</div>' . $bar;
+        $h .= '</div>';
         return $h;
     }
 

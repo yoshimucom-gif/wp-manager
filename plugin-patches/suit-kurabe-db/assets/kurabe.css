@@ -25,7 +25,8 @@
 .kurabe-v{font-weight:700;font-variant-numeric:tabular-nums;line-height:1.2;color:var(--k-ink);font-size:24px;white-space:nowrap}
 .kurabe-v small{font-size:15px;font-weight:700;margin-left:3px}
 .kurabe-v-main{font-size:46px;line-height:1.1;margin-top:2px}
-.kurabe-bar{display:flex;flex-wrap:wrap;gap:2px;margin:12px 0 8px}
+.kurabe-stats-bar{grid-column:1/-1;border-top:1px solid var(--k-line2);padding-top:14px}
+.kurabe-bar{display:flex;flex-wrap:wrap;gap:2px;margin:0 0 8px}
 .kurabe-bar-seg{background:var(--kurabe-c,#666);min-width:max-content;padding:0 7px;height:24px;line-height:24px;font-size:12px;font-weight:700;white-space:nowrap;border-radius:2px;box-sizing:border-box}
 .kurabe-bar-legend{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:14px;color:var(--k-ink2)}
 .kurabe-bar-legend b{font-weight:700}
