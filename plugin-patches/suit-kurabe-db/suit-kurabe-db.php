@@ -2,7 +2,7 @@
 /**
  * Plugin Name: スーツくらべ 比較データ表示
  * Description: スーツ量販店の比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。店の定義（名前・表記・色）はデータ側の stores 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.4.1
+ * Version:     1.4.2
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: suit-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Suit_Kurabe_Db
 {
-    const VERSION  = '1.4.1';
+    const VERSION  = '1.4.2';
     const META     = 'kurabe_data';
     const OPT      = 'suit_kurabe_db_settings';
 
@@ -744,15 +744,8 @@ class Suit_Kurabe_Db
             }
             return strcmp((isset($x['city']) ? $x['city'] : '') . "\t" . $x['name'], (isset($y['city']) ? $y['city'] : '') . "\t" . $y['name']);
         });
-        $ads = array();
-        foreach ($hit as $st) {
-            $k = $st['brand'];
-            if (!empty($brands[$k]['aff'])) {
-                $ads[$k] = isset($brands[$k]['label']) ? $brands[$k]['label'] : $k;
-            }
-        }
-        $h .= '<p class="kurabe-stamp">' . esc_html($date) . '時点の各社公式サイトの店舗一覧から、' . esc_html($label) . 'にある店舗を並べています（' . count($hit) . '店・' . $nb . '社）。営業時間や開店・閉店は変わることがあるので、来店の前に各店の公式ページで確かめてください。'
-            . ($ads ? 'このうち' . esc_html(implode('・', $ads)) . 'の「公式サイト」のリンクは広告（アフィリエイト）リンクです。' : '') . '</p>';
+        // 広告である旨はページ冒頭のPR表記で足りるので、表ごとには書かない（2026-10-04 吉村さん）
+        $h .= '<p class="kurabe-stamp">' . esc_html($date) . '時点の各社公式サイトの店舗一覧から、' . esc_html($label) . 'にある店舗を並べています（' . count($hit) . '店・' . $nb . '社）。営業時間や開店・閉店は変わることがあるので、来店の前に各店の公式ページで確かめてください。</p>';
         $h .= '<div class="kurabe-tablebox"><table><thead><tr><th scope="col">店舗</th><th scope="col">住所</th><th scope="col">営業時間</th></tr></thead><tbody>';
         foreach ($hit as $st) {
             $b = isset($brands[$st['brand']]) ? $brands[$st['brand']] : array();
@@ -913,7 +906,7 @@ class Suit_Kurabe_Db
             $h .= '<a class="kurabe-btn kurabe-btn-rakuten" href="' . esc_url(self::rakuten_url($q)) . '" target="_blank" rel="nofollow sponsored noopener">楽天市場で探す</a>';
             $h .= '</div></div>';
         }
-        $h .= '</div><p class="kurabe-adnote">上のリンクは広告（アフィリエイト）を含みます。価格と在庫はリンク先でご確認ください。</p>';
+        $h .= '</div><p class="kurabe-adnote">価格と在庫はリンク先でご確認ください。</p>';
         return $h;
     }
 
