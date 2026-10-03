@@ -2,7 +2,7 @@
 /**
  * Plugin Name: スーツくらべ 比較データ表示
  * Description: スーツ量販店の比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。店の定義（名前・表記・色）はデータ側の stores 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.3.0
+ * Version:     1.3.1
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: suit-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Suit_Kurabe_Db
 {
-    const VERSION  = '1.3.0';
+    const VERSION  = '1.3.1';
     const META     = 'kurabe_data';
     const OPT      = 'suit_kurabe_db_settings';
 
@@ -158,6 +158,17 @@ class Suit_Kurabe_Db
     }
 
     /* バッジ・帯グラフ・チップに渡すインラインCSS変数。stores に無い店は灰色フォールバック */
+    /* 背景色の上に置く文字色（明るい背景は濃い文字、暗い背景は白） */
+    private static function ink($hex)
+    {
+        if (!preg_match('/^#?([0-9a-f]{6})$/i', (string) $hex, $m)) {
+            return '#fff';
+        }
+        $v = array_map('hexdec', str_split($m[1], 2));
+        $y = (0.299 * $v[0] + 0.587 * $v[1] + 0.114 * $v[2]) / 255;
+        return $y > 0.6 ? '#2b2200' : '#fff';
+    }
+
     private static function color_style($stores, $s, $extra = '')
     {
         $c = isset($stores[$s]['color']) ? $stores[$s]['color'] : '';
@@ -350,7 +361,10 @@ class Suit_Kurabe_Db
         if ($per) {
             $h .= '<div class="kurabe-bar" aria-hidden="true">';
             foreach ($per as $st => $n) {
-                $h .= '<span class="kurabe-bar-seg"' . self::color_style($stores, $st, 'flex:' . (int) $n) . '></span>';
+                // 帯の中に店名を入れる（2026-10-03 吉村さん: 紺系が並んで見分けにくい）。区間は店名が収まる幅を下限にし、
+                // 文字色は背景の明るさで白／濃色を切り替える
+                $c = isset($stores[$st]['color']) ? $stores[$st]['color'] : '';
+                $h .= '<span class="kurabe-bar-seg"' . self::color_style($stores, $st, 'flex:' . (int) $n . ' 1 0;color:' . self::ink($c)) . '>' . esc_html(self::label($stores, $st)) . '</span>';
             }
             $h .= '</div><div class="kurabe-bar-legend">';
             foreach ($per as $st => $n) {
