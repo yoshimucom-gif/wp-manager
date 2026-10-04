@@ -2,7 +2,7 @@
 /**
  * Plugin Name: スーツくらべ 比較データ表示
  * Description: スーツ量販店の比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。店の定義（名前・表記・色）はデータ側の stores 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.5.0
+ * Version:     1.5.1
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: suit-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Suit_Kurabe_Db
 {
-    const VERSION  = '1.5.0';
+    const VERSION  = '1.5.1';
     const META     = 'kurabe_data';
     const OPT      = 'suit_kurabe_db_settings';
 
@@ -786,29 +786,40 @@ class Suit_Kurabe_Db
         ?>
 <div class="skdb-sd" data-date="<?php echo esc_attr($date); ?>">
 <style>
-.skdb-sd{--sd-c:var(--rd--c--secondary-rgb,27 42 74);margin:1.5em 0 2em}
-.skdb-sd fieldset{border:1px solid #e3e6ee;border-radius:10px;padding:14px 16px 10px;margin:0 0 14px;background:#fff}
-.skdb-sd legend{font-weight:700;padding:0 6px;font-size:16px}
-.skdb-sd .sd-opts{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 4px}
-.skdb-sd .sd-opts label{display:inline-flex;align-items:center;gap:6px;border:1px solid #cfd5e3;border-radius:999px;padding:7px 14px;cursor:pointer;font-size:15px;line-height:1.3;background:#fff}
-.skdb-sd .sd-opts input{accent-color:rgb(27 42 74);margin:0}
-.skdb-sd .sd-opts label:has(input:checked){border-color:rgb(27 42 74);background:rgb(27 42 74 / .07);font-weight:700}
-.skdb-sd select{font-size:15px;padding:6px 10px;border:1px solid #cfd5e3;border-radius:6px;max-width:100%}
-.skdb-sd .sd-note{font-size:13.5px;color:#5a6172;margin:4px 0 0}
-.skdb-sd .sd-btn{display:block;width:100%;max-width:420px;margin:6px auto 0;padding:13px 16px;border:0;border-radius:8px;background:rgb(27 42 74);color:#fff;font-size:16px;font-weight:700;cursor:pointer}
-.skdb-sd .sd-res{margin-top:22px}
-.skdb-sd .sd-h{font-size:18px;font-weight:700;margin:22px 0 10px;padding-left:10px;border-left:5px solid rgb(27 42 74)}
-.skdb-sd .sd-card{border:1px solid #e3e6ee;border-radius:10px;padding:14px 16px;margin:0 0 12px;background:#fff}
+.skdb-sd{margin:1.5em 0 2em;background:#eef1f7;border-radius:16px;overflow:hidden;box-shadow:0 2px 10px rgb(27 42 74 / .08)}
+.skdb-sd .sd-head{background:linear-gradient(135deg,#1b2a4a,#2e4473);color:#fff;padding:22px 22px 18px}
+.skdb-sd .sd-badge{display:inline-block;background:#f5c26b;color:#1b2a4a;font-weight:700;font-size:13px;border-radius:999px;padding:3px 12px;margin:0 0 8px}
+.skdb-sd .sd-title{font-size:22px;font-weight:700;line-height:1.45;margin:0;color:#fff}
+.skdb-sd .sd-lead{font-size:14.5px;line-height:1.7;margin:6px 0 0;color:#e3e8f3}
+.skdb-sd .sd-body{padding:18px 16px 20px;counter-reset:sdq}
+.skdb-sd fieldset{border:0;border-radius:12px;padding:14px 16px 12px;margin:0 0 12px;background:#fff;box-shadow:0 1px 3px rgb(27 42 74 / .08)}
+.skdb-sd legend{float:left;width:100%;font-weight:700;padding:0;margin:0 0 4px;font-size:16px;color:#1b2a4a}
+.skdb-sd legend::before{counter-increment:sdq;content:"Q" counter(sdq);display:inline-block;background:#1b2a4a;color:#fff;font-size:13px;border-radius:6px;padding:2px 8px;margin-right:8px;vertical-align:1px}
+.skdb-sd .sd-opts{clear:both;display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 2px}
+.skdb-sd .sd-opts label{display:inline-flex;align-items:center;gap:6px;border:1.5px solid #cfd5e3;border-radius:999px;padding:8px 15px;cursor:pointer;font-size:15px;line-height:1.3;background:#fff;transition:.15s}
+.skdb-sd .sd-opts input{accent-color:#1b2a4a;margin:0}
+.skdb-sd .sd-opts label:has(input:checked){border-color:#1b2a4a;background:#1b2a4a;color:#fff;font-weight:700}
+.skdb-sd select{font-size:15px;padding:7px 10px;border:1.5px solid #cfd5e3;border-radius:8px;max-width:100%;background:#fff}
+.skdb-sd .sd-pref{clear:both}
+.skdb-sd .sd-note{font-size:13.5px;color:#5a6172;margin:8px 0 4px}
+.skdb-sd .sd-btn{display:block;width:100%;max-width:440px;margin:8px auto 0;padding:15px 16px;border:0;border-radius:999px;background:#f5c26b;color:#1b2a4a;font-size:17px;font-weight:700;cursor:pointer;box-shadow:0 3px 0 #c99a3e}
+.skdb-sd .sd-btn:active{transform:translateY(2px);box-shadow:0 1px 0 #c99a3e}
+.skdb-sd .sd-res:not(:empty){padding:4px 16px 20px}
+.skdb-sd .sd-h{font-size:17px;font-weight:700;margin:18px 0 10px;padding:9px 14px;border-radius:8px;background:#1b2a4a;color:#fff}
+.skdb-sd .sd-h.sd-h2{background:#fff;color:#1b2a4a;border:1.5px solid #1b2a4a}
+.skdb-sd .sd-card{border:0;border-radius:12px;padding:14px 16px;margin:0 0 12px;background:#fff;box-shadow:0 1px 3px rgb(27 42 74 / .08)}
 .skdb-sd .sd-name{display:inline-block;color:#fff;font-weight:700;border-radius:6px;padding:4px 10px;font-size:15px}
 .skdb-sd dl{display:grid;grid-template-columns:8.5em 1fr;gap:6px 12px;margin:12px 0 8px;font-size:14.5px}
 .skdb-sd dt{color:#5a6172;font-weight:700}
 .skdb-sd dd{margin:0}
 .skdb-sd .sd-why{font-size:13.5px;color:#8a5a00;background:#fff7e6;border-radius:6px;padding:6px 10px;margin:6px 0 0}
-.skdb-sd .sd-ok{font-size:13.5px;color:#1f6b3a;margin:6px 0 0}
-.skdb-sd .sd-link{display:inline-block;margin-top:8px;padding:9px 16px;border-radius:6px;background:rgb(27 42 74);color:#fff !important;font-weight:700;font-size:14.5px;text-decoration:none}
+.skdb-sd .sd-ok{font-size:13.5px;color:#1f6b3a;background:#eaf6ee;border-radius:6px;padding:6px 10px;margin:6px 0 0}
+.skdb-sd .sd-link{display:inline-block;margin-top:10px;padding:10px 18px;border-radius:999px;background:#1b2a4a;color:#fff !important;font-weight:700;font-size:14.5px;text-decoration:none}
 .skdb-sd .sd-stamp{font-size:13.5px;color:#5a6172;margin:14px 0 0}
-@media (max-width:600px){.skdb-sd dl{grid-template-columns:1fr}.skdb-sd dt{margin-top:4px}}
+@media (max-width:600px){.skdb-sd dl{grid-template-columns:1fr}.skdb-sd dt{margin-top:4px}.skdb-sd .sd-title{font-size:19px}.skdb-sd .sd-head{padding:18px 16px 14px}.skdb-sd .sd-body{padding:14px 10px 16px}}
 </style>
+<div class="sd-head"><span class="sd-badge">かんたん診断</span><p class="sd-title">あなたの条件に合うオーダースーツ店</p><p class="sd-lead">4つの質問に答えると、オーダースーツ専門店11社の公式サイトの表記から、条件に当てはまる店を絞り込みます（<?php echo esc_html($date); ?>時点）。</p></div>
+<div class="sd-body">
 <form class="sd-form" onsubmit="return false">
 <fieldset><legend>スーツ1着の予算</legend><div class="sd-opts">
 <label><input type="radio" name="budget" value="30000">3万円まで</label>
@@ -835,6 +846,7 @@ class Suit_Kurabe_Db
 </div></fieldset>
 <button type="button" class="sd-btn">条件に合うオーダースーツ店を見る</button>
 </form>
+</div>
 <div class="sd-res" aria-live="polite"></div>
 <script type="application/json" class="sd-data"><?php echo $json; ?></script>
 <script>
@@ -875,7 +887,7 @@ function run(){
  res.appendChild(el('p','sd-h','条件に当てはまるオーダースーツ店（'+hit.length+'社）'));
  if(!hit.length) res.appendChild(el('p',null,'すべての条件に当てはまる店はありませんでした。予算や着る日の条件をゆるめると、候補が増えます。'));
  hit.forEach(function(x){res.appendChild(card(x[0],x[1],q));});
- if(chk.length){ res.appendChild(el('p','sd-h','公式サイトで確認が必要なオーダースーツ店（'+chk.length+'社）')); chk.forEach(function(x){res.appendChild(card(x[0],x[1],q));}); }
+ if(chk.length){ res.appendChild(el('p','sd-h sd-h2','公式サイトで確認が必要なオーダースーツ店（'+chk.length+'社）')); chk.forEach(function(x){res.appendChild(card(x[0],x[1],q));}); }
  var s=el('p','sd-stamp',root.getAttribute('data-date')+'時点の各社公式サイトの表記で判定しています（当てはまらなかった店：'+out+'社）。表示の順は順位ではなく、広告を掲載している店を先に、そのあとは決まった順で並べています。価格・納期・店舗は変わることがあるので、申し込む前に各社の公式サイトで確かめてください。');
  res.appendChild(s);
  var m=el('p','sd-stamp'); var l=el('a',null,'オーダースーツ専門店11社の価格・納期・採寸方法の比較'); l.href=D.compare_url||'/order-suit-hikaku/'; m.appendChild(document.createTextNode('全社を同じ表で見比べるときは、')); m.appendChild(l); m.appendChild(document.createTextNode('を見てください。')); res.appendChild(m);
