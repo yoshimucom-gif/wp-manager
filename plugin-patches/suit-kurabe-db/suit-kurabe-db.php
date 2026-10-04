@@ -2,7 +2,7 @@
 /**
  * Plugin Name: スーツくらべ 比較データ表示
  * Description: スーツ量販店の比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。店の定義（名前・表記・色）はデータ側の stores 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.4.2
+ * Version:     1.5.0
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: suit-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Suit_Kurabe_Db
 {
-    const VERSION  = '1.4.2';
+    const VERSION  = '1.5.0';
     const META     = 'kurabe_data';
     const OPT      = 'suit_kurabe_db_settings';
 
@@ -40,6 +40,7 @@ class Suit_Kurabe_Db
         add_action('diver_main_before', array(__CLASS__, 'archive_table'), 20);
         add_shortcode('kurabe_list', array(__CLASS__, 'list_shortcode'));
         add_shortcode('kurabe_stores', array(__CLASS__, 'stores_shortcode'));
+        add_shortcode('kurabe_shindan', array(__CLASS__, 'shindan_shortcode'));
         add_action('suit_kurabe_selfupdate', array(__CLASS__, 'selfupdate'));
         add_action('rest_api_init', array(__CLASS__, 'rest_selfupdate'));
     }
@@ -764,6 +765,128 @@ class Suit_Kurabe_Db
         }
         $h .= '</tbody></table></div></div>';
         return $h;
+    }
+
+    /* オーダースーツ診断（1.5.0〜。2026-10-04 吉村さん「オリジナルの診断ツール」「固定ページで」）
+       [kurabe_shindan] … 予算・着る日・採寸方法・都道府県・レディース/礼服の条件で、オーダースーツ店を絞り込む。
+       データは option suit_kurabe_shindan（kurabe/publish_shindan.py が毎月の公式データから作るJSON文字列）。
+       店を評価しない: 条件に当てはまるかを公式の表記で判定するだけで、順位は付けない。表記から判定できない店は「公式サイトで確認」に分ける。
+       並びは広告を掲載している店が先、そのあとはデータの並び（値の大小では並べない）。
+       本文に <script> を置くとWAFで弾かれるので、スクリプトはこのショートコードの出力に含める */
+    public static function shindan_shortcode($atts)
+    {
+        $raw = get_option('suit_kurabe_shindan', '');
+        $d = is_string($raw) ? json_decode($raw, true) : $raw;
+        if (!is_array($d) || empty($d['brands'])) {
+            return '';
+        }
+        $json = wp_json_encode($d, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP);
+        $date = isset($d['checked']) ? self::date_ja($d['checked']) : '';
+        ob_start();
+        ?>
+<div class="skdb-sd" data-date="<?php echo esc_attr($date); ?>">
+<style>
+.skdb-sd{--sd-c:var(--rd--c--secondary-rgb,27 42 74);margin:1.5em 0 2em}
+.skdb-sd fieldset{border:1px solid #e3e6ee;border-radius:10px;padding:14px 16px 10px;margin:0 0 14px;background:#fff}
+.skdb-sd legend{font-weight:700;padding:0 6px;font-size:16px}
+.skdb-sd .sd-opts{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 4px}
+.skdb-sd .sd-opts label{display:inline-flex;align-items:center;gap:6px;border:1px solid #cfd5e3;border-radius:999px;padding:7px 14px;cursor:pointer;font-size:15px;line-height:1.3;background:#fff}
+.skdb-sd .sd-opts input{accent-color:rgb(27 42 74);margin:0}
+.skdb-sd .sd-opts label:has(input:checked){border-color:rgb(27 42 74);background:rgb(27 42 74 / .07);font-weight:700}
+.skdb-sd select{font-size:15px;padding:6px 10px;border:1px solid #cfd5e3;border-radius:6px;max-width:100%}
+.skdb-sd .sd-note{font-size:13.5px;color:#5a6172;margin:4px 0 0}
+.skdb-sd .sd-btn{display:block;width:100%;max-width:420px;margin:6px auto 0;padding:13px 16px;border:0;border-radius:8px;background:rgb(27 42 74);color:#fff;font-size:16px;font-weight:700;cursor:pointer}
+.skdb-sd .sd-res{margin-top:22px}
+.skdb-sd .sd-h{font-size:18px;font-weight:700;margin:22px 0 10px;padding-left:10px;border-left:5px solid rgb(27 42 74)}
+.skdb-sd .sd-card{border:1px solid #e3e6ee;border-radius:10px;padding:14px 16px;margin:0 0 12px;background:#fff}
+.skdb-sd .sd-name{display:inline-block;color:#fff;font-weight:700;border-radius:6px;padding:4px 10px;font-size:15px}
+.skdb-sd dl{display:grid;grid-template-columns:8.5em 1fr;gap:6px 12px;margin:12px 0 8px;font-size:14.5px}
+.skdb-sd dt{color:#5a6172;font-weight:700}
+.skdb-sd dd{margin:0}
+.skdb-sd .sd-why{font-size:13.5px;color:#8a5a00;background:#fff7e6;border-radius:6px;padding:6px 10px;margin:6px 0 0}
+.skdb-sd .sd-ok{font-size:13.5px;color:#1f6b3a;margin:6px 0 0}
+.skdb-sd .sd-link{display:inline-block;margin-top:8px;padding:9px 16px;border-radius:6px;background:rgb(27 42 74);color:#fff !important;font-weight:700;font-size:14.5px;text-decoration:none}
+.skdb-sd .sd-stamp{font-size:13.5px;color:#5a6172;margin:14px 0 0}
+@media (max-width:600px){.skdb-sd dl{grid-template-columns:1fr}.skdb-sd dt{margin-top:4px}}
+</style>
+<form class="sd-form" onsubmit="return false">
+<fieldset><legend>スーツ1着の予算</legend><div class="sd-opts">
+<label><input type="radio" name="budget" value="30000">3万円まで</label>
+<label><input type="radio" name="budget" value="50000">5万円まで</label>
+<label><input type="radio" name="budget" value="100000">10万円まで</label>
+<label><input type="radio" name="budget" value="0" checked>決めていない</label>
+</div></fieldset>
+<fieldset><legend>着る日まで</legend><div class="sd-opts">
+<label><input type="radio" name="deadline" value="14">2週間以内</label>
+<label><input type="radio" name="deadline" value="31">1か月以内</label>
+<label><input type="radio" name="deadline" value="0" checked>1か月以上先・決まっていない</label>
+</div></fieldset>
+<fieldset><legend>採寸のしかた</legend><div class="sd-opts">
+<label><input type="radio" name="fit" value="store">お店で採寸したい</label>
+<label><input type="radio" name="fit" value="visit">自宅・職場に来てほしい</label>
+<label><input type="radio" name="fit" value="online">ネットで完結したい（初めてでも）</label>
+<label><input type="radio" name="fit" value="any" checked>こだわらない</label>
+</div>
+<div class="sd-pref" hidden><p class="sd-note">お店に行く都道府県</p><select name="pref"><option value="">選ばない</option></select></div>
+</fieldset>
+<fieldset><legend>あてはまるもの（いくつでも）</legend><div class="sd-opts">
+<label><input type="checkbox" name="ladies" value="1">レディースのスーツも作りたい</label>
+<label><input type="checkbox" name="formal" value="1">礼服（ブラックフォーマル）も作りたい</label>
+</div></fieldset>
+<button type="button" class="sd-btn">条件に合うオーダースーツ店を見る</button>
+</form>
+<div class="sd-res" aria-live="polite"></div>
+<script type="application/json" class="sd-data"><?php echo $json; ?></script>
+<script>
+(function(){
+var root=document.currentScript.parentNode, D=JSON.parse(root.querySelector('.sd-data').textContent), f=root.querySelector('.sd-form'), res=root.querySelector('.sd-res');
+var sel=f.querySelector('select[name=pref]');
+(D.prefs||[]).forEach(function(p){var o=document.createElement('option');o.value=p;o.textContent=p;sel.appendChild(o);});
+function val(n){var x=f.querySelector('input[name='+n+']:checked');return x?x.value:'';}
+function syncPref(){root.querySelector('.sd-pref').hidden=val('fit')!=='store';}
+f.addEventListener('change',syncPref);syncPref();
+function el(t,c,txt){var e=document.createElement(t);if(c)e.className=c;if(txt!=null)e.textContent=txt;return e;}
+function judge(b,q){
+ var ng=[],un=[],ok=[];
+ if(q.budget>0){ if(b.price_num==null) un.push('税込の最低価格が公式サイトに書かれていないため、予算と比べられません'); else if(b.price_num<=q.budget) ok.push('最低価格の表記が予算内'); else ng.push('budget'); }
+ if(q.deadline>0){ if(b.days_normal!=null&&b.days_normal<=q.deadline) ok.push('通常の納期の表記で間に合う'); else if(b.days_fast!=null&&b.days_fast<=q.deadline) ok.push('お急ぎの仕立て（追加料金・対象限定の場合あり）を使えば間に合う'); else if(b.days_normal==null&&b.days_fast==null) un.push('納期の表記から日数を読み取れないため、着る日に間に合うかは公式サイトで確認してください'); else ng.push('deadline'); }
+ if(q.fit!=='any'){ var v=b.fit?b.fit[q.fit]:null; if(v===true) ok.push({store:'お店で採寸できる',visit:'訪問・出張の採寸がある',online:'初めてでもネットで注文できる'}[q.fit]); else if(v===false) ng.push('fit'); else un.push('採寸の方法が公式サイトの表記から判定できません'); }
+ if(q.fit==='store'&&q.pref){ var n=(b.prefs||{})[q.pref]||0; if(n>0) ok.push(q.pref+'に'+n+'店舗'); else if(!b.store_data) un.push('店舗一覧を取得できていないため、'+q.pref+'に店舗があるかは公式サイトで確認してください'); else ng.push('pref'); }
+ if(q.ladies){ if(b.ladies_ok===true) ok.push('レディースの扱いあり'); else if(b.ladies_ok===false) ng.push('ladies'); else un.push('レディースの扱いが公式サイトの表記から判定できません'); }
+ if(q.formal){ if(b.formal_ok===true) ok.push('礼服の生地を公式サイトに掲載'); else un.push('礼服の生地が公式サイトの生地一覧に見当たらないため、仕立てられるかは店に確認してください'); }
+ return {ng:ng,un:un,ok:ok};
+}
+function card(b,r,q){
+ var c=el('div','sd-card'), nm=el('span','sd-name',b.name); nm.style.background=b.color||'#1b2a4a'; c.appendChild(nm);
+ var dl=el('dl'); function row(k,v){dl.appendChild(el('dt',null,k));dl.appendChild(el('dd',null,v));}
+ row('最低価格（公式の表記）',b.price); row('納期',b.delivery); row('お急ぎの仕立て',b.express); row('仕立て方式',b.method); row('採寸・注文の方法',b.fitting); row('お直し・保証',b.repair);
+ if(q.fit==='store'&&q.pref&&b.prefs&&b.prefs[q.pref]) row(q.pref+'の店舗',b.prefs[q.pref]+'店舗'); else if(b.stores) row('店舗数',b.stores);
+ c.appendChild(dl);
+ if(r.ok.length) c.appendChild(el('p','sd-ok','当てはまる条件：'+r.ok.join('／')));
+ r.un.forEach(function(t){c.appendChild(el('p','sd-why',t));});
+ var a=el('a','sd-link',b.name+'の公式サイトを見る'); a.href=b.aff||b.url; a.target='_blank'; a.rel=b.aff?'nofollow sponsored noopener':'nofollow noopener'; c.appendChild(a);
+ return c;
+}
+function run(){
+ var q={budget:+val('budget')||0,deadline:+val('deadline')||0,fit:val('fit')||'any',pref:sel.value,ladies:!!f.querySelector('input[name=ladies]:checked'),formal:!!f.querySelector('input[name=formal]:checked')};
+ var hit=[],chk=[],out=0;
+ D.brands.forEach(function(b){var r=judge(b,q); if(r.ng.length) out++; else if(r.un.length) chk.push([b,r]); else hit.push([b,r]);});
+ res.innerHTML='';
+ res.appendChild(el('p','sd-h','条件に当てはまるオーダースーツ店（'+hit.length+'社）'));
+ if(!hit.length) res.appendChild(el('p',null,'すべての条件に当てはまる店はありませんでした。予算や着る日の条件をゆるめると、候補が増えます。'));
+ hit.forEach(function(x){res.appendChild(card(x[0],x[1],q));});
+ if(chk.length){ res.appendChild(el('p','sd-h','公式サイトで確認が必要なオーダースーツ店（'+chk.length+'社）')); chk.forEach(function(x){res.appendChild(card(x[0],x[1],q));}); }
+ var s=el('p','sd-stamp',root.getAttribute('data-date')+'時点の各社公式サイトの表記で判定しています（当てはまらなかった店：'+out+'社）。表示の順は順位ではなく、広告を掲載している店を先に、そのあとは決まった順で並べています。価格・納期・店舗は変わることがあるので、申し込む前に各社の公式サイトで確かめてください。');
+ res.appendChild(s);
+ var m=el('p','sd-stamp'); var l=el('a',null,'オーダースーツ専門店11社の価格・納期・採寸方法の比較'); l.href=D.compare_url||'/order-suit-hikaku/'; m.appendChild(document.createTextNode('全社を同じ表で見比べるときは、')); m.appendChild(l); m.appendChild(document.createTextNode('を見てください。')); res.appendChild(m);
+ res.scrollIntoView({behavior:'smooth',block:'start'});
+}
+root.querySelector('.sd-btn').addEventListener('click',run);
+})();
+</script>
+</div>
+        <?php
+        return ob_get_clean();
     }
 
     public static function list_shortcode($atts)
