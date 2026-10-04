@@ -2,7 +2,7 @@
 /**
  * Plugin Name: スーツくらべ 比較データ表示
  * Description: スーツ量販店の比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。店の定義（名前・表記・色）はデータ側の stores 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.5.1
+ * Version:     1.5.2
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: suit-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Suit_Kurabe_Db
 {
-    const VERSION  = '1.5.1';
+    const VERSION  = '1.5.2';
     const META     = 'kurabe_data';
     const OPT      = 'suit_kurabe_db_settings';
 
@@ -814,7 +814,7 @@ class Suit_Kurabe_Db
 .skdb-sd dd{margin:0}
 .skdb-sd .sd-why{font-size:13.5px;color:#8a5a00;background:#fff7e6;border-radius:6px;padding:6px 10px;margin:6px 0 0}
 .skdb-sd .sd-ok{font-size:13.5px;color:#1f6b3a;background:#eaf6ee;border-radius:6px;padding:6px 10px;margin:6px 0 0}
-.skdb-sd .sd-link{display:inline-block;margin-top:10px;padding:10px 18px;border-radius:999px;background:#1b2a4a;color:#fff !important;font-weight:700;font-size:14.5px;text-decoration:none}
+.skdb-sd .sd-link{display:block;max-width:440px;margin:12px auto 0;padding:14px 18px;border-radius:999px;background:linear-gradient(180deg,#ff9a1f,#f07800);color:#fff !important;font-weight:700;font-size:16px;text-align:center;text-decoration:none;box-shadow:0 3px 0 #b85a00}.skdb-sd .sd-link::after{content:"\203A";margin-left:8px;font-size:1.2em}.skdb-sd .sd-link:active{transform:translateY(2px);box-shadow:0 1px 0 #b85a00}.skdb-sd .sd-promo{text-align:center;margin:12px 0 0;font-size:14.5px;line-height:1.6}.skdb-sd .sd-promo img{max-width:100%;height:auto;vertical-align:middle}
 .skdb-sd .sd-stamp{font-size:13.5px;color:#5a6172;margin:14px 0 0}
 @media (max-width:600px){.skdb-sd dl{grid-template-columns:1fr}.skdb-sd dt{margin-top:4px}.skdb-sd .sd-title{font-size:19px}.skdb-sd .sd-head{padding:18px 16px 14px}.skdb-sd .sd-body{padding:14px 10px 16px}}
 </style>
@@ -877,6 +877,11 @@ function card(b,r,q){
  if(r.ok.length) c.appendChild(el('p','sd-ok','当てはまる条件：'+r.ok.join('／')));
  r.un.forEach(function(t){c.appendChild(el('p','sd-why',t));});
  var a=el('a','sd-link',b.name+'の公式サイトを見る'); a.href=b.aff||b.url; a.target='_blank'; a.rel=b.aff?'nofollow sponsored noopener':'nofollow noopener'; c.appendChild(a);
+ if(b.promo){ var pr=el('p','sd-promo');
+  if(b.promo.banner_href&&b.promo.banner_img){ var ba=el('a'); ba.href=b.promo.banner_href; ba.target='_blank'; ba.rel='nofollow sponsored noopener'; var im=el('img'); im.src=b.promo.banner_img; im.alt=b.name; im.loading='lazy'; ba.appendChild(im); pr.appendChild(ba); pr.appendChild(el('br')); }
+  if(b.promo.text_href&&b.promo.text){ var ta=el('a',null,b.promo.text); ta.href=b.promo.text_href; ta.target='_blank'; ta.rel='nofollow sponsored noopener'; pr.appendChild(ta); }
+  if(b.promo.pixel){ var px=el('img'); px.src=b.promo.pixel; px.width=1; px.height=1; px.alt=''; px.style.cssText='position:absolute;width:1px;height:1px'; pr.appendChild(px); }
+  c.appendChild(pr); }
  return c;
 }
 function run(){
