@@ -2,7 +2,7 @@
 /**
  * Plugin Name: スーツくらべ 比較データ表示
  * Description: スーツ量販店の比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。店の定義（名前・表記・色）はデータ側の stores 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.5.2
+ * Version:     1.5.3
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: suit-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Suit_Kurabe_Db
 {
-    const VERSION  = '1.5.2';
+    const VERSION  = '1.5.3';
     const META     = 'kurabe_data';
     const OPT      = 'suit_kurabe_db_settings';
 
@@ -887,12 +887,18 @@ function card(b,r,q){
 function run(){
  var q={budget:+val('budget')||0,deadline:+val('deadline')||0,fit:val('fit')||'any',pref:sel.value,ladies:!!f.querySelector('input[name=ladies]:checked'),formal:!!f.querySelector('input[name=formal]:checked')};
  var hit=[],chk=[],out=0;
- D.brands.forEach(function(b){var r=judge(b,q); if(r.ng.length) out++; else if(r.un.length) chk.push([b,r]); else hit.push([b,r]);});
+ var alt=[];
+ D.brands.forEach(function(b){var r=judge(b,q);
+  // 都道府県に店舗が無いことだけで外れた店のうち、訪問採寸かネット注文ができる店は「近くに店舗がない場合」に出す（2026-10-05 吉村さん「お店で採寸でSADAがでてこない」）
+  if(r.ng.length===1&&r.ng[0]==='pref'&&b.fit&&(b.fit.visit||b.fit.online)){ r.alt=[b.fit.visit?'訪問・出張の採寸':'',b.fit.online?'初めての注文からのネット注文':''].filter(Boolean); alt.push([b,r]); return; }
+  if(r.ng.length) out++; else if(r.un.length) chk.push([b,r]); else hit.push([b,r]);});
  res.innerHTML='';
  res.appendChild(el('p','sd-h','条件に当てはまるオーダースーツ店（'+hit.length+'社）'));
  if(!hit.length) res.appendChild(el('p',null,'すべての条件に当てはまる店はありませんでした。予算や着る日の条件をゆるめると、候補が増えます。'));
  hit.forEach(function(x){res.appendChild(card(x[0],x[1],q));});
  if(chk.length){ res.appendChild(el('p','sd-h sd-h2','公式サイトで確認が必要なオーダースーツ店（'+chk.length+'社）')); chk.forEach(function(x){res.appendChild(card(x[0],x[1],q));}); }
+ if(alt.length){ res.appendChild(el('p','sd-h sd-h2',q.pref+'に店舗はないが、訪問採寸かネットで注文できるオーダースーツ店（'+alt.length+'社）'));
+  alt.forEach(function(x){ x[1].un=[q.pref+'に店舗はありませんが、'+x[1].alt.join('と')+'に対応しています（公式サイトの表記）']; res.appendChild(card(x[0],x[1],q)); }); }
  var s=el('p','sd-stamp',root.getAttribute('data-date')+'時点の各社公式サイトの表記で判定しています（当てはまらなかった店：'+out+'社）。表示の順は順位ではなく、広告を掲載している店を先に、そのあとは決まった順で並べています。価格・納期・店舗は変わることがあるので、申し込む前に各社の公式サイトで確かめてください。');
  res.appendChild(s);
  var m=el('p','sd-stamp'); var l=el('a',null,'オーダースーツ専門店11社の価格・納期・採寸方法の比較'); l.href=D.compare_url||'/order-suit-hikaku/'; m.appendChild(document.createTextNode('全社を同じ表で見比べるときは、')); m.appendChild(l); m.appendChild(document.createTextNode('を見てください。')); res.appendChild(m);
