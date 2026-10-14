@@ -6418,6 +6418,7 @@ def favicon():
 # 配布プラグイン（WordPress 連携プラグインの zip）
 PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugin-downloads')
 PLUGIN_DOWNLOADS = {
+    'thesale-schedule': {'file': 'thesale-schedule-1.0.0.zip', 'name': 'THE SALE セール日程表示', 'version': '1.0.0'},
     'mikata-seminar-feed': {'file': 'mikata-seminar-feed-1.0.0.zip', 'name': 'ミカタセミナー新着', 'version': '1.0.0'},
     'kurabe-db': {'file': 'kurabe-db-1.7.0.zip', 'name': '100均くらべ 比較データ表示', 'version': '1.7.0'},
     'suit-kurabe-db': {'file': 'suit-kurabe-db-1.5.6.zip', 'name': 'スーツくらべ 比較データ表示', 'version': '1.5.6'},
@@ -6515,6 +6516,8 @@ def download_plugin(plugin_key):
 # WP の plugins_api / pre_set_site_transient_update_plugins フィルタ経由で
 # 各プラグインがここを叩き、新バージョンを検知して自動更新する。
 PLUGIN_UPDATE_META = {
+    'thesale-schedule': {'plugin_basename': 'thesale-schedule/thesale-schedule.php',
+              'tested': '6.7', 'requires': '6.0', 'requires_php': '7.4', 'author': 'Keys'},
     'kurabe-db': {'plugin_basename': 'kurabe-db/kurabe-db.php',
               'tested': '6.7', 'requires': '6.0', 'requires_php': '7.4', 'author': 'Keys'},
     'suit-kurabe-db': {'plugin_basename': 'suit-kurabe-db/suit-kurabe-db.php',
