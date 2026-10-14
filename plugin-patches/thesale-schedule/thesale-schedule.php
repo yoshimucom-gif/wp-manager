@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.0.1
+ * Version:     1.1.0
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -187,6 +187,72 @@ function thesale_sched_upcoming( $atts ) {
 		. '<ul class="wp-block-list ts-cards">' . implode( '', $out ) . '</ul>';
 }
 add_shortcode( 'thesale_upcoming', 'thesale_sched_upcoming' );
+
+/**
+ * [thesale_status slug="udemy-sale"] 記事の冒頭に出す「いまの状況」の箱（1.1.0〜）
+ * セール日程データのうち、url がこの記事の場合か related にこの記事のスラッグを含むものを見て、
+ *   開催中 → 赤「開催中・〜◯日」＋公式ボタン ／ 次回が決まっている → 緑「次回は◯月◯日から」
+ *   どちらも無い → 灰色「次回の日程は未発表（◯年◯月◯日時点）」
+ * 本文の「◯年◯月◯日時点」が古くなっても、この箱は毎日その日の状況になる。
+ * 固定ページ・投稿の<style>は表示時に落ちる環境があるので、見た目は style 属性で付ける。
+ */
+function thesale_sched_status( $atts ) {
+	$a    = shortcode_atts( array( 'slug' => '' ), $atts );
+	$slug = trim( $a['slug'], '/' );
+	if ( '' === $slug ) {
+		return '';
+	}
+	$now  = thesale_sched_now();
+	$live = null;
+	$next = null;
+	foreach ( thesale_sched_events() as $e ) {
+		$own     = trim( (string) wp_parse_url( isset( $e['url'] ) ? $e['url'] : '', PHP_URL_PATH ), '/' );
+		$related = isset( $e['related'] ) && is_array( $e['related'] ) ? $e['related'] : array();
+		if ( $own !== $slug && ! in_array( $slug, $related, true ) ) {
+			continue;
+		}
+		$s = thesale_sched_dt( isset( $e['start'] ) ? $e['start'] : '' );
+		$t = thesale_sched_dt( isset( $e['end'] ) ? $e['end'] : '' );
+		if ( $s && $t && $s <= $now && $now < $t ) {
+			$live = array( $e, $s, $t );
+		} elseif ( $s && $s > $now && ( ! $next || $s < $next[1] ) ) {
+			$next = array( $e, $s, $t );
+		}
+	}
+	$box = 'display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin:0 0 1.6em;padding:14px 16px;border-radius:8px;';
+	$tag = 'display:inline-flex;align-items:center;justify-content:center;min-width:64px;height:30px;padding:0 10px;border-radius:4px;font-weight:700;font-size:14px;color:#fff;';
+	$btn = function ( $e ) {
+		if ( empty( $e['official']['url'] ) ) {
+			return '';
+		}
+		$am = false !== strpos( $e['official']['url'], 'amazon' );
+		return sprintf(
+			'<a href="%s" target="_blank" rel="nofollow sponsored noopener" style="margin-left:auto;display:inline-block;padding:7px 16px;border-radius:4px;font-weight:700;font-size:14px;color:#fff;text-decoration:none;background:%s">%s</a>',
+			esc_url( $e['official']['url'] ),
+			$am ? '#D16800' : '#BF0000',
+			esc_html( ! empty( $e['official']['label'] ) ? $e['official']['label'] : ( $am ? 'Amazon公式' : '楽天公式' ) )
+		);
+	};
+	if ( $live ) {
+		list( $e, $s, $t ) = $live;
+		return sprintf(
+			'<div class="ts-status ts-status-live" style="%sbackground:#FDECEE;border:1px solid #F3B7BF"><span style="%sbackground:#D7263D">開催中</span><span style="font-weight:700">%s：%s</span>%s</div>',
+			$box, $tag, esc_html( $e['name'] ), esc_html( thesale_sched_period( $s, $t ) ), $btn( $e )
+		);
+	}
+	if ( $next ) {
+		list( $e, $s, $t ) = $next;
+		return sprintf(
+			'<div class="ts-status ts-status-next" style="%sbackground:#EAF5EE;border:1px solid #B5DCC3"><span style="%sbackground:#1E6B45">次回決定</span><span style="font-weight:700">%s：%s</span>%s</div>',
+			$box, $tag, esc_html( $e['name'] ), esc_html( thesale_sched_period( $s, $t ) ), $btn( $e )
+		);
+	}
+	return sprintf(
+		'<div class="ts-status ts-status-tbd" style="%sbackground:#F3F4F6;border:1px solid #DADDE3"><span style="%sbackground:#5B6274">未発表</span><span>%s時点で、次回の日程はまだ発表されていません。発表されしだい、ここに表示します。</span></div>',
+		$box, $tag, esc_html( thesale_sched_asof() )
+	);
+}
+add_shortcode( 'thesale_status', 'thesale_sched_status' );
 
 /** [thesale_asof] 当日の日付（「2026年10月14日」） */
 add_shortcode( 'thesale_asof', function () {
