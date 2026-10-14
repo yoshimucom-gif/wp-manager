@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Re:Diver ヘルパー
  * Description: 通常のREST APIでは触れないWordPress/テーマの設定を、スクリプトから読み書きできるようにする構築補助プラグイン。テーマ側の不具合の回避（外部リンクアイコンの豆腐）も含む。カテゴリー画像などのタームメタ、記事幅などの投稿メタ、カスタマイザー（theme_mod / オプション）に対応。キー名を発見する調査用エンドポイント付き。全て管理者権限必須。
- * Version: 1.2.1
+ * Version: 1.3.0
  * Author: Keys
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -12,7 +12,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('RDH_VERSION', '1.2.1');
+define('RDH_VERSION', '1.3.0');
 
 // 自動更新通知（GitHub 直配信のメタJSONを定期チェック）
 require_once __DIR__ . '/includes/plugin-updater.php';
@@ -29,6 +29,7 @@ require_once __DIR__ . '/includes/rest-postmeta.php';
 require_once __DIR__ . '/includes/rest-customizer.php';
 require_once __DIR__ . '/includes/rest-diver-keys.php';
 require_once __DIR__ . '/includes/fix-extlink-icon.php';
+require_once __DIR__ . '/includes/avatar.php';
 
 /**
  * 使えるエンドポイントの一覧を返す（迷子防止）
@@ -60,6 +61,7 @@ add_action('rest_api_init', function () {
                     '退避の一覧'                       => "GET  {$base}/backups",
                     '退避1件の中身（戻る値の確認）'     => "GET  {$base}/backups?id=<backup_id>",
                     '退避から復元'                     => "POST {$base}/backups  {id}",
+                    '著者アバターの差し替え'           => "POST {$base}/option/rdh_avatar_map  {\"value\":{\"<user_id>\":<attachment_id>}}",
                 ],
                 'params' => [
                     'dry_run'     => '書かずに before と would_be だけ返す。一括更新の前には必ず通す。',
@@ -69,6 +71,7 @@ add_action('rest_api_init', function () {
                 ],
                 'fixes' => [
                     '外部リンクアイコンの豆腐' => 'テーマのCSSが指定する記号が、読み込み済みフォントのサブセットに入っていないため□になる。同じセレクタに実文字の矢印を上書きして回避する。無効化するフィルタ名は rdh_extlink_icon_fix。',
+                    'アバターがGravatarになる' => 'option rdh_avatar_map に「ユーザーID: 添付ファイルID」を入れると、サイト内のアバターをメディアライブラリの画像に差し替える（1.3.0）。Gravatarへの登録は不要。無効化するフィルタ名は rdh_avatar_override。',
                 ],
                 'notes' => [
                     '配色・見出しの色・メインビジュアル・記事幅などのキー名が分からないときは GET /diver-keys を見る。現在値と書き方が一緒に返る。',
