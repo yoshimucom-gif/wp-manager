@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.1.0
+ * Version:     1.1.1
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -170,7 +170,7 @@ function thesale_sched_upcoming( $atts ) {
 		$small = ctype_digit( (string) $day ) ? '' : ' ts-leaf-s';
 		$note  = ! empty( $e['note'] ) ? '<span class="ts-cn">' . esc_html( $e['note'] ) . '</span>' : '';
 		$out[] = sprintf(
-			'<li><span class="ts-leaf"><b style="background:#1F2A44;color:#FFFFFF">%s</b><span class="ts-leaf-d%s">%s</span></span>'
+			'<li><span class="ts-leaf"><b style="background:#14213D;color:#FFFFFF">%s</b><span class="ts-leaf-d%s">%s</span></span>'
 			. '<span class="ts-cb"><span class="%s">%s</span><a class="ts-ev" href="%s">%s</a>%s</span>%s</li>',
 			esc_html( $month ),
 			esc_attr( $small ),
@@ -236,7 +236,7 @@ function thesale_sched_status( $atts ) {
 	if ( $live ) {
 		list( $e, $s, $t ) = $live;
 		return sprintf(
-			'<div class="ts-status ts-status-live" style="%sbackground:#FDECEE;border:1px solid #F3B7BF"><span style="%sbackground:#D7263D">開催中</span><span style="font-weight:700">%s：%s</span>%s</div>',
+			'<div class="ts-status ts-status-live" style="%sbackground:#FFF6D6;border:1px solid #FFD966"><span style="%sbackground:#FFC20E;color:#14213D">開催中</span><span style="font-weight:700">%s：%s</span>%s</div>',
 			$box, $tag, esc_html( $e['name'] ), esc_html( thesale_sched_period( $s, $t ) ), $btn( $e )
 		);
 	}
