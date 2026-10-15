@@ -6420,9 +6420,9 @@ PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugin-do
 PLUGIN_DOWNLOADS = {
     'thesale-schedule': {'file': 'thesale-schedule-1.1.1.zip', 'name': 'THE SALE セール日程表示', 'version': '1.1.1'},
     'mikata-seminar-feed': {'file': 'mikata-seminar-feed-1.0.0.zip', 'name': 'ミカタセミナー新着', 'version': '1.0.0'},
-    'kurabe-db': {'file': 'kurabe-db-1.7.0.zip', 'name': '100均くらべ 比較データ表示', 'version': '1.7.0'},
+    'kurabe-db': {'file': 'kurabe-db-1.7.1.zip', 'name': '100均くらべ 比較データ表示', 'version': '1.7.1'},
     'suit-kurabe-db': {'file': 'suit-kurabe-db-1.5.6.zip', 'name': 'スーツくらべ 比較データ表示', 'version': '1.5.6'},
-    'catalog-kurabe-db': {'file': 'catalog-kurabe-db-1.2.26.zip', 'name': 'カタログギフトくらべ 比較データ表示', 'version': '1.2.26'},
+    'catalog-kurabe-db': {'file': 'catalog-kurabe-db-1.2.27.zip', 'name': 'カタログギフトくらべ 比較データ表示', 'version': '1.2.27'},
     'kyutoki-shindan': {
         'file': 'kyutoki-shindan-1.0.2.zip',
         'name': '給湯器エラーコード診断',

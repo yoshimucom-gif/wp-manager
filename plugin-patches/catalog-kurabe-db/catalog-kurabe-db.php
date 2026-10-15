@@ -2,7 +2,7 @@
 /**
  * Plugin Name: カタログギフトくらべ 比較データ表示
  * Description: カタログギフトの比較データ（各社の公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・通販リンクを表示します。発行会社・ブランドの定義（名前・表記・色）と絞り込みの軸はデータ側の stores / filters 配列で持ち、プラグインには店名をハードコードしません。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.2.26
+ * Version:     1.2.27
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: catalog-kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Catalog_Kurabe_Db
 {
-    const VERSION  = '1.2.26';
+    const VERSION  = '1.2.27';
     const META     = 'kurabe_data';
     const OPT      = 'catalog_kurabe_db_settings';
 
@@ -92,10 +92,24 @@ class Catalog_Kurabe_Db
             'callback'            => function () {
                 $before = self::VERSION;
                 delete_transient('catalog_kurabe_db_updater_' . md5(plugin_basename(__FILE__)));
+                $active_before = (array) get_option('active_plugins', array());
                 delete_site_transient('update_plugins');
                 wp_update_plugins();
                 if (function_exists('wp_maybe_auto_update')) {
                     wp_maybe_auto_update();
+                }
+                /* 自動更新はこのプラグイン以外（Re:Diverヘルパー等）も更新し、更新中に無効にしたまま戻さないことがある
+                   （2026-10-15 ヘルパー 1.4.0 で100均・カタログとも無効のまま残った）。更新前に有効だったものを有効の一覧へ戻す */
+                $restored = array();
+                $now      = (array) get_option('active_plugins', array());
+                foreach ($active_before as $p) {
+                    if (!in_array($p, $now, true) && file_exists(WP_PLUGIN_DIR . '/' . $p)) {
+                        $now[]      = $p;
+                        $restored[] = $p;
+                    }
+                }
+                if ($restored) {
+                    update_option('active_plugins', array_values(array_unique($now)));
                 }
                 // 更新の途中でWPはプラグインを無効にし、自分自身を更新したリクエストでは有効に戻らないので戻す
                 $base   = plugin_basename(__FILE__);
@@ -105,7 +119,7 @@ class Catalog_Kurabe_Db
                     $active[] = $base;
                     update_option('active_plugins', array_values(array_unique($active)));
                 }
-                return array('ok' => true, 'version_before' => $before, 'reactivated' => !$was);
+                return array('ok' => true, 'version_before' => $before, 'reactivated' => !$was, 'restored' => $restored);
             },
         ));
     }
