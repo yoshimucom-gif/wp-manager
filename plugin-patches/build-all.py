@@ -44,7 +44,7 @@ SPECS = [
     (os.path.join(ROOT, 'rediver-helper'),
      'rediver-helper', 'rediver-helper-1.4.1.zip'),
     (os.path.join(ROOT, 'affiros-sale-hub'),
-     'affiros-sale-hub', 'affiros-sale-hub-1.4.0.zip'),
+     'affiros-sale-hub', 'affiros-sale-hub-1.5.0.zip'),
 ]
 
 

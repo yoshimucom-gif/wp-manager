@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros セールハブ
  * Description: Amazon・楽天のセール情報を一元管理して全メディアサイトへ配信する。ke-ys.co.jp に設置する配信元プラグイン。各サイトの affiros-auto-inserter が1日1回ここのJSONを取得し、開催中のセールをカードボタン上のマイクロコピーとして表示する。
- * Version: 1.4.0
+ * Version: 1.5.0
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-sale-hub
@@ -10,12 +10,17 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('AFFIROS_SH_VERSION',    '1.4.0');
+define('AFFIROS_SH_VERSION',    '1.5.0');
 define('AFFIROS_SH_OPTION_KEY',  'affiros_sale_hub_sales');
 define('AFFIROS_SH_TOKEN_KEY',   'affiros_sale_hub_token');
 define('AFFIROS_SH_HISTORY_KEY', 'affiros_sale_hub_history');
 define('AFFIROS_SH_RECUR_KEY',   'affiros_sale_hub_recur');
 define('AFFIROS_SH_COLORS_KEY',  'affiros_sale_hub_colors');
+// 自動巡回エージェントの成果物 (GitHubリレー)。クラウド実行環境から ke-ys へ直接
+// POSTできない (egress遮断) ため、エージェントはリポジトリにJSONをコミットし、
+// ハブが1時間ごとに取りに行く
+define('AFFIROS_SH_AUTO_JSON_URL', 'https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-host/api/sales-auto.json');
+define('AFFIROS_SH_PULL_GEN_KEY',  'affiros_sale_hub_last_pull_gen');
 
 /**
  * 自動連携用トークン。初回アクセス時にランダム生成して固定。
@@ -78,7 +83,7 @@ function affiros_sh_recur_settings() {
     $r = get_option(AFFIROS_SH_RECUR_KEY, []);
     if (!is_array($r)) $r = [];
     $r = array_merge([
-        'enabled' => false,
+        'enabled' => true,  // v1.5.0: 毎月決まっている定期キャンペーンなので既定ON
         'label'   => '5と0のつく日ポイントアップ',
         'anim'    => 'blink',
     ], $r);
@@ -270,9 +275,16 @@ function affiros_sh_ajax_push() {
         wp_send_json(['ok' => false, 'error' => 'payload must be JSON'], 400);
     }
     $rows = (isset($data['sales']) && is_array($data['sales'])) ? $data['sales'] : $data;
+    $r = affiros_sh_apply_auto($rows);
+    wp_send_json(['ok' => true, 'auto' => $r['auto'], 'manual' => $r['manual']]);
+}
 
+/**
+ * replace-auto の実体 (push と GitHubリレーpull の共通処理)
+ */
+function affiros_sh_apply_auto($rows) {
     $autos = [];
-    foreach (array_slice($rows, 0, 20) as $r) {
+    foreach (array_slice((array)$rows, 0, 20) as $r) {
         if (!is_array($r)) continue;
         $row = affiros_sh_validate_row(
             $r['mall'] ?? '', $r['label'] ?? '', $r['start'] ?? '', $r['end'] ?? '', 'auto',
@@ -298,7 +310,51 @@ function affiros_sh_ajax_push() {
     $sales = array_merge($manual, $autos);
     usort($sales, function ($a, $b) { return strcmp($a['start'], $b['start']); });
     update_option(AFFIROS_SH_OPTION_KEY, $sales, false);
-    wp_send_json(['ok' => true, 'auto' => count($autos), 'manual' => count($manual)]);
+    return ['auto' => count($autos), 'manual' => count($manual)];
+}
+
+/**
+ * GitHubリレーの取り込み (1時間ごと)。
+ * 自動巡回エージェントがリポジトリにコミットした sales-auto.json を取得して
+ * replace-auto を適用する。generated が前回と同じなら何もしない (冪等・
+ * 手動のトークンpushをその日のうちに上書きしないためのガード)。
+ * 取得失敗・JSON不正は何もしない (既存データは期間ゲートで安全に減衰する)。
+ */
+function affiros_sh_pull_auto() {
+    $res = wp_remote_get(AFFIROS_SH_AUTO_JSON_URL, ['timeout' => 15, 'headers' => ['Accept' => 'application/json']]);
+    if (is_wp_error($res) || (int)wp_remote_retrieve_response_code($res) !== 200) return false;
+    $data = json_decode(wp_remote_retrieve_body($res), true);
+    if (!is_array($data) || !isset($data['sales']) || !is_array($data['sales'])) return false;
+    $gen = (string)($data['generated'] ?? '');
+    if ($gen !== '' && $gen === (string)get_option(AFFIROS_SH_PULL_GEN_KEY, '')) return 0;
+    $r = affiros_sh_apply_auto($data['sales']);
+    if ($gen !== '') update_option(AFFIROS_SH_PULL_GEN_KEY, $gen, false);
+    return $r['auto'];
+}
+add_action('affiros_sh_hourly_pull', 'affiros_sh_pull_auto');
+add_action('init', function () {
+    if (!wp_next_scheduled('affiros_sh_hourly_pull')) {
+        wp_schedule_event(time() + 300, 'hourly', 'affiros_sh_hourly_pull');
+    }
+});
+register_deactivation_hook(__FILE__, function () {
+    wp_clear_scheduled_hook('affiros_sh_hourly_pull');
+});
+
+// 取り込みを外から即時に蹴る窓口 (トークン認証・検証/即時反映の運用用)
+add_action('wp_ajax_affiros_sales_pull_now',        'affiros_sh_ajax_pull_now');
+add_action('wp_ajax_nopriv_affiros_sales_pull_now', 'affiros_sh_ajax_pull_now');
+function affiros_sh_ajax_pull_now() {
+    if (strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? '')) !== 'POST') {
+        wp_send_json(['ok' => false, 'error' => 'POST only'], 405);
+    }
+    $token = (string)($_POST['token'] ?? '');
+    if ($token === '' || !hash_equals(affiros_sh_get_token(), $token)) {
+        wp_send_json(['ok' => false, 'error' => 'bad token'], 403);
+    }
+    delete_option(AFFIROS_SH_PULL_GEN_KEY); // 同一generatedでも強制再適用
+    $n = affiros_sh_pull_auto();
+    wp_send_json(['ok' => $n !== false, 'auto' => $n === false ? null : $n]);
 }
 
 /**

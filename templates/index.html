@@ -1978,6 +1978,17 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.59 / sale-hub v1.5.0 (2026-10-20) — 🗓 つく日を既定ON・配達をGitHubリレーに</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>背景</strong>: 10/20 (5と0のつく日) に何も表示されず指摘。原因は2つ——①定期キャンペーンが既定OFFのまま ②毎朝の自動巡回のpushがクラウド実行環境のegress遮断で9月から失敗し続けていた (調査は成功・配達だけ失敗)。</li>
+              <li><strong>①つく日は既定ON</strong>: 設定保存履歴のないサイトは更新だけで毎月自動表示になる。</li>
+              <li><strong>②GitHubリレー</strong>: 巡回エージェントは <code>plugin-host/api/sales-auto.json</code> をリポジトリにコミット、ハブが<strong>1時間ごとに取得して replace-auto を適用</strong>。generated が同じ日はno-op (手動トークンpushをその日のうちに上書きしない)。取得失敗・JSON不正は既存温存。<code>action=affiros_sales_pull_now</code> (トークン認証) で即時取り込みも可。</li>
+              <li><strong>即時対応</strong>: 10/20のつく日行を手動push→全26サイトに即時反映→good-diy実ページで表示実測済み。sales-auto.jsonも同内容でシード。</li>
+              <li><strong>バージョン同期</strong>: sale-hub 1.4.0 → 1.5.0 / <code>APP_VERSION</code> 1.9.58 → 1.9.59。スタブテスト12項目PASS。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.58 / auto-inserter v0.19.2 (2026-09-29) — 挿入結果の表示をわかりやすく</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>指摘</strong>: ショートコード挿入後の結果が「ショートコード描画 (商品データ更新)」で伝わらない。メタボックスのキーワード/最終挿入も再読み込みまで古いままで「何も変わらない」ように見える。</li>

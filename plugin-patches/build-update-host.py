@@ -66,9 +66,11 @@ for node in tree.body:
 DOWNLOADS = found["PLUGIN_DOWNLOADS"]
 META = found["PLUGIN_UPDATE_META"]
 
+# 作り直すのは plugin-update/ だけ。plugin-host/ 丸ごと消すと、セール巡回エージェントが
+# コミットする api/sales-auto.json (sale-hub v1.5.0 のGitHubリレー置き場) まで消える
 api_dir = os.path.join(OUT, "api", "plugin-update")
-if os.path.isdir(OUT):
-    shutil.rmtree(OUT)
+if os.path.isdir(api_dir):
+    shutil.rmtree(api_dir)
 os.makedirs(api_dir)
 
 ok, missing = [], []
