@@ -253,6 +253,26 @@
 /* 既定色はポチップ準拠の薄め。ハブで色指定があればインラインstyleが優先 */
 .affiros-ai-sale-amazon  { color: #f7a306 !important; }
 .affiros-ai-sale-rakuten { color: #e64c4c !important; }
+/* 丸Pアイコン (自作の汎用マーク。公式ロゴは使わない)。
+ * vertical-align:middle + top-1px で文字の中心ラインに合わせる */
+.affiros-ai-sale-p {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 16px !important;
+    height: 16px !important;
+    border-radius: 50% !important;
+    color: #fff !important;
+    font-size: 11px !important;
+    font-weight: 800 !important;
+    line-height: 1 !important;
+    margin-right: 4px !important;
+    vertical-align: middle !important;
+    position: relative;
+    top: -1px;
+    background: #bf0000;
+}
+.affiros-ai-sale-amazon .affiros-ai-sale-p { background: #e65100; }
 /* .affiros-ai-btns は gap:8px の縦flex。コピーとボタンの間だけ詰める */
 .affiros-ai-btns .affiros-ai-sale { margin: 0 0 -5px !important; }
 

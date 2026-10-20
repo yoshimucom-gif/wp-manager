@@ -114,8 +114,9 @@ function affiros_ai_sale_decorate($html) {
             ? ' style="color:' . esc_attr($active['colors'][$mall]) . ' !important"'
             : '';
         $copy = '<div class="affiros-ai-sale affiros-ai-sale-' . $mall
-              . ' affiros-sh-anim-' . esc_attr($active[$mall]['anim']) . '"' . $style . '>＼'
-              . esc_html($active[$mall]['label']) . '／</div>';
+              . ' affiros-sh-anim-' . esc_attr($active[$mall]['anim']) . '"' . $style . '>＼ '
+              . '<span class="affiros-ai-sale-p">P</span>'
+              . esc_html($active[$mall]['label']) . ' ／</div>';
         $html = preg_replace(
             '/(<a[^>]*affiros-ai-btn-' . $mall . '[^>]*>)/u',
             $copy . '$1',

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros セールハブ
  * Description: Amazon・楽天のセール情報を一元管理して全メディアサイトへ配信する。ke-ys.co.jp に設置する配信元プラグイン。各サイトの affiros-auto-inserter が1日1回ここのJSONを取得し、開催中のセールをカードボタン上のマイクロコピーとして表示する。
- * Version: 1.5.0
+ * Version: 1.5.1
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-sale-hub
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('AFFIROS_SH_VERSION',    '1.5.0');
+define('AFFIROS_SH_VERSION',    '1.5.1');
 define('AFFIROS_SH_OPTION_KEY',  'affiros_sale_hub_sales');
 define('AFFIROS_SH_TOKEN_KEY',   'affiros_sale_hub_token');
 define('AFFIROS_SH_HISTORY_KEY', 'affiros_sale_hub_history');
@@ -105,7 +105,8 @@ function affiros_sh_recur_rows($sales) {
     $today = strtotime(date('Y-m-d 00:00', strtotime(current_time('mysql'))));
     for ($i = 0; $i <= 10; $i++) {
         $day = $today + $i * DAY_IN_SECONDS;
-        if (!in_array((int)date('j', $day), [5, 10, 15, 20, 25, 30], true)) continue;
+        $j = (int)date('j', $day);
+        if (!in_array($j, [5, 10, 15, 20, 25, 30], true)) continue;
         $start = date('Y-m-d 00:00', $day);
         $end   = date('Y-m-d 23:59', $day);
         $st = strtotime($start);
@@ -116,9 +117,20 @@ function affiros_sh_recur_rows($sales) {
             if (strtotime($s['start']) < $en && $st < strtotime($s['end'])) { $overlap = true; break; }
         }
         if ($overlap) continue;
+        // 文言はその日に合わせて「本日5のつく日」/「本日0のつく日」(v1.5.1)。
+        // 既定設定のままなら短い自動形、「5と0」を含むカスタム文言なら数字だけ差し替え、
+        // それ以外のカスタム文言はそのまま使う
+        $digit = ($j % 10 === 5) ? '5' : '0';
+        if ($r['label'] === '5と0のつく日ポイントアップ' || $r['label'] === '') {
+            $label = "本日{$digit}のつく日";
+        } elseif (strpos($r['label'], '5と0') !== false) {
+            $label = str_replace('5と0', $digit, $r['label']);
+        } else {
+            $label = $r['label'];
+        }
         $rows[] = [
             'mall'  => 'rakuten',
-            'label' => $r['label'],
+            'label' => $label,
             'start' => $start,
             'end'   => $end,
             'anim'  => $r['anim'],
@@ -566,7 +578,7 @@ function affiros_sh_render_admin_page() {
                         <tr>
                             <th style="width:90px;padding:8px 0">文言</th>
                             <td style="padding:8px 0">
-                                <input type="text" name="label" list="affiros-sh-presets-<?php echo esc_attr($mall_key); ?>" maxlength="40" placeholder="<?php echo esc_attr($mc['placeholder']); ?>" style="width:100%" oninput="document.getElementById('affiros-sh-pv-<?php echo esc_attr($mall_key); ?>').textContent='＼'+(this.value||this.placeholder)+'／'">
+                                <input type="text" name="label" list="affiros-sh-presets-<?php echo esc_attr($mall_key); ?>" maxlength="40" placeholder="<?php echo esc_attr($mc['placeholder']); ?>" style="width:100%" oninput="document.querySelector('#affiros-sh-pv-<?php echo esc_attr($mall_key); ?> .affiros-sh-pv-label').textContent=(this.value||this.placeholder)">
                                 <datalist id="affiros-sh-presets-<?php echo esc_attr($mall_key); ?>">
                                     <?php foreach ($mc['presets'] as $p): ?><option value="<?php echo esc_attr($p); ?>"><?php endforeach; ?>
                                 </datalist>
@@ -657,11 +669,11 @@ function affiros_sh_render_admin_page() {
                             <div style="text-align:center;font-weight:700;font-size:13px;line-height:1.5">ニトリ(NITORI) インテリア仏壇 NB01<br><span style="font-weight:400;color:#999;font-size:11.5px">※ 商品名はサンプル</span></div>
                             <div style="margin-top:10px">
                                 <?php if ($mall_key === 'amazon'): ?>
-                                    <div id="affiros-sh-pv-amazon" class="affiros-sh-anim-<?php echo esc_attr($pv_anim); ?>" style="text-align:center;font-size:12.5px;font-weight:700;color:<?php echo $mall_defs['amazon']['copy_color']; ?>;margin-bottom:3px">＼<?php echo esc_html($pv_label); ?>／</div>
+                                    <div id="affiros-sh-pv-amazon" class="affiros-sh-anim-<?php echo esc_attr($pv_anim); ?>" style="text-align:center;font-size:12.5px;font-weight:700;color:<?php echo $mall_defs['amazon']['copy_color']; ?>;margin-bottom:3px">＼ <span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#e65100;color:#fff;font-size:11px;font-weight:800;line-height:1;margin-right:4px;vertical-align:middle;position:relative;top:-1px">P</span><span class="affiros-sh-pv-label"><?php echo esc_html($pv_label); ?></span> ／</div>
                                 <?php endif; ?>
                                 <span style="display:block;width:100%;box-sizing:border-box;padding:12px 10px;border-radius:6px;font-size:13px;font-weight:700;line-height:1.4;text-align:center;color:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12);background:<?php echo $mall_defs['amazon']['btn_bg']; ?>">Amazonで見る</span>
                                 <?php if ($mall_key === 'rakuten'): ?>
-                                    <div id="affiros-sh-pv-rakuten" class="affiros-sh-anim-<?php echo esc_attr($pv_anim); ?>" style="text-align:center;font-size:12.5px;font-weight:700;color:<?php echo $mall_defs['rakuten']['copy_color']; ?>;margin:8px 0 3px">＼<?php echo esc_html($pv_label); ?>／</div>
+                                    <div id="affiros-sh-pv-rakuten" class="affiros-sh-anim-<?php echo esc_attr($pv_anim); ?>" style="text-align:center;font-size:12.5px;font-weight:700;color:<?php echo $mall_defs['rakuten']['copy_color']; ?>;margin:8px 0 3px">＼ <span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#bf0000;color:#fff;font-size:11px;font-weight:800;line-height:1;margin-right:4px;vertical-align:middle;position:relative;top:-1px">P</span><span class="affiros-sh-pv-label"><?php echo esc_html($pv_label); ?></span> ／</div>
                                 <?php endif; ?>
                                 <span style="display:block;width:100%;box-sizing:border-box;padding:12px 10px;border-radius:6px;font-size:13px;font-weight:700;line-height:1.4;text-align:center;color:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12);background:<?php echo $mall_defs['rakuten']['btn_bg']; ?>;<?php echo $mall_key === 'rakuten' ? '' : 'margin-top:8px'; ?>">楽天市場で見る</span>
                             </div>

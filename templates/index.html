@@ -1978,6 +1978,16 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.60 / sale-hub v1.5.1 + auto-inserter v0.20.0 (2026-10-20) — 🅟 マイクロコピーを「＼ P 本日0のつく日 ／」形に</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>指摘</strong>: 「＼5と0のつく日ポイントアップ／」が長くて折り返し崩れ。デザイン3案を提示し案1 (現行型＋Pアイコン) を採用。</li>
+              <li><strong>hub側</strong>: つく日の展開文言を当日に合わせて <strong>「本日5のつく日」/「本日0のつく日」</strong> に自動生成 (カスタム文言は「5と0」の数字差し替え、それ以外はそのまま)。管理画面の表示イメージもPアイコン入りに同期。</li>
+              <li><strong>受信側</strong>: マイクロコピーを「＼ P 文言 ／」形に。丸Pアイコンは自作の汎用マーク (公式ロゴ不使用)、モール色 (楽天=#bf0000 / Amazon=#e65100)、vertical-align:middle+top-1pxで文字の中心ラインに揃え。</li>
+              <li><strong>バージョン同期</strong>: sale-hub 1.5.0 → 1.5.1 / auto-inserter 0.19.2 → 0.20.0 / <code>APP_VERSION</code> 1.9.59 → 1.9.60。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.59 / sale-hub v1.5.0 (2026-10-20) — 🗓 つく日を既定ON・配達をGitHubリレーに</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>背景</strong>: 10/20 (5と0のつく日) に何も表示されず指摘。原因は2つ——①定期キャンペーンが既定OFFのまま ②毎朝の自動巡回のpushがクラウド実行環境のegress遮断で9月から失敗し続けていた (調査は成功・配達だけ失敗)。</li>
