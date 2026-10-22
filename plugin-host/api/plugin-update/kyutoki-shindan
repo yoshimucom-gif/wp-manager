@@ -2,14 +2,14 @@
   "name": "給湯器エラーコード診断",
   "slug": "kyutoki-shindan",
   "plugin": "kyutoki-shindan/kyutoki-shindan.php",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "tested": "6.7",
   "requires": "6.0",
   "requires_php": "7.4",
   "author": "Keys",
-  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/kyutoki-shindan-1.0.2.zip",
+  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/kyutoki-shindan-1.0.3.zip",
   "sections": {
     "description": "給湯器エラーコード診断 本体。GitHub から自動更新します。",
-    "changelog": "最新バージョン 1.0.2"
+    "changelog": "1.0.3 パロマのエラーコード26件を収録（公式FAQの移設先から取得）。番号の重複を解消。／1.0.2 文字サイズの調整。"
   }
 }

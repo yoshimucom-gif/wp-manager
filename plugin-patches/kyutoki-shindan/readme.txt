@@ -2,7 +2,7 @@
 Contributors: Keys
 Requires at least: 6.0
 Tested up to: 6.7
-Stable tag: 1.0.2
+Stable tag: 1.0.3
 License: GPLv2 or later
 
 リモコンに出たエラー番号から、メーカーが公式に公開している意味と対処を表示します。
@@ -19,8 +19,8 @@ License: GPLv2 or later
 * リンナイ: 10件
 * 長府製作所: 16件
 * パーパス: 1件
-* コロナ: 1件
-* パロマ: 未収録（公式情報を取得できていない）
+* コロナ: 2件
+* パロマ: 26件
 
 データはメーカー公式ページのみを出典としています。
 更新は tools/build_shindan_plugin.py を流し直して差し替えます。

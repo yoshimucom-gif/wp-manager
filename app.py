@@ -6424,9 +6424,9 @@ PLUGIN_DOWNLOADS = {
     'suit-kurabe-db': {'file': 'suit-kurabe-db-1.5.6.zip', 'name': 'スーツくらべ 比較データ表示', 'version': '1.5.6'},
     'catalog-kurabe-db': {'file': 'catalog-kurabe-db-1.2.27.zip', 'name': 'カタログギフトくらべ 比較データ表示', 'version': '1.2.27'},
     'kyutoki-shindan': {
-        'file': 'kyutoki-shindan-1.0.2.zip',
+        'file': 'kyutoki-shindan-1.0.3.zip',
         'name': '給湯器エラーコード診断',
-        'version': '1.0.2',
+        'version': '1.0.3',
     },
     'product-inserter': {
         'file': 'affiros-product-inserter-1.10.1.zip',

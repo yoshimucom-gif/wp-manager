@@ -3,7 +3,7 @@
  * Plugin Name: 給湯器エラーコード診断
  * Plugin URI:  https://oyu-navi.com/
  * Description: リモコンに出たエラー番号から、メーカー公式の記載をもとに意味と対処を表示します。ショートコード [kyutoki_shindan] で設置します。
- * Version:     1.0.2
+ * Version:     1.0.3
  * Author:      Keys株式会社
  * License:     GPLv2 or later
  * Text Domain: kyutoki-shindan
@@ -11,7 +11,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-define( 'KYUTOKI_SHINDAN_VER', '1.0.2' );
+define( 'KYUTOKI_SHINDAN_VER', '1.0.3' );
 define( 'KYUTOKI_SHINDAN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'KYUTOKI_SHINDAN_URL', plugin_dir_url( __FILE__ ) );
 
@@ -100,7 +100,7 @@ function kyutoki_shindan_enqueue() {
 	wp_localize_script( 'kyutoki-shindan', 'KYUTOKI_SHINDAN', array(
 		'makers'    => kyutoki_shindan_data(),
 		'cta'       => kyutoki_shindan_cta(),
-		'fetchedAt' => get_option( 'kyutoki_shindan_fetched_at', '2026-08-04' ),
+		'fetchedAt' => get_option( 'kyutoki_shindan_fetched_at', '2026-08-04（パロマは2026-10-22）' ),
 	) );
 }
 
