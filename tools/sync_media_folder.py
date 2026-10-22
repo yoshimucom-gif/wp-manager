@@ -48,8 +48,18 @@ def main():
         m = VER.match(f)
         if m and m.group("name") in lat:
             present.setdefault(m.group("name"), []).append(f)
+    def ver(f):
+        m = VER.match(f)
+        v = m.group("ver") if m else ""
+        return tuple(int(x) for x in v.split(".")) if v and v != "latest" else ()
+
     for name, files in sorted(present.items()):
         want = lat[name]
+        # 手元のリポジトリが古いまま（リモートに新版がある）だと配信版の情報も古い。
+        # フォルダに配信版より新しい版があるときは何もしない（2026-10-22 新しい版を古い版で置き換えてしまった）
+        if any(ver(f) > ver(want) for f in files):
+            print("フォルダの方が新しいので触らない", name, files)
+            continue
         if want not in files:
             shutil.copy2(os.path.join(DL, want), os.path.join(DEST, want))
             print("最新版を置いた", want)
