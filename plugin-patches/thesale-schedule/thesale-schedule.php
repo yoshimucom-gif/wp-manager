@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.1.5
+ * Version:     1.2.0
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -304,6 +304,210 @@ function thesale_sched_status( $atts ) {
 	);
 }
 add_shortcode( 'thesale_status', 'thesale_sched_status' );
+
+/**
+ * カード用の店データ（オプション thesale_cards。tools/push_card_data.py が書く）
+ * { "記事スラッグ": {"name": "ニューバランス", "kind": "brand"|"mall", "site": "amazon"（mallのとき）,
+ *                   "official": "https://...", "amazon": "https://...（アフィリエイト）", "rakuten": "https://..."} }
+ */
+function thesale_card_data() {
+	$c = get_option( 'thesale_cards', array() );
+	if ( is_string( $c ) ) {
+		$c = json_decode( $c, true );
+	}
+	return is_array( $c ) ? $c : array();
+}
+
+/**
+ * 条件に合う日程から、いまの状態を1つ選ぶ。
+ * 返り値: array( 'state' => 'live'|'next'|'est'|'tbd', 'e' => 日程, 's' => 開始, 't' => 終了 )
+ * est = 日程は未発表だが目安（month/day）がある回。tbd = どれも無い
+ */
+function thesale_card_pick( $match ) {
+	$now   = thesale_sched_now();
+	$today = $now->format( 'Y-m-d' );
+	$live  = null;
+	$next  = null;
+	$est   = null;
+	foreach ( thesale_sched_events() as $e ) {
+		if ( ! $match( $e ) ) {
+			continue;
+		}
+		$s = thesale_sched_dt( isset( $e['start'] ) ? $e['start'] : '' );
+		$t = thesale_sched_dt( isset( $e['end'] ) ? $e['end'] : '' );
+		if ( $s && $t && $s <= $now && $now < $t ) {
+			if ( ! $live || $t < $live['t'] ) {
+				$live = array( 'state' => 'live', 'e' => $e, 's' => $s, 't' => $t );
+			}
+		} elseif ( $s && $s > $now ) {
+			if ( ! $next || $s < $next['s'] ) {
+				$next = array( 'state' => 'next', 'e' => $e, 's' => $s, 't' => $t );
+			}
+		} elseif ( ! $s && ! empty( $e['month'] ) ) {
+			$hide = isset( $e['hide_after'] ) ? (string) $e['hide_after'] : '';
+			$sort = isset( $e['sort'] ) ? (string) $e['sort'] : '9999';
+			if ( ( '' === $hide || $hide >= $today ) && ( ! $est || $sort < $est['sort'] ) ) {
+				$est = array( 'state' => 'est', 'e' => $e, 's' => null, 't' => null, 'sort' => $sort );
+			}
+		}
+	}
+	if ( $live ) {
+		return $live;
+	}
+	if ( $next ) {
+		return $next;
+	}
+	if ( $est ) {
+		return $est;
+	}
+	return array( 'state' => 'tbd', 'e' => null, 's' => null, 't' => null );
+}
+
+/** 状態ごとの文言（ラベル・期間の文） */
+function thesale_card_text( $p ) {
+	$now = thesale_sched_now();
+	if ( 'live' === $p['state'] ) {
+		$left = (int) ceil( ( $p['t']->getTimestamp() - $now->getTimestamp() ) / 86400 );
+		return array(
+			'label' => '開催中',
+			'sub'   => $left <= 1 ? '今日まで' : 'あと' . $left . '日',
+			'name'  => $p['e']['name'],
+			'when'  => thesale_sched_period( $p['s'], $p['t'] ),
+		);
+	}
+	if ( 'next' === $p['state'] ) {
+		return array(
+			'label' => '次回',
+			'sub'   => $p['s']->format( 'n/j' ) . '〜',
+			'name'  => $p['e']['name'],
+			'when'  => thesale_sched_period( $p['s'], $p['t'] ),
+		);
+	}
+	if ( 'est' === $p['state'] ) {
+		$m = isset( $p['e']['month'] ) ? $p['e']['month'] : '';
+		$d = isset( $p['e']['day'] ) ? $p['e']['day'] : '';
+		return array(
+			'label' => '未発表',
+			'sub'   => $m,
+			'name'  => $p['e']['name'],
+			'when'  => '日程は未発表（例年' . $m . $d . 'ごろ）',
+		);
+	}
+	return array( 'label' => '未発表', 'sub' => '', 'name' => '', 'when' => '次のセールはまだ発表されていません' );
+}
+
+function thesale_card_btn( $url, $label, $bg ) {
+	if ( empty( $url ) ) {
+		return '';
+	}
+	return sprintf(
+		'<a href="%s" target="_blank" rel="nofollow sponsored noopener" style="display:inline-block;padding:7px 14px;border-radius:4px;font-weight:700;font-size:14px;line-height:1.4;color:#fff;text-decoration:none;white-space:nowrap;background:%s">%s</a>',
+		esc_url( $url ),
+		esc_attr( $bg ),
+		esc_html( $label )
+	);
+}
+
+/**
+ * [thesale_card slug="..."] 記事冒頭のカード（1.2.0〜。状況の箱 [thesale_status] と公式リンクを1枚にまとめる）
+ *  ブランドの記事: 上段＝ブランド公式のセール＋公式サイト、下段＝Amazon・楽天の公式ストアで開かれる大型セール＋公式ストア
+ *  モールの記事: そのモールのセールの1段だけ＋セール会場
+ *  表示のたびに日本時間で判定する。見た目は style 属性で付ける（記事の<style>は落ちる環境がある）
+ */
+function thesale_card( $atts ) {
+	$a    = shortcode_atts( array( 'slug' => '' ), $atts );
+	$slug = trim( $a['slug'], '/' );
+	if ( '' === $slug ) {
+		return '';
+	}
+	$cards = thesale_card_data();
+	$c     = isset( $cards[ $slug ] ) && is_array( $cards[ $slug ] ) ? $cards[ $slug ] : array();
+	$name  = isset( $c['name'] ) ? $c['name'] : '';
+	$kind  = isset( $c['kind'] ) ? $c['kind'] : 'brand';
+
+	$own = thesale_card_pick( function ( $e ) use ( $slug ) {
+		$u       = trim( (string) wp_parse_url( isset( $e['url'] ) ? $e['url'] : '', PHP_URL_PATH ), '/' );
+		$related = isset( $e['related'] ) && is_array( $e['related'] ) ? $e['related'] : array();
+		return $u === $slug || in_array( $slug, $related, true );
+	} );
+	$tx = thesale_card_text( $own );
+
+	$sq_bg = array( 'live' => '#FFC20E', 'next' => '#1E6B45', 'est' => '#5B6274', 'tbd' => '#5B6274' );
+	$sq_fg = array( 'live' => '#14213D', 'next' => '#FFFFFF', 'est' => '#FFFFFF', 'tbd' => '#FFFFFF' );
+	$wrap  = array(
+		'live' => 'border:2px solid #FFC20E;background:#FFFBEA',
+		'next' => 'border:1px solid #B5DCC3;background:#F4FAF6',
+		'est'  => 'border:1px solid #DADDE3;background:#FFFFFF',
+		'tbd'  => 'border:1px solid #DADDE3;background:#FFFFFF',
+	);
+	$st = $own['state'];
+
+	if ( 'mall' === $kind ) {
+		$btn_url = ! empty( $own['e']['official']['url'] ) ? $own['e']['official']['url'] : ( isset( $c['official'] ) ? $c['official'] : '' );
+		$site    = isset( $c['site'] ) ? $c['site'] : '';
+		$btn_bg  = 'rakuten' === $site ? '#BF0000' : ( 'amazon' === $site ? '#D16800' : '#14213D' );
+		$title   = '' !== $tx['name'] ? $tx['name'] : $name;
+		return sprintf(
+			'<div class="ts-card ts-card-mall ts-card-%1$s" style="box-sizing:border-box;display:flex;flex-wrap:wrap;align-items:center;gap:12px 14px;padding:12px 14px;border-radius:8px;%2$s">'
+			. '<div style="width:60px;height:60px;border-radius:6px;background:%3$s;color:%4$s;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;font-size:14px;line-height:1.3;flex-shrink:0">%5$s<span style="font-size:11px;font-weight:700">%6$s</span></div>'
+			. '<div style="flex:1;min-width:180px"><div style="font-weight:700;font-size:16px;line-height:1.5">%7$s</div><div style="font-size:13px;color:#5B6274;line-height:1.5">%8$s</div></div>'
+			. '%9$s</div>',
+			esc_attr( $st ), $wrap[ $st ], $sq_bg[ $st ], $sq_fg[ $st ], esc_html( $tx['label'] ), esc_html( $tx['sub'] ),
+			esc_html( $title ), esc_html( $tx['when'] ), thesale_card_btn( $btn_url, 'live' === $st ? 'セール会場へ' : '公式サイト', $btn_bg )
+		);
+	}
+
+	// ブランドの記事: 上段
+	$top_title = $name . '公式' . ( '' !== $tx['name'] ? '：' . $tx['name'] : '' );
+	$top_sub   = 'tbd' === $st ? '次のセールはまだ発表されていません' : $tx['when'];
+	$official  = isset( $c['official'] ) ? $c['official'] : '';
+	if ( 'live' === $st && ! empty( $own['e']['official']['url'] ) ) {
+		$official = $own['e']['official']['url'];
+	}
+	$html = sprintf(
+		'<div class="ts-card ts-card-brand ts-card-%1$s" style="box-sizing:border-box;border-radius:8px;overflow:hidden;%2$s">'
+		. '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 14px;padding:12px 14px">'
+		. '<div style="width:60px;height:60px;border-radius:6px;background:%3$s;color:%4$s;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;font-size:14px;line-height:1.3;flex-shrink:0">%5$s<span style="font-size:11px;font-weight:700">%6$s</span></div>'
+		. '<div style="flex:1;min-width:180px"><div style="font-size:12px;color:#5B6274;line-height:1.5">公式のセール</div><div style="font-weight:700;font-size:16px;line-height:1.5">%7$s</div><div style="font-size:13px;color:#5B6274;line-height:1.5">%8$s</div></div>'
+		. '%9$s</div>',
+		esc_attr( $st ), $wrap[ $st ], $sq_bg[ $st ], $sq_fg[ $st ], esc_html( $tx['label'] ), esc_html( $tx['sub'] ),
+		esc_html( $top_title ), esc_html( $top_sub ), thesale_card_btn( $official, 'live' === $st ? '公式のセール会場へ' : '公式サイト', '#14213D' )
+	);
+
+	// 下段: Amazon・楽天の公式ストアで開かれる大型セール（トップに出しているモールの日程から選ぶ）
+	$rows = '';
+	$malls = array(
+		'amazon'  => array( 'Amazon公式ストア', '#D16800', 'Amazon' ),
+		'rakuten' => array( '楽天公式ショップ', '#BF0000', '楽天市場' ),
+	);
+	foreach ( $malls as $site => $m ) {
+		if ( empty( $c[ $site ] ) ) {
+			continue;
+		}
+		$p = thesale_card_pick( function ( $e ) use ( $site ) {
+			return isset( $e['site'] ) && $site === $e['site'] && ! ( isset( $e['top'] ) && false === $e['top'] );
+		} );
+		$t2    = thesale_card_text( $p );
+		$ps    = $p['state'];
+		$badge = array( 'live' => array( '#FFC20E', '#14213D' ), 'next' => array( '#1E6B45', '#FFFFFF' ), 'est' => array( '#5B6274', '#FFFFFF' ), 'tbd' => array( '#5B6274', '#FFFFFF' ) );
+		$rbg   = array( 'live' => 'background:#FFFBEA;border:1px solid #FFC20E', 'next' => 'background:#F4FAF6;border:1px solid #B5DCC3', 'est' => 'background:#F7F8FA;border:1px solid #E3E5EA', 'tbd' => 'background:#F7F8FA;border:1px solid #E3E5EA' );
+		$line  = '' !== $t2['name'] ? $t2['name'] . '　' . $t2['when'] : $m[2] . '：' . $t2['when'];
+		$rows .= sprintf(
+			'<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:8px 10px;border-radius:6px;margin-top:6px;%1$s">'
+			. '<span style="display:inline-block;padding:3px 8px;border-radius:4px;font-size:12px;font-weight:700;background:%2$s;color:%3$s;white-space:nowrap">%4$s</span>'
+			. '<span style="flex:1;min-width:160px;font-size:14px;font-weight:700;line-height:1.5">%5$s</span>%6$s</div>',
+			$rbg[ $ps ], $badge[ $ps ][0], $badge[ $ps ][1], esc_html( 'live' === $ps ? '開催中' : ( 'next' === $ps ? '次回' : '未発表' ) ),
+			esc_html( $line ), thesale_card_btn( $c[ $site ], $m[0], $m[1] )
+		);
+	}
+	if ( '' !== $rows ) {
+		$html .= '<div style="border-top:1px solid rgba(0,0,0,.08);padding:4px 14px 12px;background:#FFFFFF">'
+			. '<div style="font-size:12px;color:#5B6274;margin-top:6px;line-height:1.5">通販サイトの公式ストアで開かれるセール</div>'
+			. $rows . '</div>';
+	}
+	return $html . '</div>';
+}
+add_shortcode( 'thesale_card', 'thesale_card' );
 
 /** [thesale_asof] 当日の日付（「2026年10月14日」） */
 add_shortcode( 'thesale_asof', function () {
