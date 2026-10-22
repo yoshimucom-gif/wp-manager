@@ -2,7 +2,7 @@
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.1.4
+Stable tag: 1.1.5
 
 THE SALE（the-sale.jp）のトップに出す「いま開催中のセール」「これから始まるセール」を、
 オプション thesale_events のセール日程データから、表示のたびに日本時間で計算して出す。
@@ -13,6 +13,8 @@ THE SALE（the-sale.jp）のトップに出す「いま開催中のセール」�
 * [thesale_asof] … 当日の日付
 
 == Changelog ==
+= 1.1.5 =
+* 日程データに "top": false を付けると、トップの一覧には出さず記事冒頭の状況の箱だけで使う（アウトレットの施設のセール用）
 = 1.1.4 =
 * 状況の箱の上下の余白を、ふつうの段落と同じ間隔（テーマの本文の間隔）にする
 = 1.1.3 =

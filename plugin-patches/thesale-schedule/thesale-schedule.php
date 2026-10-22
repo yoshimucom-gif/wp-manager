@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.1.4
+ * Version:     1.1.5
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -85,6 +85,13 @@ function thesale_sched_events() {
 	return is_array( $ev ) ? array_values( $ev ) : array();
 }
 
+/** トップの一覧（開催中・これから）に出す日程。"top": false の日程は記事冒頭の状況の箱だけで使う（1.1.5〜。アウトレットの施設のセールなど） */
+function thesale_sched_top_events() {
+	return array_values( array_filter( thesale_sched_events(), function ( $e ) {
+		return ! ( isset( $e['top'] ) && false === $e['top'] );
+	} ) );
+}
+
 function thesale_sched_now() {
 	return new DateTimeImmutable( 'now', new DateTimeZone( 'Asia/Tokyo' ) );
 }
@@ -148,7 +155,7 @@ function thesale_sched_period( $s, $e ) {
 function thesale_sched_live( $atts ) {
 	$now  = thesale_sched_now();
 	$rows = array();
-	foreach ( thesale_sched_events() as $e ) {
+	foreach ( thesale_sched_top_events() as $e ) {
 		$s = thesale_sched_dt( isset( $e['start'] ) ? $e['start'] : '' );
 		$t = thesale_sched_dt( isset( $e['end'] ) ? $e['end'] : '' );
 		if ( $s && $t && $s <= $now && $now < $t ) {
@@ -175,7 +182,7 @@ function thesale_sched_upcoming( $atts ) {
 	$now   = thesale_sched_now();
 	$today = $now->format( 'Y-m-d' );
 	$list  = array();
-	foreach ( thesale_sched_events() as $e ) {
+	foreach ( thesale_sched_top_events() as $e ) {
 		$s = thesale_sched_dt( isset( $e['start'] ) ? $e['start'] : '' );
 		if ( $s ) {
 			if ( $s <= $now ) {
