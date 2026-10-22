@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.1.2
+ * Version:     1.1.3
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -18,6 +18,50 @@ add_action( 'init', function () {
 		__FILE__,
 		'https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-host/api/plugin-update/thesale-schedule'
 	);
+} );
+
+/**
+ * 新版の即時適用（1.1.3）: POST /wp-json/thesale/v1/selfupdate
+ * 更新キャッシュを捨てて配信元を確認し、このプラグインだけをその場で更新する。
+ * 管理画面の更新ボタンを押さずに、リリース直後の版を反映するための窓口。
+ */
+add_action( 'rest_api_init', function () {
+	register_rest_route( 'thesale/v1', '/selfupdate', array(
+		'methods'             => 'POST',
+		'permission_callback' => function () { return current_user_can( 'update_plugins' ); },
+		'callback'            => function () {
+			$base = plugin_basename( __FILE__ );
+			$data = get_file_data( __FILE__, array( 'v' => 'Version' ) );
+			delete_transient( 'thesale_sched_updater_' . md5( $base ) );
+			delete_site_transient( 'update_plugins' );
+			wp_update_plugins();
+			$upd = get_site_transient( 'update_plugins' );
+			if ( empty( $upd->response[ $base ] ) ) {
+				return array( 'ok' => true, 'updated' => false, 'version' => $data['v'], 'note' => '配信版との差がない' );
+			}
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+			require_once ABSPATH . 'wp-admin/includes/misc.php';
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+			require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+			$up  = new Plugin_Upgrader( new Automatic_Upgrader_Skin() );
+			$res = $up->upgrade( $base );
+			// 更新の途中でWPはプラグインを無効にし、自分自身を更新したリクエストでは有効に戻らないので戻す
+			$active = (array) get_option( 'active_plugins', array() );
+			$was    = in_array( $base, $active, true );
+			if ( ! $was ) {
+				$active[] = $base;
+				update_option( 'active_plugins', array_values( array_unique( $active ) ) );
+			}
+			return array(
+				'ok'             => true === $res,
+				'updated'        => true === $res,
+				'version_before' => $data['v'],
+				'to'             => isset( $upd->response[ $base ]->new_version ) ? $upd->response[ $base ]->new_version : '',
+				'reactivated'    => ! $was,
+				'error'          => is_wp_error( $res ) ? $res->get_error_message() : null,
+			);
+		},
+	) );
 } );
 
 /**
