@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.3.2
+ * Version:     1.3.3
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -520,8 +520,9 @@ function thesale_card_positions_all() {
 	return array(
 		'after_lead'   => 'リード文の直後（最初の見出しの直前）',
 		'after_h2'     => '最初の見出しの直後',
+		'middle'       => '記事の真ん中（真ん中あたりの見出しの直前）',
 		'before_sum'   => '「まとめ」の見出しの直前',
-		'end'          => '記事の最後',
+		'end'          => '記事の最後（まとめの直後）',
 	);
 }
 
@@ -564,6 +565,18 @@ add_filter( 'the_content', function ( $content ) {
 	}
 	if ( in_array( 'after_h2', $pos, true ) && preg_match( $h_close, $content, $m, PREG_OFFSET_CAPTURE ) ) {
 		$ins[ $m[0][1] + strlen( $m[0][0] ) ] = true;
+	}
+	if ( in_array( 'middle', $pos, true ) && preg_match_all( '/(?:<!-- wp:heading[^>]*-->\s*)?<h2[^>]*>((?:(?!<\/h2>).)*)<\/h2>/su', $content, $mm, PREG_OFFSET_CAPTURE ) ) {
+		// 「よくある質問」「まとめ」を除いた本文の見出しのうち、真ん中の見出しの直前（見出しが3本以上あるとき）
+		$body = array();
+		foreach ( $mm[0] as $k => $hit ) {
+			if ( ! preg_match( '/よくある質問|まとめ/u', wp_strip_all_tags( $mm[1][ $k ][0] ) ) ) {
+				$body[] = $hit[1];
+			}
+		}
+		if ( count( $body ) >= 3 ) {
+			$ins[ $body[ (int) floor( count( $body ) / 2 ) ] ] = true;
+		}
 	}
 	if ( in_array( 'before_sum', $pos, true ) && preg_match( '/(?:<!-- wp:heading[^>]*-->\s*)?<h2[^>]*>(?:(?!<\/h2>).)*まとめ/su', $content, $m, PREG_OFFSET_CAPTURE ) ) {
 		$ins[ $m[0][1] ] = true;
