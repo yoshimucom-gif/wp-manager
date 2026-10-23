@@ -2,7 +2,7 @@
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.4.1
+Stable tag: 1.4.2
 
 THE SALE（the-sale.jp）のトップに出す「いま開催中のセール」「これから始まるセール」を、
 オプション thesale_events のセール日程データから、表示のたびに日本時間で計算して出す。
@@ -13,6 +13,8 @@ THE SALE（the-sale.jp）のトップに出す「いま開催中のセール」�
 * [thesale_asof] … 当日の日付
 
 == Changelog ==
+= 1.4.2 =
+* スマホでトップの黒いカードの見出し・札が折り返して崩れるのを修正
 = 1.4.1 =
 * トップの黒いカードの文字が見えなかったのを修正。背景を画面いっぱいの生成り色に
 = 1.4.0 =

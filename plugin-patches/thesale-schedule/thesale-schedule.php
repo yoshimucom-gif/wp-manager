@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.4.1
+ * Version:     1.4.2
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -704,7 +704,7 @@ function thesale_home_css() {
 .th-item-name{font-size:24px;font-weight:900;line-height:1.65;margin:0 0 22px}
 .th-item-foot{border-top:1px solid var(--th-line);padding:20px 0 0;display:flex;justify-content:space-between;color:var(--th-muted);font-size:16px}
 .th-note{display:flex;align-items:center;gap:10px;color:var(--th-muted);font-size:15px;padding:4px 0 40px}
-@media (max-width:820px){.th-hero{grid-template-columns:1fr;gap:36px;padding-top:28px}.th-next{min-height:0}.th-grid{grid-template-columns:1fr}.th-btn{min-width:0;width:100%}.th-malls{flex-direction:column}}
+@media (max-width:820px){.th-next{padding:24px 22px}.th-next-label{font-size:13px;letter-spacing:.06em}.th-badge{white-space:nowrap;font-size:13px;padding:6px 10px}.th-date{margin:24px 0 18px}.th-date b{font-size:72px}.th-next-name{font-size:24px}.th-next-foot{font-size:15px}.th-hero{grid-template-columns:1fr;gap:36px;padding-top:28px}.th-next{min-height:0}.th-grid{grid-template-columns:1fr}.th-btn{min-width:0;width:100%}.th-malls{flex-direction:column}}
 ';
 }
 
