@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.5.4
+ * Version:     1.6.0
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -726,7 +726,7 @@ function thesale_home_assets() {
 		wp_enqueue_style( 'thesale-home-fonts', 'https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800;900&family=Noto+Sans+JP:wght@500;700;900&display=swap', array(), null );
 		wp_register_style( 'thesale-home', false, array(), '1.4.0' );
 		wp_enqueue_style( 'thesale-home' );
-		wp_add_inline_style( 'thesale-home', thesale_home_css() . thesale_home_lower_css() );
+		wp_add_inline_style( 'thesale-home', thesale_home_css() . thesale_home_lower_css() . thesale_dir_css() );
 	}
 }
 add_action( 'wp_enqueue_scripts', function () {
@@ -734,7 +734,7 @@ add_action( 'wp_enqueue_scripts', function () {
 		return;
 	}
 	$p = get_post();
-	if ( $p && has_shortcode( $p->post_content, 'thesale_home' ) ) {
+	if ( $p && ( has_shortcode( $p->post_content, 'thesale_home' ) || has_shortcode( $p->post_content, 'thesale_directory' ) ) ) {
 		thesale_home_assets();
 	}
 } );
@@ -1097,3 +1097,180 @@ function thesale_home_lower( $now ) {
 		. '<li><em>03</em><div><b>いつ確認した情報か、見えるように。</b><span>ブランド一覧では「最終確認日」を掲載。公式の告知を最後に確認した日がわかります。</span></div></li></ol></div></section>';
 	return $o;
 }
+
+/*
+ * ── 掲載ブランド一覧ページ [thesale_directory]（1.6.0〜。吉村さんのデザイン「あの店のセール、いつだっけ。」）─────
+ * データはオプション thesale_directory（tools/chrome/make_store_list_page.py が毎日書く）。検索・ジャンル・もっと見るは小さなJS。
+ */
+function thesale_dir_css() {
+	return '
+.td-dir .td-hero{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:40px;align-items:end;padding:36px 0 44px}
+.td-dir .td-eyebrow{font-size:13px;font-weight:800;letter-spacing:.16em;margin:0 0 18px}
+.td-dir h1.td-title{font-size:clamp(38px,5.4vw,62px);font-weight:900;line-height:1.3;margin:0 0 22px;letter-spacing:.01em}
+.td-dir .td-lead{font-size:15px;line-height:2;color:var(--th-muted);margin:0}
+.td-dir .td-total{border-left:1px solid var(--th-ink);padding:6px 0 6px 40px;min-width:230px}
+.td-dir .td-total small{display:block;font-size:12px;font-weight:800;letter-spacing:.14em;margin-bottom:6px}
+.td-dir .td-total b{font-size:96px;font-weight:900;line-height:1;letter-spacing:-.03em}
+.td-dir .td-total i{font-style:normal;font-size:14px;font-weight:800;margin-left:8px}
+.td-dir .td-total p{font-size:13px;color:var(--th-muted);margin:10px 0 0}
+.td-dir .td-search{background:#D6F55C;padding:30px 36px 26px;margin-bottom:44px}
+.td-dir .td-search-label{font-size:15px;font-weight:800;margin:0 0 14px}
+.td-dir .td-search label{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid var(--th-ink);height:62px;padding:0 20px}
+.td-dir .td-search label svg{flex-shrink:0;fill:none!important;stroke:var(--th-ink)}
+.td-dir .td-search input{flex:1;border:0!important;outline:0;background:transparent!important;font:500 17px "Noto Sans JP",sans-serif;color:var(--th-ink);box-shadow:none!important;padding:0!important;height:100%}
+.td-dir .td-quick{display:flex;flex-wrap:wrap;align-items:center;gap:8px 22px;margin-top:16px;font-size:14px}
+.td-dir .td-quick span{color:#4D5A1C}
+.td-dir .td-quick button{appearance:none;background:none;border:0;border-bottom:2px solid var(--th-ink);padding:2px 0;font:800 14px "Inter","Noto Sans JP",sans-serif;color:var(--th-ink);cursor:pointer}
+.td-dir .td-genre-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.td-dir .td-genre-head b{font-size:18px;font-weight:900}
+.td-dir .td-genre-head button,.td-dir .td-g{appearance:none;cursor:pointer;font-family:"Noto Sans JP",sans-serif;color:var(--th-ink)}
+.td-dir .td-genre-head button{background:none;border:0;font-size:14px;font-weight:800;padding:4px 10px}
+.td-dir .td-genre-head button em{font-style:normal;color:var(--th-muted);margin-left:8px;font-weight:700}
+.td-dir .td-genres{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;padding-bottom:44px;border-bottom:3px solid var(--th-ink)}
+.td-dir .td-g{display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid var(--th-line);padding:16px;font-size:15px;font-weight:800;text-align:left;line-height:1.4}
+.td-dir .td-g em{font-style:normal;font-weight:700;color:var(--th-muted);font-family:"Inter",sans-serif;font-size:14px}
+.td-dir .td-g:hover{border-color:var(--th-ink)}
+.td-dir .td-g.is-on,.td-dir .td-genre-head button.is-on{background:var(--th-ink);color:#fff;border-color:var(--th-ink)}
+.td-dir .td-g.is-on em,.td-dir .td-genre-head button.is-on em{color:#D6F55C}
+.td-dir .td-all-head{display:flex;align-items:baseline;gap:14px;margin:44px 0 8px;scroll-margin-top:110px}
+.td-dir .td-all-head h2{font-size:clamp(28px,3.4vw,34px);font-weight:900;margin:0}
+.td-dir .td-all-head span{font-size:15px;color:var(--th-muted);font-weight:700}
+.td-dir .td-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 44px}
+.td-dir .td-card{border-top:1px solid var(--th-line);padding:28px 0 34px;display:flex;flex-direction:column}
+.td-dir .td-card.is-hidden{display:none}
+.td-dir .td-card-top{display:flex;justify-content:space-between;font-size:13px;color:var(--th-muted);margin-bottom:16px}
+.td-dir .td-card-top .th-en{letter-spacing:.06em}
+.td-dir .td-name{display:flex;align-items:center;gap:14px;margin:0 0 18px}
+.td-dir .td-ini{flex-shrink:0;width:42px;height:42px;display:inline-flex;align-items:center;justify-content:center;font:900 21px "Inter","Noto Sans JP",sans-serif}
+.td-dir .td-name b{font-size:22px;font-weight:900;line-height:1.35;letter-spacing:.01em}
+.td-dir a.td-go{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:15px;font-weight:800;padding:0 0 18px;border-bottom:1px solid var(--th-line)}
+.td-dir a.td-go .th-arrow{width:40px;height:40px;border:1px solid var(--th-ink);display:inline-flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.td-dir a.td-go:hover .th-arrow{background:var(--th-ink);color:#fff}
+.td-dir .td-sub{font-size:12px;font-weight:800;color:var(--th-muted);letter-spacing:.06em;margin:18px 0 8px}
+.td-dir .td-rel{list-style:none;margin:0;padding:0}
+.td-dir .td-rel li{margin:0;padding:0;list-style:none}
+.td-dir .td-rel li::before{display:none}
+.td-dir .td-rel a{display:flex;justify-content:space-between;gap:10px;font-size:14px;line-height:1.6;padding:5px 0}
+.td-dir .td-rel a:hover span:first-child{text-decoration:underline}
+.td-dir .td-offs{display:flex;flex-wrap:wrap;gap:8px}
+.td-dir a.td-off{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--th-line);background:#fff;padding:7px 12px;font-size:13px;font-weight:800}
+.td-dir a.td-off:hover{border-color:var(--th-ink)}
+.td-dir .td-ver{margin:auto 0 0;padding-top:20px;font-size:13px;color:var(--th-muted)}
+.td-dir .td-ver .th-en{margin-left:6px;letter-spacing:.04em}
+.td-dir .td-empty{display:none;padding:40px 0;font-size:16px;color:var(--th-muted)}
+.td-dir .td-foot{text-align:center;padding:24px 0 8px}
+.td-dir .td-more{appearance:none;display:inline-flex;justify-content:space-between;align-items:center;gap:40px;min-width:250px;border:1px solid var(--th-ink);background:transparent;font:800 16px "Noto Sans JP",sans-serif;padding:18px 24px;cursor:pointer;color:var(--th-ink)}
+.td-dir .td-more:hover{background:var(--th-ink);color:#fff}
+.td-dir .td-count{display:block;font-size:13px;color:var(--th-muted);margin-top:12px}
+.td-dir .td-note{font-size:13px;line-height:1.9;color:var(--th-muted);border-top:1px solid var(--th-line);padding:22px 0 0;margin:40px 0 44px}
+.td-dir .td-cta{display:flex;justify-content:space-between;align-items:center;gap:24px;flex-wrap:wrap;background:var(--th-ink);color:#fff;padding:42px 44px;margin-bottom:56px}
+.td-dir .td-cta small{display:block;color:#D6F55C;font:800 12px "Inter",sans-serif;letter-spacing:.16em;margin-bottom:10px}
+.td-dir .td-cta b{font-size:clamp(22px,2.6vw,28px);font-weight:900;color:#fff}
+.td-dir a.td-cta-btn{display:inline-flex;align-items:center;gap:28px;background:#D6F55C;font-weight:800;font-size:16px;padding:18px 26px}
+.td-dir a.td-cta-btn,.td-dir a.td-cta-btn *{color:var(--th-ink)!important}
+@media (max-width:900px){.td-dir .td-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:0 28px}.td-dir .td-genres{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:640px){
+.td-dir .td-hero{grid-template-columns:1fr;gap:28px;padding-top:24px}
+.td-dir .td-total{border-left:0;border-top:1px solid var(--th-ink);padding:20px 0 0;display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px}
+.td-dir .td-total small{width:100%}.td-dir .td-total b{font-size:64px}.td-dir .td-total p{width:100%;margin-top:4px}
+.td-dir .td-search{padding:24px 18px 20px}.td-dir .td-search label{height:56px;padding:0 14px}.td-dir .td-search input{font-size:16px}
+.td-dir .td-genres{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.td-dir .td-g{padding:14px 12px;font-size:14px}
+.td-dir .td-grid{grid-template-columns:1fr}
+.td-dir .td-cta{padding:30px 22px}.td-dir a.td-cta-btn{width:100%;justify-content:space-between;box-sizing:border-box}
+.td-dir .td-more{width:100%;box-sizing:border-box}}
+';
+}
+
+function thesale_dir_js() {
+	return <<<'JS'
+document.addEventListener('DOMContentLoaded',function(){
+  document.querySelectorAll('.td-dir').forEach(function(root){
+    var q=root.querySelector('.td-search input'),cards=[].slice.call(root.querySelectorAll('.td-card')),gb=[].slice.call(root.querySelectorAll('[data-g-btn]')),
+        more=root.querySelector('.td-more'),cnt=root.querySelector('.td-count'),empty=root.querySelector('.td-empty'),step=24,shown=step,g='';
+    function apply(){var k=(q.value||'').trim().toLowerCase(),hit=0,vis=0;
+      cards.forEach(function(c){var ok=(!k||c.dataset.n.indexOf(k)>=0)&&(!g||c.dataset.g===g);if(ok)hit++;
+        var show=ok&&hit<=shown;c.classList.toggle('is-hidden',!show);if(show)vis++;});
+      gb.forEach(function(b){b.classList.toggle('is-on',b.dataset.gBtn===g);});
+      cnt.textContent=vis+' / '+hit+' 件を表示';more.style.display=vis>=hit?'none':'';empty.style.display=hit?'none':'block';}
+    q.addEventListener('input',function(){shown=step;apply();});
+    gb.forEach(function(b){b.addEventListener('click',function(){g=b.dataset.gBtn;shown=step;apply();});});
+    root.querySelectorAll('.td-quick button').forEach(function(b){b.addEventListener('click',function(){q.value=b.textContent;g='';shown=step;apply();
+      root.querySelector('.td-all-head').scrollIntoView({behavior:'smooth',block:'start'});});});
+    more.addEventListener('click',function(){shown+=step;apply();});apply();
+  });
+});
+JS;
+}
+
+function thesale_directory( $atts ) {
+	thesale_home_assets();
+	$d = get_option( 'thesale_directory', array() );
+	if ( is_string( $d ) ) {
+		$d = json_decode( $d, true );
+	}
+	if ( ! is_array( $d ) || empty( $d['shops'] ) ) {
+		return '';
+	}
+	wp_register_script( 'thesale-dir', false, array(), '1.6.0', true );
+	wp_enqueue_script( 'thesale-dir' );
+	wp_add_inline_script( 'thesale-dir', thesale_dir_js() );
+	$a     = thesale_home_arrow();
+	$shops = array_values( $d['shops'] );
+	$n     = count( $shops );
+	$cnt   = array();
+	foreach ( $shops as $s ) {
+		$cnt[ $s['group'] ] = isset( $cnt[ $s['group'] ] ) ? $cnt[ $s['group'] ] + 1 : 1;
+	}
+	$o  = '<div class="th-home td-dir">';
+	$o .= '<section class="td-hero"><div><p class="td-eyebrow th-en">SALE DIRECTORY</p><h1 class="td-title">あの店のセール、<br>いつだっけ。</h1>'
+		. '<p class="td-lead">好きなショップも、気になるブランドも。<br>セールの開催時期を、まとめて探せます。</p></div>'
+		. '<div class="td-total"><small class="th-en">SHOPS &amp; BRANDS</small><b class="th-en">' . $n . '</b><i>件掲載</i><p>ネット通販から、店舗まで。</p></div></section>';
+	$o .= '<section class="td-search"><p class="td-search-label">ショップ・ブランド名で探す</p>'
+		. '<label><svg width="20" height="20" viewBox="0 0 24 24" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>'
+		. '<input type="search" placeholder="店名・ブランド名" aria-label="店名・ブランド名で探す"></label><div class="td-quick"><span>クイック検索</span>';
+	foreach ( isset( $d['quick'] ) ? (array) $d['quick'] : array() as $k ) {
+		$o .= '<button type="button">' . esc_html( $k ) . '</button>';
+	}
+	$o .= '</div></section>';
+	$o .= '<section><div class="td-genre-head"><b>ジャンルから探す</b><button type="button" data-g-btn="">すべて<em class="th-en">' . $n . '</em></button></div><div class="td-genres">';
+	foreach ( isset( $d['groups'] ) ? (array) $d['groups'] : array() as $g ) {
+		$o .= '<button type="button" class="td-g" data-g-btn="' . esc_attr( $g ) . '"><span>' . esc_html( $g ) . '</span><em>' . ( isset( $cnt[ $g ] ) ? (int) $cnt[ $g ] : 0 ) . '</em></button>';
+	}
+	$o .= '</div></section>';
+	$o .= '<section><div class="td-all-head"><h2>すべてのセール</h2><span>' . $n . '件</span></div><div class="td-grid">';
+	$i = 0;
+	foreach ( $shops as $s ) {
+		$i++;
+		$key = function_exists( 'mb_strtolower' ) ? mb_strtolower( $s['name'] . ' ' . $s['initial'] . ' ' . $s['group'] ) : strtolower( $s['name'] . ' ' . $s['initial'] . ' ' . $s['group'] );
+		$o  .= '<article class="td-card" data-n="' . esc_attr( $key ) . '" data-g="' . esc_attr( $s['group'] ) . '">'
+			. '<div class="td-card-top"><span>' . esc_html( $s['group'] ) . '</span><span class="th-en">' . sprintf( '%03d', $i ) . '</span></div>'
+			. '<p class="td-name"><span class="td-ini" style="background:' . esc_attr( $s['bg'] ) . ';color:' . esc_attr( $s['fg'] ) . '">' . esc_html( $s['initial'] ) . '</span><b>' . esc_html( $s['name'] ) . '</b></p>'
+			. '<a class="td-go" href="' . esc_url( home_url( $s['url'] ) ) . '"><span>セール日程の記事を見る</span><span class="th-arrow">' . $a . '</span></a>';
+		if ( ! empty( $s['related'] ) ) {
+			$o .= '<p class="td-sub">関連するセール記事</p><ul class="td-rel">';
+			foreach ( $s['related'] as $r ) {
+				$o .= '<li><a href="' . esc_url( home_url( $r[1] ) ) . '"><span>' . esc_html( $r[0] ) . '</span>' . $a . '</a></li>';
+			}
+			$o .= '</ul>';
+		}
+		if ( ! empty( $s['offs'] ) ) {
+			$o .= '<p class="td-sub">公式サイト・ストア</p><div class="td-offs">';
+			foreach ( $s['offs'] as $f ) {
+				$o .= '<a class="td-off" href="' . esc_url( $f[1] ) . '" target="_blank" rel="nofollow sponsored noopener">' . esc_html( $f[0] ) . $a . '</a>';
+			}
+			$o .= '</div>';
+		}
+		if ( ! empty( $s['verified'] ) ) {
+			$o .= '<p class="td-ver">最終確認<span class="th-en">' . esc_html( $s['verified'] ) . '</span></p>';
+		}
+		$o .= '</article>';
+	}
+	$o .= '</div><p class="td-empty">見つかりませんでした。別の名前やジャンルでお試しください。</p>'
+		. '<div class="td-foot"><button type="button" class="td-more">もっと見る<span aria-hidden="true">＋</span></button><span class="td-count"></span></div>'
+		. '<p class="td-note">「最終確認日」は、その店の公式の告知を最後に確認した日付です。セールの開催日程は各記事で、最新の発表内容・参加条件はショップの公式サイトでご確認ください。</p></section>';
+	$cta = isset( $d['cta'] ) && is_array( $d['cta'] ) ? $d['cta'] : array( 'url' => '/category/season/', 'label' => '季節のセールを見る' );
+	$o  .= '<section class="td-cta"><div><small>FIND YOUR TIMING</small><b>お店よりも、買う時期で探したい？</b></div>'
+		. '<a class="td-cta-btn" href="' . esc_url( home_url( $cta['url'] ) ) . '">' . esc_html( $cta['label'] ) . $a . '</a></section>';
+	return $o . '</div>';
+}
+add_shortcode( 'thesale_directory', 'thesale_directory' );
