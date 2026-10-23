@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.3.0
+ * Version:     1.3.1
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -474,7 +474,7 @@ function thesale_card( $atts ) {
 	if ( 'live' === $st && ! empty( $own['e']['official']['url'] ) ) {
 		$official = $own['e']['official']['url'];
 	}
-	$title = $name . '公式' . ( in_array( $st, array( 'live', 'next' ), true ) && '' !== $tx['name'] ? '　' . $tx['name'] : '' );
+	$title = ( in_array( $st, array( 'live', 'next' ), true ) && '' !== $tx['name'] ) ? $tx['name'] : $name . '公式';
 	$sub   = 'tbd' === $st ? '次のセールはまだ発表されていません' : $tx['when'];
 	$html  = $outer . thesale_card_head( '公式のセール', $st, $title, $sub,
 		thesale_card_button( $official, 'live' === $st ? '公式のセール会場へ' : '公式サイト', '#14213D', false ) );
@@ -537,7 +537,7 @@ add_filter( 'the_content', function ( $content ) {
 	if ( ! is_singular( 'post' ) || ! in_the_loop() || ! is_main_query() ) {
 		return $content;
 	}
-	if ( false !== strpos( $content, 'ts-card' ) ) {
+	if ( false !== strpos( $content, 'ts-card' ) || false !== strpos( $content, '[thesale_card' ) ) {
 		return $content; // 本文にカードを置いた記事は、その場所を優先する
 	}
 	$slug  = (string) get_post_field( 'post_name', get_the_ID() );
@@ -554,14 +554,18 @@ add_filter( 'the_content', function ( $content ) {
 		return $content;
 	}
 	$card = '<div class="ts-card-auto" style="margin:1.6em 0">' . $card . '</div>';
-	$ins  = array(); // 挿入位置（文字位置） => true
-	if ( in_array( 'after_lead', $pos, true ) && false !== ( $i = strpos( $content, '<h2' ) ) ) {
-		$ins[ $i ] = true;
+	// この時点の本文はブロックの描画前（<!-- wp:heading --> の注釈つき）。見出しブロックの内側に入れると
+	// ブロックが壊れるので、注釈の外側（見出しブロックの前後）に入れる
+	$h_open  = '/(?:<!-- wp:heading[^>]*-->\s*)?<h2/u';
+	$h_close = '/<\/h2>(?:\s*<!-- \/wp:heading -->)?/u';
+	$ins     = array(); // 挿入位置（文字位置） => true
+	if ( in_array( 'after_lead', $pos, true ) && preg_match( $h_open, $content, $m, PREG_OFFSET_CAPTURE ) ) {
+		$ins[ $m[0][1] ] = true;
 	}
-	if ( in_array( 'after_h2', $pos, true ) && false !== ( $i = strpos( $content, '</h2>' ) ) ) {
-		$ins[ $i + 5 ] = true;
+	if ( in_array( 'after_h2', $pos, true ) && preg_match( $h_close, $content, $m, PREG_OFFSET_CAPTURE ) ) {
+		$ins[ $m[0][1] + strlen( $m[0][0] ) ] = true;
 	}
-	if ( in_array( 'before_sum', $pos, true ) && preg_match( '/<h2[^>]*>(?:(?!<\/h2>).)*まとめ/su', $content, $m, PREG_OFFSET_CAPTURE ) ) {
+	if ( in_array( 'before_sum', $pos, true ) && preg_match( '/(?:<!-- wp:heading[^>]*-->\s*)?<h2[^>]*>(?:(?!<\/h2>).)*まとめ/su', $content, $m, PREG_OFFSET_CAPTURE ) ) {
 		$ins[ $m[0][1] ] = true;
 	}
 	if ( in_array( 'end', $pos, true ) ) {
@@ -572,7 +576,7 @@ add_filter( 'the_content', function ( $content ) {
 		$content = substr( $content, 0, $at ) . $card . substr( $content, $at );
 	}
 	return $content;
-}, 20 );
+}, 1 ); // テーマが最初の見出しの前に差し込む編集部の欄・目次より前（リード文の直後）に入れるため、ブロックの描画より先に動かす
 
 add_action( 'admin_init', function () {
 	register_setting( 'thesale_card', 'thesale_card_positions', array(
