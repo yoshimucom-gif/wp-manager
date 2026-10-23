@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.5.0
+ * Version:     1.5.1
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -908,7 +908,10 @@ function thesale_home_lower_css() {
 .th-std li em{font-style:normal;color:var(--th-muted);font-family:"Inter",sans-serif;padding-top:4px}
 .th-std li b{display:block;font-size:20px;font-weight:800;margin-bottom:8px}
 .th-std li span{color:var(--th-muted);line-height:1.95;font-size:16px}
-.th-arrow{font-size:28px;font-family:"Inter",sans-serif}
+.th-home .th-arrow,.th-home .th-brand .th-arrow,.th-home .th-cat .th-arrow{font-size:28px;font-family:"Inter",sans-serif;color:var(--th-ink);letter-spacing:0}
+.th-home h2,.th-home h2.wp-block-heading{background:none!important;color:var(--th-ink)!important;padding:0!important;border:0!important;box-shadow:none!important;border-radius:0!important}
+.th-home h2::before,.th-home h2::after{display:none!important;content:none!important}
+.th-search svg{flex-shrink:0}
 @media (max-width:820px){
 .th-tabs{grid-template-columns:repeat(6,minmax(0,1fr))}.th-tab:nth-child(7){border-left:0}.th-tab:nth-child(n+7){border-top:1px solid var(--th-line)}
 .th-cal{grid-template-columns:1fr}.th-cal-num{font-size:110px}.th-cal-row{grid-template-columns:96px minmax(0,1fr) 24px}.th-cal-site,.th-cal-ev b{font-size:18px}
@@ -1007,7 +1010,7 @@ function thesale_home_lower( $now ) {
 	$n = count( $brands );
 	$o .= '<section class="th-band th-band-lime th-bi"><div class="th-sec-head"><div><p class="th-sec-eyebrow th-en">THE BRAND INDEX</p>'
 		. '<h2 class="th-sec-title">好きなお店の、次のセール。</h2></div><span class="th-sec-num th-en">03 / ' . $n . ' SHOPS &amp; MORE</span></div>'
-		. '<div class="th-search"><label><span aria-hidden="true" class="th-en" style="font-size:22px">&#9906;</span><input type="search" placeholder="店名・ブランド名で探す" aria-label="店名・ブランド名で探す"></label>'
+		. '<div class="th-search"><label><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input type="search" placeholder="店名・ブランド名で探す" aria-label="店名・ブランド名で探す"></label>'
 		. '<select aria-label="カテゴリ">' . $opts . '</select></div>'
 		. '<div class="th-brands">' . $items . '</div>'
 		. '<div class="th-brand-foot"><span class="th-count">掲載' . $n . '件</span><button type="button" class="th-more">さらに表示する</button>'
