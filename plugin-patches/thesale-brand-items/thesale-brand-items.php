@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE ブランド商品カード
  * Description: 記事のブランド名（ブランドの記事）または商品名（買い時の記事）で Amazon の商品を引き、在庫のある商品をカードで並べる。Amazon・楽天のボタン付き。記事への自動差し込み・サイドバー（ウィジェット）・ショートコード [thesale_items]（サイドバーは [thesale_items layout="side" n="3"]）。商品は1日1回まとめて取り直して保存する。Affiros オートインサーターとは別管理。
- * Version:     1.0.1
+ * Version:     1.0.2
  * Author:      Keys
  * Text Domain: thesale-brand-items
  */
@@ -262,9 +262,15 @@ function tsbi_rakuten_url( $title ) {
 	return 'https://hb.afl.rakuten.co.jp/hgc/' . $c['rakuten_aff'] . '/?pc=' . rawurlencode( $u ) . '&m=' . rawurlencode( $u );
 }
 
+/** 商品画像の alt（商品名の先頭60字。【】や［］の宣伝表記は外す） */
+function tsbi_alt( $title ) {
+	$t = trim( preg_replace( '/\s+/u', ' ', preg_replace( '/【[^】]*】|\[[^\]]*\]/u', ' ', (string) $title ) ) );
+	return function_exists( 'mb_substr' ) ? mb_substr( $t, 0, 60 ) : substr( $t, 0, 120 );
+}
+
 function tsbi_card( $it, $compact = false ) {
 	return '<div class="tsbi-card' . ( $compact ? ' is-compact' : '' ) . '">'
-		. '<a class="tsbi-img" href="' . esc_url( $it['url'] ) . '" target="_blank" rel="nofollow sponsored noopener"><img src="' . esc_url( $it['image'] ) . '" alt="" loading="lazy" width="300" height="300"></a>'
+		. '<a class="tsbi-img" href="' . esc_url( $it['url'] ) . '" target="_blank" rel="nofollow sponsored noopener"><img src="' . esc_url( $it['image'] ) . '" alt="' . esc_attr( tsbi_alt( $it['title'] ) ) . '" loading="lazy" width="300" height="300"></a>'
 		. '<p class="tsbi-title">' . esc_html( $it['title'] ) . '</p>'
 		. '<div class="tsbi-btns"><a class="tsbi-btn tsbi-am" href="' . esc_url( $it['url'] ) . '" target="_blank" rel="nofollow sponsored noopener">Amazonで見る<span aria-hidden="true">&#8599;</span></a>'
 		. '<a class="tsbi-btn tsbi-rk" href="' . esc_url( tsbi_rakuten_url( $it['title'] ) ) . '" target="_blank" rel="nofollow sponsored noopener">楽天で探す<span aria-hidden="true">&#8599;</span></a></div>'
@@ -375,7 +381,7 @@ function tsbi_side_html( $e, $n, $with_head = true ) {
 	$o = $with_head ? '<h2 class="wp-block-heading">' . esc_html( $label ) . 'の商品</h2>' : '';
 	$o .= '<div class="tsbi-side">';
 	foreach ( $items as $it ) {
-		$o .= '<div class="tsbi-card"><a class="tsbi-img" href="' . esc_url( $it['url'] ) . '" target="_blank" rel="nofollow sponsored noopener"><img src="' . esc_url( $it['image'] ) . '" alt="" loading="lazy" width="120" height="120"></a>'
+		$o .= '<div class="tsbi-card"><a class="tsbi-img" href="' . esc_url( $it['url'] ) . '" target="_blank" rel="nofollow sponsored noopener"><img src="' . esc_url( $it['image'] ) . '" alt="' . esc_attr( tsbi_alt( $it['title'] ) ) . '" loading="lazy" width="120" height="120"></a>'
 			. '<div class="tsbi-body"><p class="tsbi-title">' . esc_html( $it['title'] ) . '</p><div class="tsbi-btns">'
 			. '<a class="tsbi-btn tsbi-am" href="' . esc_url( $it['url'] ) . '" target="_blank" rel="nofollow sponsored noopener">Amazon<span aria-hidden="true">&#8599;</span></a>'
 			. '<a class="tsbi-btn tsbi-rk" href="' . esc_url( tsbi_rakuten_url( $it['title'] ) ) . '" target="_blank" rel="nofollow sponsored noopener">楽天<span aria-hidden="true">&#8599;</span></a></div></div></div>';
