@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.6.1
+ * Version:     1.6.2
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -1135,10 +1135,12 @@ function thesale_dir_css() {
 .td-dir .td-all-head{display:flex;align-items:baseline;gap:14px;margin:44px 0 8px;scroll-margin-top:110px}
 .td-dir .td-all-head h2{font-size:clamp(28px,3.4vw,34px);font-weight:900;margin:0}
 .td-dir .td-all-head span{font-size:15px;color:var(--th-muted);font-weight:700}
-.td-dir .td-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 44px}
-.td-dir .td-card{border-top:1px solid var(--th-line);padding:28px 0 34px;display:flex;flex-direction:column}
+.td-dir .td-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;margin-top:20px}
+.td-dir .td-card{background:#fff;border:1px solid #DCDDD5;border-top:4px solid var(--th-ink);padding:24px 24px 22px;display:flex;flex-direction:column;box-shadow:0 1px 0 rgba(0,0,0,.03)}
+.td-dir .td-card:hover{border-color:var(--th-ink)}
 .td-dir .td-card.is-hidden{display:none}
-.td-dir .td-card-top{display:flex;justify-content:space-between;font-size:13px;color:var(--th-muted);margin-bottom:16px}
+.td-dir .td-card-top{display:flex;font-size:12px;font-weight:700;color:var(--th-muted);margin-bottom:14px}
+.td-dir .td-card-top span{background:#F1F2EC;padding:3px 8px}
 .td-dir .td-card-top .th-en{letter-spacing:.06em}
 .td-dir .td-name{display:flex;align-items:center;gap:14px;margin:0 0 18px}
 .td-dir .td-ini{flex-shrink:0;width:42px;height:42px;display:inline-flex;align-items:center;justify-content:center;font:900 21px "Inter","Noto Sans JP",sans-serif}
@@ -1153,9 +1155,10 @@ function thesale_dir_css() {
 .td-dir .td-rel a{display:flex;justify-content:space-between;gap:10px;font-size:14px;line-height:1.6;padding:5px 0}
 .td-dir .td-rel a:hover span:first-child{text-decoration:underline}
 .td-dir .td-offs{display:flex;flex-wrap:wrap;gap:8px}
-.td-dir a.td-off{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--th-line);background:#fff;padding:7px 12px;font-size:13px;font-weight:800}
+.td-dir a.td-off{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--th-line);background:#F7F7F2;padding:7px 12px;font-size:13px;font-weight:800}
 .td-dir a.td-off:hover{border-color:var(--th-ink)}
-.td-dir .td-ver{margin:auto 0 0;padding-top:20px;font-size:13px;color:var(--th-muted)}
+.td-dir .td-ver{margin:auto 0 0;padding-top:18px;font-size:13px;color:var(--th-muted)}
+.td-dir .td-offs+.td-ver,.td-dir .td-rel+.td-ver,.td-dir a.td-go+.td-ver{margin-top:18px;border-top:1px solid var(--th-line)}
 .td-dir .td-ver .th-en{margin-left:6px;letter-spacing:.04em}
 .td-dir .td-empty{display:none;padding:40px 0;font-size:16px;color:var(--th-muted)}
 .td-dir .td-foot{text-align:center;padding:24px 0 8px}
@@ -1168,14 +1171,14 @@ function thesale_dir_css() {
 .td-dir .td-cta b{font-size:clamp(22px,2.6vw,28px);font-weight:900;color:#fff}
 .td-dir a.td-cta-btn{display:inline-flex;align-items:center;gap:28px;background:#D6F55C;font-weight:800;font-size:16px;padding:18px 26px}
 .td-dir a.td-cta-btn,.td-dir a.td-cta-btn *{color:var(--th-ink)!important}
-@media (max-width:900px){.td-dir .td-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:0 28px}.td-dir .td-genres{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:900px){.td-dir .td-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.td-dir .td-genres{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:640px){
 .td-dir .td-hero{grid-template-columns:1fr;gap:28px;padding-top:24px}
 .td-dir .td-total{border-left:0;border-top:1px solid var(--th-ink);padding:20px 0 0;display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px}
 .td-dir .td-total small{width:100%}.td-dir .td-total b{font-size:64px}.td-dir .td-total p{width:100%;margin-top:4px}
 .td-dir .td-search{padding:24px 18px 20px}.td-dir .td-search label{height:56px;padding:0 14px}.td-dir .td-search input{font-size:16px}
 .td-dir .td-genres{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.td-dir .td-g{padding:13px 10px;font-size:13px}
-.td-dir .td-grid{grid-template-columns:1fr}
+.td-dir .td-grid{grid-template-columns:1fr;gap:14px}.td-dir .td-card{padding:20px 18px 18px}
 .td-dir .td-cta{padding:30px 22px}.td-dir a.td-cta-btn{width:100%;justify-content:space-between;box-sizing:border-box}
 .td-dir .td-more{width:100%;box-sizing:border-box}}
 ';
@@ -1243,7 +1246,7 @@ function thesale_directory( $atts ) {
 		$i++;
 		$key = function_exists( 'mb_strtolower' ) ? mb_strtolower( $s['name'] . ' ' . $s['initial'] . ' ' . $s['group'] ) : strtolower( $s['name'] . ' ' . $s['initial'] . ' ' . $s['group'] );
 		$o  .= '<article class="td-card" data-n="' . esc_attr( $key ) . '" data-g="' . esc_attr( $s['group'] ) . '">'
-			. '<div class="td-card-top"><span>' . esc_html( $s['group'] ) . '</span><span class="th-en">' . sprintf( '%03d', $i ) . '</span></div>'
+			. '<div class="td-card-top"><span>' . esc_html( $s['group'] ) . '</span></div>'
 			. '<p class="td-name"><span class="td-ini" style="background:' . esc_attr( $s['bg'] ) . ';color:' . esc_attr( $s['fg'] ) . '">' . esc_html( $s['initial'] ) . '</span><b>' . esc_html( $s['name'] ) . '</b></p>'
 			. '<a class="td-go" href="' . esc_url( home_url( $s['url'] ) ) . '"><span>セール日程の記事を見る</span><span class="th-arrow">' . $a . '</span></a>';
 		if ( ! empty( $s['related'] ) ) {
