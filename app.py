@@ -6418,7 +6418,8 @@ def favicon():
 # 配布プラグイン（WordPress 連携プラグインの zip）
 PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugin-downloads')
 PLUGIN_DOWNLOADS = {
-    'thesale-schedule': {'file': 'thesale-schedule-1.6.7.zip', 'name': 'THE SALE セール日程表示', 'version': '1.6.7'},
+    'thesale-schedule': {'file': 'thesale-schedule-1.6.8.zip', 'name': 'THE SALE セール日程表示', 'version': '1.6.8'},
+    'thesale-brand-items': {'file': 'thesale-brand-items-1.0.0.zip', 'name': 'THE SALE ブランド商品カード', 'version': '1.0.0'},
     'mikata-seminar-feed': {'file': 'mikata-seminar-feed-1.0.0.zip', 'name': 'ミカタセミナー新着', 'version': '1.0.0'},
     'kurabe-db': {'file': 'kurabe-db-1.7.2.zip', 'name': '100均くらべ 比較データ表示', 'version': '1.7.2'},
     'suit-kurabe-db': {'file': 'suit-kurabe-db-1.5.6.zip', 'name': 'スーツくらべ 比較データ表示', 'version': '1.5.6'},
@@ -6517,6 +6518,8 @@ def download_plugin(plugin_key):
 # 各プラグインがここを叩き、新バージョンを検知して自動更新する。
 PLUGIN_UPDATE_META = {
     'thesale-schedule': {'plugin_basename': 'thesale-schedule/thesale-schedule.php',
+              'tested': '6.7', 'requires': '6.0', 'requires_php': '7.4', 'author': 'Keys'},
+    'thesale-brand-items': {'plugin_basename': 'thesale-brand-items/thesale-brand-items.php',
               'tested': '6.7', 'requires': '6.0', 'requires_php': '7.4', 'author': 'Keys'},
     'kurabe-db': {'plugin_basename': 'kurabe-db/kurabe-db.php',
               'tested': '6.7', 'requires': '6.0', 'requires_php': '7.4', 'author': 'Keys'},

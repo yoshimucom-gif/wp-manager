@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.6.7
+ * Version:     1.6.8
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -59,6 +59,52 @@ add_action( 'rest_api_init', function () {
 				'to'             => isset( $upd->response[ $base ]->new_version ) ? $upd->response[ $base ]->new_version : '',
 				'reactivated'    => ! $was,
 				'error'          => is_wp_error( $res ) ? $res->get_error_message() : null,
+			);
+		},
+	) );
+} );
+
+/**
+ * THE SALE 用の別プラグインの初回導入（1.6.8〜）: POST /wp-json/thesale/v1/install-plugin {"key":"thesale-xxx"}
+ * WPのRESTは自作zipを入れられないので、配信元（wp-manager リポジトリの raw）にある thesale- で始まる
+ * プラグインに限って、ここからインストール・有効化する。以後の更新は各プラグインの自動更新で届く。
+ */
+add_action( 'rest_api_init', function () {
+	register_rest_route( 'thesale/v1', '/install-plugin', array(
+		'methods'             => 'POST',
+		'permission_callback' => function () { return current_user_can( 'install_plugins' ) && current_user_can( 'activate_plugins' ); },
+		'callback'            => function ( WP_REST_Request $req ) {
+			$key = (string) $req->get_param( 'key' );
+			if ( ! preg_match( '/^thesale-[a-z0-9-]+$/', $key ) ) {
+				return new WP_Error( 'bad_key', 'thesale- で始まるプラグインだけ入れられる', array( 'status' => 400 ) );
+			}
+			$raw  = 'https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/';
+			$res  = wp_remote_get( $raw . 'plugin-host/api/plugin-update/' . $key . '?t=' . time(), array( 'timeout' => 20 ) );
+			$meta = json_decode( wp_remote_retrieve_body( $res ), true );
+			$url  = is_array( $meta ) && ! empty( $meta['download_url'] ) ? (string) $meta['download_url'] : '';
+			if ( 0 !== strpos( $url, $raw . 'plugin-downloads/' ) ) {
+				return new WP_Error( 'no_meta', '配信情報が見つからない', array( 'status' => 404 ) );
+			}
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+			require_once ABSPATH . 'wp-admin/includes/misc.php';
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+			require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+			$base = $key . '/' . $key . '.php';
+			$installed = file_exists( WP_PLUGIN_DIR . '/' . $base );
+			if ( ! $installed ) {
+				$up = new Plugin_Upgrader( new Automatic_Upgrader_Skin() );
+				$r  = $up->install( $url );
+				if ( true !== $r ) {
+					return new WP_Error( 'install_failed', is_wp_error( $r ) ? $r->get_error_message() : 'インストールに失敗', array( 'status' => 500 ) );
+				}
+			}
+			$act = activate_plugin( $base );
+			return array(
+				'ok'        => ! is_wp_error( $act ),
+				'installed' => ! $installed,
+				'active'    => is_plugin_active( $base ),
+				'version'   => isset( $meta['version'] ) ? $meta['version'] : '',
+				'error'     => is_wp_error( $act ) ? $act->get_error_message() : null,
 			);
 		},
 	) );
