@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.4.2
+ * Version:     1.5.0
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -713,7 +713,7 @@ function thesale_home_assets() {
 		wp_enqueue_style( 'thesale-home-fonts', 'https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800;900&family=Noto+Sans+JP:wght@500;700;900&display=swap', array(), null );
 		wp_register_style( 'thesale-home', false, array(), '1.4.0' );
 		wp_enqueue_style( 'thesale-home' );
-		wp_add_inline_style( 'thesale-home', thesale_home_css() );
+		wp_add_inline_style( 'thesale-home', thesale_home_css() . thesale_home_lower_css() );
 	}
 }
 add_action( 'wp_enqueue_scripts', function () {
@@ -839,7 +839,242 @@ function thesale_home( $atts ) {
 	$o .= '</div>';
 	$o .= '<p class="th-note"><span aria-hidden="true" style="display:inline-flex;width:20px;height:20px;border:1.5px solid currentColor;border-radius:50%;align-items:center;justify-content:center;font-size:12px;font-weight:700">i</span>'
 		. esc_html( $now->format( 'n' ) . '月' . $now->format( 'j' ) . '日時点、' . ( $live ? '開催中の大型セールは' . count( $live ) . '件です。' : '開催中の大型セールはありません。' ) . '未発表の日程は、過去の開催時期を目安にしています。' )
-		. '</p></section></div>';
+		. '</p></section>' . thesale_home_lower( $now ) . '</div>';
 	return $o;
 }
 add_shortcode( 'thesale_home', 'thesale_home' );
+
+/*
+ * ── トップページの下半分（1.5.0〜）: 02 月別カレンダー／03 ブランド一覧／読みもの／カテゴリ／編集方針 ─────
+ * データはオプション thesale_home（tools/push_home_data.py が書く）。月の切り替え・検索・さらに表示は小さなJS。
+ */
+function thesale_home_lower_css() {
+	return '
+.th-band{box-shadow:0 0 0 100vmax var(--th-band);clip-path:inset(0 -100vmax);background:var(--th-band);padding:64px 0}
+.th-band-sage{--th-band:#ECEFE5}.th-band-lime{--th-band:#D6F55C}.th-band-paper{--th-band:#F7F7F2}
+.th-tabs{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));border:1px solid var(--th-line);background:#FAFAF6;margin-bottom:34px}
+.th-tab{appearance:none;border:0;border-left:1px solid var(--th-line);background:transparent;padding:22px 0;font:800 17px "Noto Sans JP",sans-serif;color:var(--th-ink);cursor:pointer}
+.th-tab:first-child{border-left:0}
+.th-tab.is-on{background:var(--th-ink);color:#fff}
+.th-cal{display:grid;grid-template-columns:240px minmax(0,1fr);gap:28px}
+.th-cal-panel{display:none}.th-cal-panel.is-on{display:grid}
+.th-cal-year{font-size:17px;letter-spacing:.14em;margin:12px 0 18px}
+.th-cal-num{font-size:150px;font-weight:900;line-height:.85;letter-spacing:-.04em}
+.th-cal-unit{font-size:26px;margin:14px 0 30px 8px}
+.th-cal-list{border-top:1px solid var(--th-ink)}
+.th-cal-row{display:grid;grid-template-columns:150px minmax(0,1fr) 30px;align-items:center;gap:12px;padding:26px 0;border-bottom:1px solid var(--th-line)}
+.th-cal-site{font-size:22px;font-weight:800}
+.th-cal-ev b{display:block;font-size:22px;font-weight:800;margin-bottom:6px}
+.th-cal-ev span{font-size:16px;color:var(--th-muted)}
+.th-cal-empty{padding:26px 0;color:var(--th-muted);border-bottom:1px solid var(--th-line)}
+.th-small{font-size:16px;color:var(--th-muted);margin:30px 0 0}
+.th-search{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;margin-bottom:28px}
+.th-search label{display:flex;align-items:center;gap:14px;background:#F8FBEA;border:1px solid rgba(31,34,28,.55);padding:0 24px;height:88px}
+.th-search input{border:0;background:transparent;font:500 20px "Noto Sans JP",sans-serif;width:100%;outline:0;color:var(--th-ink)}
+.th-search select{border:1px solid rgba(31,34,28,.55);background:transparent;font:600 17px "Noto Sans JP",sans-serif;padding:0 22px;height:90px;color:var(--th-ink)}
+.th-brands{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0 22px;border-top:1px solid rgba(31,34,28,.45)}
+.th-brand{display:flex;justify-content:space-between;align-items:center;padding:26px 0;border-bottom:1px solid rgba(31,34,28,.45)}
+.th-brand b{display:block;font-size:24px;font-weight:800;margin-bottom:8px}
+.th-brand span{font-size:15px;color:#3E4433}
+.th-brand.is-hidden{display:none}
+.th-brand-foot{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-top:30px;font-size:16px;color:#3E4433}
+.th-more{appearance:none;border:1px solid var(--th-ink);background:transparent;font:800 17px "Noto Sans JP",sans-serif;padding:18px 26px;cursor:pointer;color:var(--th-ink)}
+.th-feature{display:block;margin-bottom:36px}
+.th-art{display:flex;flex-direction:column;justify-content:space-between;padding:34px 30px;min-height:240px;box-sizing:border-box}
+.th-art-dark{background:var(--th-ink);color:var(--th-lime)}
+.th-art-sage{background:#ECEFE5;border:1px solid var(--th-line);color:var(--th-ink)}
+.th-art-lime{background:#D6F55C;color:var(--th-ink)}
+.th-art small{font-size:15px;font-weight:800;letter-spacing:.14em}
+.th-art strong{font-family:"Inter","Noto Sans JP",sans-serif;font-size:clamp(40px,5.6vw,66px);font-weight:900;line-height:1.02;letter-spacing:-.03em;white-space:pre-line}
+.th-art-sage strong{font-family:Georgia,"Times New Roman",serif;font-style:italic;font-weight:400;letter-spacing:-.02em}
+.th-art-lime strong{font-family:"Noto Sans JP",sans-serif;font-size:clamp(34px,4.4vw,52px);line-height:1.35}
+.th-feature-meta{display:flex;justify-content:space-between;color:var(--th-muted);font-size:15px;margin:18px 0 12px}
+.th-feature-title{font-size:21px;font-weight:800;line-height:1.7;margin:0}
+.th-feature-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:30px}
+.th-rank{border-top:1px solid var(--th-line);margin-top:10px;padding-top:26px;list-style:none;margin-left:0;padding-left:0}
+.th-rank li{display:flex;gap:26px;padding:12px 0;font-size:18px;margin:0}
+.th-rank li::before{content:none}
+.th-rank em{font-style:normal;font-weight:800;color:var(--th-muted);font-family:"Inter",sans-serif}
+.th-cats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--th-ink)}
+.th-cat{display:flex;justify-content:space-between;align-items:center;padding:42px 28px 42px 0;border-bottom:1px solid var(--th-line);border-left:1px solid var(--th-line);padding-left:26px}
+.th-cat:nth-child(3n+1){border-left:0;padding-left:0}
+.th-cat b{display:block;font-size:24px;font-weight:800;margin-bottom:12px}
+.th-cat span{font-size:15px;letter-spacing:.12em;color:var(--th-muted)}
+.th-std{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:60px}
+.th-std h2{font-size:clamp(32px,4vw,40px);font-weight:900;line-height:1.55;margin:0 0 40px}
+.th-std ol{list-style:none;margin:0;padding:0}
+.th-std li{display:grid;grid-template-columns:62px minmax(0,1fr);margin:0 0 34px}
+.th-std li::before{content:none}
+.th-std li em{font-style:normal;color:var(--th-muted);font-family:"Inter",sans-serif;padding-top:4px}
+.th-std li b{display:block;font-size:20px;font-weight:800;margin-bottom:8px}
+.th-std li span{color:var(--th-muted);line-height:1.95;font-size:16px}
+.th-arrow{font-size:28px;font-family:"Inter",sans-serif}
+@media (max-width:820px){
+.th-tabs{grid-template-columns:repeat(6,minmax(0,1fr))}.th-tab:nth-child(7){border-left:0}.th-tab:nth-child(n+7){border-top:1px solid var(--th-line)}
+.th-cal{grid-template-columns:1fr}.th-cal-num{font-size:110px}.th-cal-row{grid-template-columns:96px minmax(0,1fr) 24px}.th-cal-site,.th-cal-ev b{font-size:18px}
+.th-search{grid-template-columns:1fr}.th-search label,.th-search select{height:64px}
+.th-brands{grid-template-columns:repeat(2,minmax(0,1fr))}.th-brand b{font-size:19px}
+.th-feature-row,.th-std{grid-template-columns:1fr}.th-cats{grid-template-columns:1fr 1fr}.th-cat{padding:28px 12px}.th-cat:nth-child(3n+1){border-left:1px solid var(--th-line);padding-left:12px}.th-cat:nth-child(2n+1){border-left:0;padding-left:0}.th-cat b{font-size:19px}
+.th-sec-num{display:none}}
+';
+}
+
+function thesale_home_lower_js() {
+	return <<<'JS'
+document.addEventListener('DOMContentLoaded',function(){
+  document.querySelectorAll('.th-tabs').forEach(function(t){
+    t.addEventListener('click',function(ev){var b=ev.target.closest('.th-tab');if(!b)return;
+      t.querySelectorAll('.th-tab').forEach(function(x){x.classList.toggle('is-on',x===b);x.setAttribute('aria-selected',x===b?'true':'false')});
+      var root=t.parentNode;root.querySelectorAll('.th-cal-panel').forEach(function(p){p.classList.toggle('is-on',p.dataset.m===b.dataset.m)});});
+  });
+  document.querySelectorAll('.th-bi').forEach(function(root){
+    var q=root.querySelector('input'),sel=root.querySelector('select'),more=root.querySelector('.th-more'),cnt=root.querySelector('.th-count'),
+        items=[].slice.call(root.querySelectorAll('.th-brand')),shown=8;
+    function apply(){var k=(q.value||'').trim().toLowerCase(),g=sel.value,hit=0,vis=0;
+      items.forEach(function(it){var ok=(!k||it.dataset.n.toLowerCase().indexOf(k)>=0)&&(!g||it.dataset.g===g);
+        if(ok){hit++;}var show=ok&&(k||g?true:hit<=shown);it.classList.toggle('is-hidden',!show);if(show)vis++;});
+      cnt.textContent='掲載'+items.length+'件 / '+vis+'件を表示';more.style.display=(k||g||vis>=hit)?'none':'';}
+    q.addEventListener('input',apply);sel.addEventListener('change',apply);
+    more.addEventListener('click',function(){shown+=8;apply();});apply();
+  });
+});
+JS;
+}
+
+function thesale_home_lower( $now ) {
+	$d = get_option( 'thesale_home', array() );
+	if ( is_string( $d ) ) {
+		$d = json_decode( $d, true );
+	}
+	if ( ! is_array( $d ) ) {
+		return '';
+	}
+	wp_register_script( 'thesale-home', false, array(), '1.5.0', true );
+	wp_enqueue_script( 'thesale-home' );
+	wp_add_inline_script( 'thesale-home', thesale_home_lower_js() );
+	$a  = thesale_home_arrow();
+	$o  = '';
+
+	// 02 カレンダー
+	$cal = isset( $d['calendar'] ) ? $d['calendar'] : array();
+	$en  = array( 1 => 'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december' );
+	$m0  = (int) $now->format( 'n' );
+	$y0  = (int) $now->format( 'Y' );
+	// 月の途中なら翌月から（10月23日なら11月始まり。1日〜10日なら当月から）
+	if ( (int) $now->format( 'j' ) > 10 ) {
+		$m0 = 12 === $m0 ? 1 : $m0 + 1;
+		$y0 = 1 === $m0 ? $y0 + 1 : $y0;
+	}
+	$tabs = '';
+	$pans = '';
+	for ( $i = 0; $i < 12; $i++ ) {
+		$m = ( ( $m0 - 1 + $i ) % 12 ) + 1;
+		$y = $y0 + (int) floor( ( $m0 - 1 + $i ) / 12 );
+		$on = 0 === $i ? ' is-on' : '';
+		$tabs .= '<button type="button" class="th-tab' . $on . '" data-m="' . $m . '" aria-selected="' . ( $on ? 'true' : 'false' ) . '">' . $m . '月</button>';
+		$art = isset( $cal['month_article'][ (string) $m ] ) ? $cal['month_article'][ (string) $m ] : str_replace( '{en}', $en[ $m ], isset( $cal['month_article_default'] ) ? $cal['month_article_default'] : 'amazon-sale-{en}' );
+		$rows = '';
+		$list = isset( $cal['months'][ (string) $m ] ) && is_array( $cal['months'][ (string) $m ] ) ? $cal['months'][ (string) $m ] : array();
+		foreach ( $list as $r ) {
+			$rows .= '<a class="th-cal-row" href="' . esc_url( home_url( '/' . $r[2] . '/' ) ) . '"><span class="th-cal-site th-en">' . esc_html( $r[0] ) . '</span>'
+				. '<span class="th-cal-ev"><b>' . esc_html( $r[1] ) . '</b><span>例年の開催傾向 · 正式日程は記事で確認</span></span><span class="th-arrow">' . $a . '</span></a>';
+		}
+		if ( '' === $rows ) {
+			$rows = '<p class="th-cal-empty">この月に例年開かれる大型セールはありません。月ごとの記事で、小さなセールの過去の日程を確かめられます。</p>';
+		}
+		$pans .= '<div class="th-cal th-cal-panel' . $on . '" data-m="' . $m . '"><div><p class="th-cal-year th-en">' . $y . '</p>'
+			. '<div class="th-cal-num th-en">' . $m . '</div><p class="th-cal-unit">月</p>'
+			. '<a class="th-link" href="' . esc_url( home_url( '/' . $art . '/' ) ) . '">この月の記事へ' . $a . '</a></div>'
+			. '<div class="th-cal-list">' . $rows . '</div></div>';
+	}
+	$o .= '<section class="th-band th-band-sage"><div class="th-sec-head"><div><p class="th-sec-eyebrow th-en">PLAN YOUR SHOPPING</p>'
+		. '<h2 class="th-sec-title">買い時を、先読み。</h2></div><span class="th-sec-num th-en">02 / SALE CALENDAR</span></div>'
+		. '<div class="th-calwrap"><div class="th-tabs" role="tablist">' . $tabs . '</div>' . $pans . '</div>'
+		. '<p class="th-small">Amazon・楽天市場・Qoo10の、例年の主なセールを掲載しています。開催時期の傾向であり、確定した日程ではありません。</p></section>';
+
+	// 03 ブランド一覧
+	$brands = isset( $d['brands'] ) && is_array( $d['brands'] ) ? $d['brands'] : array();
+	$groups = isset( $d['groups'] ) && is_array( $d['groups'] ) ? $d['groups'] : array();
+	$opts   = '<option value="">すべてのカテゴリ</option>';
+	foreach ( $groups as $g ) {
+		$opts .= '<option value="' . esc_attr( $g ) . '">' . esc_html( $g ) . '</option>';
+	}
+	$items = '';
+	foreach ( $brands as $b ) {
+		$items .= '<a class="th-brand" data-n="' . esc_attr( $b['name'] ) . '" data-g="' . esc_attr( $b['group'] ) . '" href="' . esc_url( home_url( $b['url'] ) ) . '">'
+			. '<span><b>' . esc_html( $b['name'] ) . '</b><span>' . ( '' !== $b['verified'] ? '最終確認 ' . esc_html( $b['verified'] ) : '' ) . '</span></span><span class="th-arrow">' . $a . '</span></a>';
+	}
+	$n = count( $brands );
+	$o .= '<section class="th-band th-band-lime th-bi"><div class="th-sec-head"><div><p class="th-sec-eyebrow th-en">THE BRAND INDEX</p>'
+		. '<h2 class="th-sec-title">好きなお店の、次のセール。</h2></div><span class="th-sec-num th-en">03 / ' . $n . ' SHOPS &amp; MORE</span></div>'
+		. '<div class="th-search"><label><span aria-hidden="true" class="th-en" style="font-size:22px">&#9906;</span><input type="search" placeholder="店名・ブランド名で探す" aria-label="店名・ブランド名で探す"></label>'
+		. '<select aria-label="カテゴリ">' . $opts . '</select></div>'
+		. '<div class="th-brands">' . $items . '</div>'
+		. '<div class="th-brand-foot"><span class="th-count">掲載' . $n . '件</span><button type="button" class="th-more">さらに表示する</button>'
+		. '<a class="th-link" href="' . esc_url( home_url( '/sale-list/' ) ) . '">掲載ショップ・ブランドをすべて見る' . $a . '</a></div></section>';
+
+	// 読みもの
+	$edit = isset( $d['edit'] ) ? $d['edit'] : array();
+	$card = function ( $f ) use ( $a ) {
+		$p = get_page_by_path( $f['slug'], OBJECT, 'post' );
+		if ( ! $p ) {
+			return '';
+		}
+		$cats  = get_the_category( $p->ID );
+		$cat   = $cats ? $cats[0]->name : '';
+		$title = get_the_title( $p );
+		$title = preg_replace( '/？/u', '？<br>', esc_html( $title ), 1 );
+		return '<a class="th-feature" href="' . esc_url( get_permalink( $p ) ) . '"><div class="th-art th-art-' . esc_attr( $f['style'] ) . '">'
+			. '<small class="th-en">' . esc_html( $f['eyebrow'] ) . '</small><strong>' . esc_html( $f['art'] ) . '</strong></div>'
+			. '<div class="th-feature-meta"><span>' . esc_html( $cat ) . '</span><span class="th-en">' . esc_html( get_the_date( 'Y.m.d', $p ) ) . '</span></div>'
+			. '<p class="th-feature-title">' . $title . '</p></a>';
+	};
+	$fs   = isset( $edit['features'] ) && is_array( $edit['features'] ) ? $edit['features'] : array();
+	$feat = '';
+	if ( $fs ) {
+		$feat .= $card( $fs[0] );
+		$rest  = '';
+		foreach ( array_slice( $fs, 1 ) as $f ) {
+			$rest .= $card( $f );
+		}
+		if ( '' !== $rest ) {
+			$feat .= '<div class="th-feature-row">' . $rest . '</div>';
+		}
+	}
+	$rank = '';
+	$i    = 0;
+	foreach ( ( isset( $edit['list'] ) && is_array( $edit['list'] ) ? $edit['list'] : array() ) as $slug ) {
+		$p = get_page_by_path( $slug, OBJECT, 'post' );
+		if ( ! $p ) {
+			continue;
+		}
+		$i++;
+		$rank .= '<li><em>' . sprintf( '%02d', $i ) . '</em><a href="' . esc_url( get_permalink( $p ) ) . '">' . esc_html( get_the_title( $p ) ) . '</a></li>';
+	}
+	$o .= '<section class="th-band th-band-paper"><div class="th-sec-head"><div><p class="th-sec-eyebrow th-en">THE SHOPPING EDIT</p>'
+		. '<h2 class="th-sec-title">買い物の前に、読む。</h2></div><a class="th-link" href="' . esc_url( home_url( '/articles/' ) ) . '" style="min-width:120px">記事一覧' . $a . '</a></div>'
+		. $feat . ( '' !== $rank ? '<ol class="th-rank">' . $rank . '</ol>' : '' ) . '</section>';
+
+	// カテゴリ
+	$cats = array( array( 'mall', 'ネット通販', 'ONLINE MALL' ), array( 'season', '季節のセール', 'SEASONAL SALE' ), array( 'gadget', '家電・ガジェット', 'TECH &amp; HOME' ),
+		array( 'game', 'ゲーム', 'GAMES' ), array( 'fashion', 'ファッション', 'FASHION' ), array( 'otoku', 'お得に買うコツ', 'SHOPPING TIPS' ) );
+	$ct   = '';
+	foreach ( $cats as $c ) {
+		$t = get_category_by_slug( $c[0] );
+		if ( ! $t ) {
+			continue;
+		}
+		$ct .= '<a class="th-cat" href="' . esc_url( get_category_link( $t ) ) . '"><span><b>' . esc_html( $c[1] ) . '</b><span class="th-en">' . $c[2] . '</span></span><span class="th-arrow">' . $a . '</span></a>';
+	}
+	$o .= '<section class="th-band th-band-paper" style="border-top:1px solid var(--th-line)"><div class="th-sec-head"><div><p class="th-sec-eyebrow th-en">FIND YOUR NEXT</p>'
+		. '<h2 class="th-sec-title">何のセールを探す？</h2></div><a class="th-link" href="' . esc_url( home_url( '/category-list/' ) ) . '" style="min-width:120px">全カテゴリ' . $a . '</a></div>'
+		. '<div class="th-cats">' . $ct . '</div></section>';
+
+	// 編集方針
+	$o .= '<section class="th-band th-band-sage"><div class="th-std"><div><p class="th-sec-eyebrow th-en">OUR EDITORIAL STANDARD</p>'
+		. '<h2>日程を知る。<br>根拠も、わかる。</h2><a class="th-link" href="' . esc_url( home_url( '/information-policy/' ) ) . '">情報の取得方法と掲載基準' . $a . '</a></div>'
+		. '<ol><li><em>01</em><div><b>公式の情報を起点に。</b><span>通販サイトやブランドの公式発表を優先して、セールの開催日程をまとめています。</span></div></li>'
+		. '<li><em>02</em><div><b>予定と、過去の実績を分けて。</b><span>日程がまだ発表されていないものは「日程未発表」と表示。過去の開催時期を目安として紹介します。</span></div></li>'
+		. '<li><em>03</em><div><b>いつ確認した情報か、見えるように。</b><span>ブランド一覧では「最終確認日」を掲載。公式の告知を最後に確認した日がわかります。</span></div></li></ol></div></section>';
+	return $o;
+}
