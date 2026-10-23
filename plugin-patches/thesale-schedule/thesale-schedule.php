@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.7.2
+ * Version:     1.7.3
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -600,7 +600,8 @@ function thesale_card( $atts ) {
 		}
 		return $outer . '<div style="box-sizing:border-box;padding:20px 24px;background:#fff;border:1px solid #E3E8EF;border-radius:14px">'
 			. '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-size:13px;font-weight:700;color:#5B6274">' . esc_html( $name ) . 'のセール</span>' . thesale_card_pill( $st ) . '</div>'
-			. '<div style="font-size:20px;font-weight:700;line-height:1.5;color:#1F2937;margin-top:8px">' . esc_html( $title ) . '</div>'
+			// 見出し: 日程データのセール名（例年の目安も含む）。無ければ「次のセール」（上の行の「◯◯のセール」と重ねない・1.7.3）
+			. '<div style="font-size:20px;font-weight:700;line-height:1.5;color:#1F2937;margin-top:8px">' . esc_html( '' !== $tx['name'] ? $tx['name'] : '次のセール' ) . '</div>'
 			. '<div style="font-size:14px;line-height:1.6;color:#5B6274;margin-top:4px">' . esc_html( $sub ) . '</div>'
 			. $grid . '</div></div>';
 	}
