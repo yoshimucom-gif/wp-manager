@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE ブランド商品カード
  * Description: 記事のブランド名（ブランドの記事）または商品名（買い時の記事）で Amazon の商品を引き、在庫のある商品をカードで並べる。Amazon・楽天のボタン付き。記事への自動差し込み・サイドバー（ウィジェット）・ショートコード [thesale_items]（サイドバーは [thesale_items layout="side" n="3"]）。商品は1日1回まとめて取り直して保存する。Affiros オートインサーターとは別管理。
- * Version:     1.0.2
+ * Version:     1.0.3
  * Author:      Keys
  * Text Domain: thesale-brand-items
  */
@@ -262,9 +262,11 @@ function tsbi_rakuten_url( $title ) {
 	return 'https://hb.afl.rakuten.co.jp/hgc/' . $c['rakuten_aff'] . '/?pc=' . rawurlencode( $u ) . '&m=' . rawurlencode( $u );
 }
 
-/** 商品画像の alt（商品名の先頭60字。【】や［］の宣伝表記は外す） */
+/** 商品画像の alt（商品名の先頭60字。【】の宣伝表記は外し、[ブランド名] は中身を残す） */
 function tsbi_alt( $title ) {
-	$t = trim( preg_replace( '/\s+/u', ' ', preg_replace( '/【[^】]*】|\[[^\]]*\]/u', ' ', (string) $title ) ) );
+	$t = preg_replace( '/【[^】]*】/u', ' ', (string) $title );          // 【送料無料】などの宣伝表記は外す
+	$t = preg_replace( '/[\[［]([^\]］]*)[\]］]/u', '$1 ', $t );        // [ナイキ] のブランド名は中身を残す
+	$t = trim( preg_replace( '/\s+/u', ' ', $t ) );
 	return function_exists( 'mb_substr' ) ? mb_substr( $t, 0, 60 ) : substr( $t, 0, 120 );
 }
 
