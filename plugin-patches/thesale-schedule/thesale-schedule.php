@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.6.8
+ * Version:     1.6.9
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -719,7 +719,7 @@ function thesale_home_css() {
 .th-home a{color:inherit;text-decoration:none}
 .th-home a.th-next,.th-home a.th-next *{color:#fff}
 .th-home a.th-btn,.th-home a.th-btn *{color:#fff}
-.th-home{background:var(--th-bg);box-shadow:0 0 0 100vmax var(--th-bg);clip-path:inset(0 -100vmax);margin-bottom:0!important}
+.th-home{background:var(--th-bg);box-shadow:0 0 0 100vmax var(--th-bg);clip-path:inset(0 -100vmax);margin-top:0!important;margin-bottom:0!important}
 .th-home .th-en{font-family:"Inter","Noto Sans JP",sans-serif}
 .th-hero{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:48px;align-items:stretch;padding:48px 0 40px}
 .th-eyebrow{font-size:14px;font-weight:800;letter-spacing:.16em;margin:0 0 28px}
