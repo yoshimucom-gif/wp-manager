@@ -42,7 +42,7 @@ SPECS = [
     (os.path.join(ROOT, 'affiros-cat-eyecatch'),
      'affiros-cat-eyecatch', 'affiros-cat-eyecatch-1.0.1.zip'),
     (os.path.join(ROOT, 'rediver-helper'),
-     'rediver-helper', 'rediver-helper-1.4.1.zip'),
+     'rediver-helper', 'rediver-helper-1.5.0.zip'),
     (os.path.join(ROOT, 'affiros-sale-hub'),
      'affiros-sale-hub', 'affiros-sale-hub-1.5.1.zip'),
 ]

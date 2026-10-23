@@ -2,14 +2,14 @@
   "name": "Re:Diver ヘルパー",
   "slug": "rediver-helper",
   "plugin": "rediver-helper/rediver-helper.php",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "tested": "6.6",
   "requires": "5.8",
   "requires_php": "7.4",
   "author": "Keys",
-  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/rediver-helper-1.4.1.zip",
+  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/rediver-helper-1.5.0.zip",
   "sections": {
     "description": "Re:Diver ヘルパー 本体。GitHub から自動更新します。",
-    "changelog": "1.4.1 — noindex にしたページを WP標準のサイトマップ（wp-sitemap.xml）から外す（Search Console の送信エラーを防ぐ）。 / 1.4.0 — (1) 編集画面のSEO設定（noindex / nofollow）が <meta name=\"robots\"> に出ないテーマの不具合を、wp_robots で同じ値を足して修正（無効化フィルタ rdh_single_robots_fix）。(2) option rdh_cf7_style を 1 にしたサイトだけ、Contact Form 7 のフォームをサイトの配色で整える（既定はオフ）。(3) 新版の即時適用 POST /rdh/v1/selfupdate を追加。 / 1.3.0 — 著者アバターをメディアライブラリの画像に差し替える機能を追加。option rdh_avatar_map に「ユーザーID: 添付ファイルID」を入れると、記事下の著者欄・コメント欄・著者アーカイブのアバターが差し替わる。Gravatarへの画像登録は不要。無効化するフィルタ名は rdh_avatar_override。 / 1.2.1 — diver-keys の記述を実測に合わせて訂正。ブロックのプリセット色は diver_color_custom から自動生成されるので設定不要（設定直後だけ transient のせいで古い色に見えることがある）。グローバルスタイルの上書きや追加CSSに逃げないよう注意書きを追加。 / 1.2.0 — re:Diverの設定キー索引 GET /rdh/v1/diver-keys を追加。配色（theme_mod diver_color ＋ diver_color_custom）・ブロックのプリセット色（グローバルスタイルのパレット）・見出しの色（diver_content_heading）・メインビジュアル・記事幅・カテゴリ画像・追加CSSが、どこに何というキーで入っていて、どう書くかを現在値つきで1回で返す。さらに「色は入っているのに diver_color.isCustom が立っておらず、テーマが既定の配色のまま描画している」状態を検出して warnings に出す。 / 1.1.2 — 洗い出した不具合の一括修正。(1) JSONで送ったバックスラッシュが消える不具合を修正。(2) 一括更新に退避が無く戻せなかったのを修正し、全件分を1件にまとめて保存・500件で頭打ち。(3) 配列のオプションをスカラーで丸ごと消せてしまう穴を塞いだ。(4) 案内だけで実装が無かった force=true を実装。(5) タームメタのDELETEに退避と存在確認を追加。(6) theme_mod もキーのガードを通るようにした。(7) 役割定義オプションの拒否をテーブル接頭辞に追従。(8) 更新チェックの失敗を5分キャッシュし、管理画面が毎回10秒待たされるのを解消。(9) 配布URLはhttpsのみ受け付ける。(10) 復元前の値も退避し復元を取り消せるようにした。"
+    "changelog": "1.5.0 — ads.txt をオプション rdh_ads_txt から配信する機能を追加（サーバーにファイルを置かずに REST で書ける。空なら配信しない。無効化フィルタ rdh_ads_txt_serve）。 / 1.4.1 — noindex にしたページを WP標準のサイトマップ（wp-sitemap.xml）から外す（Search Console の送信エラーを防ぐ）。 / 1.4.0 — (1) 編集画面のSEO設定（noindex / nofollow）が <meta name=\"robots\"> に出ないテーマの不具合を、wp_robots で同じ値を足して修正（無効化フィルタ rdh_single_robots_fix）。(2) option rdh_cf7_style を 1 にしたサイトだけ、Contact Form 7 のフォームをサイトの配色で整える（既定はオフ）。(3) 新版の即時適用 POST /rdh/v1/selfupdate を追加。 / 1.3.0 — 著者アバターをメディアライブラリの画像に差し替える機能を追加。option rdh_avatar_map に「ユーザーID: 添付ファイルID」を入れると、記事下の著者欄・コメント欄・著者アーカイブのアバターが差し替わる。Gravatarへの画像登録は不要。無効化するフィルタ名は rdh_avatar_override。 / 1.2.1 — diver-keys の記述を実測に合わせて訂正。ブロックのプリセット色は diver_color_custom から自動生成されるので設定不要（設定直後だけ transient のせいで古い色に見えることがある）。グローバルスタイルの上書きや追加CSSに逃げないよう注意書きを追加。 / 1.2.0 — re:Diverの設定キー索引 GET /rdh/v1/diver-keys を追加。配色（theme_mod diver_color ＋ diver_color_custom）・ブロックのプリセット色（グローバルスタイルのパレット）・見出しの色（diver_content_heading）・メインビジュアル・記事幅・カテゴリ画像・追加CSSが、どこに何というキーで入っていて、どう書くかを現在値つきで1回で返す。さらに「色は入っているのに diver_color.isCustom が立っておらず、テーマが既定の配色のまま描画している」状態を検出して warnings に出す。 / 1.1.2 — 洗い出した不具合の一括修正。(1) JSONで送ったバックスラッシュが消える不具合を修正。(2) 一括更新に退避が無く戻せなかったのを修正し、全件分を1件にまとめて保存・500件で頭打ち。(3) 配列のオプションをスカラーで丸ごと消せてしまう穴を塞いだ。(4) 案内だけで実装が無かった force=true を実装。(5) タームメタのDELETEに退避と存在確認を追加。(6) theme_mod もキーのガードを通るようにした。(7) 役割定義オプションの拒否をテーブル接頭辞に追従。(8) 更新チェックの失敗を5分キャッシュし、管理画面が毎回10秒待たされるのを解消。(9) 配布URLはhttpsのみ受け付ける。(10) 復元前の値も退避し復元を取り消せるようにした。"
   }
 }
