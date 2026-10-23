@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.6.9
+ * Version:     1.7.0
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -108,6 +108,16 @@ add_action( 'rest_api_init', function () {
 			);
 		},
 	) );
+} );
+
+/** 開催中の点滅（1.7.0〜）。カードは記事の本文に入るので、CSSは記事ページで別に読み込む */
+add_action( 'wp_enqueue_scripts', function () {
+	if ( ! is_singular( 'post' ) ) {
+		return;
+	}
+	wp_register_style( 'thesale-card', false, array(), '1.7.0' );
+	wp_enqueue_style( 'thesale-card' );
+	wp_add_inline_style( 'thesale-card', '@keyframes tsBlink{0%,100%{opacity:1}50%{opacity:.25}}.ts-blink{animation:tsBlink 1.1s ease-in-out infinite}@media (prefers-reduced-motion:reduce){.ts-blink{animation:none}}@media (max-width:600px){.ts-live a{width:100%}}' );
 } );
 
 /**
@@ -451,8 +461,8 @@ function thesale_card_pill( $state ) {
 	);
 	$m = isset( $map[ $state ] ) ? $map[ $state ] : $map['tbd'];
 	return sprintf(
-		'<span style="display:inline-block;padding:3px 10px;border-radius:6px;font-size:13px;font-weight:700;line-height:1.5;white-space:nowrap;background:%s;color:%s">%s</span>',
-		$m[0], $m[1], esc_html( $m[2] )
+		'<span%s style="display:inline-block;padding:3px 10px;border-radius:6px;font-size:13px;font-weight:700;line-height:1.5;white-space:nowrap;background:%s;color:%s">%s</span>',
+		'live' === $state ? ' class="ts-blink"' : '', $m[0], $m[1], esc_html( $m[2] )
 	);
 }
 
@@ -469,6 +479,45 @@ function thesale_card_button( $url, $label, $bg, $full, $fg = '#fff' ) {
 		esc_attr( $bg ),
 		esc_html( $label )
 	);
+}
+
+/** 開催中の残り時間（1.7.0〜）: 終了まであと N日／本日 H:i 終了／あと N時間 */
+function thesale_card_left( $t ) {
+	if ( ! $t ) {
+		return '';
+	}
+	$now  = thesale_sched_now();
+	$secs = $t->getTimestamp() - $now->getTimestamp();
+	if ( $secs <= 0 ) {
+		return '';
+	}
+	if ( $t->format( 'Y-m-d' ) === $now->format( 'Y-m-d' ) ) {
+		return in_array( $t->format( 'H:i' ), array( '23:59', '00:00' ), true ) ? '本日終了' : '本日 ' . $t->format( 'G:i' ) . ' 終了';
+	}
+	if ( $secs < 86400 ) {
+		return '終了まであと' . max( 1, (int) floor( $secs / 3600 ) ) . '時間';
+	}
+	return '終了まであと' . (int) ceil( $secs / 86400 ) . '日';
+}
+
+/**
+ * 開催中の上段（1.7.0〜・吉村さん選定のA案）: オレンジ地の全面帯。「開催中」と残り時間は点滅。ボタンは強い色
+ */
+function thesale_card_head_live( $label, $title, $sub, $left, $btn_url, $btn_label, $btn_bg = '#E53935', $btn_fg = '#fff' ) {
+	$btn = '';
+	if ( ! empty( $btn_url ) ) {
+		$btn = '<a href="' . esc_url( $btn_url ) . '" target="_blank" rel="nofollow sponsored noopener" style="box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:14px 26px;border-radius:8px;font-weight:800;font-size:16px;line-height:1.4;color:' . esc_attr( $btn_fg ) . ';text-decoration:none;white-space:nowrap;background:' . esc_attr( $btn_bg ) . '">' . esc_html( $btn_label ) . '<span aria-hidden="true" style="font-weight:400">&#8599;</span></a>';
+	}
+	return '<div class="ts-live" style="box-sizing:border-box;display:flex;flex-wrap:wrap;align-items:center;gap:14px 20px;padding:20px 24px;background:#FFF4E5;border:2px solid #F28C28;border-radius:14px">'
+		. '<div style="flex:1;min-width:220px">'
+		. '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+		. '<span style="font-size:13px;font-weight:700;color:#8A4B00">' . esc_html( $label ) . '</span>'
+		. '<span class="ts-blink" style="display:inline-block;padding:4px 12px;border-radius:6px;font-size:14px;font-weight:800;line-height:1.4;white-space:nowrap;background:#E53935;color:#fff">● 開催中</span>'
+		. ( '' !== $left ? '<span class="ts-blink" style="font-size:14px;font-weight:800;color:#C62828;white-space:nowrap">' . esc_html( $left ) . '</span>' : '' )
+		. '</div>'
+		. '<div style="font-size:21px;font-weight:800;line-height:1.5;color:#3B2200;margin-top:8px">' . esc_html( $title ) . '</div>'
+		. '<div style="font-size:14px;line-height:1.6;color:#8A4B00;margin-top:4px">' . esc_html( $sub ) . '</div>'
+		. '</div>' . $btn . '</div>';
 }
 
 /** 上段（白いカード）: ラベル＋状態・見出し・補足・右にボタン */
@@ -520,7 +569,11 @@ function thesale_card( $atts ) {
 		$btn_fg  = 'amazon' === $site ? '#0F1111' : '#fff';
 		$title   = '' !== $tx['name'] ? $tx['name'] : $name;
 		$sub     = 'tbd' === $st ? '次のセールはまだ発表されていません' : $tx['when'];
-		$btn     = thesale_card_button( $btn_url, 'live' === $st ? 'セール会場へ' : '公式サイト', $btn_bg, false, $btn_fg );
+		if ( 'live' === $st ) {
+			return $outer . thesale_card_head_live( 'セールの状況', $title, $sub, thesale_card_left( $own['t'] ), $btn_url, 'いますぐセール会場へ',
+				'#14213D' === $btn_bg ? '#E53935' : $btn_bg, $btn_fg ) . '</div>';
+		}
+		$btn     = thesale_card_button( $btn_url, '公式サイト', $btn_bg, false, $btn_fg );
 		return $outer . thesale_card_head( 'セールの状況', $st, $title, $sub, $btn ) . '</div>';
 	}
 
@@ -530,8 +583,9 @@ function thesale_card( $atts ) {
 	}
 	$title = ( in_array( $st, array( 'live', 'next' ), true ) && '' !== $tx['name'] ) ? $tx['name'] : $name . '公式';
 	$sub   = 'tbd' === $st ? '次のセールはまだ発表されていません' : $tx['when'];
-	$html  = $outer . thesale_card_head( '公式のセール', $st, $title, $sub,
-		thesale_card_button( $official, 'live' === $st ? '公式のセール会場へ' : '公式サイト', '#14213D', false ) );
+	$html  = $outer . ( 'live' === $st
+		? thesale_card_head_live( '公式のセール', $title, $sub, thesale_card_left( $own['t'] ), $official, 'いますぐセール会場へ' )
+		: thesale_card_head( '公式のセール', $st, $title, $sub, thesale_card_button( $official, '公式サイト', '#14213D', false ) ) );
 
 	// 下段: Amazon・楽天の公式ストアで開かれる大型セール（トップに出しているモールの日程から選ぶ）
 	$malls = array(
