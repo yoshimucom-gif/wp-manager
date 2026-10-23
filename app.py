@@ -6418,7 +6418,7 @@ def favicon():
 # 配布プラグイン（WordPress 連携プラグインの zip）
 PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugin-downloads')
 PLUGIN_DOWNLOADS = {
-    'thesale-schedule': {'file': 'thesale-schedule-1.5.3.zip', 'name': 'THE SALE セール日程表示', 'version': '1.5.3'},
+    'thesale-schedule': {'file': 'thesale-schedule-1.5.4.zip', 'name': 'THE SALE セール日程表示', 'version': '1.5.4'},
     'mikata-seminar-feed': {'file': 'mikata-seminar-feed-1.0.0.zip', 'name': 'ミカタセミナー新着', 'version': '1.0.0'},
     'kurabe-db': {'file': 'kurabe-db-1.7.2.zip', 'name': '100均くらべ 比較データ表示', 'version': '1.7.2'},
     'suit-kurabe-db': {'file': 'suit-kurabe-db-1.5.6.zip', 'name': 'スーツくらべ 比較データ表示', 'version': '1.5.6'},

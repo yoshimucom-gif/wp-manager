@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.5.3
+ * Version:     1.5.4
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -410,15 +410,16 @@ function thesale_card_pill( $state ) {
 	);
 }
 
-function thesale_card_button( $url, $label, $bg, $full ) {
+function thesale_card_button( $url, $label, $bg, $full, $fg = '#fff' ) {
 	if ( empty( $url ) ) {
 		return '';
 	}
 	return sprintf(
-		'<a href="%s" target="_blank" rel="nofollow sponsored noopener" style="box-sizing:border-box;display:%s;align-items:center;justify-content:center;gap:10px;%spadding:12px 22px;border-radius:8px;font-weight:700;font-size:15px;line-height:1.4;color:#fff;text-decoration:none;white-space:nowrap;background:%s">%s<span aria-hidden="true" style="font-weight:400">&#8599;</span></a>',
+		'<a href="%s" target="_blank" rel="nofollow sponsored noopener" style="box-sizing:border-box;display:%s;align-items:center;justify-content:center;gap:10px;%spadding:12px 22px;border-radius:8px;font-weight:700;font-size:15px;line-height:1.4;color:%s;text-decoration:none;white-space:nowrap;background:%s">%s<span aria-hidden="true" style="font-weight:400">&#8599;</span></a>',
 		esc_url( $url ),
 		$full ? 'flex' : 'inline-flex',
 		$full ? 'width:100%;' : '',
+		esc_attr( $fg ),
 		esc_attr( $bg ),
 		esc_html( $label )
 	);
@@ -463,10 +464,11 @@ function thesale_card( $atts ) {
 	if ( 'mall' === $kind ) {
 		$btn_url = ! empty( $own['e']['official']['url'] ) ? $own['e']['official']['url'] : ( isset( $c['official'] ) ? $c['official'] : '' );
 		$site    = isset( $c['site'] ) ? $c['site'] : '';
-		$btn_bg  = 'rakuten' === $site ? '#BF0000' : ( 'amazon' === $site ? '#B35900' : '#14213D' );
+		$btn_bg  = 'rakuten' === $site ? '#BF0000' : ( 'amazon' === $site ? '#FF9900' : '#14213D' );
+		$btn_fg  = 'amazon' === $site ? '#0F1111' : '#fff';
 		$title   = '' !== $tx['name'] ? $tx['name'] : $name;
 		$sub     = 'tbd' === $st ? '次のセールはまだ発表されていません' : $tx['when'];
-		$btn     = thesale_card_button( $btn_url, 'live' === $st ? 'セール会場へ' : '公式サイト', $btn_bg, false );
+		$btn     = thesale_card_button( $btn_url, 'live' === $st ? 'セール会場へ' : '公式サイト', $btn_bg, false, $btn_fg );
 		return $outer . thesale_card_head( 'セールの状況', $st, $title, $sub, $btn ) . '</div>';
 	}
 
@@ -481,8 +483,8 @@ function thesale_card( $atts ) {
 
 	// 下段: Amazon・楽天の公式ストアで開かれる大型セール（トップに出しているモールの日程から選ぶ）
 	$malls = array(
-		'amazon'  => array( 'Amazon', '#B35900', 'Amazon公式ストア', '/^Amazon\s*/u' ),
-		'rakuten' => array( '楽天', '#BF0000', '楽天公式ショップ', '/^楽天(市場)?\s*/u' ),
+		'amazon'  => array( 'Amazon', '#FF9900', 'Amazon公式ストア', '/^Amazon\s*/u', '#0F1111', '#232F3E' ),
+		'rakuten' => array( '楽天', '#BF0000', '楽天公式ショップ', '/^楽天(市場)?\s*/u', '#fff', '#BF0000' ),
 	);
 	$cols = '';
 	foreach ( $malls as $site => $m ) {
@@ -496,10 +498,10 @@ function thesale_card( $atts ) {
 		$ev    = '' !== $t2['name'] ? preg_replace( $m[3], '', $t2['name'] ) : '大型セール';
 		$when  = 'tbd' === $p['state'] ? '次のセールはまだ発表されていません' : $t2['when'];
 		$cols .= '<div style="box-sizing:border-box;display:flex;flex-direction:column;gap:10px;padding:20px 24px;background:#fff;border:1px solid #E3E8EF;border-radius:14px">'
-			. '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span style="font-size:17px;font-weight:700;color:' . esc_attr( $m[1] ) . '">' . esc_html( $m[0] ) . '</span>' . thesale_card_pill( $p['state'] ) . '</div>'
+			. '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span style="font-size:17px;font-weight:800;color:' . esc_attr( $m[5] ) . '">' . esc_html( $m[0] ) . '</span>' . thesale_card_pill( $p['state'] ) . '</div>'
 			. '<div style="font-size:18px;font-weight:700;line-height:1.6;color:#1F2937">' . esc_html( $ev ) . '</div>'
 			. '<div style="font-size:14px;line-height:1.6;color:#5B6274;flex:1">' . esc_html( $when ) . '</div>'
-			. thesale_card_button( $c[ $site ], $m[2], $m[1], true )
+			. thesale_card_button( $c[ $site ], $m[2], $m[1], true, $m[4] )
 			. '</div>';
 	}
 	if ( '' !== $cols ) {
@@ -704,7 +706,18 @@ function thesale_home_css() {
 .th-item-name{font-size:24px;font-weight:900;line-height:1.65;margin:0 0 22px}
 .th-item-foot{border-top:1px solid var(--th-line);padding:20px 0 0;display:flex;justify-content:space-between;color:var(--th-muted);font-size:16px}
 .th-note{display:flex;align-items:center;gap:10px;color:var(--th-muted);font-size:15px;padding:4px 0 40px}
-@media (max-width:820px){.th-next{padding:24px 22px}.th-next-label{font-size:13px;letter-spacing:.06em}.th-badge{white-space:nowrap;font-size:13px;padding:6px 10px}.th-date{margin:24px 0 18px}.th-date b{font-size:72px}.th-next-name{font-size:24px}.th-next-foot{font-size:15px}.th-hero{grid-template-columns:1fr;gap:36px;padding-top:28px}.th-next{min-height:0}.th-grid{grid-template-columns:1fr}.th-btn{min-width:0;width:100%}.th-malls{flex-direction:column}}
+.th-band-white{--th-band:#fff}
+.th-band-white.th-sec{padding:64px 0 16px}
+.th-band-white .th-item{border-top-width:4px;padding-top:26px}
+.th-band-white .th-item-when b{font-size:58px;letter-spacing:-.01em}
+.th-band-white .th-item-when span{font-size:17px;font-weight:700;color:var(--th-ink)}
+.th-band-white .th-badge-off{background:#EEEFE9;border:0;color:var(--th-ink)}
+.th-item-site{font-size:15px;font-weight:800;letter-spacing:.08em;color:var(--th-muted);margin:0 0 4px}
+.th-band-white .th-item-name{font-size:28px;margin:0 0 24px;line-height:1.45}
+.th-band-white .th-item-foot{color:var(--th-ink);font-weight:800}
+.th-band-white .th-item:hover .th-item-name{text-decoration:underline;text-decoration-thickness:3px;text-decoration-color:var(--th-lime);text-underline-offset:6px}
+.th-band-white .th-note{padding-bottom:48px}
+@media (max-width:820px){.th-next{padding:24px 22px}.th-next-label{font-size:13px;letter-spacing:.06em}.th-badge{white-space:nowrap;font-size:13px;padding:6px 10px}.th-date{margin:24px 0 18px}.th-date b{font-size:72px}.th-next-name{font-size:24px}.th-next-foot{font-size:15px}.th-hero{grid-template-columns:1fr;gap:36px;padding-top:28px}.th-next{min-height:0}.th-grid{grid-template-columns:1fr}.th-btn{min-width:0;width:100%}.th-malls{flex-direction:column}.th-band-white .th-item-when b{font-size:46px}.th-band-white .th-item-name{font-size:24px}.th-band-white.th-sec{padding-top:48px}}
 ';
 }
 
@@ -818,7 +831,7 @@ function thesale_home( $atts ) {
 	$o .= '<div class="th-malls"><span>Amazon<i>/</i>楽天市場<i>/</i>Yahoo!ショッピング<i>/</i>Qoo10<i>/</i>and more</span>'
 		. '<a href="' . esc_url( home_url( '/information-policy/' ) ) . '">情報の取得方法と掲載基準 ' . thesale_home_arrow() . '</a></div>';
 
-	$o .= '<section class="th-sec" id="th-coming"><div class="th-sec-head"><div><p class="th-sec-eyebrow th-en">COMING NEXT</p>'
+	$o .= '<section class="th-sec th-band th-band-white" id="th-coming"><div class="th-sec-head"><div><p class="th-sec-eyebrow th-en">COMING NEXT</p>'
 		. '<h2 class="th-sec-title">この先のセール。</h2></div><span class="th-sec-num th-en">01 / UPCOMING</span></div><div class="th-grid">';
 	foreach ( array_slice( $up, 0, 4 ) as $u ) {
 		list( $site, $nm, $round ) = thesale_home_split( $u['e'] );
@@ -833,7 +846,7 @@ function thesale_home( $atts ) {
 		}
 		$o .= '<a class="th-item" href="' . esc_url( thesale_sched_url( isset( $u['e']['url'] ) ? $u['e']['url'] : '' ) ) . '">'
 			. '<div class="th-item-when"><b>' . esc_html( $month ) . '</b><span>' . esc_html( $sub ) . '</span></div>' . $badge
-			. '<p class="th-item-name">' . ( '' !== $site ? esc_html( $site ) . '<br>' : '' ) . esc_html( $nm ) . '</p>'
+			. ( '' !== $site ? '<p class="th-item-site th-en">' . esc_html( $site ) . '</p>' : '' ) . '<p class="th-item-name">' . esc_html( $nm ) . '</p>'
 			. '<div class="th-item-foot"><span>日程・開催実績を確認</span>' . thesale_home_arrow() . '</div></a>';
 	}
 	$o .= '</div>';
