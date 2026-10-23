@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.6.6
+ * Version:     1.6.7
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -464,6 +464,12 @@ function thesale_card( $atts ) {
 	if ( 'mall' === $kind ) {
 		$btn_url = ! empty( $own['e']['official']['url'] ) ? $own['e']['official']['url'] : ( isset( $c['official'] ) ? $c['official'] : '' );
 		$site    = isset( $c['site'] ) ? $c['site'] : '';
+		// カードのデータに通販サイトが無い記事（ブラックフライデー・初売りのまとめ等）は、表示する日程の通販サイトで色を決める（1.6.7〜）
+		if ( '' === $site && ! empty( $own['e']['site'] ) ) {
+			$site = $own['e']['site'];
+		} elseif ( '' === $site && '' !== $tx['name'] ) {
+			$site = 0 === strpos( $tx['name'], 'Amazon' ) ? 'amazon' : ( 0 === strpos( $tx['name'], '楽天' ) ? 'rakuten' : '' );
+		}
 		$btn_bg  = 'rakuten' === $site ? '#BF0000' : ( 'amazon' === $site ? '#FF9900' : '#14213D' );
 		$btn_fg  = 'amazon' === $site ? '#0F1111' : '#fff';
 		$title   = '' !== $tx['name'] ? $tx['name'] : $name;
