@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.7.0
+ * Version:     1.7.1
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -355,7 +355,7 @@ function thesale_sched_status( $atts ) {
 		);
 	}
 	return sprintf(
-		'<div class="ts-status ts-status-tbd" style="%sbackground:#F3F4F6;border:1px solid #DADDE3"><span style="%sbackground:#5B6274">未発表</span><span>%s時点で、次回の日程はまだ発表されていません。発表されしだい、ここに表示します。</span></div>',
+		'<div class="ts-status ts-status-tbd" style="%sbackground:#F3F4F6;border:1px solid #DADDE3"><span style="%sbackground:#5B6274">確認中</span><span>次回の日程は、公式の発表を確認中です（%s時点）。発表されしだい、ここに表示します。</span></div>',
 		$box, $tag, esc_html( thesale_sched_asof() )
 	);
 }
@@ -443,21 +443,21 @@ function thesale_card_text( $p ) {
 		$m = isset( $p['e']['month'] ) ? $p['e']['month'] : '';
 		$d = isset( $p['e']['day'] ) ? $p['e']['day'] : '';
 		return array(
-			'label' => '未発表',
+			'label' => '確認中',
 			'sub'   => $m,
 			'name'  => $p['e']['name'],
-			'when'  => '日程は未発表（例年' . $m . $d . 'ごろ）',
+			'when'  => '例年' . $m . $d . 'ごろ・公式の発表を確認中',
 		);
 	}
-	return array( 'label' => '未発表', 'sub' => '', 'name' => '', 'when' => '次のセールはまだ発表されていません' );
+	return array( 'label' => '確認中', 'sub' => '', 'name' => '', 'when' => '公式の発表を確認中です' );
 }
 
 function thesale_card_pill( $state ) {
 	$map = array(
 		'live' => array( '#FFF3C4', '#7A5200', '● 開催中' ),
 		'next' => array( '#EAF5EE', '#1E6B45', '● 次回' ),
-		'est'  => array( '#F1F3F6', '#5B6274', '未発表' ),
-		'tbd'  => array( '#F1F3F6', '#5B6274', '未発表' ),
+		'est'  => array( '#F1F3F6', '#5B6274', '確認中' ),
+		'tbd'  => array( '#F1F3F6', '#5B6274', '確認中' ),
 	);
 	$m = isset( $map[ $state ] ) ? $map[ $state ] : $map['tbd'];
 	return sprintf(
@@ -568,7 +568,7 @@ function thesale_card( $atts ) {
 		$btn_bg  = 'rakuten' === $site ? '#BF0000' : ( 'amazon' === $site ? '#FF9900' : '#14213D' );
 		$btn_fg  = 'amazon' === $site ? '#0F1111' : '#fff';
 		$title   = '' !== $tx['name'] ? $tx['name'] : $name;
-		$sub     = 'tbd' === $st ? '次のセールはまだ発表されていません' : $tx['when'];
+		$sub     = 'tbd' === $st ? '公式の発表を確認中です' : $tx['when'];
 		if ( 'live' === $st ) {
 			return $outer . thesale_card_head_live( 'セールの状況', $title, $sub, thesale_card_left( $own['t'] ), $btn_url, 'いますぐセール会場へ',
 				'#14213D' === $btn_bg ? '#E53935' : $btn_bg, $btn_fg ) . '</div>';
@@ -582,7 +582,7 @@ function thesale_card( $atts ) {
 		$official = $own['e']['official']['url'];
 	}
 	$title = ( in_array( $st, array( 'live', 'next' ), true ) && '' !== $tx['name'] ) ? $tx['name'] : $name . '公式';
-	$sub   = 'tbd' === $st ? '次のセールはまだ発表されていません' : $tx['when'];
+	$sub   = 'tbd' === $st ? '公式の発表を確認中です' : $tx['when'];
 	$html  = $outer . ( 'live' === $st
 		? thesale_card_head_live( '公式のセール', $title, $sub, thesale_card_left( $own['t'] ), $official, 'いますぐセール会場へ' )
 		: thesale_card_head( '公式のセール', $st, $title, $sub, thesale_card_button( $official, '公式サイト', '#14213D', false ) ) );
@@ -602,7 +602,7 @@ function thesale_card( $atts ) {
 		} );
 		$t2    = thesale_card_text( $p );
 		$ev    = '' !== $t2['name'] ? preg_replace( $m[3], '', $t2['name'] ) : '大型セール';
-		$when  = 'tbd' === $p['state'] ? '次のセールはまだ発表されていません' : $t2['when'];
+		$when  = 'tbd' === $p['state'] ? '公式の発表を確認中です' : $t2['when'];
 		$cols .= '<div style="box-sizing:border-box;display:flex;flex-direction:column;gap:10px;padding:20px 24px;background:#fff;border:1px solid #E3E8EF;border-radius:14px">'
 			. '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span style="font-size:17px;font-weight:800;color:' . esc_attr( $m[5] ) . '">' . esc_html( $m[0] ) . '</span>' . thesale_card_pill( $p['state'] ) . '</div>'
 			. '<div style="font-size:18px;font-weight:700;line-height:1.6;color:#1F2937">' . esc_html( $ev ) . '</div>'
@@ -959,7 +959,7 @@ function thesale_home( $atts ) {
 		} else {
 			$month = isset( $u['e']['month'] ) ? $u['e']['month'] : '';
 			$sub   = ( isset( $u['e']['day'] ) ? $u['e']['day'] : '' ) . '目安';
-			$badge = '<span class="th-badge th-badge-off">日程未発表</span>';
+			$badge = '<span class="th-badge th-badge-off">発表を確認中</span>';
 		}
 		$o .= '<a class="th-item" href="' . esc_url( thesale_sched_url( isset( $u['e']['url'] ) ? $u['e']['url'] : '' ) ) . '">'
 			. '<div class="th-item-when"><b>' . esc_html( $month ) . '</b><span>' . esc_html( $sub ) . '</span></div>' . $badge
@@ -1228,7 +1228,7 @@ function thesale_home_lower( $now ) {
 	$o .= '<section class="th-band th-band-sage"><div class="th-std"><div><p class="th-sec-eyebrow th-en">OUR EDITORIAL STANDARD</p>'
 		. '<h2>日程を知る。<br>根拠も、わかる。</h2><a class="th-link" href="' . esc_url( home_url( '/information-policy/' ) ) . '">情報の取得方法と掲載基準' . $a . '</a></div>'
 		. '<ol><li><em>01</em><div><b>公式の情報を起点に。</b><span>通販サイトやブランドの公式発表を優先して、セールの開催日程をまとめています。</span></div></li>'
-		. '<li><em>02</em><div><b>予定と、過去の実績を分けて。</b><span>日程がまだ発表されていないものは「日程未発表」と表示。過去の開催時期を目安として紹介します。</span></div></li>'
+		. '<li><em>02</em><div><b>予定と、過去の実績を分けて。</b><span>日程の発表を確認できていないものは「確認中」と表示。過去の開催時期を目安として紹介します。</span></div></li>'
 		. '<li><em>03</em><div><b>いつ確認した情報か、見えるように。</b><span>ブランド一覧では「最終確認日」を掲載。公式の告知を最後に確認した日がわかります。</span></div></li></ol></div></section>';
 	return $o;
 }
