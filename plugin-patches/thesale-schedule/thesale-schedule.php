@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.6.2
+ * Version:     1.6.5
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -667,7 +667,7 @@ function thesale_home_css() {
 .th-home a{color:inherit;text-decoration:none}
 .th-home a.th-next,.th-home a.th-next *{color:#fff}
 .th-home a.th-btn,.th-home a.th-btn *{color:#fff}
-.th-home{background:var(--th-bg);box-shadow:0 0 0 100vmax var(--th-bg);clip-path:inset(0 -100vmax)}
+.th-home{background:var(--th-bg);box-shadow:0 0 0 100vmax var(--th-bg);clip-path:inset(0 -100vmax);margin-bottom:0!important}
 .th-home .th-en{font-family:"Inter","Noto Sans JP",sans-serif}
 .th-hero{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:48px;align-items:stretch;padding:48px 0 40px}
 .th-eyebrow{font-size:14px;font-weight:800;letter-spacing:.16em;margin:0 0 28px}
@@ -760,8 +760,17 @@ function thesale_home_split( $e ) {
 	return array( $site, $name, $round );
 }
 
-function thesale_home_arrow() {
-	return '<span aria-hidden="true" class="th-en">&#8599;</span>';
+/**
+ * 矢印は意味で使い分ける（1.6.5〜）
+ *  out  ↗ 外部サイトへ出る（公式サイト・Amazon・楽天）
+ *  next → サイト内の別ページへ進む（記事・カテゴリ・一覧）
+ *  down ↓ 同じページの下へ移動
+ *  more ＋ その場で続きを表示
+ * 行やカードのように全体が押せるものには付けない
+ */
+function thesale_home_arrow( $type = 'next' ) {
+	$map = array( 'out' => '&#8599;', 'next' => '&#8594;', 'down' => '&#8595;', 'more' => '&#xFF0B;' );
+	return '<span aria-hidden="true" class="th-en th-ar th-ar-' . esc_attr( $type ) . '">' . ( isset( $map[ $type ] ) ? $map[ $type ] : $map['next'] ) . '</span>';
 }
 
 function thesale_home( $atts ) {
@@ -808,7 +817,7 @@ function thesale_home( $atts ) {
 	$o .= '<p class="th-eyebrow th-en">GOOD TIMING. GREAT SHOPPING.</p>';
 	$o .= '<h1 class="th-catch">買いどきを、<br><span class="th-mark">逃さない。</span></h1>';
 	$o .= '<p class="th-lead">いつものお店も、気になるブランドも。<br>次のセールが、ひと目でわかる。<br>買い物の予定は、ここから。</p>';
-	$o .= '<div class="th-btns"><a class="th-btn" href="#th-coming">次のセールを見る' . thesale_home_arrow() . '</a>'
+	$o .= '<div class="th-btns"><a class="th-btn" href="#th-coming">次のセールを見る' . thesale_home_arrow( 'down' ) . '</a>'
 		. '<a class="th-link" href="' . esc_url( home_url( '/sale-list/' ) ) . '">ブランドから探す' . thesale_home_arrow() . '</a></div>';
 	$o .= '</div>';
 
@@ -823,13 +832,13 @@ function thesale_home( $atts ) {
 			. '<span class="th-badge">' . ( $hero_live ? '開催中' : '開催予定' ) . '</span></div>'
 			. '<div class="th-date th-en"><b>' . esc_html( $d->format( 'n.d' ) ) . '</b><span>' . esc_html( $time ) . '</span></div>'
 			. '<p class="th-next-name">' . ( '' !== $site ? esc_html( $site ) . '<br>' : '' ) . esc_html( $nm ) . '</p>'
-			. '<div class="th-next-foot"><span>' . esc_html( $foot ) . '</span><span style="color:#D8F35A!important" class="th-lime">日程・参加条件 ' . thesale_home_arrow() . '</span></div>'
+			. '<div class="th-next-foot"><span>' . esc_html( $foot ) . '</span><span style="color:#D8F35A!important" class="th-lime">日程・参加条件</span></div>'
 			. '</a>';
 	}
 	$o .= '</section>';
 
 	$o .= '<div class="th-malls"><span>Amazon<i>/</i>楽天市場<i>/</i>Yahoo!ショッピング<i>/</i>Qoo10<i>/</i>and more</span>'
-		. '<a href="' . esc_url( home_url( '/information-policy/' ) ) . '">情報の取得方法と掲載基準 ' . thesale_home_arrow() . '</a></div>';
+		. '<a href="' . esc_url( home_url( '/information-policy/' ) ) . '">情報の取得方法と掲載基準' . thesale_home_arrow() . '</a></div>';
 
 	$o .= '<section class="th-sec th-band th-band-white" id="th-coming"><div class="th-sec-head"><div><p class="th-sec-eyebrow th-en">COMING NEXT</p>'
 		. '<h2 class="th-sec-title">この先のセール。</h2></div><span class="th-sec-num th-en">01 / UPCOMING</span></div><div class="th-grid">';
@@ -847,7 +856,7 @@ function thesale_home( $atts ) {
 		$o .= '<a class="th-item" href="' . esc_url( thesale_sched_url( isset( $u['e']['url'] ) ? $u['e']['url'] : '' ) ) . '">'
 			. '<div class="th-item-when"><b>' . esc_html( $month ) . '</b><span>' . esc_html( $sub ) . '</span></div>' . $badge
 			. ( '' !== $site ? '<p class="th-item-site th-en">' . esc_html( $site ) . '</p>' : '' ) . '<p class="th-item-name">' . esc_html( $nm ) . '</p>'
-			. '<div class="th-item-foot"><span>日程・開催実績を確認</span>' . thesale_home_arrow() . '</div></a>';
+			. '<div class="th-item-foot"><span>日程・開催実績を確認</span></div></a>';
 	}
 	$o .= '</div>';
 	$o .= '<p class="th-note"><span aria-hidden="true" style="display:inline-flex;width:20px;height:20px;border:1.5px solid currentColor;border-radius:50%;align-items:center;justify-content:center;font-size:12px;font-weight:700">i</span>'
@@ -907,6 +916,15 @@ function thesale_home_lower_css() {
 .th-rank{border-top:1px solid var(--th-line);margin-top:10px;padding-top:26px;list-style:none;margin-left:0;padding-left:0}
 .th-rank li{display:flex;gap:26px;padding:12px 0;font-size:18px;margin:0}
 .th-rank li::before{content:none}
+.th-pop{margin-top:56px;border-top:3px solid var(--th-ink);padding-top:26px}
+.th-pop-head{display:flex;align-items:baseline;gap:16px;font-size:22px;font-weight:900;margin:0 0 22px}
+.th-pop-head .th-en{font-size:13px;font-weight:800;letter-spacing:.16em;color:var(--th-muted)}
+.th-band-find .th-cat{background:#fff}
+.th-home .th-ar{display:inline-block;font-weight:500;line-height:1;transition:transform .15s}
+.th-home .th-ar-out{font-size:.85em}
+.th-home a:hover .th-ar-next{transform:translateX(3px)}.th-home a:hover .th-ar-down{transform:translateY(3px)}
+.td-dir a.td-off .th-ar-out{color:var(--th-muted)}
+.th-more{display:inline-flex;align-items:center;gap:16px}
 .th-rank em{font-style:normal;font-weight:800;color:var(--th-muted);font-family:"Inter",sans-serif}
 .th-cats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--th-ink)}
 .th-cat{display:flex;justify-content:space-between;align-items:center;padding:42px 28px 42px 0;border-bottom:1px solid var(--th-line);border-left:1px solid var(--th-line);padding-left:26px}
@@ -996,7 +1014,7 @@ function thesale_home_lower( $now ) {
 		$list = isset( $cal['months'][ (string) $m ] ) && is_array( $cal['months'][ (string) $m ] ) ? $cal['months'][ (string) $m ] : array();
 		foreach ( $list as $r ) {
 			$rows .= '<a class="th-cal-row" href="' . esc_url( home_url( '/' . $r[2] . '/' ) ) . '"><span class="th-cal-site th-en">' . esc_html( $r[0] ) . '</span>'
-				. '<span class="th-cal-ev"><b>' . esc_html( $r[1] ) . '</b><span>例年の開催傾向 · 正式日程は記事で確認</span></span><span class="th-arrow">' . $a . '</span></a>';
+				. '<span class="th-cal-ev"><b>' . esc_html( $r[1] ) . '</b><span>例年の開催傾向 · 正式日程は記事で確認</span></span></a>';
 		}
 		if ( '' === $rows ) {
 			$rows = '<p class="th-cal-empty">この月に例年開かれる大型セールはありません。月ごとの記事で、小さなセールの過去の日程を確かめられます。</p>';
@@ -1021,7 +1039,7 @@ function thesale_home_lower( $now ) {
 	$items = '';
 	foreach ( $brands as $b ) {
 		$items .= '<a class="th-brand" data-n="' . esc_attr( $b['name'] ) . '" data-g="' . esc_attr( $b['group'] ) . '" href="' . esc_url( home_url( $b['url'] ) ) . '">'
-			. '<span><b>' . esc_html( $b['name'] ) . '</b><span>' . ( '' !== $b['verified'] ? '最終確認 ' . esc_html( $b['verified'] ) : '' ) . '</span></span><span class="th-arrow">' . $a . '</span></a>';
+			. '<span><b>' . esc_html( $b['name'] ) . '</b><span>' . ( '' !== $b['verified'] ? '最終確認 ' . esc_html( $b['verified'] ) : '' ) . '</span></span></a>';
 	}
 	$n = count( $brands );
 	$o .= '<section class="th-band th-band-lime th-bi"><div class="th-sec-head"><div><p class="th-sec-eyebrow th-en">THE BRAND INDEX</p>'
@@ -1029,7 +1047,7 @@ function thesale_home_lower( $now ) {
 		. '<div class="th-search"><label><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input type="search" placeholder="店名・ブランド名で探す" aria-label="店名・ブランド名で探す"></label>'
 		. '<select aria-label="カテゴリ">' . $opts . '</select></div>'
 		. '<div class="th-brands">' . $items . '</div>'
-		. '<div class="th-brand-foot"><span class="th-count">掲載' . $n . '件</span><button type="button" class="th-more">さらに表示する</button>'
+		. '<div class="th-brand-foot"><span class="th-count">掲載' . $n . '件</span><button type="button" class="th-more">さらに表示する' . thesale_home_arrow( 'more' ) . '</button>'
 		. '<a class="th-link" href="' . esc_url( home_url( '/sale-list/' ) ) . '">掲載ショップ・ブランドをすべて見る' . $a . '</a></div></section>';
 
 	// 読みもの
@@ -1072,7 +1090,11 @@ function thesale_home_lower( $now ) {
 	}
 	$o .= '<section class="th-band th-band-paper"><div class="th-sec-head"><div><p class="th-sec-eyebrow th-en">THE SHOPPING EDIT</p>'
 		. '<h2 class="th-sec-title">買い物の前に、読む。</h2></div><a class="th-link" href="' . esc_url( home_url( '/articles/' ) ) . '" style="min-width:120px">記事一覧' . $a . '</a></div>'
-		. $feat . ( '' !== $rank ? '<ol class="th-rank">' . $rank . '</ol>' : '' ) . '</section>';
+		. $feat . ( '' !== $rank ? '<ol class="th-rank">' . $rank . '</ol>' : '' )
+		// 今月の人気記事: re:Diverの人気記事ブロック（dbp/article・閲覧数順・期間=月間）をそのまま描画する（1.6.3〜）
+		. '<div class="th-pop"><p class="th-pop-head"><span class="th-en">POPULAR THIS MONTH</span>今月よく読まれている記事</p>'
+		. do_blocks( '<!-- wp:dbp/article {"article":{"number":9,"layout":"grid","design":"card","column":{"type":"column","width":200,"max":3,"min":1},"orderby":"post_views_count","order":"DESC","items":"thumb,category","postType":"post","period":"month"}} /-->' )
+		. '</div></section>';
 
 	// カテゴリ
 	$cats = array( array( 'mall', 'ネット通販', 'ONLINE MALL' ), array( 'season', '季節のセール', 'SEASONAL SALE' ), array( 'gadget', '家電・ガジェット', 'TECH &amp; HOME' ),
@@ -1083,9 +1105,9 @@ function thesale_home_lower( $now ) {
 		if ( ! $t ) {
 			continue;
 		}
-		$ct .= '<a class="th-cat" href="' . esc_url( get_category_link( $t ) ) . '"><span><b>' . esc_html( $c[1] ) . '</b><span class="th-en">' . $c[2] . '</span></span><span class="th-arrow">' . $a . '</span></a>';
+		$ct .= '<a class="th-cat" href="' . esc_url( get_category_link( $t ) ) . '"><span><b>' . esc_html( $c[1] ) . '</b><span class="th-en">' . $c[2] . '</span></span></a>';
 	}
-	$o .= '<section class="th-band th-band-paper" style="border-top:1px solid var(--th-line)"><div class="th-sec-head"><div><p class="th-sec-eyebrow th-en">FIND YOUR NEXT</p>'
+	$o .= '<section class="th-band th-band-white th-band-find"><div class="th-sec-head"><div><p class="th-sec-eyebrow th-en">FIND YOUR NEXT</p>'
 		. '<h2 class="th-sec-title">何のセールを探す？</h2></div><a class="th-link" href="' . esc_url( home_url( '/category-list/' ) ) . '" style="min-width:120px">全カテゴリ' . $a . '</a></div>'
 		. '<div class="th-cats">' . $ct . '</div></section>';
 
@@ -1252,14 +1274,14 @@ function thesale_directory( $atts ) {
 		if ( ! empty( $s['related'] ) ) {
 			$o .= '<p class="td-sub">関連するセール記事</p><ul class="td-rel">';
 			foreach ( $s['related'] as $r ) {
-				$o .= '<li><a href="' . esc_url( home_url( $r[1] ) ) . '"><span>' . esc_html( $r[0] ) . '</span>' . $a . '</a></li>';
+				$o .= '<li><a href="' . esc_url( home_url( $r[1] ) ) . '"><span>' . esc_html( $r[0] ) . '</span></a></li>';
 			}
 			$o .= '</ul>';
 		}
 		if ( ! empty( $s['offs'] ) ) {
 			$o .= '<p class="td-sub">公式サイト・ストア</p><div class="td-offs">';
 			foreach ( $s['offs'] as $f ) {
-				$o .= '<a class="td-off" href="' . esc_url( $f[1] ) . '" target="_blank" rel="nofollow sponsored noopener">' . esc_html( $f[0] ) . $a . '</a>';
+				$o .= '<a class="td-off" href="' . esc_url( $f[1] ) . '" target="_blank" rel="nofollow sponsored noopener">' . esc_html( $f[0] ) . thesale_home_arrow( 'out' ) . '</a>';
 			}
 			$o .= '</div>';
 		}
@@ -1269,7 +1291,7 @@ function thesale_directory( $atts ) {
 		$o .= '</article>';
 	}
 	$o .= '</div><p class="td-empty">見つかりませんでした。別の名前やジャンルでお試しください。</p>'
-		. '<div class="td-foot"><button type="button" class="td-more">もっと見る<span aria-hidden="true">＋</span></button><span class="td-count"></span></div>'
+		. '<div class="td-foot"><button type="button" class="td-more">もっと見る' . thesale_home_arrow( 'more' ) . '</button><span class="td-count"></span></div>'
 		. '<p class="td-note">「最終確認日」は、その店の公式の告知を最後に確認した日付です。セールの開催日程は各記事で、最新の発表内容・参加条件はショップの公式サイトでご確認ください。</p></section>';
 	$cta = isset( $d['cta'] ) && is_array( $d['cta'] ) ? $d['cta'] : array( 'url' => '/category/season/', 'label' => '季節のセールを見る' );
 	$o  .= '<section class="td-cta"><div><small>FIND YOUR TIMING</small><b>お店よりも、買う時期で探したい？</b></div>'
