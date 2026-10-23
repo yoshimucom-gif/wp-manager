@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE ブランド商品カード
  * Description: 記事のブランド名（ブランドの記事）または商品名（買い時の記事）で Amazon の商品を引き、在庫のある商品をカードで並べる。Amazon・楽天のボタン付き。記事への自動差し込み・サイドバー（ウィジェット）・ショートコード [thesale_items]（サイドバーは [thesale_items layout="side" n="3"]）。商品は1日1回まとめて取り直して保存する。Affiros オートインサーターとは別管理。
- * Version:     1.0.3
+ * Version:     1.0.4
  * Author:      Keys
  * Text Domain: thesale-brand-items
  */
@@ -57,7 +57,7 @@ add_action( 'rest_api_init', function () {
 /* ── 設定 ──────────────────────────────────────────────── */
 
 function tsbi_settings() {
-	$d = array( 'enabled' => 1, 'count' => 6, 'position' => 'end', 'sidebar_count' => 3 );
+	$d = array( 'enabled' => 1, 'count' => 6, 'position' => 'end', 'sidebar_count' => 3, 'top_count' => 3 );
 	$s = get_option( 'tsbi_settings', array() );
 	return is_array( $s ) ? array_merge( $d, $s ) : $d;
 }
@@ -279,8 +279,13 @@ function tsbi_card( $it, $compact = false ) {
 		. '</div>';
 }
 
-function tsbi_block( $e, $n ) {
-	$items = array_slice( tsbi_items( $e ), 0, max( 1, (int) $n ) );
+function tsbi_block( $e, $n, $offset = 0 ) {
+	$all   = tsbi_items( $e );
+	// 最初の見出しの上に出した商品と重ならないよう、ずらして取る（足りなければ先頭から）
+	$items = array_slice( $all, $offset, max( 1, (int) $n ) );
+	if ( count( $items ) < 3 ) {
+		$items = array_slice( $all, 0, max( 1, (int) $n ) );
+	}
 	if ( count( $items ) < 3 ) {   // 3点に満たないときは出さない（並びが崩れる・選択肢として弱い）
 		return '';
 	}
@@ -289,6 +294,20 @@ function tsbi_block( $e, $n ) {
 		. '<p class="tsbi-note">Amazonで在庫のある商品です。価格・在庫は変わるため、リンク先でご確認ください。</p><div class="tsbi-grid">';
 	foreach ( $items as $it ) {
 		$o .= tsbi_card( $it );
+	}
+	return $o . '</div></section>';
+}
+
+/** 最初のH2見出しの上に出す3点（1.0.4〜）。小さめのカードを横に並べる */
+function tsbi_top_block( $e, $n ) {
+	$items = array_slice( tsbi_items( $e ), 0, max( 1, (int) $n ) );
+	if ( count( $items ) < 3 ) {
+		return '';
+	}
+	$label = ! empty( $e['label'] ) ? $e['label'] : $e['kw'];
+	$o = '<section class="tsbi tsbi-top"><p class="tsbi-head">' . esc_html( $label ) . 'の商品をチェック</p><div class="tsbi-grid">';
+	foreach ( $items as $it ) {
+		$o .= tsbi_card( $it, true );
 	}
 	return $o . '</div></section>';
 }
@@ -314,14 +333,15 @@ function tsbi_css() {
 .tsbi-side .tsbi-body{display:flex;flex-direction:column;gap:8px;min-width:0;flex:1}
 .tsbi-side .tsbi-title{-webkit-line-clamp:3;font-size:12px}
 .tsbi-side .tsbi-btn{padding:6px 4px;font-size:12px}
-@media (max-width:640px){.tsbi{padding:16px}.tsbi-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.tsbi-card{padding:8px}.tsbi-btn{font-size:12px}}
+.tsbi-top{padding:16px 18px}.tsbi-top .tsbi-head{font-size:15px;margin-bottom:12px}.tsbi-top .tsbi-grid{gap:10px}.tsbi-top .tsbi-card{padding:10px;gap:8px}.tsbi-top .tsbi-title{-webkit-line-clamp:2;font-size:12px}.tsbi-top .tsbi-btn{padding:6px 4px;font-size:12px}
+/* サイドバーで中身の無いウィジェット（商品が無いページの商品カード等）は白い枠ごと消す */
+.widget_block:not(:has(*)){display:none!important}
+@media (max-width:640px){.tsbi{padding:16px}.tsbi-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.tsbi-card{padding:8px}.tsbi-btn{font-size:12px}.tsbi-top .tsbi-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.tsbi-top .tsbi-card{padding:6px}.tsbi-top .tsbi-btn{font-size:11px;padding:5px 2px}.tsbi-top .tsbi-btn span{display:none}}
 ';
 }
 
 add_action( 'wp_enqueue_scripts', function () {
-	if ( ! is_singular( 'post' ) ) {
-		return;
-	}
+	// サイドバー（追従欄）の空枠を消す指定も含むので、全ページで読む（小さいCSSのみ）
 	wp_register_style( 'tsbi', false, array(), '1.0.0' );
 	wp_enqueue_style( 'tsbi' );
 	wp_add_inline_style( 'tsbi', tsbi_css() );
@@ -340,9 +360,17 @@ add_filter( 'the_content', function ( $content ) {
 	if ( ! $e ) {
 		return $content;
 	}
-	$block = tsbi_block( $e, $s['count'] );
+	$top_n = isset( $s['top_count'] ) ? (int) $s['top_count'] : 3;
+	$block = tsbi_block( $e, $s['count'], $top_n );
 	if ( '' === $block ) {
 		return $content;
+	}
+	// 最初のH2見出しの上に3点（設定で0にすると出さない）
+	if ( $top_n > 0 && preg_match( '/<h2[\s>]/', $content, $fm, PREG_OFFSET_CAPTURE ) ) {
+		$top = tsbi_top_block( $e, $top_n );
+		if ( '' !== $top ) {
+			$content = substr( $content, 0, $fm[0][1] ) . $top . substr( $content, $fm[0][1] );
+		}
 	}
 	if ( 'before_sum' === $s['position'] && preg_match( '/<h2[^>]*>[^<]*まとめ/u', $content, $m, PREG_OFFSET_CAPTURE ) ) {
 		return substr( $content, 0, $m[0][1] ) . $block . substr( $content, $m[0][1] );
@@ -438,6 +466,7 @@ function tsbi_admin_page() {
 			'count'         => max( 3, min( 12, (int) ( isset( $_POST['count'] ) ? $_POST['count'] : 6 ) ) ),
 			'position'      => in_array( $pos, array( 'end', 'before_sum', 'middle' ), true ) ? $pos : 'end',
 			'sidebar_count' => max( 1, min( 6, (int) ( isset( $_POST['sidebar_count'] ) ? $_POST['sidebar_count'] : 3 ) ) ),
+			'top_count'     => max( 0, min( 3, (int) ( isset( $_POST['top_count'] ) ? $_POST['top_count'] : 3 ) ) ),
 		) );
 		if ( ! empty( $_POST['refresh'] ) ) {
 			tsbi_refresh_all();
@@ -457,6 +486,7 @@ function tsbi_admin_page() {
 		echo '<option value="' . esc_attr( $k ) . '"' . selected( $s['position'], $k, false ) . '>' . esc_html( $v ) . '</option>';
 	}
 	echo '</select></td></tr>'
+		. '<tr><th>最初の見出しの上に並べる数</th><td><input type="number" name="top_count" min="0" max="3" value="' . esc_attr( $s['top_count'] ) . '"> 点（0で出さない）</td></tr>'
 		. '<tr><th>サイドバーの数（既定）</th><td><input type="number" name="sidebar_count" min="1" max="6" value="' . esc_attr( $s['sidebar_count'] ) . '"> 点（外観 &gt; ウィジェット の「THE SALE 商品カード」）</td></tr>'
 		. '<tr><th>商品の取り直し</th><td><label><input type="checkbox" name="refresh" value="1"> 保存と同時に、全部の検索語を今すぐ取り直す（1語あたり1〜2秒）</label><p class="description">ふだんは毎日4:30ごろに自動で取り直します。'
 		. ( ! empty( $last['time'] ) ? ' 前回: ' . esc_html( wp_date( 'Y-m-d H:i', $last['time'] ) ) : '' ) . '</p></td></tr>'
