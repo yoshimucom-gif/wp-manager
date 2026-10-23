@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.4.0
+ * Version:     1.4.1
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -663,6 +663,9 @@ function thesale_home_css() {
 	return '
 .th-home{--th-ink:#1F221C;--th-lime:#D8F35A;--th-muted:#5F6159;--th-line:#E4E5DE;--th-bg:#F7F7F2;color:var(--th-ink);font-family:"Noto Sans JP",sans-serif}
 .th-home a{color:inherit;text-decoration:none}
+.th-home a.th-next,.th-home a.th-next *{color:#fff}
+.th-home a.th-btn,.th-home a.th-btn *{color:#fff}
+.th-home{background:var(--th-bg);box-shadow:0 0 0 100vmax var(--th-bg);clip-path:inset(0 -100vmax)}
 .th-home .th-en{font-family:"Inter","Noto Sans JP",sans-serif}
 .th-hero{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:48px;align-items:stretch;padding:48px 0 40px}
 .th-eyebrow{font-size:14px;font-weight:800;letter-spacing:.16em;margin:0 0 28px}
@@ -674,7 +677,9 @@ function thesale_home_css() {
 .th-link{display:inline-flex;align-items:center;justify-content:space-between;gap:28px;font-weight:800;font-size:17px;padding:12px 0;border-bottom:2px solid var(--th-ink);min-width:190px}
 .th-next{background:var(--th-ink);color:#fff;padding:32px 34px;display:flex;flex-direction:column;min-height:440px;box-sizing:border-box}
 .th-next-top{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.th-home .th-next .th-next-label,.th-home .th-next .th-lime{color:var(--th-lime)}
 .th-next-label{color:var(--th-lime);font-weight:800;font-size:16px;letter-spacing:.12em}
+.th-home .th-next .th-badge{color:var(--th-ink)}
 .th-badge{display:inline-block;background:var(--th-lime);color:var(--th-ink);font-weight:800;font-size:15px;padding:8px 14px;line-height:1.3}
 .th-badge-off{background:transparent;border:1px solid var(--th-line);color:var(--th-muted);font-weight:700}
 .th-date{display:flex;align-items:flex-end;gap:12px;margin:36px 0 26px}
@@ -805,7 +810,7 @@ function thesale_home( $atts ) {
 			. '<span class="th-badge">' . ( $hero_live ? '開催中' : '開催予定' ) . '</span></div>'
 			. '<div class="th-date th-en"><b>' . esc_html( $d->format( 'n.d' ) ) . '</b><span>' . esc_html( $time ) . '</span></div>'
 			. '<p class="th-next-name">' . ( '' !== $site ? esc_html( $site ) . '<br>' : '' ) . esc_html( $nm ) . '</p>'
-			. '<div class="th-next-foot"><span>' . esc_html( $foot ) . '</span><span style="color:#D8F35A">日程・参加条件 ' . thesale_home_arrow() . '</span></div>'
+			. '<div class="th-next-foot"><span>' . esc_html( $foot ) . '</span><span style="color:#D8F35A!important" class="th-lime">日程・参加条件 ' . thesale_home_arrow() . '</span></div>'
 			. '</a>';
 	}
 	$o .= '</section>';
