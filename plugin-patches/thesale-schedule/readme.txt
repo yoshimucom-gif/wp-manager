@@ -2,7 +2,7 @@
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.2.1
+Stable tag: 1.3.0
 
 THE SALE（the-sale.jp）のトップに出す「いま開催中のセール」「これから始まるセール」を、
 オプション thesale_events のセール日程データから、表示のたびに日本時間で計算して出す。
@@ -13,6 +13,8 @@ THE SALE（the-sale.jp）のトップに出す「いま開催中のセール」�
 * [thesale_asof] … 当日の日付
 
 == Changelog ==
+= 1.3.0 =
+* カードの自動挿入を追加。設定 > THE SALE カード で場所（リード文の直後・最初の見出しの直後・「まとめ」の直前・記事の最後）を選ぶと、セール記事すべてに自動で入る。本文に [thesale_card] を置いた記事はその場所を優先。REST: GET/POST /wp-json/thesale/v1/card-positions
 = 1.2.1 =
 * 記事冒頭のカードのデザインを変更（薄いグレーの台に白いカード。公式のセールは横長、Amazon・楽天は2列。状態は小さな札、ボタンは幅いっぱい）
 = 1.2.0 =

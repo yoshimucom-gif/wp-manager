@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.2.1
+ * Version:     1.3.0
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -510,6 +510,126 @@ function thesale_card( $atts ) {
 }
 
 add_shortcode( 'thesale_card', 'thesale_card' );
+
+/*
+ * ── カードの自動挿入（1.3.0〜）────────────────────────────
+ * 設定 > THE SALE カード で選んだ場所に、セール記事（thesale_cards に載っている投稿）へ自動でカードを入れる。
+ * 本文に [thesale_card] を置いた記事は自動では入れず、置いた場所を優先する（記事ごとの例外）。
+ */
+function thesale_card_positions_all() {
+	return array(
+		'after_lead'   => 'リード文の直後（最初の見出しの直前）',
+		'after_h2'     => '最初の見出しの直後',
+		'before_sum'   => '「まとめ」の見出しの直前',
+		'end'          => '記事の最後',
+	);
+}
+
+function thesale_card_positions() {
+	$v = get_option( 'thesale_card_positions', null );
+	if ( null === $v ) {
+		return array( 'after_lead' );
+	}
+	return is_array( $v ) ? array_values( array_intersect( $v, array_keys( thesale_card_positions_all() ) ) ) : array();
+}
+
+add_filter( 'the_content', function ( $content ) {
+	if ( ! is_singular( 'post' ) || ! in_the_loop() || ! is_main_query() ) {
+		return $content;
+	}
+	if ( false !== strpos( $content, 'ts-card' ) ) {
+		return $content; // 本文にカードを置いた記事は、その場所を優先する
+	}
+	$slug  = (string) get_post_field( 'post_name', get_the_ID() );
+	$cards = thesale_card_data();
+	if ( '' === $slug || ! isset( $cards[ $slug ] ) ) {
+		return $content;
+	}
+	$pos = thesale_card_positions();
+	if ( ! $pos ) {
+		return $content;
+	}
+	$card = thesale_card( array( 'slug' => $slug ) );
+	if ( '' === $card ) {
+		return $content;
+	}
+	$card = '<div class="ts-card-auto" style="margin:1.6em 0">' . $card . '</div>';
+	$ins  = array(); // 挿入位置（文字位置） => true
+	if ( in_array( 'after_lead', $pos, true ) && false !== ( $i = strpos( $content, '<h2' ) ) ) {
+		$ins[ $i ] = true;
+	}
+	if ( in_array( 'after_h2', $pos, true ) && false !== ( $i = strpos( $content, '</h2>' ) ) ) {
+		$ins[ $i + 5 ] = true;
+	}
+	if ( in_array( 'before_sum', $pos, true ) && preg_match( '/<h2[^>]*>(?:(?!<\/h2>).)*まとめ/su', $content, $m, PREG_OFFSET_CAPTURE ) ) {
+		$ins[ $m[0][1] ] = true;
+	}
+	if ( in_array( 'end', $pos, true ) ) {
+		$ins[ strlen( $content ) ] = true;
+	}
+	krsort( $ins );
+	foreach ( array_keys( $ins ) as $at ) {
+		$content = substr( $content, 0, $at ) . $card . substr( $content, $at );
+	}
+	return $content;
+}, 20 );
+
+add_action( 'admin_init', function () {
+	register_setting( 'thesale_card', 'thesale_card_positions', array(
+		'type'              => 'array',
+		'sanitize_callback' => function ( $v ) {
+			return is_array( $v ) ? array_values( array_intersect( array_map( 'sanitize_key', $v ), array_keys( thesale_card_positions_all() ) ) ) : array();
+		},
+		'default'           => array( 'after_lead' ),
+	) );
+} );
+
+add_action( 'admin_menu', function () {
+	add_options_page( 'THE SALE カード', 'THE SALE カード', 'manage_options', 'thesale-card', function () {
+		$cur = thesale_card_positions();
+		echo '<div class="wrap"><h1>THE SALE カード</h1>';
+		echo '<p>セール記事に、セールの状況と公式サイト・Amazon・楽天のボタンをまとめたカードを自動で入れます。チェックを入れた場所すべてに入ります。</p>';
+		echo '<p>本文に <code>[thesale_card slug="記事のスラッグ"]</code> を置いた記事は、自動では入れず、置いた場所に出します。</p>';
+		echo '<form method="post" action="options.php">';
+		settings_fields( 'thesale_card' );
+		echo '<input type="hidden" name="thesale_card_positions[]" value="">';
+		echo '<table class="form-table" role="presentation"><tr><th scope="row">挿入する場所</th><td><fieldset>';
+		foreach ( thesale_card_positions_all() as $k => $label ) {
+			printf(
+				'<label style="display:block;margin:6px 0"><input type="checkbox" name="thesale_card_positions[]" value="%s" %s> %s</label>',
+				esc_attr( $k ),
+				checked( in_array( $k, $cur, true ), true, false ),
+				esc_html( $label )
+			);
+		}
+		echo '</fieldset></td></tr></table>';
+		submit_button( '保存' );
+		echo '</form></div>';
+	} );
+} );
+
+/** 設定の読み書きをRESTからも（POST /wp-json/thesale/v1/card-positions {"positions": [...]}） */
+add_action( 'rest_api_init', function () {
+	register_rest_route( 'thesale/v1', '/card-positions', array(
+		array(
+			'methods'             => 'GET',
+			'permission_callback' => function () { return current_user_can( 'manage_options' ); },
+			'callback'            => function () {
+				return array( 'positions' => thesale_card_positions(), 'choices' => thesale_card_positions_all() );
+			},
+		),
+		array(
+			'methods'             => 'POST',
+			'permission_callback' => function () { return current_user_can( 'manage_options' ); },
+			'callback'            => function ( $req ) {
+				$v = $req->get_param( 'positions' );
+				$v = is_array( $v ) ? array_values( array_intersect( array_map( 'sanitize_key', $v ), array_keys( thesale_card_positions_all() ) ) ) : array();
+				update_option( 'thesale_card_positions', $v );
+				return array( 'positions' => thesale_card_positions() );
+			},
+		),
+	) );
+} );
 
 /** [thesale_asof] 当日の日付（「2026年10月14日」） */
 add_shortcode( 'thesale_asof', function () {
