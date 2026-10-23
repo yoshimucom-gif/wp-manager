@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: THE SALE ブランド商品カード
- * Description: 記事のブランド名（ブランドの記事）または商品名（買い時の記事）で Amazon の商品を引き、在庫のある商品をカードで並べる。Amazon・楽天のボタン付き。記事への自動差し込み・サイドバー（ウィジェット）・ショートコード [thesale_items]。商品は1日1回まとめて取り直して保存する。Affiros オートインサーターとは別管理。
- * Version:     1.0.0
+ * Description: 記事のブランド名（ブランドの記事）または商品名（買い時の記事）で Amazon の商品を引き、在庫のある商品をカードで並べる。Amazon・楽天のボタン付き。記事への自動差し込み・サイドバー（ウィジェット）・ショートコード [thesale_items]（サイドバーは [thesale_items layout="side" n="3"]）。商品は1日1回まとめて取り直して保存する。Affiros オートインサーターとは別管理。
+ * Version:     1.0.1
  * Author:      Keys
  * Text Domain: thesale-brand-items
  */
@@ -347,8 +347,10 @@ add_filter( 'the_content', function ( $content ) {
 }, 30 );
 
 add_shortcode( 'thesale_items', function ( $atts ) {
-	$a = shortcode_atts( array( 'kw' => '', 'n' => 6 ), $atts );
-	$e = '' !== $a['kw'] ? array( 'kw' => $a['kw'], 'label' => $a['kw'], 'kind' => 'product', 'match' => array( $a['kw'] ) ) : tsbi_entry_for_post();
+	$a = shortcode_atts( array( 'kw' => '', 'n' => 6, 'layout' => '' ), $atts );
+	// サイドバーなどループの外でも、表示中の記事で引く
+	$cur = is_singular( 'post' ) ? get_queried_object_id() : null;
+	$e = '' !== $a['kw'] ? array( 'kw' => $a['kw'], 'label' => $a['kw'], 'kind' => 'product', 'match' => array( $a['kw'] ) ) : tsbi_entry_for_post( $cur );
 	if ( ! $e ) {
 		return '';
 	}
@@ -360,8 +362,26 @@ add_shortcode( 'thesale_items', function ( $atts ) {
 			update_option( 'tsbi_keywords', $map, false );
 		}
 	}
-	return tsbi_block( $e, (int) $a['n'] );
+	return 'side' === $a['layout'] ? tsbi_side_html( $e, (int) $a['n'] ) : tsbi_block( $e, (int) $a['n'] );
 } );
+
+/** サイドバー用の縦並び（ウィジェット・[thesale_items layout="side"] 共通）。見出しはサイドバーの他のブロックと同じ h2 */
+function tsbi_side_html( $e, $n, $with_head = true ) {
+	$items = array_slice( tsbi_items( $e ), 0, max( 1, (int) $n ) );
+	if ( count( $items ) < 2 ) {
+		return '';
+	}
+	$label = ! empty( $e['label'] ) ? $e['label'] : $e['kw'];
+	$o = $with_head ? '<h2 class="wp-block-heading">' . esc_html( $label ) . 'の商品</h2>' : '';
+	$o .= '<div class="tsbi-side">';
+	foreach ( $items as $it ) {
+		$o .= '<div class="tsbi-card"><a class="tsbi-img" href="' . esc_url( $it['url'] ) . '" target="_blank" rel="nofollow sponsored noopener"><img src="' . esc_url( $it['image'] ) . '" alt="" loading="lazy" width="120" height="120"></a>'
+			. '<div class="tsbi-body"><p class="tsbi-title">' . esc_html( $it['title'] ) . '</p><div class="tsbi-btns">'
+			. '<a class="tsbi-btn tsbi-am" href="' . esc_url( $it['url'] ) . '" target="_blank" rel="nofollow sponsored noopener">Amazon<span aria-hidden="true">&#8599;</span></a>'
+			. '<a class="tsbi-btn tsbi-rk" href="' . esc_url( tsbi_rakuten_url( $it['title'] ) ) . '" target="_blank" rel="nofollow sponsored noopener">楽天<span aria-hidden="true">&#8599;</span></a></div></div></div>';
+	}
+	return $o . '</div>';
+}
 
 /** サイドバー（ウィジェット）: 記事ページで、その記事の商品を縦に並べる */
 class Tsbi_Widget extends WP_Widget {
@@ -376,20 +396,13 @@ class Tsbi_Widget extends WP_Widget {
 		if ( ! $e ) {
 			return;
 		}
-		$n     = ! empty( $instance['n'] ) ? (int) $instance['n'] : (int) tsbi_settings()['sidebar_count'];
-		$items = array_slice( tsbi_items( $e ), 0, $n );
-		if ( count( $items ) < 2 ) {
+		$n    = ! empty( $instance['n'] ) ? (int) $instance['n'] : (int) tsbi_settings()['sidebar_count'];
+		$html = tsbi_side_html( $e, $n, false );
+		if ( '' === $html ) {
 			return;
 		}
 		$label = ! empty( $e['label'] ) ? $e['label'] : $e['kw'];
-		echo $args['before_widget'] . $args['before_title'] . esc_html( $label ) . 'の商品' . $args['after_title'] . '<div class="tsbi-side">';   // phpcs:ignore
-		foreach ( $items as $it ) {
-			echo '<div class="tsbi-card"><a class="tsbi-img" href="' . esc_url( $it['url'] ) . '" target="_blank" rel="nofollow sponsored noopener"><img src="' . esc_url( $it['image'] ) . '" alt="" loading="lazy" width="120" height="120"></a>'
-				. '<div class="tsbi-body"><p class="tsbi-title">' . esc_html( $it['title'] ) . '</p><div class="tsbi-btns">'
-				. '<a class="tsbi-btn tsbi-am" href="' . esc_url( $it['url'] ) . '" target="_blank" rel="nofollow sponsored noopener">Amazon<span aria-hidden="true">&#8599;</span></a>'
-				. '<a class="tsbi-btn tsbi-rk" href="' . esc_url( tsbi_rakuten_url( $it['title'] ) ) . '" target="_blank" rel="nofollow sponsored noopener">楽天<span aria-hidden="true">&#8599;</span></a></div></div></div>';   // phpcs:ignore
-		}
-		echo '</div>' . $args['after_widget'];   // phpcs:ignore
+		echo $args['before_widget'] . $args['before_title'] . esc_html( $label ) . 'の商品' . $args['after_title'] . $html . $args['after_widget'];   // phpcs:ignore
 	}
 	public function form( $instance ) {
 		$n = ! empty( $instance['n'] ) ? (int) $instance['n'] : 3;
