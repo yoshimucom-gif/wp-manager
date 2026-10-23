@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.6.0
+ * Version:     1.6.1
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -1127,7 +1127,7 @@ function thesale_dir_css() {
 .td-dir .td-genre-head button{background:none;border:0;font-size:14px;font-weight:800;padding:4px 10px}
 .td-dir .td-genre-head button em{font-style:normal;color:var(--th-muted);margin-left:8px;font-weight:700}
 .td-dir .td-genres{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;padding-bottom:44px;border-bottom:3px solid var(--th-ink)}
-.td-dir .td-g{display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid var(--th-line);padding:16px;font-size:15px;font-weight:800;text-align:left;line-height:1.4}
+.td-dir .td-g{display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid var(--th-line);padding:15px 14px;font-size:14px;font-weight:800;text-align:left;line-height:1.4;letter-spacing:0}
 .td-dir .td-g em{font-style:normal;font-weight:700;color:var(--th-muted);font-family:"Inter",sans-serif;font-size:14px}
 .td-dir .td-g:hover{border-color:var(--th-ink)}
 .td-dir .td-g.is-on,.td-dir .td-genre-head button.is-on{background:var(--th-ink);color:#fff;border-color:var(--th-ink)}
@@ -1174,7 +1174,7 @@ function thesale_dir_css() {
 .td-dir .td-total{border-left:0;border-top:1px solid var(--th-ink);padding:20px 0 0;display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px}
 .td-dir .td-total small{width:100%}.td-dir .td-total b{font-size:64px}.td-dir .td-total p{width:100%;margin-top:4px}
 .td-dir .td-search{padding:24px 18px 20px}.td-dir .td-search label{height:56px;padding:0 14px}.td-dir .td-search input{font-size:16px}
-.td-dir .td-genres{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.td-dir .td-g{padding:14px 12px;font-size:14px}
+.td-dir .td-genres{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.td-dir .td-g{padding:13px 10px;font-size:13px}
 .td-dir .td-grid{grid-template-columns:1fr}
 .td-dir .td-cta{padding:30px 22px}.td-dir a.td-cta-btn{width:100%;justify-content:space-between;box-sizing:border-box}
 .td-dir .td-more{width:100%;box-sizing:border-box}}
