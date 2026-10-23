@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE ブランド商品カード
  * Description: 記事のブランド名（ブランドの記事）または商品名（買い時の記事）で Amazon の商品を引き、在庫のある商品をカードで並べる。Amazon・楽天のボタン付き。記事への自動差し込み・サイドバー（ウィジェット）・ショートコード [thesale_items]（サイドバーは [thesale_items layout="side" n="3"]）。商品は1日1回まとめて取り直して保存する。Affiros オートインサーターとは別管理。
- * Version:     1.0.4
+ * Version:     1.0.5
  * Author:      Keys
  * Text Domain: thesale-brand-items
  */
@@ -298,13 +298,39 @@ function tsbi_block( $e, $n, $offset = 0 ) {
 	return $o . '</div></section>';
 }
 
-/** 最初のH2見出しの上に出す3点（1.0.4〜）。小さめのカードを横に並べる */
+/**
+ * 最初のH2見出しの上に出す3点（1.0.4〜）。
+ * 1.0.5〜: Affiros オートインサーターが入っていれば、その3商品比較カードの描画と
+ * 開催中セールのマイクロコピー（＼お買い物マラソン開催中／）をそのまま使う＝見た目と挙動を既存カードにそろえる。
+ * 入っていないときだけ、このプラグインの小さめのカードで出す。
+ */
 function tsbi_top_block( $e, $n ) {
 	$items = array_slice( tsbi_items( $e ), 0, max( 1, (int) $n ) );
 	if ( count( $items ) < 3 ) {
 		return '';
 	}
 	$label = ! empty( $e['label'] ) ? $e['label'] : $e['kw'];
+	if ( class_exists( 'Affiros_AI_Card_Renderer' ) ) {
+		$aff   = get_option( 'affiros_ai_settings', array() );
+		$aff   = is_array( $aff ) ? $aff : array();
+		$prods = array();
+		foreach ( $items as $it ) {
+			$prods[] = array( 'source' => 'amazon', 'title' => $it['title'], 'image' => $it['image'], 'url' => $it['url'], 'brand' => '' );
+		}
+		$html = Affiros_AI_Card_Renderer::render( $prods, array(), array(
+			'keyword'              => $label,
+			'count'                => count( $prods ),
+			'card_heading_suffix'  => isset( $aff['card_heading_suffix'] ) ? $aff['card_heading_suffix'] : '',
+			'amazon_partner_tag'   => isset( $aff['amazon_partner_tag'] ) ? $aff['amazon_partner_tag'] : '',
+			'rakuten_affiliate_id' => isset( $aff['rakuten_affiliate_id'] ) ? $aff['rakuten_affiliate_id'] : '',
+		) );
+		if ( function_exists( 'affiros_ai_sale_decorate' ) ) {
+			$html = affiros_ai_sale_decorate( $html );   // 開催中セールのマイクロコピーをボタンの上に
+		}
+		if ( '' !== $html ) {
+			return '<div class="tsbi-top-aff">' . $html . '</div>';
+		}
+	}
 	$o = '<section class="tsbi tsbi-top"><p class="tsbi-head">' . esc_html( $label ) . 'の商品をチェック</p><div class="tsbi-grid">';
 	foreach ( $items as $it ) {
 		$o .= tsbi_card( $it, true );
@@ -353,7 +379,7 @@ add_filter( 'the_content', function ( $content ) {
 		return $content;
 	}
 	$s = tsbi_settings();
-	if ( empty( $s['enabled'] ) || false !== strpos( $content, 'class="tsbi"' ) ) {
+	if ( empty( $s['enabled'] ) || false !== strpos( $content, 'class="tsbi"' ) || false !== strpos( $content, 'tsbi-top-aff' ) ) {
 		return $content;
 	}
 	$e = tsbi_entry_for_post();
