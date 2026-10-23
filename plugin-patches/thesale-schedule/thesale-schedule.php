@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.7.1
+ * Version:     1.7.2
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -583,6 +583,28 @@ function thesale_card( $atts ) {
 	}
 	$title = ( in_array( $st, array( 'live', 'next' ), true ) && '' !== $tx['name'] ) ? $tx['name'] : $name . '公式';
 	$sub   = 'tbd' === $st ? '公式の発表を確認中です' : $tx['when'];
+
+	// Amazon・楽天で買えるブランド（1.7.2〜・吉村さんのA案）: 日程の下にAmazon・楽天の大きなボタン、公式サイトは右下の小さな文字リンク
+	// 公式サイトはアフィリエイトが無いので、報酬の付く2つを主役にする。店で買う記事（ユニクロ・ZOZO等）はリンクが無いので従来どおり
+	if ( ! empty( $c['amazon'] ) || ! empty( $c['rakuten'] ) ) {
+		$btns = '';
+		foreach ( array( 'amazon' => array( 'Amazonで見る', '#FF9900', '#0F1111' ), 'rakuten' => array( '楽天で見る', '#BF0000', '#fff' ) ) as $k => $b ) {
+			if ( ! empty( $c[ $k ] ) ) {
+				$btns .= thesale_card_button( $c[ $k ], $b[0], $b[1], true, $b[2] );
+			}
+		}
+		$off = '' !== $official ? '<div style="text-align:right;margin-top:10px"><a href="' . esc_url( $official ) . '" target="_blank" rel="nofollow noopener" style="font-size:13px;color:#5B6274;text-decoration:none">' . ( 'live' === $st ? '公式のセール会場' : '公式サイト' ) . ' <span aria-hidden="true">&#8599;</span></a></div>' : '';
+		$grid = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:14px">' . $btns . '</div>' . $off;
+		if ( 'live' === $st ) {
+			return $outer . thesale_card_head_live( '公式のセール', $title, $sub, thesale_card_left( $own['t'] ), '', '' ) . $grid . '</div>';
+		}
+		return $outer . '<div style="box-sizing:border-box;padding:20px 24px;background:#fff;border:1px solid #E3E8EF;border-radius:14px">'
+			. '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-size:13px;font-weight:700;color:#5B6274">' . esc_html( $name ) . 'のセール</span>' . thesale_card_pill( $st ) . '</div>'
+			. '<div style="font-size:20px;font-weight:700;line-height:1.5;color:#1F2937;margin-top:8px">' . esc_html( $title ) . '</div>'
+			. '<div style="font-size:14px;line-height:1.6;color:#5B6274;margin-top:4px">' . esc_html( $sub ) . '</div>'
+			. $grid . '</div></div>';
+	}
+
 	$html  = $outer . ( 'live' === $st
 		? thesale_card_head_live( '公式のセール', $title, $sub, thesale_card_left( $own['t'] ), $official, 'いますぐセール会場へ' )
 		: thesale_card_head( '公式のセール', $st, $title, $sub, thesale_card_button( $official, '公式サイト', '#14213D', false ) ) );
