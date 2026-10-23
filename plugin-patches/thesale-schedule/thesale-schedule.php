@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.2.0
+ * Version:     1.2.1
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -396,22 +396,48 @@ function thesale_card_text( $p ) {
 	return array( 'label' => '未発表', 'sub' => '', 'name' => '', 'when' => '次のセールはまだ発表されていません' );
 }
 
-function thesale_card_btn( $url, $label, $bg ) {
+function thesale_card_pill( $state ) {
+	$map = array(
+		'live' => array( '#FFF3C4', '#7A5200', '● 開催中' ),
+		'next' => array( '#EAF5EE', '#1E6B45', '● 次回' ),
+		'est'  => array( '#F1F3F6', '#5B6274', '未発表' ),
+		'tbd'  => array( '#F1F3F6', '#5B6274', '未発表' ),
+	);
+	$m = isset( $map[ $state ] ) ? $map[ $state ] : $map['tbd'];
+	return sprintf(
+		'<span style="display:inline-block;padding:3px 10px;border-radius:6px;font-size:13px;font-weight:700;line-height:1.5;white-space:nowrap;background:%s;color:%s">%s</span>',
+		$m[0], $m[1], esc_html( $m[2] )
+	);
+}
+
+function thesale_card_button( $url, $label, $bg, $full ) {
 	if ( empty( $url ) ) {
 		return '';
 	}
 	return sprintf(
-		'<a href="%s" target="_blank" rel="nofollow sponsored noopener" style="display:inline-block;padding:7px 14px;border-radius:4px;font-weight:700;font-size:14px;line-height:1.4;color:#fff;text-decoration:none;white-space:nowrap;background:%s">%s</a>',
+		'<a href="%s" target="_blank" rel="nofollow sponsored noopener" style="box-sizing:border-box;display:%s;align-items:center;justify-content:center;gap:10px;%spadding:12px 22px;border-radius:8px;font-weight:700;font-size:15px;line-height:1.4;color:#fff;text-decoration:none;white-space:nowrap;background:%s">%s<span aria-hidden="true" style="font-weight:400">&#8599;</span></a>',
 		esc_url( $url ),
+		$full ? 'flex' : 'inline-flex',
+		$full ? 'width:100%;' : '',
 		esc_attr( $bg ),
 		esc_html( $label )
 	);
 }
 
+/** 上段（白いカード）: ラベル＋状態・見出し・補足・右にボタン */
+function thesale_card_head( $label, $state, $title, $sub, $btn ) {
+	return '<div style="box-sizing:border-box;display:flex;flex-wrap:wrap;align-items:center;gap:14px 20px;padding:20px 24px;background:#fff;border:1px solid #E3E8EF;border-radius:14px">'
+		. '<div style="flex:1;min-width:220px">'
+		. '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-size:13px;font-weight:700;color:#5B6274">' . esc_html( $label ) . '</span>' . thesale_card_pill( $state ) . '</div>'
+		. '<div style="font-size:20px;font-weight:700;line-height:1.5;color:#1F2937;margin-top:8px">' . esc_html( $title ) . '</div>'
+		. '<div style="font-size:14px;line-height:1.6;color:#5B6274;margin-top:4px">' . esc_html( $sub ) . '</div>'
+		. '</div>' . $btn . '</div>';
+}
+
 /**
- * [thesale_card slug="..."] 記事冒頭のカード（1.2.0〜。状況の箱 [thesale_status] と公式リンクを1枚にまとめる）
- *  ブランドの記事: 上段＝ブランド公式のセール＋公式サイト、下段＝Amazon・楽天の公式ストアで開かれる大型セール＋公式ストア
- *  モールの記事: そのモールのセールの1段だけ＋セール会場
+ * [thesale_card slug="..."] 記事冒頭のカード（1.2.0〜。1.2.1でデザインを吉村さんの案に合わせた）
+ *  ブランドの記事: 上段＝ブランド公式のセール＋公式サイト、下段＝Amazon・楽天の公式ストアで開かれる大型セール（2列）
+ *  モールの記事: 上段だけ（そのモールのセール＋セール会場）
  *  表示のたびに日本時間で判定する。見た目は style 属性で付ける（記事の<style>は落ちる環境がある）
  */
 function thesale_card( $atts ) {
@@ -431,55 +457,34 @@ function thesale_card( $atts ) {
 		return $u === $slug || in_array( $slug, $related, true );
 	} );
 	$tx = thesale_card_text( $own );
-
-	$sq_bg = array( 'live' => '#FFC20E', 'next' => '#1E6B45', 'est' => '#5B6274', 'tbd' => '#5B6274' );
-	$sq_fg = array( 'live' => '#14213D', 'next' => '#FFFFFF', 'est' => '#FFFFFF', 'tbd' => '#FFFFFF' );
-	$wrap  = array(
-		'live' => 'border:2px solid #FFC20E;background:#FFFBEA',
-		'next' => 'border:1px solid #B5DCC3;background:#F4FAF6',
-		'est'  => 'border:1px solid #DADDE3;background:#FFFFFF',
-		'tbd'  => 'border:1px solid #DADDE3;background:#FFFFFF',
-	);
 	$st = $own['state'];
+	$outer = '<div class="ts-card ts-card-' . esc_attr( $kind ) . ' ts-card-' . esc_attr( $st ) . '" style="box-sizing:border-box;padding:18px;background:#EEF2F7;border:1px solid #E3E8EF;border-radius:18px">';
 
 	if ( 'mall' === $kind ) {
 		$btn_url = ! empty( $own['e']['official']['url'] ) ? $own['e']['official']['url'] : ( isset( $c['official'] ) ? $c['official'] : '' );
 		$site    = isset( $c['site'] ) ? $c['site'] : '';
-		$btn_bg  = 'rakuten' === $site ? '#BF0000' : ( 'amazon' === $site ? '#D16800' : '#14213D' );
+		$btn_bg  = 'rakuten' === $site ? '#BF0000' : ( 'amazon' === $site ? '#B35900' : '#14213D' );
 		$title   = '' !== $tx['name'] ? $tx['name'] : $name;
-		return sprintf(
-			'<div class="ts-card ts-card-mall ts-card-%1$s" style="box-sizing:border-box;display:flex;flex-wrap:wrap;align-items:center;gap:12px 14px;padding:12px 14px;border-radius:8px;%2$s">'
-			. '<div style="width:60px;height:60px;border-radius:6px;background:%3$s;color:%4$s;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;font-size:14px;line-height:1.3;flex-shrink:0">%5$s<span style="font-size:11px;font-weight:700">%6$s</span></div>'
-			. '<div style="flex:1;min-width:180px"><div style="font-weight:700;font-size:16px;line-height:1.5">%7$s</div><div style="font-size:13px;color:#5B6274;line-height:1.5">%8$s</div></div>'
-			. '%9$s</div>',
-			esc_attr( $st ), $wrap[ $st ], $sq_bg[ $st ], $sq_fg[ $st ], esc_html( $tx['label'] ), esc_html( $tx['sub'] ),
-			esc_html( $title ), esc_html( $tx['when'] ), thesale_card_btn( $btn_url, 'live' === $st ? 'セール会場へ' : '公式サイト', $btn_bg )
-		);
+		$sub     = 'tbd' === $st ? '次のセールはまだ発表されていません' : $tx['when'];
+		$btn     = thesale_card_button( $btn_url, 'live' === $st ? 'セール会場へ' : '公式サイト', $btn_bg, false );
+		return $outer . thesale_card_head( 'セールの状況', $st, $title, $sub, $btn ) . '</div>';
 	}
 
-	// ブランドの記事: 上段
-	$top_title = $name . '公式' . ( '' !== $tx['name'] ? '：' . $tx['name'] : '' );
-	$top_sub   = 'tbd' === $st ? '次のセールはまだ発表されていません' : $tx['when'];
-	$official  = isset( $c['official'] ) ? $c['official'] : '';
+	$official = isset( $c['official'] ) ? $c['official'] : '';
 	if ( 'live' === $st && ! empty( $own['e']['official']['url'] ) ) {
 		$official = $own['e']['official']['url'];
 	}
-	$html = sprintf(
-		'<div class="ts-card ts-card-brand ts-card-%1$s" style="box-sizing:border-box;border-radius:8px;overflow:hidden;%2$s">'
-		. '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 14px;padding:12px 14px">'
-		. '<div style="width:60px;height:60px;border-radius:6px;background:%3$s;color:%4$s;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;font-size:14px;line-height:1.3;flex-shrink:0">%5$s<span style="font-size:11px;font-weight:700">%6$s</span></div>'
-		. '<div style="flex:1;min-width:180px"><div style="font-size:12px;color:#5B6274;line-height:1.5">公式のセール</div><div style="font-weight:700;font-size:16px;line-height:1.5">%7$s</div><div style="font-size:13px;color:#5B6274;line-height:1.5">%8$s</div></div>'
-		. '%9$s</div>',
-		esc_attr( $st ), $wrap[ $st ], $sq_bg[ $st ], $sq_fg[ $st ], esc_html( $tx['label'] ), esc_html( $tx['sub'] ),
-		esc_html( $top_title ), esc_html( $top_sub ), thesale_card_btn( $official, 'live' === $st ? '公式のセール会場へ' : '公式サイト', '#14213D' )
-	);
+	$title = $name . '公式' . ( in_array( $st, array( 'live', 'next' ), true ) && '' !== $tx['name'] ? '　' . $tx['name'] : '' );
+	$sub   = 'tbd' === $st ? '次のセールはまだ発表されていません' : $tx['when'];
+	$html  = $outer . thesale_card_head( '公式のセール', $st, $title, $sub,
+		thesale_card_button( $official, 'live' === $st ? '公式のセール会場へ' : '公式サイト', '#14213D', false ) );
 
 	// 下段: Amazon・楽天の公式ストアで開かれる大型セール（トップに出しているモールの日程から選ぶ）
-	$rows = '';
 	$malls = array(
-		'amazon'  => array( 'Amazon公式ストア', '#D16800', 'Amazon' ),
-		'rakuten' => array( '楽天公式ショップ', '#BF0000', '楽天市場' ),
+		'amazon'  => array( 'Amazon', '#B35900', 'Amazon公式ストア', '/^Amazon\s*/u' ),
+		'rakuten' => array( '楽天', '#BF0000', '楽天公式ショップ', '/^楽天(市場)?\s*/u' ),
 	);
+	$cols = '';
 	foreach ( $malls as $site => $m ) {
 		if ( empty( $c[ $site ] ) ) {
 			continue;
@@ -488,25 +493,22 @@ function thesale_card( $atts ) {
 			return isset( $e['site'] ) && $site === $e['site'] && ! ( isset( $e['top'] ) && false === $e['top'] );
 		} );
 		$t2    = thesale_card_text( $p );
-		$ps    = $p['state'];
-		$badge = array( 'live' => array( '#FFC20E', '#14213D' ), 'next' => array( '#1E6B45', '#FFFFFF' ), 'est' => array( '#5B6274', '#FFFFFF' ), 'tbd' => array( '#5B6274', '#FFFFFF' ) );
-		$rbg   = array( 'live' => 'background:#FFFBEA;border:1px solid #FFC20E', 'next' => 'background:#F4FAF6;border:1px solid #B5DCC3', 'est' => 'background:#F7F8FA;border:1px solid #E3E5EA', 'tbd' => 'background:#F7F8FA;border:1px solid #E3E5EA' );
-		$line  = '' !== $t2['name'] ? $t2['name'] . '　' . $t2['when'] : $m[2] . '：' . $t2['when'];
-		$rows .= sprintf(
-			'<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:8px 10px;border-radius:6px;margin-top:6px;%1$s">'
-			. '<span style="display:inline-block;padding:3px 8px;border-radius:4px;font-size:12px;font-weight:700;background:%2$s;color:%3$s;white-space:nowrap">%4$s</span>'
-			. '<span style="flex:1;min-width:160px;font-size:14px;font-weight:700;line-height:1.5">%5$s</span>%6$s</div>',
-			$rbg[ $ps ], $badge[ $ps ][0], $badge[ $ps ][1], esc_html( 'live' === $ps ? '開催中' : ( 'next' === $ps ? '次回' : '未発表' ) ),
-			esc_html( $line ), thesale_card_btn( $c[ $site ], $m[0], $m[1] )
-		);
+		$ev    = '' !== $t2['name'] ? preg_replace( $m[3], '', $t2['name'] ) : '大型セール';
+		$when  = 'tbd' === $p['state'] ? '次のセールはまだ発表されていません' : $t2['when'];
+		$cols .= '<div style="box-sizing:border-box;display:flex;flex-direction:column;gap:10px;padding:20px 24px;background:#fff;border:1px solid #E3E8EF;border-radius:14px">'
+			. '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span style="font-size:17px;font-weight:700;color:' . esc_attr( $m[1] ) . '">' . esc_html( $m[0] ) . '</span>' . thesale_card_pill( $p['state'] ) . '</div>'
+			. '<div style="font-size:18px;font-weight:700;line-height:1.6;color:#1F2937">' . esc_html( $ev ) . '</div>'
+			. '<div style="font-size:14px;line-height:1.6;color:#5B6274;flex:1">' . esc_html( $when ) . '</div>'
+			. thesale_card_button( $c[ $site ], $m[2], $m[1], true )
+			. '</div>';
 	}
-	if ( '' !== $rows ) {
-		$html .= '<div style="border-top:1px solid rgba(0,0,0,.08);padding:4px 14px 12px;background:#FFFFFF">'
-			. '<div style="font-size:12px;color:#5B6274;margin-top:6px;line-height:1.5">通販サイトの公式ストアで開かれるセール</div>'
-			. $rows . '</div>';
+	if ( '' !== $cols ) {
+		$html .= '<div style="font-size:14px;font-weight:700;color:#5B6274;margin:18px 2px 10px">通販サイトの公式ストアで開かれるセール</div>'
+			. '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px">' . $cols . '</div>';
 	}
 	return $html . '</div>';
 }
+
 add_shortcode( 'thesale_card', 'thesale_card' );
 
 /** [thesale_asof] 当日の日付（「2026年10月14日」） */
