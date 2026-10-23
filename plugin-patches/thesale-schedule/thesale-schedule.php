@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.3.1
+ * Version:     1.3.2
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -553,7 +553,7 @@ add_filter( 'the_content', function ( $content ) {
 	if ( '' === $card ) {
 		return $content;
 	}
-	$card = '<div class="ts-card-auto" style="margin:1.6em 0">' . $card . '</div>';
+	$card = '<div class="ts-card-auto" style="margin-top:1.6em;margin-bottom:1.6em">' . $card . '</div>';
 	// この時点の本文はブロックの描画前（<!-- wp:heading --> の注釈つき）。見出しブロックの内側に入れると
 	// ブロックが壊れるので、注釈の外側（見出しブロックの前後）に入れる
 	$h_open  = '/(?:<!-- wp:heading[^>]*-->\s*)?<h2/u';
