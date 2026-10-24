@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.7.5
+ * Version:     1.7.6
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -869,7 +869,7 @@ function thesale_home_assets() {
 		wp_enqueue_style( 'thesale-home-fonts', 'https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800;900&family=Noto+Sans+JP:wght@500;700;900&display=swap', array(), null );
 		wp_register_style( 'thesale-home', false, array(), '1.4.0' );
 		wp_enqueue_style( 'thesale-home' );
-		wp_add_inline_style( 'thesale-home', thesale_home_css() . thesale_home_lower_css() . thesale_dir_css() );
+		wp_add_inline_style( 'thesale-home', thesale_home_css() . thesale_home_lower_css() . thesale_dir_css() . thesale_home_now_css() );
 	}
 }
 add_action( 'wp_enqueue_scripts', function () {
@@ -985,6 +985,8 @@ function thesale_home( $atts ) {
 	$o .= '<div class="th-malls"><span>Amazon<i>/</i>楽天市場<i>/</i>Yahoo!ショッピング<i>/</i>Qoo10<i>/</i>and more</span>'
 		. '<a href="' . esc_url( home_url( '/information-policy/' ) ) . '">情報の取得方法と掲載基準' . thesale_home_arrow( 'dbl' ) . '</a></div>';
 
+	$o .= thesale_home_now( $now );
+
 	$o .= '<section class="th-sec th-band th-band-white" id="th-coming"><div class="th-sec-head"><div><p class="th-sec-eyebrow th-en">COMING NEXT</p>'
 		. '<h2 class="th-sec-title">この先のセール。</h2></div><span class="th-sec-num th-en">01 / UPCOMING</span></div><div class="th-grid">';
 	foreach ( array_slice( $up, 0, 4 ) as $u ) {
@@ -1010,6 +1012,121 @@ function thesale_home( $atts ) {
 	return $o;
 }
 add_shortcode( 'thesale_home', 'thesale_home' );
+
+/*
+ * トップ「開催中のセール。」（1.7.6〜。2026-10-24 吉村さん「現在開催中のセールを『この先のセール』の見出し前におけ」）
+ * 日程データの全件（トップに出さない店・ブランドのセールも含む）から、いま開催中のものを表示のたびに日本時間で選ぶ。
+ *  期間限定 … 終わるのが早い順。9件を出し、残りは「さらに表示」の中
+ *  終了日未定 … 期間限定の後ろ（when の文言を出す）
+ *  常設 … 公式通販でいつもやっているセール。名前だけを横並びで
+ */
+function thesale_home_now_css() {
+	return '
+.th-now{padding:56px 0 8px}
+@keyframes tsBlink{0%,100%{opacity:1}50%{opacity:.25}}.th-home .ts-blink{animation:tsBlink 1.1s ease-in-out infinite}@media (prefers-reduced-motion:reduce){.th-home .ts-blink{animation:none}}
+.th-now .th-sec-head{margin-bottom:28px}
+.th-now-num{display:inline-flex;align-items:center;gap:8px;font-size:16px;font-weight:800}
+.th-now-dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#E53935}
+.th-now-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.th-home a.th-now-item{display:flex;flex-direction:column;background:#fff;border:1px solid var(--th-line);border-top:4px solid #E53935;padding:18px 20px 16px;box-sizing:border-box;min-height:150px}
+.th-home a.th-now-item:hover{border-color:var(--th-ink);border-top-color:#E53935}
+.th-now-top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}
+.th-now-on{font-size:13px;font-weight:800;color:#E53935;white-space:nowrap}
+.th-now-left{font-size:13px;font-weight:800;background:var(--th-lime);color:var(--th-ink);padding:3px 10px;white-space:nowrap}
+.th-now-left.is-open{background:#EEEFE9}
+.th-now-name{font-size:18px;font-weight:900;line-height:1.55;margin:0 0 12px}
+.th-now-when{margin-top:auto;font-size:14px;color:var(--th-muted);font-weight:700;line-height:1.6}
+.th-now-more{margin-top:16px}
+.th-now-more>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:10px;font-weight:800;font-size:16px;padding:12px 0;border-bottom:2px solid var(--th-ink)}
+.th-now-more>summary::-webkit-details-marker{display:none}
+.th-now-more[open]>summary{margin-bottom:16px}
+.th-now-perm{margin:28px 0 0;padding:20px 0 0;border-top:1px solid var(--th-line)}
+.th-now-perm-h{font-size:15px;font-weight:800;margin:0 0 12px}
+.th-now-perm-list{display:flex;flex-wrap:wrap;gap:8px}
+.th-home a.th-now-chip{display:inline-block;background:#fff;border:1px solid var(--th-line);padding:7px 12px;font-size:14px;font-weight:700}
+.th-home a.th-now-chip:hover{border-color:var(--th-ink)}
+@media (max-width:820px){.th-now-grid{grid-template-columns:1fr}.th-home a.th-now-item{min-height:0}.th-now-name{font-size:17px}}
+';
+}
+
+function thesale_home_now( $now ) {
+	$lim  = array();
+	$open = array();
+	$perm = array();
+	$seen = array();
+	foreach ( thesale_sched_events() as $e ) {
+		if ( ! is_array( $e ) || empty( $e['name'] ) ) {
+			continue;
+		}
+		$s = thesale_sched_dt( isset( $e['start'] ) ? $e['start'] : '' );
+		$t = thesale_sched_dt( isset( $e['end'] ) ? $e['end'] : '' );
+		if ( ! $s || $s > $now ) {
+			continue;
+		}
+		$key = $e['name'] . '|' . ( isset( $e['url'] ) ? $e['url'] : '' );
+		if ( isset( $seen[ $key ] ) ) {
+			continue;
+		}
+		$when = isset( $e['when'] ) ? (string) $e['when'] : '';
+		if ( $t ) {
+			if ( $now >= $t ) {
+				continue;
+			}
+			$seen[ $key ] = 1;
+			$lim[] = array( 'e' => $e, 't' => $t );
+		} elseif ( ! empty( $e['ongoing'] ) ) {
+			$seen[ $key ] = 1;
+			if ( false !== strpos( $when, '常設' ) || false !== strpos( $when, '常時' ) ) {
+				$perm[] = $e;
+			} else {
+				$open[] = $e;
+			}
+		}
+	}
+	if ( ! $lim && ! $open && ! $perm ) {
+		return '';
+	}
+	usort( $lim, function ( $a, $b ) { return $a['t'] <=> $b['t']; } );
+
+	$cards = array();
+	foreach ( $lim as $x ) {
+		$t    = $x['t'];
+		$left = str_replace( '終了まで', '', thesale_card_left( $t ) );
+		$end  = $t->format( 'n' ) . '月' . $t->format( 'j' ) . '日' . ( in_array( $t->format( 'H:i' ), array( '23:59', '00:00' ), true ) ? '' : ' ' . $t->format( 'G:i' ) ) . 'まで';
+		$cards[] = thesale_home_now_card( $x['e'], $left, '', $end );
+	}
+	foreach ( $open as $e ) {
+		$cards[] = thesale_home_now_card( $e, '終了日未定', ' is-open', isset( $e['when'] ) ? $e['when'] : '' );
+	}
+	$n  = count( $lim ) + count( $open );
+	$o  = '<section class="th-sec th-now" id="th-now"><div class="th-sec-head"><div><p class="th-sec-eyebrow th-en">NOW ON</p>'
+		. '<h2 class="th-sec-title">開催中のセール。</h2></div><span class="th-now-num"><span class="th-now-dot ts-blink" aria-hidden="true"></span>' . (int) $n . '件 開催中</span></div>';
+	if ( $cards ) {
+		$o .= '<div class="th-now-grid">' . implode( '', array_slice( $cards, 0, 9 ) ) . '</div>';
+		if ( count( $cards ) > 9 ) {
+			$o .= '<details class="th-now-more"><summary>さらに表示（' . ( count( $cards ) - 9 ) . '件）' . thesale_home_arrow( 'more' ) . '</summary>'
+				. '<div class="th-now-grid">' . implode( '', array_slice( $cards, 9 ) ) . '</div></details>';
+		}
+	}
+	if ( $perm ) {
+		$o .= '<div class="th-now-perm"><p class="th-now-perm-h">公式通販でいつも開催しているセール・アウトレット（' . count( $perm ) . '件）</p><div class="th-now-perm-list">';
+		foreach ( $perm as $e ) {
+			$nm = trim( preg_replace( '/（[^）]*常設[^）]*）/u', '', (string) $e['name'] ) );
+			$o .= '<a class="th-now-chip" href="' . esc_url( thesale_sched_url( isset( $e['url'] ) ? $e['url'] : '' ) ) . '">' . esc_html( $nm ) . '</a>';
+		}
+		$o .= '</div></div>';
+	}
+	$o .= '<p class="th-note" style="padding-bottom:8px">' . esc_html( $now->format( 'n' ) . '月' . $now->format( 'j' ) . '日時点。各店の公式サイトの表示を毎日確かめて載せています。' ) . '</p></section>';
+	return $o;
+}
+
+function thesale_home_now_card( $e, $left, $cls, $when ) {
+	return '<a class="th-now-item" href="' . esc_url( thesale_sched_url( isset( $e['url'] ) ? $e['url'] : '' ) ) . '">'
+		. '<div class="th-now-top"><span class="th-now-on"><span class="ts-blink">●</span> 開催中</span>'
+		. ( '' !== $left ? '<span class="th-now-left' . $cls . '">' . esc_html( $left ) . '</span>' : '' ) . '</div>'
+		. '<p class="th-now-name">' . esc_html( (string) $e['name'] ) . '</p>'
+		. '<p class="th-now-when">' . esc_html( $when ) . '</p></a>';
+}
 
 /*
  * ── トップページの下半分（1.5.0〜）: 02 月別カレンダー／03 ブランド一覧／読みもの／カテゴリ／編集方針 ─────
