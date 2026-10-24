@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.7.3
+ * Version:     1.7.4
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -392,8 +392,13 @@ function thesale_card_pick( $match ) {
 		$s = thesale_sched_dt( isset( $e['start'] ) ? $e['start'] : '' );
 		$t = thesale_sched_dt( isset( $e['end'] ) ? $e['end'] : '' );
 		if ( $s && $t && $s <= $now && $now < $t ) {
-			if ( ! $live || $t < $live['t'] ) {
+			if ( ! $live || ! $live['t'] || $t < $live['t'] ) {
 				$live = array( 'state' => 'live', 'e' => $e, 's' => $s, 't' => $t );
+			}
+		} elseif ( $s && ! $t && ! empty( $e['ongoing'] ) && $s <= $now ) {
+			// 終了日が公式で未定の開催中セール・常設のアウトレット（1.7.4〜）。終了日のある開催中があればそちらを優先
+			if ( ! $live ) {
+				$live = array( 'state' => 'live', 'e' => $e, 's' => $s, 't' => null );
 			}
 		} elseif ( $s && $s > $now ) {
 			if ( ! $next || $s < $next['s'] ) {
@@ -422,6 +427,14 @@ function thesale_card_pick( $match ) {
 /** 状態ごとの文言（ラベル・期間の文） */
 function thesale_card_text( $p ) {
 	$now = thesale_sched_now();
+	if ( 'live' === $p['state'] && ! $p['t'] ) {
+		return array(
+			'label' => '開催中',
+			'sub'   => '',
+			'name'  => $p['e']['name'],
+			'when'  => ! empty( $p['e']['when'] ) ? $p['e']['when'] : $p['s']->format( 'n月j日' ) . '〜（終了日は公式で未定）',
+		);
+	}
 	if ( 'live' === $p['state'] ) {
 		$left = (int) ceil( ( $p['t']->getTimestamp() - $now->getTimestamp() ) / 86400 );
 		return array(
