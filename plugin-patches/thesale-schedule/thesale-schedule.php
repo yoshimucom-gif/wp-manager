@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.7.6
+ * Version:     1.7.7
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -1026,14 +1026,14 @@ function thesale_home_now_css() {
 @keyframes tsBlink{0%,100%{opacity:1}50%{opacity:.25}}.th-home .ts-blink{animation:tsBlink 1.1s ease-in-out infinite}@media (prefers-reduced-motion:reduce){.th-home .ts-blink{animation:none}}
 .th-now .th-sec-head{margin-bottom:28px}
 .th-now-num{display:inline-flex;align-items:center;gap:8px;font-size:16px;font-weight:800}
-.th-now-dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#E53935}
+.th-now-dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--th-ink)}
 .th-now-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
-.th-home a.th-now-item{display:flex;flex-direction:column;background:#fff;border:1px solid var(--th-line);border-top:4px solid #E53935;padding:18px 20px 16px;box-sizing:border-box;min-height:150px}
-.th-home a.th-now-item:hover{border-color:var(--th-ink);border-top-color:#E53935}
+.th-home a.th-now-item{display:flex;flex-direction:column;background:#fff;border:1px solid var(--th-line);border-top:3px solid var(--th-ink);padding:18px 20px 16px;box-sizing:border-box;min-height:150px}
+.th-home a.th-now-item:hover .th-now-name{text-decoration:underline;text-decoration-thickness:3px;text-decoration-color:var(--th-lime);text-underline-offset:6px}
 .th-now-top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}
-.th-now-on{font-size:13px;font-weight:800;color:#E53935;white-space:nowrap}
+.th-home .th-now-on{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:800;background:var(--th-ink);color:var(--th-lime);padding:3px 10px;white-space:nowrap}
 .th-now-left{font-size:13px;font-weight:800;background:var(--th-lime);color:var(--th-ink);padding:3px 10px;white-space:nowrap}
-.th-now-left.is-open{background:#EEEFE9}
+.th-now-left.is-open{background:#EEEFE9;color:var(--th-ink)}
 .th-now-name{font-size:18px;font-weight:900;line-height:1.55;margin:0 0 12px}
 .th-now-when{margin-top:auto;font-size:14px;color:var(--th-muted);font-weight:700;line-height:1.6}
 .th-now-more{margin-top:16px}
