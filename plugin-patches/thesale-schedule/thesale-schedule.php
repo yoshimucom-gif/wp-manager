@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.7.7
+ * Version:     1.7.8
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -117,7 +117,7 @@ add_action( 'wp_enqueue_scripts', function () {
 	}
 	wp_register_style( 'thesale-card', false, array(), '1.7.0' );
 	wp_enqueue_style( 'thesale-card' );
-	wp_add_inline_style( 'thesale-card', '@keyframes tsBlink{0%,100%{opacity:1}50%{opacity:.25}}.ts-blink{animation:tsBlink 1.1s ease-in-out infinite}@media (prefers-reduced-motion:reduce){.ts-blink{animation:none}}@media (max-width:600px){.ts-live a{width:100%}}' );
+	wp_add_inline_style( 'thesale-card', '@keyframes tsBlink{0%,100%{opacity:1}50%{opacity:.25}}.ts-blink{animation:tsBlink 1.1s ease-in-out infinite}.affiros-ai-btn-amazon,.affiros-ai-btn-amazon:hover,a.tsbi-am{color:#fff!important}@media (prefers-reduced-motion:reduce){.ts-blink{animation:none}}@media (max-width:600px){.ts-live a{width:100%}}' );
 } );
 
 /**
@@ -580,7 +580,7 @@ function thesale_card( $atts ) {
 			$site = 0 === strpos( $tx['name'], 'Amazon' ) ? 'amazon' : ( 0 === strpos( $tx['name'], '楽天' ) ? 'rakuten' : '' );
 		}
 		$btn_bg  = 'rakuten' === $site ? '#BF0000' : ( 'amazon' === $site ? '#FF9900' : '#14213D' );
-		$btn_fg  = 'amazon' === $site ? '#0F1111' : '#fff';
+		$btn_fg  = 'amazon' === $site ? '#fff' : '#fff';
 		$title   = '' !== $tx['name'] ? $tx['name'] : $name;
 		$sub     = 'tbd' === $st ? '公式の発表を確認中です' : $tx['when'];
 		if ( 'live' === $st ) {
@@ -602,7 +602,7 @@ function thesale_card( $atts ) {
 	// 公式サイトはアフィリエイトが無いので、報酬の付く2つを主役にする。店で買う記事（ユニクロ・ZOZO等）はリンクが無いので従来どおり
 	if ( ! empty( $c['amazon'] ) || ! empty( $c['rakuten'] ) ) {
 		$btns = '';
-		foreach ( array( 'amazon' => array( 'Amazonで見る', '#FF9900', '#0F1111' ), 'rakuten' => array( '楽天で見る', '#BF0000', '#fff' ) ) as $k => $b ) {
+		foreach ( array( 'amazon' => array( 'Amazonで見る', '#FF9900', '#fff' ), 'rakuten' => array( '楽天で見る', '#BF0000', '#fff' ) ) as $k => $b ) {
 			if ( ! empty( $c[ $k ] ) ) {
 				$btns .= thesale_card_button( $c[ $k ], $b[0], $b[1], true, $b[2] );
 			}
@@ -626,7 +626,7 @@ function thesale_card( $atts ) {
 
 	// 下段: Amazon・楽天の公式ストアで開かれる大型セール（トップに出しているモールの日程から選ぶ）
 	$malls = array(
-		'amazon'  => array( 'Amazon', '#FF9900', 'Amazon公式ストア', '/^Amazon\s*/u', '#0F1111', '#232F3E' ),
+		'amazon'  => array( 'Amazon', '#FF9900', 'Amazon公式ストア', '/^Amazon\s*/u', '#fff', '#232F3E' ),
 		'rakuten' => array( '楽天', '#BF0000', '楽天公式ショップ', '/^楽天(市場)?\s*/u', '#fff', '#BF0000' ),
 	);
 	$cols = '';

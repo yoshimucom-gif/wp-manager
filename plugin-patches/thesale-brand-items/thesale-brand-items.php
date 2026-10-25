@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE ブランド商品カード
  * Description: 記事のブランド名（ブランドの記事）または商品名（買い時の記事）で Amazon の商品を引き、在庫のある商品をカードで並べる。Amazon・楽天のボタン付き。記事への自動差し込み・サイドバー（ウィジェット）・ショートコード [thesale_items]（サイドバーは [thesale_items layout="side" n="3"]）。商品は1日1回まとめて取り直して保存する。Affiros オートインサーターとは別管理。
- * Version:     1.0.5
+ * Version:     1.0.6
  * Author:      Keys
  * Text Domain: thesale-brand-items
  */
@@ -351,7 +351,7 @@ function tsbi_css() {
 .tsbi-btns{display:flex;flex-direction:column;gap:6px}
 .tsbi-btn{display:flex;justify-content:center;align-items:center;gap:6px;padding:8px 6px;font-size:13px;font-weight:800;text-decoration:none!important;line-height:1.3}
 .tsbi-btn span{font-weight:400;font-size:.9em}
-.tsbi-am{background:#FF9900;color:#0F1111!important}
+.tsbi-am{background:#FF9900;color:#fff!important}
 .tsbi-rk{background:#BF0000;color:#fff!important}
 .tsbi-btn:hover{opacity:.88}
 .tsbi-side .tsbi-card{flex-direction:row;align-items:flex-start;padding:10px;margin-bottom:10px}
@@ -411,6 +411,10 @@ add_filter( 'the_content', function ( $content ) {
 add_shortcode( 'thesale_items', function ( $atts ) {
 	$a = shortcode_atts( array( 'kw' => '', 'n' => 6, 'layout' => '' ), $atts );
 	// サイドバーなどループの外でも、表示中の記事で引く
+	// 一覧ページ（カテゴリー・トップ等）では、ループの最後の記事（グローバルの $post）で引かれて関係ない店の商品が出るので、語の指定が無ければ出さない（1.0.6〜）
+	if ( '' === $a['kw'] && ! is_singular( 'post' ) ) {
+		return '';
+	}
 	$cur = is_singular( 'post' ) ? get_queried_object_id() : null;
 	$e = '' !== $a['kw'] ? array( 'kw' => $a['kw'], 'label' => $a['kw'], 'kind' => 'product', 'match' => array( $a['kw'] ) ) : tsbi_entry_for_post( $cur );
 	if ( ! $e ) {
