@@ -1978,6 +1978,15 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.61 / auto-inserter v0.20.1 (2026-10-25) — マイクロコピーの折り返し崩れを修正</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>指摘</strong>: 3カラムの狭いカードで「＼ P お買い物マラソン開催中 ／」が折り返されて崩れる。</li>
+              <li><strong>変更</strong>: フォントを1段小さく (12.5→11.5px)、flexの<strong>1行固定 (nowrap)</strong>、＼／は::before/::afterで文言に吸着 (本文に混ぜない)。180px列で「お買い物マラソン開催中」が1行・はみ出しゼロをブラウザ実測。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.20.0 → 0.20.1 / <code>APP_VERSION</code> 1.9.60 → 1.9.61。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.60 / sale-hub v1.5.1 + auto-inserter v0.20.0 (2026-10-20) — 🅟 マイクロコピーを「＼ P 本日0のつく日 ／」形に</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>指摘</strong>: 「＼5と0のつく日ポイントアップ／」が長くて折り返し崩れ。デザイン3案を提示し案1 (現行型＋Pアイコン) を採用。</li>

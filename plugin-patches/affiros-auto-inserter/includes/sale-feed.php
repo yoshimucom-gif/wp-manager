@@ -113,10 +113,12 @@ function affiros_ai_sale_decorate($html) {
         $style = isset($active['colors'][$mall])
             ? ' style="color:' . esc_attr($active['colors'][$mall]) . ' !important"'
             : '';
+        // ＼／はCSSの::before/::afterで付ける (v0.20.1)。本文に混ぜると
+        // 狭い3カラムカードで折り返されて崩れるため、flexの1行固定にする
         $copy = '<div class="affiros-ai-sale affiros-ai-sale-' . $mall
-              . ' affiros-sh-anim-' . esc_attr($active[$mall]['anim']) . '"' . $style . '>＼ '
+              . ' affiros-sh-anim-' . esc_attr($active[$mall]['anim']) . '"' . $style . '>'
               . '<span class="affiros-ai-sale-p">P</span>'
-              . esc_html($active[$mall]['label']) . ' ／</div>';
+              . '<span class="affiros-ai-sale-t">' . esc_html($active[$mall]['label']) . '</span></div>';
         $html = preg_replace(
             '/(<a[^>]*affiros-ai-btn-' . $mall . '[^>]*>)/u',
             $copy . '$1',
