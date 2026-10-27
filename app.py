@@ -6422,7 +6422,7 @@ PLUGIN_DOWNLOADS = {
     'thesale-brand-items': {'file': 'thesale-brand-items-1.0.6.zip', 'name': 'THE SALE ブランド商品カード', 'version': '1.0.6'},
     'mikata-seminar-feed': {'file': 'mikata-seminar-feed-1.0.0.zip', 'name': 'ミカタセミナー新着', 'version': '1.0.0'},
     'kurabe-db': {'file': 'kurabe-db-1.7.2.zip', 'name': '100均くらべ 比較データ表示', 'version': '1.7.2'},
-    'suit-kurabe-db': {'file': 'suit-kurabe-db-1.5.6.zip', 'name': 'スーツくらべ 比較データ表示', 'version': '1.5.6'},
+    'suit-kurabe-db': {'file': 'suit-kurabe-db-1.5.7.zip', 'name': 'スーツくらべ 比較データ表示', 'version': '1.5.7'},
     'catalog-kurabe-db': {'file': 'catalog-kurabe-db-1.2.27.zip', 'name': 'カタログギフトくらべ 比較データ表示', 'version': '1.2.27'},
     'kyutoki-shindan': {
         'file': 'kyutoki-shindan-1.0.3.zip',
