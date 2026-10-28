@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Re:Diver ヘルパー
  * Description: 通常のREST APIでは触れないWordPress/テーマの設定を、スクリプトから読み書きできるようにする構築補助プラグイン。テーマ側の不具合の回避（外部リンクアイコンの豆腐）も含む。カテゴリー画像などのタームメタ、記事幅などの投稿メタ、カスタマイザー（theme_mod / オプション）に対応。キー名を発見する調査用エンドポイント付き。全て管理者権限必須。
- * Version: 1.5.0
+ * Version: 1.6.0
  * Author: Keys
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -12,7 +12,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('RDH_VERSION', '1.5.0');
+define('RDH_VERSION', '1.6.0');
 
 // 自動更新通知（GitHub 直配信のメタJSONを定期チェック）
 require_once __DIR__ . '/includes/plugin-updater.php';
@@ -33,6 +33,7 @@ require_once __DIR__ . '/includes/avatar.php';
 require_once __DIR__ . '/includes/fix-single-robots.php';
 require_once __DIR__ . '/includes/cf7-style.php';
 require_once __DIR__ . '/includes/ads-txt.php';
+require_once __DIR__ . '/includes/head-meta.php';
 
 /**
  * 新版の即時適用（1.4.0）: POST /wp-json/rdh/v1/selfupdate
@@ -106,6 +107,7 @@ add_action('rest_api_init', function () {
                     '新版の即時適用'                   => "POST {$base}/selfupdate",
                     'CF7フォームの見た目を有効化'      => "POST {$base}/option/rdh_cf7_style  {\"value\":\"1\"}",
                     'ads.txt の配信'                   => "POST {$base}/option/rdh_ads_txt  {\"value\":\"google.com, pub-..., DIRECT, f08c47fec0942fa0\"}",
+                    'サイト所有確認の<meta>'           => "POST {$base}/option/rdh_head_meta  {\"value\":{\"p:domain_verify\":\"...\"},\"merge\":true}",
                     '著者アバターの差し替え'           => "POST {$base}/option/rdh_avatar_map  {\"value\":{\"<user_id>\":<attachment_id>}}",
                 ],
                 'params' => [
