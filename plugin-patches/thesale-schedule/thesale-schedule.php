@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.8.2
+ * Version:     1.8.3
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -196,6 +196,36 @@ function thesale_wd( $d ) {
 	return '（' . $w[ (int) $d->format( 'w' ) ] . '）';
 }
 
+/**
+ * 日程の自由記述（when。例「10月29日まで（公式オンライン・アプリ）」）の日付に曜日を足す（1.8.3〜）。
+ * 年が書かれていない日付は、そのセールの開始日（無ければ終了日・今日）の年で読む。12月の回の「1月3日」は翌年。
+ */
+function thesale_wd_text( $text, $ref = null ) {
+	if ( '' === (string) $text ) {
+		return $text;
+	}
+	$ref = $ref ? $ref : thesale_sched_now();
+	return preg_replace_callback( '/(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日(?!\s*[（(])/u', function ( $m ) use ( $ref ) {
+		$mo = (int) $m[2];
+		$da = (int) $m[3];
+		if ( '' !== $m[1] ) {
+			$y = (int) $m[1];
+		} else {
+			$y  = (int) $ref->format( 'Y' );
+			$rm = (int) $ref->format( 'n' );
+			if ( $mo - $rm < -6 ) {
+				$y++;
+			} elseif ( $mo - $rm > 6 ) {
+				$y--;
+			}
+		}
+		if ( ! checkdate( $mo, $da, $y ) ) {
+			return $m[0];
+		}
+		return $m[0] . thesale_wd( new DateTimeImmutable( sprintf( '%04d-%02d-%02d', $y, $mo, $da ), new DateTimeZone( 'Asia/Tokyo' ) ) );
+	}, (string) $text );
+}
+
 /** 今日から終了日まで、暦の上で何日先か（今日=0・明日=1）。時間の割り算だと「明日まで」が「あと2日」になる（1.8.2〜） */
 function thesale_days_until( $t ) {
 	$now = thesale_sched_now();
@@ -280,7 +310,7 @@ function thesale_sched_upcoming( $atts ) {
 			$month  = $s->format( 'n' ) . '月';
 			$day    = $s->format( 'j' );
 			$time   = ( '00:00' === $s->format( 'H:i' ) ) ? '' : '・' . $s->format( 'G:i' ) . '〜';
-			$status = '開催予定' . $time;
+			$status = thesale_wd( $s ) . '開催予定' . $time;
 			$cls    = 'ts-st ts-st-ok';
 		} else {
 			$month  = isset( $e['month'] ) ? $e['month'] : '';
@@ -446,7 +476,7 @@ function thesale_card_text( $p ) {
 			'label' => '開催中',
 			'sub'   => '',
 			'name'  => $p['e']['name'],
-			'when'  => ! empty( $p['e']['when'] ) ? $p['e']['when'] : $p['s']->format( 'n月j日' ) . thesale_wd( $p['s'] ) . '〜（終了日は公式で未定）',
+			'when'  => ! empty( $p['e']['when'] ) ? thesale_wd_text( $p['e']['when'], $p['s'] ) : $p['s']->format( 'n月j日' ) . thesale_wd( $p['s'] ) . '〜（終了日は公式で未定）',
 		);
 	}
 	if ( 'live' === $p['state'] ) {
@@ -456,13 +486,13 @@ function thesale_card_text( $p ) {
 			'sub'   => $left <= 0 ? '今日まで' : ( 1 === $left ? '明日まで' : 'あと' . $left . '日' ),
 			'name'  => $p['e']['name'],
 			// 開始日が公式に書かれていない回は、日程データの when（例「開催中（10月26日11:59まで）」）をそのまま出す（1.7.5〜）
-			'when'  => ! empty( $p['e']['when'] ) ? $p['e']['when'] : thesale_sched_period( $p['s'], $p['t'] ),
+			'when'  => ! empty( $p['e']['when'] ) ? thesale_wd_text( $p['e']['when'], $p['s'] ? $p['s'] : $p['t'] ) : thesale_sched_period( $p['s'], $p['t'] ),
 		);
 	}
 	if ( 'next' === $p['state'] ) {
 		return array(
 			'label' => '次回',
-			'sub'   => $p['s']->format( 'n/j' ) . '〜',
+			'sub'   => $p['s']->format( 'n/j' ) . thesale_wd( $p['s'] ) . '〜',
 			'name'  => $p['e']['name'],
 			'when'  => thesale_sched_period( $p['s'], $p['t'] ),
 		);
@@ -1244,7 +1274,7 @@ function thesale_home_now( $now ) {
 		$cards[] = thesale_home_now_card( $x['e'], $left, '', $end );
 	}
 	foreach ( $open as $e ) {
-		$cards[] = thesale_home_now_card( $e, '終了日未定', ' is-open', isset( $e['when'] ) ? $e['when'] : '' );
+		$cards[] = thesale_home_now_card( $e, '終了日未定', ' is-open', isset( $e['when'] ) ? thesale_wd_text( $e['when'], thesale_sched_dt( isset( $e['start'] ) ? $e['start'] : '' ) ) : '' );
 	}
 	$n  = count( $lim ) + count( $open );
 	$o  = '<section class="th-sec th-now" id="th-now"><div class="th-sec-head"><div><p class="th-sec-eyebrow th-en">NOW ON</p>'
