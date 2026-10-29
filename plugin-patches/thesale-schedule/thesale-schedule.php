@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.7.9
+ * Version:     1.8.0
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -667,8 +667,11 @@ function thesale_bar_html() {
 	}
 	$slug  = get_post_field( 'post_name', get_queried_object_id() );
 	$cards = thesale_card_data();
-	if ( '' === $slug || empty( $cards[ $slug ] ) || ! is_array( $cards[ $slug ] ) ) {
+	if ( '' === $slug ) {
 		return '';
+	}
+	if ( empty( $cards[ $slug ] ) || ! is_array( $cards[ $slug ] ) ) {
+		return thesale_bar_search_html( $slug );   // カードの無い記事（買い時・季節・まとめ）は Amazon・楽天で探すボタン（1.8.0〜）
 	}
 	$c    = $cards[ $slug ];
 	$kind = isset( $c['kind'] ) ? $c['kind'] : 'brand';
@@ -704,7 +707,7 @@ function thesale_bar_html() {
 		}
 	}
 	if ( ! $btns ) {
-		return '';
+		return thesale_bar_search_html( $slug );
 	}
 
 	$name = isset( $c['name'] ) ? $c['name'] : '';
@@ -720,6 +723,40 @@ function thesale_bar_html() {
 		$line = $name . '　次のセールは公式の発表を確認中';
 	}
 	$o = '<div class="ts-bar" role="region" aria-label="' . esc_attr( $name ) . 'のセールのリンク"><div class="ts-bar-st">' . $pill . '<span class="ts-bar-txt">' . esc_html( $line ) . '</span></div>'
+		. '<div class="ts-bar-btns" style="grid-template-columns:repeat(' . count( $btns ) . ',1fr)">';
+	foreach ( $btns as $b ) {
+		$o .= '<a class="ts-bar-btn" href="' . esc_url( $b[1] ) . '" target="_blank" rel="nofollow sponsored noopener" style="background:' . esc_attr( $b[2] ) . '">' . esc_html( $b[0] ) . '</a>';
+	}
+	return $o . '</div></div>';
+}
+
+/**
+ * カードの無い記事の固定ボタン（1.8.0〜。2026-10-29 吉村さん「固定ボタンが無い131本……やろう」）
+ * データはオプション thesale_bar_links（THE SALE のツール tools/push_bar_links.py が書く）
+ *  { "<スラッグ>": { "label": "エアコン", "amazon": "<Amazonの検索アフィリンク>", "rakuten": "<楽天の検索アフィリンク>" } }
+ */
+function thesale_bar_search_html( $slug ) {
+	$all = get_option( 'thesale_bar_links', array() );
+	if ( is_string( $all ) ) {
+		$all = json_decode( $all, true );
+	}
+	if ( ! is_array( $all ) || empty( $all[ $slug ] ) || ! is_array( $all[ $slug ] ) ) {
+		return '';
+	}
+	$d     = $all[ $slug ];
+	$label = isset( $d['label'] ) ? (string) $d['label'] : '';
+	$btns  = array();
+	if ( ! empty( $d['amazon'] ) ) {
+		$btns[] = array( 'Amazonで探す', $d['amazon'], '#FF9900' );
+	}
+	if ( ! empty( $d['rakuten'] ) ) {
+		$btns[] = array( '楽天で探す', $d['rakuten'], '#BF0000' );
+	}
+	if ( ! $btns ) {
+		return '';
+	}
+	$line = '' !== $label ? $label . 'を通販で探す' : 'Amazon・楽天のセール会場';
+	$o    = '<div class="ts-bar" role="region" aria-label="' . esc_attr( $line ) . '"><div class="ts-bar-st"><span class="ts-bar-pill ts-bar-live">通販</span><span class="ts-bar-txt">' . esc_html( $line ) . '</span></div>'
 		. '<div class="ts-bar-btns" style="grid-template-columns:repeat(' . count( $btns ) . ',1fr)">';
 	foreach ( $btns as $b ) {
 		$o .= '<a class="ts-bar-btn" href="' . esc_url( $b[1] ) . '" target="_blank" rel="nofollow sponsored noopener" style="background:' . esc_attr( $b[2] ) . '">' . esc_html( $b[0] ) . '</a>';
