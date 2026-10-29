@@ -2,14 +2,14 @@
   "name": "装飾・整形プラグイン",
   "slug": "decoration-formatter",
   "plugin": "decoration-formatter/decoration-formatter.php",
-  "version": "1.0.31",
+  "version": "1.0.35",
   "tested": "6.6",
   "requires": "5.8",
   "requires_php": "7.4",
   "author": "Affiros",
-  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/decoration-formatter-1.0.31.zip",
+  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/decoration-formatter-1.0.35.zip",
   "sections": {
     "description": "装飾・整形プラグイン 本体。GitHub から自動更新します。",
-    "changelog": "最新バージョン 1.0.31"
+    "changelog": "1.0.35 — カッコの無い商品名の中の「！」で段落が割れる不具合を修正（「やみつき！光る！カチカチキートップキーホルダー」が3つに割れていた）。近い距離で「！」「？」が繰り返されるのは商品名とみなし、そこでは切らない。ふつうの文は従来どおり「！」のあとで切れる。 / 1.0.34 — カッコの中の「！」で段落が割れる不具合を修正（分割位置の判定を1文字ずつ見る方式に変更）。"
   }
 }
