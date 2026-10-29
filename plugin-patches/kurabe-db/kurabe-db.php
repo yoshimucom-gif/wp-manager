@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.7.2
+ * Version:     1.7.3
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.7.2';
+    const VERSION  = '1.7.3';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -108,15 +108,8 @@ class Kurabe_Db
             $robots['noindex']  = true;
             $robots['nofollow'] = true;
         }
-        // 掲載商品が10件未満の比較表は、件数が増えるまで検索に出さない（AdSense「有用性の低いコンテンツ」対策・2026-10-22）
-        // 月1回の取り直しで kurabe_count が10以上になれば自動で外れる。リンクはたどってもらう（follow のまま）
-        if (is_singular('post')) {
-            $n = get_post_meta(get_queried_object_id(), 'kurabe_count', true);
-            if ($n !== '' && (int) $n < 10) {
-                $robots['noindex'] = true;
-                unset($robots['max-image-preview']);
-            }
-        }
+        // 記事（比較表）は掲載件数にかかわらず全部インデックスさせる（2026-10-29 吉村さん指示）。
+        // 1.7.2 で入れた「掲載10件未満は noindex」は廃止。記事を noindex にする規則をここに足さない
         return $robots;
     }
 
