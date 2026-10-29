@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.8.1
+ * Version:     1.8.2
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -190,12 +190,26 @@ function thesale_sched_official( $e, $box ) {
 	);
 }
 
-/** 開始・終了の表示（例: 10月14日20:00〜17日9:59） */
+/** 曜日（例「（金）」）。2026-10-29 吉村さん「曜日まで出してほしい」（1.8.2〜） */
+function thesale_wd( $d ) {
+	$w = array( '日', '月', '火', '水', '木', '金', '土' );
+	return '（' . $w[ (int) $d->format( 'w' ) ] . '）';
+}
+
+/** 今日から終了日まで、暦の上で何日先か（今日=0・明日=1）。時間の割り算だと「明日まで」が「あと2日」になる（1.8.2〜） */
+function thesale_days_until( $t ) {
+	$now = thesale_sched_now();
+	$a   = new DateTime( $now->format( 'Y-m-d' ), $now->getTimezone() );
+	$b   = new DateTime( $t->format( 'Y-m-d' ), $now->getTimezone() );
+	return (int) $a->diff( $b )->format( '%r%a' );
+}
+
+/** 開始・終了の表示（例: 10月14日（火）20:00〜17日（金）9:59） */
 function thesale_sched_period( $s, $e ) {
 	$fmt = function ( $d, $with_month ) {
 		// 0:00 と 23:59 は「その日いっぱい」なので時刻を出さない（「19日23:59」→「19日」）
 		$t = in_array( $d->format( 'H:i' ), array( '00:00', '23:59' ), true ) ? '' : $d->format( 'G:i' );
-		return ( $with_month ? $d->format( 'n' ) . '月' : '' ) . $d->format( 'j' ) . '日' . $t;
+		return ( $with_month ? $d->format( 'n' ) . '月' : '' ) . $d->format( 'j' ) . '日' . thesale_wd( $d ) . $t;
 	};
 	if ( ! $s ) {
 		return '';
@@ -432,14 +446,14 @@ function thesale_card_text( $p ) {
 			'label' => '開催中',
 			'sub'   => '',
 			'name'  => $p['e']['name'],
-			'when'  => ! empty( $p['e']['when'] ) ? $p['e']['when'] : $p['s']->format( 'n月j日' ) . '〜（終了日は公式で未定）',
+			'when'  => ! empty( $p['e']['when'] ) ? $p['e']['when'] : $p['s']->format( 'n月j日' ) . thesale_wd( $p['s'] ) . '〜（終了日は公式で未定）',
 		);
 	}
 	if ( 'live' === $p['state'] ) {
-		$left = (int) ceil( ( $p['t']->getTimestamp() - $now->getTimestamp() ) / 86400 );
+		$left = thesale_days_until( $p['t'] );
 		return array(
 			'label' => '開催中',
-			'sub'   => $left <= 1 ? '今日まで' : 'あと' . $left . '日',
+			'sub'   => $left <= 0 ? '今日まで' : ( 1 === $left ? '明日まで' : 'あと' . $left . '日' ),
 			'name'  => $p['e']['name'],
 			// 開始日が公式に書かれていない回は、日程データの when（例「開催中（10月26日11:59まで）」）をそのまま出す（1.7.5〜）
 			'when'  => ! empty( $p['e']['when'] ) ? $p['e']['when'] : thesale_sched_period( $p['s'], $p['t'] ),
@@ -511,7 +525,11 @@ function thesale_card_left( $t ) {
 	if ( $secs < 86400 ) {
 		return '終了まであと' . max( 1, (int) floor( $secs / 3600 ) ) . '時間';
 	}
-	return '終了まであと' . (int) ceil( $secs / 86400 ) . '日';
+	$days = thesale_days_until( $t );
+	if ( 1 === $days ) {
+		return in_array( $t->format( 'H:i' ), array( '23:59', '00:00' ), true ) ? '明日終了' : '明日 ' . $t->format( 'G:i' ) . ' 終了';
+	}
+	return '終了まであと' . $days . '日';
 }
 
 /**
@@ -1099,8 +1117,8 @@ function thesale_home( $atts ) {
 	if ( $hero ) {
 		list( $site, $nm, $round ) = thesale_home_split( $hero['e'] );
 		$d     = $hero_live ? $hero['t'] : $hero['s'];
-		$time  = $hero_live ? '〜' . ( in_array( $d->format( 'H:i' ), array( '00:00', '23:59' ), true ) ? 'まで' : $d->format( 'G:i' ) . 'まで' )
-			: ( in_array( $d->format( 'H:i' ), array( '00:00', '23:59' ), true ) ? '〜' : $d->format( 'G:i' ) . '–' );
+		$time  = thesale_wd( $d ) . ( $hero_live ? '〜' . ( in_array( $d->format( 'H:i' ), array( '00:00', '23:59' ), true ) ? 'まで' : $d->format( 'G:i' ) . 'まで' )
+			: ( in_array( $d->format( 'H:i' ), array( '00:00', '23:59' ), true ) ? '〜' : $d->format( 'G:i' ) . '–' ) );
 		$foot  = $hero['s']->format( 'Y' ) . '年' . $hero['s']->format( 'n' ) . '月' . ( '' !== $round ? '・' . $round : '' );
 		$o .= '<a class="th-next" href="' . esc_url( thesale_sched_url( isset( $hero['e']['url'] ) ? $hero['e']['url'] : '' ) ) . '">'
 			. '<div class="th-next-top"><span class="th-next-label th-en">' . ( $hero_live ? 'NOW ON / 開催中のセール' : 'NEXT UP / 次のセール' ) . '</span>'
@@ -1123,7 +1141,7 @@ function thesale_home( $atts ) {
 		list( $site, $nm, $round ) = thesale_home_split( $u['e'] );
 		if ( $u['s'] ) {
 			$month = $u['s']->format( 'n' ) . '月';
-			$sub   = $u['s']->format( 'j' ) . '日';
+			$sub   = $u['s']->format( 'j' ) . '日' . thesale_wd( $u['s'] );
 			$badge = '<span class="th-badge">開催予定</span>';
 		} else {
 			$month = isset( $u['e']['month'] ) ? $u['e']['month'] : '';
@@ -1222,7 +1240,7 @@ function thesale_home_now( $now ) {
 	foreach ( $lim as $x ) {
 		$t    = $x['t'];
 		$left = str_replace( '終了まで', '', thesale_card_left( $t ) );
-		$end  = $t->format( 'n' ) . '月' . $t->format( 'j' ) . '日' . ( in_array( $t->format( 'H:i' ), array( '23:59', '00:00' ), true ) ? '' : ' ' . $t->format( 'G:i' ) ) . 'まで';
+		$end  = $t->format( 'n' ) . '月' . $t->format( 'j' ) . '日' . thesale_wd( $t ) . ( in_array( $t->format( 'H:i' ), array( '23:59', '00:00' ), true ) ? '' : ' ' . $t->format( 'G:i' ) ) . 'まで';
 		$cards[] = thesale_home_now_card( $x['e'], $left, '', $end );
 	}
 	foreach ( $open as $e ) {
