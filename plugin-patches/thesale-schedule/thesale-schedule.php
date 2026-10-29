@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.8.0
+ * Version:     1.8.1
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -1495,7 +1495,7 @@ function thesale_home_lower( $now ) {
 
 	// カテゴリ
 	$cats = array( array( 'mall', 'ネット通販', 'ONLINE MALL' ), array( 'season', '季節のセール', 'SEASONAL SALE' ), array( 'gadget', '家電・ガジェット', 'TECH &amp; HOME' ),
-		array( 'game', 'ゲーム', 'GAMES' ), array( 'fashion', 'ファッション', 'FASHION' ), array( 'otoku', 'お得に買うコツ', 'SHOPPING TIPS' ) );
+		array( 'game', 'ゲーム', 'GAMES' ), array( 'fashion', 'ファッション', 'FASHION' ), array( 'travel', '旅行・航空券', 'TRAVEL' ) );
 	$ct   = '';
 	foreach ( $cats as $c ) {
 		$t = get_category_by_slug( $c[0] );
