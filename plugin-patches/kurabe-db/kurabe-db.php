@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.7.3
+ * Version:     1.7.4
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.7.3';
+    const VERSION  = '1.7.4';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -119,6 +119,25 @@ class Kurabe_Db
        リリース直後に反映されない（スーツくらべ skdb/v1/selfupdate と同じ作り） */
     public static function rest_selfupdate()
     {
+        // 指定した記事だけ、オートインサーター（affiros-auto-inserter）の商品取得・挿入を走らせる（2026-10-29 サンプル3本用）。
+        // キーワードは先に postmeta _affiros_ai_keyword に入れておく。本文に [affiros_ai_card] があれば商品データの更新だけになる
+        register_rest_route('kdb/v1', '/affiros-run', array(
+            'methods'             => 'POST',
+            'permission_callback' => function () {
+                return current_user_can('edit_posts');
+            },
+            'callback'            => function ($req) {
+                if (!class_exists('Affiros_AI_Inserter')) {
+                    return new WP_Error('no_inserter', 'オートインサーターが有効になっていません', array('status' => 400));
+                }
+                $out = array();
+                foreach (array_slice((array) $req->get_param('ids'), 0, 10) as $id) {
+                    $r = Affiros_AI_Inserter::process(intval($id), array('force_refresh_products' => (bool) $req->get_param('refresh')));
+                    $out[intval($id)] = $r;
+                }
+                return $out;
+            },
+        ));
         register_rest_route('kdb/v1', '/selfupdate', array(
             'methods'             => 'POST',
             'permission_callback' => function () {
