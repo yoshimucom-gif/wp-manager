@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.7.8
+ * Version:     1.7.9
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -655,6 +655,99 @@ function thesale_card( $atts ) {
 }
 
 add_shortcode( 'thesale_card', 'thesale_card' );
+
+/*
+ * スマホの下に固定する「公式・Amazon・楽天」の帯（1.7.9〜。2026-10-29 吉村さんのB案・スマホなので矢印なし）
+ * 上の段＝セールの状況（開催中・次回・確認中と、あと何日／日程）、下の段＝その店にあるボタンだけ。
+ * 中身は記事冒頭のカードと同じデータ（thesale_cards・日程データ）から作る。幅768px以下でだけ出す。
+ */
+function thesale_bar_html() {
+	if ( ! is_singular( 'post' ) ) {
+		return '';
+	}
+	$slug  = get_post_field( 'post_name', get_queried_object_id() );
+	$cards = thesale_card_data();
+	if ( '' === $slug || empty( $cards[ $slug ] ) || ! is_array( $cards[ $slug ] ) ) {
+		return '';
+	}
+	$c    = $cards[ $slug ];
+	$kind = isset( $c['kind'] ) ? $c['kind'] : 'brand';
+	$own  = thesale_card_pick( function ( $e ) use ( $slug ) {
+		$u       = trim( (string) wp_parse_url( isset( $e['url'] ) ? $e['url'] : '', PHP_URL_PATH ), '/' );
+		$related = isset( $e['related'] ) && is_array( $e['related'] ) ? $e['related'] : array();
+		return $u === $slug || in_array( $slug, $related, true );
+	} );
+	$tx = thesale_card_text( $own );
+	$st = $own['state'];
+
+	$btns = array();
+	if ( 'mall' === $kind ) {
+		$url  = ! empty( $own['e']['official']['url'] ) ? $own['e']['official']['url'] : ( isset( $c['official'] ) ? $c['official'] : '' );
+		$site = isset( $c['site'] ) ? $c['site'] : ( ! empty( $own['e']['site'] ) ? $own['e']['site'] : '' );
+		$bg   = 'rakuten' === $site ? '#BF0000' : ( 'amazon' === $site ? '#FF9900' : '#14213D' );
+		if ( '' !== $url ) {
+			$btns[] = array( 'live' === $st ? 'セール会場へ' : '公式サイト', $url, $bg );
+		}
+	} else {
+		$official = isset( $c['official'] ) ? $c['official'] : '';
+		if ( 'live' === $st && ! empty( $own['e']['official']['url'] ) ) {
+			$official = $own['e']['official']['url'];
+		}
+		if ( '' !== $official ) {
+			$btns[] = array( '公式', $official, '#14213D' );
+		}
+		if ( ! empty( $c['amazon'] ) ) {
+			$btns[] = array( 'Amazon', $c['amazon'], '#FF9900' );
+		}
+		if ( ! empty( $c['rakuten'] ) ) {
+			$btns[] = array( '楽天', $c['rakuten'], '#BF0000' );
+		}
+	}
+	if ( ! $btns ) {
+		return '';
+	}
+
+	$name = isset( $c['name'] ) ? $c['name'] : '';
+	if ( 'live' === $st ) {
+		$left  = $own['t'] ? thesale_card_left( $own['t'] ) : ( ! empty( $own['e']['when'] ) && false !== strpos( $own['e']['when'], '常設' ) ? '公式で常設のセール' : '終了日は未定' );
+		$pill  = '<span class="ts-bar-pill ts-bar-live"><span class="ts-blink">●</span> 開催中</span>';
+		$line  = $name . '　' . $left;
+	} elseif ( 'next' === $st ) {
+		$pill = '<span class="ts-bar-pill ts-bar-next">次回</span>';
+		$line = $name . '　' . $tx['when'];
+	} else {
+		$pill = '<span class="ts-bar-pill ts-bar-tbd">確認中</span>';
+		$line = $name . '　次のセールは公式の発表を確認中';
+	}
+	$o = '<div class="ts-bar" role="region" aria-label="' . esc_attr( $name ) . 'のセールのリンク"><div class="ts-bar-st">' . $pill . '<span class="ts-bar-txt">' . esc_html( $line ) . '</span></div>'
+		. '<div class="ts-bar-btns" style="grid-template-columns:repeat(' . count( $btns ) . ',1fr)">';
+	foreach ( $btns as $b ) {
+		$o .= '<a class="ts-bar-btn" href="' . esc_url( $b[1] ) . '" target="_blank" rel="nofollow sponsored noopener" style="background:' . esc_attr( $b[2] ) . '">' . esc_html( $b[0] ) . '</a>';
+	}
+	return $o . '</div></div>';
+}
+
+add_action( 'wp_footer', function () {
+	$bar = thesale_bar_html();
+	if ( '' === $bar ) {
+		return;
+	}
+	echo '<style>.ts-bar{display:none}@media (max-width:768px){'
+		. '.ts-bar{display:block;position:fixed;left:0;right:0;bottom:0;z-index:9990;background:#fff;border-top:1px solid #E2E3DC;padding:10px 12px calc(12px + env(safe-area-inset-bottom));box-sizing:border-box;font-family:"Noto Sans JP",sans-serif}'
+		. '.ts-bar-st{display:flex;align-items:center;gap:8px;margin-bottom:8px;min-width:0}'
+		. '.ts-bar-pill{flex:none;font-size:12px;font-weight:700;padding:3px 9px;line-height:1.4;white-space:nowrap}'
+		. '.ts-bar-live{background:#1F221C;color:#D8F35A}.ts-bar-next{background:#1E6B45;color:#fff}.ts-bar-tbd{background:#EEEFE9;color:#1F221C}'
+		. '.ts-bar-txt{font-size:14px;font-weight:700;color:#1F221C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}'
+		. '.ts-bar-btns{display:grid;gap:8px}'
+		. 'a.ts-bar-btn{display:block;text-align:center;white-space:nowrap;font-size:15px;font-weight:700;color:#fff!important;text-decoration:none!important;padding:13px 0;border-radius:8px;line-height:1.3}'
+		. '@keyframes tsBlink{0%,100%{opacity:1}50%{opacity:.25}}.ts-bar .ts-blink{animation:tsBlink 1.1s ease-in-out infinite}'
+		. '@media (prefers-reduced-motion:reduce){.ts-bar .ts-blink{animation:none}}'
+		. '}</style>' . $bar
+		// 帯の高さぶん、本文の最後と「ページ上部に戻る」ボタンを上へずらす（帯で隠れないように）
+		. '<script>(function(){var b=document.querySelector(".ts-bar");if(!b)return;function f(){var mob=window.matchMedia("(max-width:768px)").matches,h=mob?b.offsetHeight:0;document.body.style.paddingBottom=h?h+"px":"";'
+		. 'var t=document.querySelector(".js-scroll-to-top");if(t){var p=t;while(p&&p!==document.body&&getComputedStyle(p).position!=="fixed")p=p.parentElement;if(p&&p!==document.body)p.style.transform=h?"translateY(-"+h+"px)":"";}}'
+		. 'f();window.addEventListener("resize",f);window.addEventListener("load",f);})();</script>';
+}, 20 );
 
 /*
  * ── カードの自動挿入（1.3.0〜）────────────────────────────
