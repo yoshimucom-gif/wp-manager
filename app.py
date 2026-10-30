@@ -6419,7 +6419,7 @@ def favicon():
 PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugin-downloads')
 PLUGIN_DOWNLOADS = {
     'thesale-schedule': {'file': 'thesale-schedule-1.8.8.zip', 'name': 'THE SALE セール日程表示', 'version': '1.8.8'},
-    'thesale-brand-items': {'file': 'thesale-brand-items-1.0.6.zip', 'name': 'THE SALE ブランド商品カード', 'version': '1.0.6'},
+    'thesale-brand-items': {'file': 'thesale-brand-items-1.0.7.zip', 'name': 'THE SALE ブランド商品カード', 'version': '1.0.7'},
     'mikata-seminar-feed': {'file': 'mikata-seminar-feed-1.0.0.zip', 'name': 'ミカタセミナー新着', 'version': '1.0.0'},
     'kurabe-db': {'file': 'kurabe-db-1.7.4.zip', 'name': '100均くらべ 比較データ表示', 'version': '1.7.4'},
     'suit-kurabe-db': {'file': 'suit-kurabe-db-1.5.8.zip', 'name': 'スーツくらべ 比較データ表示', 'version': '1.5.8'},
@@ -6494,6 +6494,11 @@ PLUGIN_DOWNLOADS = {
         'name': 'Re:Diver ヘルパー',
         'version': '1.6.0',
     },
+    'fukujimai-cta': {
+        'file': 'fukujimai-cta-1.0.0.zip',
+        'name': '服じまい CTA・追従バナー',
+        'version': '1.0.0',
+    },
 }
 
 @app.route('/download/plugin/<plugin_key>')
@@ -6517,6 +6522,8 @@ def download_plugin(plugin_key):
 # WP の plugins_api / pre_set_site_transient_update_plugins フィルタ経由で
 # 各プラグインがここを叩き、新バージョンを検知して自動更新する。
 PLUGIN_UPDATE_META = {
+    'fukujimai-cta': {'plugin_basename': 'fukujimai-cta/fukujimai-cta.php',
+              'tested': '6.7', 'requires': '6.0', 'requires_php': '7.4', 'author': 'Keys'},
     'thesale-schedule': {'plugin_basename': 'thesale-schedule/thesale-schedule.php',
               'tested': '6.7', 'requires': '6.0', 'requires_php': '7.4', 'author': 'Keys'},
     'thesale-brand-items': {'plugin_basename': 'thesale-brand-items/thesale-brand-items.php',

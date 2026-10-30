@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE ブランド商品カード
  * Description: 記事のブランド名（ブランドの記事）または商品名（買い時の記事）で Amazon の商品を引き、在庫のある商品をカードで並べる。Amazon・楽天のボタン付き。記事への自動差し込み・サイドバー（ウィジェット）・ショートコード [thesale_items]（サイドバーは [thesale_items layout="side" n="3"]）。商品は1日1回まとめて取り直して保存する。Affiros オートインサーターとは別管理。
- * Version:     1.0.6
+ * Version:     1.0.7
  * Author:      Keys
  * Text Domain: thesale-brand-items
  */
@@ -181,6 +181,10 @@ function tsbi_fetch( $e ) {
 			}
 			$img = isset( $it['images']['primary']['large']['url'] ) ? $it['images']['primary']['large']['url'] : '';
 			if ( ! $ok || '' === $img || '' === $title ) {
+				continue;
+			}
+			// 整備済み品・中古は出さない（メーカーの新品ではない。2026-10-30 デルの記事で半分近くが整備済み品だった）
+			if ( preg_match( '/整備済み|整備品|中古|リファービッシュ|refurbished/iu', $title ) ) {
 				continue;
 			}
 			$items[] = array( 'asin' => $asin, 'title' => $title, 'image' => $img,
