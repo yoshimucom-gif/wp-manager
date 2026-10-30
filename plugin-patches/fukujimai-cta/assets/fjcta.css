@@ -22,7 +22,7 @@
 	font-weight: 700;
 	line-height: 1.5;
 	padding: 13px 28px;
-	border-radius: 3px;
+	border-radius: 6px;
 	transition: transform .16s ease, box-shadow .16s ease, background .16s ease;
 }
 .fj-btn:hover,
@@ -55,14 +55,19 @@
 	100%{ left: 130%; }
 }
 
-/* ---------- 最初のh2の上 ---------- */
+/* ---------- 最初のh2の上 ----------
+   本文の囲み（figure.mb-fig）と同じ寸法に合わせる。
+   地と罫の色だけ変えて、本文の図と見分けがつくようにする。 */
 .fj-cta-lead{
-	margin: 24px 0 30px;
-	padding: 0 0 0 18px;
-	border-left: 2px solid rgb(var(--fj-cta) / .5);
+	margin: 2em 0;
+	padding: 1.2em 1.3em;
+	border: 1px solid rgb(var(--fj-cta) / .22);
+	border-left: 3px solid rgb(var(--fj-cta));
+	border-radius: 8px;
+	background: rgb(var(--fj-cta) / .04);
 }
 .fj-cta-lead p{
-	margin: 0 0 12px;
+	margin: 0 0 14px;
 	font-size: 16px;
 	line-height: 1.9;
 }
@@ -81,60 +86,61 @@ p.fj-cta-mid a:hover{
 	background-image: linear-gradient(rgb(var(--fj-cta)), rgb(var(--fj-cta)));
 }
 
-/* ---------- まとめのあと ---------- */
+/* ---------- まとめのあと ----------
+   主役はここ1つ。上端の色罫で本文の囲みと区別する。 */
 .fj-cta-end{
-	margin: 28px 0 0;
-	border-top: 1px solid rgb(var(--fj-line));
-	padding-top: 24px;
-}
-.fj-cta-end .fj-kicker{
-	font-size: 13px;
-	font-weight: 700;
-	letter-spacing: .1em;
-	color: rgb(var(--fj-cta));
-	margin: 0 0 6px;
+	margin: 2.4em 0 0;
+	padding: 1.3em 1.4em 1.4em;
+	border: 1px solid rgb(var(--fj-cta) / .22);
+	border-top: 3px solid rgb(var(--fj-cta));
+	border-radius: 8px;
+	background: #fff;
 }
 .fj-cta-end .fj-nm{
-	font-size: 21px;
+	font-size: 20px;
 	font-weight: 700;
-	line-height: 1.5;
-	margin: 0 0 8px;
+	line-height: 1.55;
+	margin: 0 0 10px;
 }
 .fj-cta-end .fj-de{
 	font-size: 16px;
 	line-height: 1.9;
-	margin: 0 0 6px;
-	max-width: 620px;
+	margin: 0 0 8px;
 }
 .fj-cta-end .fj-cond{
 	font-size: 14px;
+	line-height: 1.8;
 	color: #5d6b64;
-	margin: 0 0 18px;
+	margin: 0 0 20px;
+	padding-top: 10px;
+	border-top: 1px dashed rgb(var(--fj-cta) / .3);
 }
 .fj-cta-end .fj-cond em{
 	font-style: normal;
 	font-weight: 700;
 	color: inherit;
 }
-.fj-cta-end .fj-others{
-	margin: 22px 0 0;
+.fj-cta-end .fj-asof{
+	font-size: 13px;
+	color: #8d978f;
+	margin: 14px 0 0;
+}
+
+/* 残り2社は箱の外。地の文に戻して主役と差をつける */
+.fj-others{
+	margin: 1.1em 0 0;
 	font-size: 15px;
 	line-height: 2;
 	color: #4d5a53;
 }
-.fj-cta-end .fj-others a{
+.fj-others a{
 	color: rgb(var(--fj-sec));
 	font-weight: 700;
 	text-decoration: none;
 	border-bottom: 1px solid rgb(var(--fj-sec) / .4);
 	transition: border-color .2s ease;
 }
-.fj-cta-end .fj-others a:hover{ border-bottom-color: rgb(var(--fj-sec)); }
-.fj-cta-end .fj-asof{
-	font-size: 13px;
-	color: #8d978f;
-	margin: 14px 0 0;
-}
+.fj-others a:hover{ border-bottom-color: rgb(var(--fj-sec)); }
 
 .fj-px-wrap{ height: 0; overflow: hidden; }
 .fj-px{ border: 0; position: absolute; }

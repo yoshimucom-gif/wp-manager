@@ -45,14 +45,29 @@ function maybe_unserialize($v) { $r = @unserialize($v); return ($r === false && 
 
 require __DIR__ . '/../fukujimai-cta.php';
 
-/** h2が5本ある記事を模す */
+/** 本番の記事を模す。本文の囲み（figure.mb-fig）も同じ書式で入れて見比べる */
+function fj_dummy_box() {
+	$row = '<div style="display:flex;gap:10px;align-items:flex-start%s">'
+		. '<div style="flex-shrink:0;width:28px;height:28px;border-radius:50%%;background:#2c6fb5;color:#fff;'
+		. 'font-weight:bold;text-align:center;line-height:28px">%d</div>'
+		. '<div style="flex:1;line-height:1.7"><strong>%s</strong><br>%s</div></div>';
+	$h = '<figure class="mb-fig" style="margin:2em 0;padding:1.2em;border:1px solid #ddd;border-radius:8px;background:#f7f7f7">'
+		. '<figcaption style="font-weight:bold;margin-bottom:.8em">作業服を手放すときの分かれ道（名前の有無と状態で決まる）</figcaption>';
+	$h .= sprintf($row, '', 1, '会社名・個人名が入っているか', '刺繍やプリントで消せない場合は、買取と店頭の衣類回収の対象から外れます');
+	$h .= sprintf($row, ';border-top:1px dashed #ddd;padding-top:10px;margin-top:10px', 2, '破れ・油汚れ・擦り切れがあるか', 'あれば、自治体のごみ区分に従って出します');
+	$h .= sprintf($row, ';border-top:1px dashed #ddd;padding-top:10px;margin-top:10px', 3, '無地でブランドのタグが残っているか', '残っていれば、1点ずつ査定する店に持ち込む候補になります');
+	$h .= '<div style="font-size:.85em;color:#666;margin-top:.8em">対象品目は店舗・モールごとに異なります（2026年9月時点）</div></figure>';
+	return $h;
+}
+
 function fj_dummy_content() {
 	$h = '<p>リード文がここで終わります。各社が公開している条件だけを集めて並べています。</p>';
 	$titles = array('出せる先を整理する', '持ち込みで手放す', '宅配で手放す', '費用の目安', 'まとめ');
 	foreach ($titles as $i => $t) {
 		$h .= '<h2 id="toc-id-1-' . ($i + 1) . '" class="wp-block-heading">' . $t . '</h2>';
-		$h .= '<p>本文の段落その1です。' . $t . 'についての説明が入ります。</p>';
+		$h .= '<p>本文の段落その1です。' . $t . 'についての説明が入ります。条件は各社が公開しているページで確かめています。</p>';
 		$h .= '<p>本文の段落その2です。条件や手順の補足が入ります。</p>';
+		if ($i === 1) $h .= fj_dummy_box();
 	}
 	return $h;
 }
@@ -71,15 +86,15 @@ $slug_sample = array(
 echo "<!doctype html>\n<html lang=\"ja\"><head><meta charset=\"utf-8\">";
 echo '<meta name="viewport" content="width=device-width,initial-scale=1">';
 echo '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap">';
-echo '<link rel="stylesheet" href="../assets/fjcta.css">';
+echo '<style>' . file_get_contents(__DIR__ . '/../assets/fjcta.css') . '</style>';
 echo '<style>html{font-size:10px}body{font-family:"Noto Sans JP",sans-serif;background:#FAFBF7;color:#2C3730;'
-	. 'margin:0;padding:34px;font-size:16px;line-height:1.9}.page{max-width:840px;margin:0 auto}'
+	. 'margin:0;padding:34px;font-size:16px;line-height:1.9}.page{max-width:760px;margin:0 auto}'
 	. 'h2.wp-block-heading{font-size:22px;background:#26765F;color:#fff;padding:.6em 1em;border-radius:4px;margin:20px 0 14px}'
 	. '.pat{margin:64px 0 0;padding:14px 0 0;border-top:3px solid #26765F}'
 	. '.pat b{font-size:15px;letter-spacing:.06em;color:#26765F}'
 	. '.side-demo{margin:20px 0;padding:16px;border:1px dashed #9aa5a0;max-width:340px}'
 	. '.side-demo .fj-bn-side:not([hidden]){display:block}</style>';
-echo '<script src="../assets/fjcta.js" defer></script>';
+echo '<script>' . file_get_contents(__DIR__ . '/../assets/fjcta.js') . '</script>';
 echo "</head><body><div class=\"page\">";
 
 $seen_pixel = array();

@@ -6495,9 +6495,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.6.0',
     },
     'fukujimai-cta': {
-        'file': 'fukujimai-cta-1.0.1.zip',
+        'file': 'fukujimai-cta-1.0.2.zip',
         'name': '服じまい CTA・追従バナー',
-        'version': '1.0.1',
+        'version': '1.0.2',
     },
 }
 
