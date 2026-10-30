@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.8.3
+ * Version:     1.8.4
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -528,6 +528,17 @@ function thesale_card_button( $url, $label, $bg, $full, $fg = '#fff' ) {
 	if ( empty( $url ) ) {
 		return '';
 	}
+	// 公式サイトのボタン（紺 #14213D で呼ばれるもの）は緑地・黒い影・光が横切る形にする（1.8.4〜・2026-10-30 吉村さん選定）。
+	// 文字をボタンの真ん中に置くため、矢印は右端に別置きにして左右の余白をそろえる
+	if ( '#14213D' === $bg ) {
+		return sprintf(
+			'<a class="ts-ofb" href="%s" target="_blank" rel="nofollow sponsored noopener" style="box-sizing:border-box;display:%s;align-items:center;justify-content:center;%spadding:12px 42px;margin:0 4px 4px 0;border-radius:8px;font-weight:700;font-size:15px;line-height:1.4;color:#fff;text-decoration:none;white-space:nowrap;background:#4F7F00">%s<span aria-hidden="true" style="position:absolute;right:16px;top:50%%;transform:translateY(-50%%);font-weight:400">&#8599;</span></a>',
+			esc_url( $url ),
+			$full ? 'flex' : 'inline-flex',
+			$full ? 'width:calc(100% - 4px);' : '',
+			esc_html( $label )
+		);
+	}
 	return sprintf(
 		'<a href="%s" target="_blank" rel="nofollow sponsored noopener" style="box-sizing:border-box;display:%s;align-items:center;justify-content:center;gap:10px;%spadding:12px 22px;border-radius:8px;font-weight:700;font-size:15px;line-height:1.4;color:%s;text-decoration:none;white-space:nowrap;background:%s">%s<span aria-hidden="true" style="font-weight:400">&#8599;</span></a>',
 		esc_url( $url ),
@@ -773,7 +784,8 @@ function thesale_bar_html() {
 	$o = '<div class="ts-bar" role="region" aria-label="' . esc_attr( $name ) . 'のセールのリンク"><div class="ts-bar-st">' . $pill . '<span class="ts-bar-txt">' . esc_html( $line ) . '</span></div>'
 		. '<div class="ts-bar-btns" style="grid-template-columns:repeat(' . count( $btns ) . ',1fr)">';
 	foreach ( $btns as $b ) {
-		$o .= '<a class="ts-bar-btn" href="' . esc_url( $b[1] ) . '" target="_blank" rel="nofollow sponsored noopener" style="background:' . esc_attr( $b[2] ) . '">' . esc_html( $b[0] ) . '</a>';
+		$ofb = '#14213D' === $b[2];   // 公式のボタンは緑・黒い影・光（1.8.4〜）。矢印は付けない＝文字を真ん中に
+		$o  .= '<a class="ts-bar-btn' . ( $ofb ? ' ts-ofb' : '' ) . '" href="' . esc_url( $b[1] ) . '" target="_blank" rel="nofollow sponsored noopener" style="background:' . esc_attr( $ofb ? '#4F7F00' : $b[2] ) . '">' . esc_html( $b[0] ) . '</a>';
 	}
 	return $o . '</div></div>';
 }
@@ -807,10 +819,20 @@ function thesale_bar_search_html( $slug ) {
 	$o    = '<div class="ts-bar" role="region" aria-label="' . esc_attr( $line ) . '"><div class="ts-bar-st"><span class="ts-bar-pill ts-bar-live">通販</span><span class="ts-bar-txt">' . esc_html( $line ) . '</span></div>'
 		. '<div class="ts-bar-btns" style="grid-template-columns:repeat(' . count( $btns ) . ',1fr)">';
 	foreach ( $btns as $b ) {
-		$o .= '<a class="ts-bar-btn" href="' . esc_url( $b[1] ) . '" target="_blank" rel="nofollow sponsored noopener" style="background:' . esc_attr( $b[2] ) . '">' . esc_html( $b[0] ) . '</a>';
+		$ofb = '#14213D' === $b[2];   // 公式のボタンは緑・黒い影・光（1.8.4〜）。矢印は付けない＝文字を真ん中に
+		$o  .= '<a class="ts-bar-btn' . ( $ofb ? ' ts-ofb' : '' ) . '" href="' . esc_url( $b[1] ) . '" target="_blank" rel="nofollow sponsored noopener" style="background:' . esc_attr( $ofb ? '#4F7F00' : $b[2] ) . '">' . esc_html( $b[0] ) . '</a>';
 	}
 	return $o . '</div></div>';
 }
+
+/** 公式サイトのボタン（.ts-ofb）の影と、ときどき光が横切る動き（1.8.4〜）。動きを減らす設定の端末では止める */
+add_action( 'wp_head', function () {
+	echo '<style>a.ts-ofb{position:relative;overflow:hidden;box-shadow:4px 4px 0 #1E201E;transition:transform .12s,box-shadow .12s}'
+		. 'a.ts-ofb:hover{transform:translate(2px,2px);box-shadow:2px 2px 0 #1E201E}'
+		. 'a.ts-ofb::after{content:"";position:absolute;top:0;left:-60%;width:40%;height:100%;background:linear-gradient(110deg,transparent,rgba(255,255,255,.45),transparent);animation:tsOfb 2.8s ease-in-out infinite;pointer-events:none}'
+		. '@keyframes tsOfb{0%,55%{left:-60%}100%{left:130%}}'
+		. '@media (prefers-reduced-motion:reduce){a.ts-ofb::after{animation:none;display:none}}</style>';
+} );
 
 add_action( 'wp_footer', function () {
 	$bar = thesale_bar_html();
@@ -823,7 +845,7 @@ add_action( 'wp_footer', function () {
 		. '.ts-bar-pill{flex:none;font-size:12px;font-weight:700;padding:3px 9px;line-height:1.4;white-space:nowrap}'
 		. '.ts-bar-live{background:#1F221C;color:#D8F35A}.ts-bar-next{background:#1E6B45;color:#fff}.ts-bar-tbd{background:#EEEFE9;color:#1F221C}'
 		. '.ts-bar-txt{font-size:14px;font-weight:700;color:#1F221C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}'
-		. '.ts-bar-btns{display:grid;gap:8px}'
+		. '.ts-bar-btns{display:grid;gap:10px;padding:0 4px 4px 0}'
 		. 'a.ts-bar-btn{display:block;text-align:center;white-space:nowrap;font-size:15px;font-weight:700;color:#fff!important;text-decoration:none!important;padding:13px 0;border-radius:8px;line-height:1.3}'
 		. '@keyframes tsBlink{0%,100%{opacity:1}50%{opacity:.25}}.ts-bar .ts-blink{animation:tsBlink 1.1s ease-in-out infinite}'
 		. '@media (prefers-reduced-motion:reduce){.ts-bar .ts-blink{animation:none}}'
