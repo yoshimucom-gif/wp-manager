@@ -42,6 +42,7 @@ REDIVER_112 = (
 #   ※この仕組みが無かった頃、本スクリプトを回すと手書きの changelog が
 #     既定文で上書きされて消えていた (2026-09-07 に rediver-helper 1.1.2 で発覚)。
 CHANGELOGS = {
+    ("fukujimai-cta",      "1.0.0"): "1.0.0 — 記事のカテゴリに応じて買取サービスのCTAを本文の3箇所（最初のh2の上・途中・まとめのあと）に出し、PCはサイドバー追従・スマホは画面下に固定でバナーを出す。喪服・着物／制服・体操服／靴・家具のカテゴリには出さない。",
     ("cat-eyecatch",       "1.0.1"): GH_HANDOVER,
     ("categorizer",        "0.1.2"): GH_HANDOVER,
     ("decoration",         "1.2.4"): GH_HANDOVER,

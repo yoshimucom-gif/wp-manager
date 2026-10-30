@@ -1,0 +1,104 @@
+{
+ "_メモ": "A8.netの広告素材。掲載サイト＝服じまい【アピールサイト】（websiteId=030）で発行したもの。2026-10-30取得。素材IDごとに a8mat が違うので、使い回さないこと。",
+ "取得日": "2026-10-30",
+ "媒体": { "メディアID": "a16091525842", "掲載サイト": "服じまい【アピールサイト】", "websiteId": "030" },
+
+ "fukuro": {
+  "表示名": "フクウロ",
+  "広告主": "株式会社ベクトル",
+  "programId": "s00000016474002",
+  "aid": "261030031744",
+  "成果条件": "買取",
+  "報酬": 1950,
+  "EPC": 143.14,
+  "確定率": 58.68,
+  "向いている記事": "ブランドの服が混ざっている人。3社でいちばん成果が立っている",
+  "text": {
+   "a8mat": "4BES27+CAZ58A+3J44+BWVTE",
+   "href": "https://px.a8.net/svt/ejp?a8mat=4BES27+CAZ58A+3J44+BWVTE",
+   "pixel": "https://www14.a8.net/0.gif?a8mat=4BES27+CAZ58A+3J44+BWVTE"
+  },
+  "banner_300x250": {
+   "素材ID": "009", "クリック率": "2.31%",
+   "a8mat": "4BES27+CAZ58A+3J44+BYLJL",
+   "href": "https://px.a8.net/svt/ejp?a8mat=4BES27+CAZ58A+3J44+BYLJL",
+   "img": "https://www20.a8.net/svt/bgt?aid=261030031744&wid=030&eno=01&mid=s00000016474002009000&mc=1",
+   "pixel": "https://www14.a8.net/0.gif?a8mat=4BES27+CAZ58A+3J44+BYLJL",
+   "w": 300, "h": 250
+  },
+  "banner_320x50": {
+   "素材ID": "008",
+   "a8mat": "4BES27+CAZ58A+3J44+BYDTT",
+   "href": "https://px.a8.net/svt/ejp?a8mat=4BES27+CAZ58A+3J44+BYDTT",
+   "img": "https://www27.a8.net/svt/bgt?aid=261030031744&wid=030&eno=01&mid=s00000016474002008000&mc=1",
+   "pixel": "https://www19.a8.net/0.gif?a8mat=4BES27+CAZ58A+3J44+BYDTT",
+   "w": 320, "h": 50
+  }
+ },
+
+ "ribla": {
+  "表示名": "RIBLA",
+  "広告主": "株式会社BLM",
+  "programId": "s00000025363001",
+  "aid": "261030031737",
+  "成果条件": "新規買取成立",
+  "報酬": 6800,
+  "EPC": 89.36,
+  "確定率": 40.81,
+  "向いている記事": "レディースのブランド古着・洋服。報酬は3社で最高だが対象が限られる",
+  "text": {
+   "a8mat": "4BES27+C6T3ZU+5FPA+5YRHE",
+   "href": "https://px.a8.net/svt/ejp?a8mat=4BES27+C6T3ZU+5FPA+5YRHE",
+   "pixel": "https://www19.a8.net/0.gif?a8mat=4BES27+C6T3ZU+5FPA+5YRHE"
+  },
+  "banner_300x250": {
+   "素材ID": "005", "クリック率": "5%以上",
+   "a8mat": "4BES27+C6T3ZU+5FPA+5ZEMP",
+   "href": "https://px.a8.net/svt/ejp?a8mat=4BES27+C6T3ZU+5FPA+5ZEMP",
+   "img": "https://www21.a8.net/svt/bgt?aid=261030031737&wid=030&eno=01&mid=s00000025363001005000&mc=1",
+   "pixel": "https://www14.a8.net/0.gif?a8mat=4BES27+C6T3ZU+5FPA+5ZEMP",
+   "w": 300, "h": 250
+  },
+  "banner_320x50": {
+   "素材ID": "007",
+   "a8mat": "4BES27+C6T3ZU+5FPA+5ZU29",
+   "href": "https://px.a8.net/svt/ejp?a8mat=4BES27+C6T3ZU+5FPA+5ZU29",
+   "img": "https://www29.a8.net/svt/bgt?aid=261030031737&wid=030&eno=01&mid=s00000025363001007000&mc=1",
+   "pixel": "https://www16.a8.net/0.gif?a8mat=4BES27+C6T3ZU+5FPA+5ZU29",
+   "w": 320, "h": 50
+  }
+ },
+
+ "okoku": {
+  "表示名": "古着買取王国",
+  "広告主": "株式会社買取王国",
+  "programId": "s00000015589001",
+  "aid": "261030031741",
+  "成果条件": "査定完了",
+  "報酬": 1200,
+  "EPC": 5.51,
+  "確定率": 26.66,
+  "向いている記事": "ノンブランドをまとめて出したい人。査定だけで成果になるのでハードルが低い",
+  "text": {
+   "a8mat": "4BES27+C96UEY+3CAA+5YJRM",
+   "href": "https://px.a8.net/svt/ejp?a8mat=4BES27+C96UEY+3CAA+5YJRM",
+   "pixel": "https://www19.a8.net/0.gif?a8mat=4BES27+C96UEY+3CAA+5YJRM"
+  },
+  "banner_300x250": {
+   "素材ID": "010", "クリック率": "5%以上",
+   "a8mat": "4BES27+C96UEY+3CAA+60H7L",
+   "href": "https://px.a8.net/svt/ejp?a8mat=4BES27+C96UEY+3CAA+60H7L",
+   "img": "https://www26.a8.net/svt/bgt?aid=261030031741&wid=030&eno=01&mid=s00000015589001010000&mc=1",
+   "pixel": "https://www10.a8.net/0.gif?a8mat=4BES27+C96UEY+3CAA+60H7L",
+   "w": 300, "h": 250
+  },
+  "banner_320x50": {
+   "素材ID": "016", "クリック率": "3.96%",
+   "a8mat": "4BES27+C96UEY+3CAA+61RI9",
+   "href": "https://px.a8.net/svt/ejp?a8mat=4BES27+C96UEY+3CAA+61RI9",
+   "img": "https://www27.a8.net/svt/bgt?aid=261030031741&wid=030&eno=01&mid=s00000015589001016000&mc=1",
+   "pixel": "https://www12.a8.net/0.gif?a8mat=4BES27+C96UEY+3CAA+61RI9",
+   "w": 320, "h": 50
+  }
+ }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "服じまい CTA・追従バナー",
+  "slug": "fukujimai-cta",
+  "plugin": "fukujimai-cta/fukujimai-cta.php",
+  "version": "1.0.0",
+  "tested": "6.7",
+  "requires": "6.0",
+  "requires_php": "7.4",
+  "author": "Keys",
+  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/fukujimai-cta-1.0.0.zip",
+  "sections": {
+    "description": "服じまい CTA・追従バナー 本体。GitHub から自動更新します。",
+    "changelog": "1.0.0 — 記事のカテゴリに応じて買取サービスのCTAを本文の3箇所（最初のh2の上・途中・まとめのあと）に出し、PCはサイドバー追従・スマホは画面下に固定でバナーを出す。喪服・着物／制服・体操服／靴・家具のカテゴリには出さない。"
+  }
+}
