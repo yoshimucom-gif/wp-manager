@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.8.4
+ * Version:     1.8.5
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -539,11 +539,12 @@ function thesale_card_button( $url, $label, $bg, $full, $fg = '#fff' ) {
 			esc_html( $label )
 		);
 	}
+	// Amazon・楽天などのボタンも同じ黒い影で立体にする（1.8.5〜・2026-10-30 吉村さん「amazonとか楽天も立体的に」）。光は公式だけ
 	return sprintf(
-		'<a href="%s" target="_blank" rel="nofollow sponsored noopener" style="box-sizing:border-box;display:%s;align-items:center;justify-content:center;gap:10px;%spadding:12px 22px;border-radius:8px;font-weight:700;font-size:15px;line-height:1.4;color:%s;text-decoration:none;white-space:nowrap;background:%s">%s<span aria-hidden="true" style="font-weight:400">&#8599;</span></a>',
+		'<a class="ts-3d" href="%s" target="_blank" rel="nofollow sponsored noopener" style="box-sizing:border-box;display:%s;align-items:center;justify-content:center;gap:10px;%smargin:0 4px 4px 0;padding:12px 22px;border-radius:8px;font-weight:700;font-size:15px;line-height:1.4;color:%s;text-decoration:none;white-space:nowrap;background:%s">%s<span aria-hidden="true" style="font-weight:400">&#8599;</span></a>',
 		esc_url( $url ),
 		$full ? 'flex' : 'inline-flex',
-		$full ? 'width:100%;' : '',
+		$full ? 'width:calc(100% - 4px);' : '',
 		esc_attr( $fg ),
 		esc_attr( $bg ),
 		esc_html( $label )
@@ -827,8 +828,8 @@ function thesale_bar_search_html( $slug ) {
 
 /** 公式サイトのボタン（.ts-ofb）の影と、ときどき光が横切る動き（1.8.4〜）。動きを減らす設定の端末では止める */
 add_action( 'wp_head', function () {
-	echo '<style>a.ts-ofb{position:relative;overflow:hidden;box-shadow:4px 4px 0 #1E201E;transition:transform .12s,box-shadow .12s}'
-		. 'a.ts-ofb:hover{transform:translate(2px,2px);box-shadow:2px 2px 0 #1E201E}'
+	echo '<style>a.ts-ofb,a.ts-3d,a.ts-bar-btn{position:relative;overflow:hidden;box-shadow:4px 4px 0 #1E201E;transition:transform .12s,box-shadow .12s}'
+		. 'a.ts-ofb:hover,a.ts-3d:hover,a.ts-bar-btn:hover{transform:translate(2px,2px);box-shadow:2px 2px 0 #1E201E}'
 		. 'a.ts-ofb::after{content:"";position:absolute;top:0;left:-60%;width:40%;height:100%;background:linear-gradient(110deg,transparent,rgba(255,255,255,.45),transparent);animation:tsOfb 2.8s ease-in-out infinite;pointer-events:none}'
 		. '@keyframes tsOfb{0%,55%{left:-60%}100%{left:130%}}'
 		. '@media (prefers-reduced-motion:reduce){a.ts-ofb::after{animation:none;display:none}}</style>';
