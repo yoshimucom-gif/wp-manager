@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.8.6
+ * Version:     1.8.7
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -832,7 +832,9 @@ add_action( 'wp_head', function () {
 		. 'a.ts-ofb:hover,a.ts-3d:hover,a.ts-bar-btn:hover{transform:translate(2px,2px);box-shadow:2px 2px 0 #1E201E}'
 		. 'a.ts-ofb::after{content:"";position:absolute;top:0;left:-60%;width:40%;height:100%;background:linear-gradient(110deg,transparent,rgba(255,255,255,.45),transparent);animation:tsOfb 2.8s ease-in-out infinite;pointer-events:none}'
 		. '@keyframes tsOfb{0%,55%{left:-60%}100%{left:130%}}'
-		. '.ts-bar a.ts-ofb::after{animation:none;display:none}'   // スマホの固定ボタンは光らせない（2026-10-30 吉村さん）
+		// 光らせるのは「公式にしか飛ばせない」ときだけ（2026-10-30 吉村さん）。固定ボタンで Amazon・楽天と並ぶときは光らせない。
+		// 記事冒頭のカードは、Amazon・楽天がある記事では公式が小さな文字リンクになるので、ボタンが出る＝公式だけのとき
+		. '.ts-bar a.ts-ofb:not(:only-child)::after{animation:none;display:none}'
 		. '@media (prefers-reduced-motion:reduce){a.ts-ofb::after{animation:none;display:none}}</style>';
 } );
 
