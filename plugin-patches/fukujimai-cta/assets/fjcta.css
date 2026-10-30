@@ -22,7 +22,6 @@
 	font-weight: 700;
 	line-height: 1.5;
 	padding: 13px 28px;
-	border-radius: 6px;
 	transition: transform .16s ease, box-shadow .16s ease, background .16s ease;
 }
 .fj-btn:hover,
@@ -63,7 +62,6 @@
 	padding: 1.2em 1.3em;
 	border: 1px solid rgb(var(--fj-cta) / .22);
 	border-left: 3px solid rgb(var(--fj-cta));
-	border-radius: 8px;
 	background: rgb(var(--fj-cta) / .04);
 }
 .fj-cta-lead p{
@@ -93,7 +91,6 @@ p.fj-cta-mid a:hover{
 	padding: 1.3em 1.4em 1.4em;
 	border: 1px solid rgb(var(--fj-cta) / .22);
 	border-top: 3px solid rgb(var(--fj-cta));
-	border-radius: 8px;
 	background: #fff;
 }
 .fj-cta-end .fj-nm{
@@ -193,7 +190,6 @@ p.fj-cta-mid a:hover{
 	width: 316px;
 	background: rgb(255 255 255 / .96);
 	border: 1px solid rgb(var(--fj-line));
-	border-radius: 4px;
 	box-shadow: 0 4px 16px rgb(0 0 0 / .14);
 	opacity: 0;
 	transform: translateY(8px);

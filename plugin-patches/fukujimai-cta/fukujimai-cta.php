@@ -3,7 +3,7 @@
  * Plugin Name: 服じまい CTA・追従バナー
  * Plugin URI:  https://fukujimai.jp/
  * Description: 記事のカテゴリに応じて買取サービスのCTAを本文の3箇所（最初のh2の上・途中・まとめのあと）に出し、PCはサイドバー追従・スマホは画面下固定でバナーを出します。品目によっては何も出しません。
- * Version:     1.0.2
+ * Version:     1.0.3
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: fukujimai-cta
@@ -11,7 +11,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('FJCTA_VERSION', '1.0.2');
+define('FJCTA_VERSION', '1.0.3');
 define('FJCTA_DIR', plugin_dir_path(__FILE__));
 define('FJCTA_URL', plugin_dir_url(__FILE__));
 define('FJCTA_UPDATE_URL', 'https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-host/api/plugin-update/fukujimai-cta');

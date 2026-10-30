@@ -2,14 +2,14 @@
   "name": "服じまい CTA・追従バナー",
   "slug": "fukujimai-cta",
   "plugin": "fukujimai-cta/fukujimai-cta.php",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "tested": "6.7",
   "requires": "6.0",
   "requires_php": "7.4",
   "author": "Keys",
-  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/fukujimai-cta-1.0.2.zip",
+  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/fukujimai-cta-1.0.3.zip",
   "sections": {
     "description": "服じまい CTA・追従バナー 本体。GitHub から自動更新します。",
-    "changelog": "1.0.2 — CTAの見た目を記事本文の囲みに合わせた。余白が無く左端に貼り付いていたのを、本文の図と同じ余白・角丸・罫の太さで組み直し、地と罫の色だけ変えて見分けがつくようにした。定型の小見出し（キッカー）は廃止。まとめのあとの他社リンクは箱の外に出して、主役との差をつけた。"
+    "changelog": "1.0.3 — CTAの角丸をやめた。囲みもボタンも直角にして、記事本文の図（角丸）と役割の違いが出るようにした。"
   }
 }
