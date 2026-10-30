@@ -175,6 +175,32 @@ p.fj-cta-mid a:hover{
 	.fj-bn-side:not([hidden]){ display: block; }
 }
 
+/* ---------- PC: サイドバーが無い記事は画面右下に固定 ---------- */
+.fj-bn-fix{
+	display: none;
+	position: fixed;
+	right: 16px;
+	bottom: 16px;
+	/* テーマ実測: ポップアップ994・ドロワー994・上に戻る992。その下に置く */
+	z-index: 989;
+	padding: 8px;
+	width: 316px;
+	background: rgb(255 255 255 / .96);
+	border: 1px solid rgb(var(--fj-line));
+	border-radius: 4px;
+	box-shadow: 0 4px 16px rgb(0 0 0 / .14);
+	opacity: 0;
+	transform: translateY(8px);
+	transition: opacity .28s ease, transform .28s ease;
+}
+.fj-bn-fix img{ width: 300px; max-width: 100%; }
+.fj-bn-fix.is-in{ opacity: 1; transform: none; }
+.fj-bn-fix .fj-bn-x{ top: -11px; right: -11px; }
+
+@media (min-width: 782px){
+	.fj-bn-fix:not([hidden]){ display: block; }
+}
+
 /* ---------- スマホ: 画面下に固定 ---------- */
 .fj-bn-sp{
 	display: none;
@@ -182,7 +208,8 @@ p.fj-cta-mid a:hover{
 	left: 0;
 	right: 0;
 	bottom: 0;
-	z-index: 9980;
+	/* テーマ実測: ポップアップ994・ドロワー994・上に戻る992。その下に置く */
+	z-index: 990;
 	padding: 6px 0 calc(6px + env(safe-area-inset-bottom, 0px));
 	background: rgb(255 255 255 / .96);
 	border-top: 1px solid rgb(var(--fj-line));
@@ -200,14 +227,15 @@ p.fj-cta-mid a:hover{
 
 @media (max-width: 781px){
 	.fj-bn-sp:not([hidden]){ display: block; }
-	/* テーマの「上に戻る」ボタンがバナーに重ならないよう持ち上げる */
-	body.fj-bn-sp-on #rd-sticky-action{ bottom: 74px; }
+	/* テーマの「上に戻る」ボタンは、テーマ自身の変数で持ち上げる */
+	body.fj-bn-sp-on{ --diver--sticky--position--bottom: 74px; }
 }
 
 @media (prefers-reduced-motion: reduce){
 	.fj-btn,
 	.fj-btn .fj-ar,
 	p.fj-cta-mid a,
-	.fj-bn-sp{ transition: none; }
+	.fj-bn-sp,
+	.fj-bn-fix{ transition: none; }
 	.fj-btn::after{ animation: none; display: none; }
 }

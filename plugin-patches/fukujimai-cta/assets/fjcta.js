@@ -41,14 +41,14 @@
 				return;
 			}
 
-			// スマホは300pxほど読み進めてから
+			// 画面に固定するものは300pxほど読み進めてから
 			var shown = false;
 			var show = function () {
 				if (shown) return;
 				if ((window.pageYOffset || document.documentElement.scrollTop) < 300) return;
 				shown = true;
 				el.removeAttribute('hidden');
-				document.body.classList.add('fj-bn-sp-on');
+				if (kind === 'sp') document.body.classList.add('fj-bn-sp-on');
 				// hidden を外した直後だと transition が効かないので1フレーム置く
 				window.requestAnimationFrame(function () {
 					window.requestAnimationFrame(function () { el.classList.add('is-in'); });

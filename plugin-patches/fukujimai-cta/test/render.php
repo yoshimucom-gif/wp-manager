@@ -8,6 +8,7 @@
 define('ABSPATH', __DIR__ . '/');
 
 $GLOBALS['fj_test_terms']  = array();
+$GLOBALS['fj_test_meta']   = array();
 $GLOBALS['fj_test_option'] = array('cta_enabled' => 1, 'banner_enabled' => 1, 'exclude_ids' => '');
 
 function plugin_dir_path($f) { return dirname($f) . '/'; }
@@ -39,6 +40,8 @@ function wp_verify_nonce() { return false; }
 function sanitize_text_field($s) { return $s; }
 function wp_unslash($s) { return $s; }
 class WP_Query { public $posts = array(); public function __construct($a = array()) {} }
+function get_post_meta($id, $k, $single = false) { return isset($GLOBALS['fj_test_meta'][$k]) ? $GLOBALS['fj_test_meta'][$k] : ''; }
+function maybe_unserialize($v) { $r = @unserialize($v); return ($r === false && $v !== 'b:0;') ? $v : $r; }
 
 require __DIR__ . '/../fukujimai-cta.php';
 
@@ -111,9 +114,24 @@ $GLOBALS['fj_test_terms'] = array('takuhai-kaitori');
 echo '<div class="pat"><b>除外ID指定</b> … 判定=' . (fjcta_pattern_key(1) === '' ? '（出さない）' : '出る（想定外）') . '</div>';
 $GLOBALS['fj_test_option']['exclude_ids'] = '';
 
+// サイドバーを出さない記事（無料ツールのページ）
+$GLOBALS['fj_test_terms'] = array('takuhai-kaitori');
+$GLOBALS['fj_test_meta']  = array('diver_single_layout' => serialize(array(
+	'title' => 'default', 'sidebar' => 'hide', 'size' => 'wide', 'width' => 'large', 'design' => 'default', 'gap' => '')));
+$tool = fjcta_pattern(1);
+echo '<div class="pat"><b>ツールのページ（sidebar=hide）</b> … 判定='
+	. esc_html(fjcta_pattern_key(1))
+	. ' ／ サイドバー非表示の検出=' . (fjcta_sidebar_hidden(1) ? 'はい' : 'いいえ（想定外）') . '</div>';
+echo '<div class="side-demo">本文にh2が無いとき（ツールのページ）<br>'
+	. fjcta_inject_content('<p>相場を調べるツールです。</p>') . '</div>';
+echo fjcta_banner_html($tool, 'fix');
+$GLOBALS['fj_test_meta'] = array();
+
 // スマホ固定バーは1つだけ出す
 $GLOBALS['fj_test_terms'] = array('area-city');
 $pp = fjcta_pattern(1);
+echo '<div class="pat"><b>通常記事のサイドバー非表示の検出</b> … '
+	. (fjcta_sidebar_hidden(1) ? 'はい（想定外）' : 'いいえ') . '</div>';
 echo fjcta_banner_html($pp, 'sp');
 
 echo "</div></body></html>";

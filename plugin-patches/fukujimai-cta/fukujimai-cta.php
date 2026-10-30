@@ -3,7 +3,7 @@
  * Plugin Name: 服じまい CTA・追従バナー
  * Plugin URI:  https://fukujimai.jp/
  * Description: 記事のカテゴリに応じて買取サービスのCTAを本文の3箇所（最初のh2の上・途中・まとめのあと）に出し、PCはサイドバー追従・スマホは画面下固定でバナーを出します。品目によっては何も出しません。
- * Version:     1.0.0
+ * Version:     1.0.1
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: fukujimai-cta
@@ -11,7 +11,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('FJCTA_VERSION', '1.0.0');
+define('FJCTA_VERSION', '1.0.1');
 define('FJCTA_DIR', plugin_dir_path(__FILE__));
 define('FJCTA_URL', plugin_dir_url(__FILE__));
 define('FJCTA_UPDATE_URL', 'https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-host/api/plugin-update/fukujimai-cta');
@@ -165,6 +165,17 @@ function fjcta_target_post_id() {
 	return $id ? $id : 0;
 }
 
+/**
+ * その記事がサイドバーを出さない設定か（無料ツールのページが該当する）。
+ * re:Diverの diver_single_layout に sidebar=hide が入っている。
+ */
+function fjcta_sidebar_hidden($post_id) {
+	$raw = get_post_meta($post_id, 'diver_single_layout', true);
+	if (is_string($raw) && $raw !== '') $raw = maybe_unserialize($raw);
+	if (!is_array($raw)) return false;
+	return (isset($raw['sidebar']) && $raw['sidebar'] === 'hide');
+}
+
 /* ============================================================
  * CTAのHTML
  * ========================================================== */
@@ -270,7 +281,12 @@ function fjcta_banner_html($p, $size) {
 	if (!$m || empty($m[$k]['href']) || empty($m[$k]['img'])) return '';
 
 	$b   = $m[$k];
-	$cls = ($size === 'sp') ? 'fj-bn fj-bn-sp' : 'fj-bn fj-bn-side';
+	$map = array(
+		'sp'   => 'fj-bn fj-bn-sp',
+		'side' => 'fj-bn fj-bn-side',
+		'fix'  => 'fj-bn fj-bn-fix',
+	);
+	$cls = isset($map[$size]) ? $map[$size] : $map['side'];
 
 	$h  = '<div class="' . $cls . '" data-fj-bn="' . esc_attr($size) . '" hidden>';
 	$h .= '<button type="button" class="fj-bn-x" aria-label="広告を閉じる">×</button>';
@@ -297,7 +313,10 @@ function fjcta_banner_sidebar($index, $has_widgets = true) {
 	echo fjcta_banner_html($p, 'side');
 }
 
-/** スマホ: 画面下に固定 */
+/**
+ * スマホ: 画面下に固定。
+ * サイドバーを出さない記事（無料ツールのページ）は、PCでも置き場所が無いので画面右下に固定する。
+ */
 add_action('wp_footer', 'fjcta_banner_footer', 20);
 
 function fjcta_banner_footer() {
@@ -306,7 +325,11 @@ function fjcta_banner_footer() {
 	if (!$id) return;
 	$p = fjcta_pattern($id);
 	if (!$p) return;
+
 	echo fjcta_banner_html($p, 'sp');
+	if (fjcta_sidebar_hidden($id)) {
+		echo fjcta_banner_html($p, 'fix');
+	}
 }
 
 /* ============================================================
