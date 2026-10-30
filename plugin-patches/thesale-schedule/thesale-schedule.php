@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.8.7
+ * Version:     1.8.8
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -1769,3 +1769,92 @@ function thesale_directory( $atts ) {
 	return $o . '</div>';
 }
 add_shortcode( 'thesale_directory', 'thesale_directory' );
+
+/*
+ * ── お問い合わせフォームの迷惑メールよけ（1.8.8〜・2026-10-30 吉村さん「スパムみたいなメールはじいてほしい」）──
+ * Contact Form 7 の送信を、次のどれかに当たったら迷惑メール扱いにする（メールは届かず、Flamingo の迷惑メールに残る）。
+ *  ・機械が埋める見えない欄（ts_hp）に何か入っている／表示から3秒未満で送られた
+ *  ・営業・一斉送信の決まり文句（Telegram・WhatsApp・無料トライアル・「フォームを通じて送信」など）
+ *  ・メールアドレスが no.reply／noreply で始まる
+ *  ・電話番号が日本の番号の形でない（0 か +81 で始まらない）
+ *  ・本文に日本語が1文字も無い／URL が2つ以上
+ * 言葉はオプション thesale_spam_words（改行区切り）で足せる。
+ */
+function thesale_spam_reason( $f ) {
+	$msg   = isset( $f['your-message'] ) ? (string) $f['your-message'] : '';
+	$all   = implode( "\n", array_map( 'strval', array_intersect_key( $f, array_flip( array( 'your-name', 'your-email', 'company', 'tel', 'your-message' ) ) ) ) );
+	$words = array( 'Telegram', 'WhatsApp', 'テレグラム', 'ワッツアップ', '無料トライアル', '商用メッセージ', 'フォームを通じて送信', 'スパムフィルター',
+		'メッセージのサービス料金', 'casino', 'crypto', 'bitcoin', 'viagra', 'SEO services', 'backlinks' );
+	$extra = get_option( 'thesale_spam_words', '' );
+	if ( is_string( $extra ) && '' !== trim( $extra ) ) {
+		$words = array_merge( $words, array_filter( array_map( 'trim', preg_split( '/\R/', $extra ) ) ) );
+	}
+	foreach ( $words as $w ) {
+		if ( '' !== $w && false !== mb_stripos( $all, $w ) ) {
+			return '営業・一斉送信の言葉: ' . $w;
+		}
+	}
+	$mail = isset( $f['your-email'] ) ? strtolower( (string) $f['your-email'] ) : '';
+	if ( preg_match( '/^no[._-]?reply/', $mail ) ) {
+		return '返信できないメールアドレス';
+	}
+	$tel = isset( $f['tel'] ) ? preg_replace( '/[^\d+]/', '', (string) $f['tel'] ) : '';
+	if ( '' !== $tel && ! preg_match( '/^(0|\+?81)/', $tel ) ) {
+		return '日本の電話番号の形でない';
+	}
+	if ( '' !== trim( $msg ) && ! preg_match( '/[\x{3040}-\x{30FF}\x{4E00}-\x{9FFF}]/u', $msg ) ) {
+		return '本文に日本語が無い';
+	}
+	if ( preg_match_all( '#https?://#i', $msg ) >= 2 ) {
+		return 'URLが2つ以上';
+	}
+	return '';
+}
+
+// 機械だけが埋める見えない欄と、フォームを表示した時刻
+add_filter( 'wpcf7_form_hidden_fields', function ( $h ) {
+	$h['ts_t'] = (string) time();
+	return $h;
+} );
+add_filter( 'wpcf7_form_elements', function ( $html ) {
+	return $html . '<span style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden" aria-hidden="true"><label>空欄のまま<input type="text" name="ts_hp" value="" tabindex="-1" autocomplete="off"></label></span>';
+} );
+
+add_filter( 'wpcf7_spam', function ( $spam, $submission = null ) {
+	if ( $spam ) {
+		return $spam;
+	}
+	$reason = '';
+	if ( ! empty( $_POST['ts_hp'] ) ) {
+		$reason = '見えない欄に入力あり';
+	} elseif ( isset( $_POST['ts_t'] ) && ctype_digit( (string) $_POST['ts_t'] ) && time() - (int) $_POST['ts_t'] < 3 ) {
+		$reason = '表示から3秒未満の送信';
+	} else {
+		$f = array();
+		foreach ( array( 'your-name', 'your-email', 'company', 'tel', 'your-message' ) as $k ) {
+			$f[ $k ] = isset( $_POST[ $k ] ) ? wp_unslash( (string) $_POST[ $k ] ) : '';
+		}
+		$reason = thesale_spam_reason( $f );
+	}
+	if ( '' === $reason ) {
+		return false;
+	}
+	if ( $submission && method_exists( $submission, 'add_spam_log' ) ) {
+		$submission->add_spam_log( array( 'agent' => 'thesale', 'reason' => $reason ) );
+	}
+	return true;
+}, 10, 2 );
+
+// 判定の確認用（管理者だけ）: POST thesale/v1/spamcheck {"your-name":…, "your-email":…, "tel":…, "your-message":…} → {"spam":bool,"reason":…}
+add_action( 'rest_api_init', function () {
+	register_rest_route( 'thesale/v1', '/spamcheck', array(
+		'methods'             => 'POST',
+		'permission_callback' => function () {
+			return current_user_can( 'manage_options' );
+		},
+		'callback'            => function ( $req ) {
+			$r = thesale_spam_reason( (array) $req->get_json_params() );
+			return array( 'spam' => '' !== $r, 'reason' => $r );
+		},
+	) );
+} );
