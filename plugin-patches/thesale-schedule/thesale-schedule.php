@@ -2,7 +2,7 @@
 /**
  * Plugin Name: THE SALE セール日程表示
  * Description: トップの「いま開催中のセール」「これから始まるセール」を、セール日程データ（オプション thesale_events）から表示のたびに日本時間で計算して出すショートコード。終わったセールは自動で消え、時点の日付も当日になる。
- * Version:     1.8.8
+ * Version:     1.8.9
  * Author:      Keys
  * Text Domain: thesale-schedule
  */
@@ -1175,7 +1175,14 @@ function thesale_home( $atts ) {
 		$d     = $hero_live ? $hero['t'] : $hero['s'];
 		$time  = thesale_wd( $d ) . ( $hero_live ? '〜' . ( in_array( $d->format( 'H:i' ), array( '00:00', '23:59' ), true ) ? 'まで' : $d->format( 'G:i' ) . 'まで' )
 			: ( in_array( $d->format( 'H:i' ), array( '00:00', '23:59' ), true ) ? '〜' : $d->format( 'G:i' ) . '–' ) );
-		$foot  = $hero['s']->format( 'Y' ) . '年' . $hero['s']->format( 'n' ) . '月' . ( '' !== $round ? '・' . $round : '' );
+		// 下の行は開催期間（1.8.9〜）。以前は「2026年11月・11月」と開始月と回の名前（（11月））が重なって意味が取れなかった
+		$end   = ! empty( $hero['t'] ) ? $hero['t'] : null;
+		if ( $end && '00:00' === $end->format( 'H:i' ) ) {
+			$end = $end->modify( '-1 minute' );
+		}
+		$foot  = $hero['s']->format( 'Y' ) . '年' . $hero['s']->format( 'n月j日' ) . thesale_wd( $hero['s'] )
+			. ( $end ? '〜' . ( $end->format( 'Y' ) !== $hero['s']->format( 'Y' ) ? $end->format( 'Y' ) . '年' : '' ) . $end->format( 'n月j日' ) . thesale_wd( $end ) : '' )
+			. ( '' !== $round && ! preg_match( '/^\d{1,2}月$/u', $round ) ? '・' . $round : '' );
 		$o .= '<a class="th-next" href="' . esc_url( thesale_sched_url( isset( $hero['e']['url'] ) ? $hero['e']['url'] : '' ) ) . '">'
 			. '<div class="th-next-top"><span class="th-next-label th-en">' . ( $hero_live ? 'NOW ON / 開催中のセール' : 'NEXT UP / 次のセール' ) . '</span>'
 			. '<span class="th-badge">' . ( $hero_live ? '開催中' : '開催予定' ) . '</span></div>'
