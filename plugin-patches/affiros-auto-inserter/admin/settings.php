@@ -245,7 +245,7 @@ function affiros_ai_render_settings_page() {
                     <th>タイトルパターン (正規表現)</th>
                     <td>
                         <textarea name="<?php echo AFFIROS_AI_OPTION_KEY; ?>[ranking_title_patterns]" rows="6" style="width:480px;font-family:monospace"><?php echo esc_textarea($settings['ranking_title_patterns']); ?></textarea>
-                        <p class="description">1行1パターン。既定: 「選」「ランキング」「おすすめN位」「ベストN」。<br>手動除外は各記事の編集画面メタボックスから。</p>
+                        <p class="description">1行1パターン。既定: 「N選」「ランキング」「おすすめN位」「ベストN」。<br>手動除外は各記事の編集画面メタボックスから。</p>
                     </td>
                 </tr>
             </table>

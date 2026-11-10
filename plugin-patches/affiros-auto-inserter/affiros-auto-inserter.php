@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros オートインサーター
  * Description: マーカー不要。Claude Haiku が本文から検索キーワードを自動抽出し、Amazon + 楽天から関連商品3件を引っ張って「最初のH2直前」「まとめ直後」の2箇所に比較カードを自動挿入する。ランキング記事は自動判定して除外。既存の affiros-product-inserter とは独立して動作。
- * Version: 0.20.1
+ * Version: 0.20.2
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-auto-inserter
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('AFFIROS_AI_VERSION',      '0.20.1');
+define('AFFIROS_AI_VERSION',      '0.20.2');
 define('AFFIROS_AI_PATH',         plugin_dir_path(__FILE__));
 define('AFFIROS_AI_URL',          plugin_dir_url(__FILE__));
 define('AFFIROS_AI_OPTION_KEY',   'affiros_ai_settings');
@@ -79,7 +79,7 @@ function affiros_ai_default_settings() {
         'side_heading_suffix'    => 'で迷ったらこれ',   // サイドバー:   「KW」で迷ったらこれ
         // ランキング検出
         'skip_ranking_articles'  => 'yes',
-        'ranking_title_patterns' => "選\nランキング\nおすすめ.*位\nベスト\\d+",
+        'ranking_title_patterns' => "\\d+選\nランキング\nおすすめ.*位\nベスト\\d+",
         // 挿入しないカテゴリー・タグ
         'exclude_category_ids'   => [],  // カテゴリーID配列
         'exclude_tags'           => '',  // カンマ区切り (タグ名 or スラッグ)
