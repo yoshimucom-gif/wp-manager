@@ -2,7 +2,7 @@
 /**
  * Plugin Name: インテリアグッズLab 条件で探す
  * Description: 品目ごとの商品データ（Amazon公式APIで取得した仕様）を同梱し、ショートコード [interior_finder set="chest"] で「幅・奥行・高さ・段数・素材・色・置き場所・入れるもの」の掛け合わせ絞り込みページを出します。商品は全点サーバー側で描き、絞り込みは表示の出し入れだけで行うため、検索エンジンには全商品が見えます。価格は扱いません。
- * Version:     1.0.0
+ * Version:     1.1.0
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: interior-finder
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Interior_Finder
 {
-    const VERSION = '1.0.0';
+    const VERSION = '1.1.0';
 
     /* ショートコードが使われたページでだけCSS/JSを読む */
     private static $used = false;
@@ -64,6 +64,21 @@ class Interior_Finder
             'set'   => '',
             'title' => '',          /* 絞り込みの見出し。空なら出さない（テーマの見出しに任せる） */
             'cols'  => '3',
+            /* ここから初期条件。記事の中に「その記事の話に絞った状態」で埋めるため。
+               例) [interior_finder set="chest" fit_d="30" place="洗面所"]
+               読者がURLを共有したときは、そのURLの条件が初期条件より優先される。 */
+            'fit_w'    => '',       /* 幅が何cm以下に収まるか（数字） */
+            'fit_d'    => '',
+            'fit_h'    => '',
+            'w'        => '',       /* 寸法の区分。"0-35" のように下限-上限。複数はカンマ区切り */
+            'd'        => '',
+            'h'        => '',
+            'step'     => '',       /* 段数。"3,4" */
+            'material' => '',       /* 素材。"木,ラタン" */
+            'color'    => '',
+            'place'    => '',       /* 置き場所。"洗面所" */
+            'use'      => '',       /* 入れるもの。"衣類" */
+            'flag'     => '',       /* "caster" / "door" */
         ), $atts, 'interior_finder');
 
         $d = self::load($a['set']);
@@ -95,13 +110,17 @@ class Interior_Finder
             }
         }
 
-        $id    = 'ifd-' . sanitize_html_class($d['slug']);
+        /* 1ページに2つ置かれてもidが衝突しないよう連番を足す */
+        static $seq = 0;
+        $seq++;
+        $id    = 'ifd-' . sanitize_html_class($d['slug']) . ($seq > 1 ? '-' . $seq : '');
         $label = $d['label'];
         $cols  = max(2, min(4, (int) $a['cols']));
+        $init  = self::init_query($a, $d);
 
         ob_start();
         ?>
-<div class="ifd" id="<?php echo esc_attr($id); ?>">
+<div class="ifd" id="<?php echo esc_attr($id); ?>"<?php if ($init) : ?> data-init="<?php echo esc_attr(wp_json_encode($init)); ?>"<?php endif; ?>>
 
 	<?php if ($a['title'] !== '') : ?>
 	<p class="ifd-h"><?php echo esc_html($a['title']); ?></p>
@@ -227,6 +246,70 @@ class Interior_Finder
 </div>
 		<?php
         return ob_get_clean();
+    }
+
+    /* ショートコードの初期条件を、JSが読む形（内部キー）に詰め直す。
+       ★データに無い値は黙って捨てる。綴り違いで「0点」の画面を出さないため。 */
+    private static function init_query($a, $d)
+    {
+        $out = array();
+
+        foreach (array('w', 'd', 'h') as $k) {
+            $v = trim($a['fit_' . $k]);
+            if ($v !== '' && (float) $v > 0) {
+                $out['fit' . $k] = (float) $v;
+            }
+            $ok = array();
+            foreach (array_filter(array_map('trim', explode(',', $a[$k]))) as $b) {
+                foreach ($d['sizes'] as $s) {
+                    if ($s['key'] !== $k) {
+                        continue;
+                    }
+                    foreach ($s['buckets'] as $x) {
+                        if ($b === $x[0] . '-' . $x[1]) {
+                            $ok[] = $b;
+                        }
+                    }
+                }
+            }
+            if ($ok) {
+                $out[$k] = array_values(array_unique($ok));
+            }
+        }
+
+        $map = array('step' => 's', 'material' => 'm', 'color' => 'c',
+                     'place' => 'p', 'use' => 'g');
+        foreach ($map as $att => $key) {
+            $want = array_filter(array_map('trim', explode(',', $a[$att])));
+            if (!$want) {
+                continue;
+            }
+            $have = array();
+            foreach ($d['facets'] as $f) {
+                if ($f['key'] === $key) {
+                    foreach ($f['options'] as $o) {
+                        $have[] = (string) $o['v'];
+                    }
+                }
+            }
+            $ok = array_values(array_intersect($want, $have));
+            if ($ok) {
+                $out[$key] = $ok;
+            }
+        }
+
+        $want = array_filter(array_map('trim', explode(',', $a['flag'])));
+        if ($want) {
+            $have = array();
+            foreach ((array) $d['flags'] as $f) {
+                $have[] = (string) $f['v'];
+            }
+            $ok = array_values(array_intersect($want, $have));
+            if ($ok) {
+                $out['f'] = $ok;
+            }
+        }
+        return $out;
     }
 
     /* 54.5 → 54.5 / 78.0 → 78（小数の0を見せない） */

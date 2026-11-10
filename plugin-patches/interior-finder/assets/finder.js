@@ -27,6 +27,9 @@
 		/* 選んだ条件。キーごとに値の集合（同じキーの中はOR、キーをまたぐとAND） */
 		var sel = {};
 		var fit = {};
+		/* 読者が1回でも触るまでURLを書き換えない。
+		   記事の中に初期条件つきで埋めたとき、記事のURLに ?d=0-35 を足さないため */
+		var touched = false;
 
 		/* カードの仕様を先に配列へ写す。毎回DOMを読まない */
 		var data = cards.map(function (el) {
@@ -153,7 +156,7 @@
 		}
 
 		function writeUrl() {
-			if (!window.history || !history.replaceState) { return; }
+			if (!touched || !window.history || !history.replaceState) { return; }
 			var q = [];
 			Object.keys(sel).forEach(function (k) {
 				if (sel[k] && sel[k].length) {
@@ -167,9 +170,32 @@
 			history.replaceState(null, '', url);
 		}
 
+		/* ショートコードに書かれた初期条件。URLに条件があればそちらを優先する
+		   （共有されたURLが、記事側の初期条件に上書きされないように） */
+		function readInit() {
+			var raw = root.getAttribute('data-init');
+			if (!raw) { return; }
+			var q;
+			try { q = JSON.parse(raw); } catch (e) { return; }
+			Object.keys(q).forEach(function (k) {
+				if (/^fit[wdh]$/.test(k)) {
+					var f = parseFloat(q[k]);
+					if (f > 0) {
+						fit[k.slice(3)] = f;
+						fits.forEach(function (i) {
+							if (i.getAttribute('data-fit') === k.slice(3)) { i.value = f; }
+						});
+					}
+				} else if (SIZE.indexOf(k) >= 0 || LIST.indexOf(k) >= 0) {
+					sel[k] = [].concat(q[k]);
+				}
+			});
+		}
+
 		function readUrl() {
 			var s = location.search.replace(/^\?/, '');
-			if (!s) { return; }
+			if (!s) { return false; }
+			var hit = false;
 			s.split('&').forEach(function (pair) {
 				var p = pair.split('=');
 				var k = decodeURIComponent(p[0] || '');
@@ -179,18 +205,22 @@
 					var f = parseFloat(v);
 					if (f > 0) {
 						fit[k.slice(3)] = f;
+						hit = true;
 						fits.forEach(function (i) {
 							if (i.getAttribute('data-fit') === k.slice(3)) { i.value = f; }
 						});
 					}
 				} else if (SIZE.indexOf(k) >= 0 || LIST.indexOf(k) >= 0) {
 					sel[k] = v.split('.');
+					hit = true;
 				}
 			});
+			return hit;
 		}
 
 		btns.forEach(function (b) {
 			b.addEventListener('click', function () {
+				touched = true;
 				var k = b.getAttribute('data-key');
 				var v = SIZE.indexOf(k) >= 0
 					? (b.getAttribute('data-lo') + '-' + b.getAttribute('data-hi'))
@@ -204,6 +234,7 @@
 
 		fits.forEach(function (i) {
 			var run = function () {
+				touched = true;
 				var k = i.getAttribute('data-fit');
 				var v = parseFloat(i.value);
 				fit[k] = (v > 0) ? v : 0;
@@ -215,6 +246,7 @@
 
 		if (reset) {
 			reset.addEventListener('click', function () {
+				touched = true;
 				sel = {};
 				fit = {};
 				fits.forEach(function (i) { i.value = ''; });
@@ -224,6 +256,7 @@
 
 		[].forEach.call(root.querySelectorAll('.ifd-p'), function (p) {
 			p.addEventListener('click', function () {
+				touched = true;
 				var q;
 				try {
 					q = JSON.parse(p.getAttribute('data-q'));
@@ -251,7 +284,7 @@
 			});
 		});
 
-		readUrl();
+		if (!readUrl()) { readInit(); }
 		apply();
 	}
 

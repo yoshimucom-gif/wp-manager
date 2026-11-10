@@ -8,8 +8,8 @@
   "author": "Keys",
   "sections": {
     "description": "インテリアグッズLab 条件で探す 本体。GitHub から自動更新します。",
-    "changelog": "公開。チェスト121点を条件で絞り込めます"
+    "changelog": "記事の中に埋められるよう、ショートコードに初期条件（fit_w/fit_d/fit_h・place・material・color・use・step・flag・w/d/h）を追加。読者が触るまでURLは書き換えない"
   },
-  "version": "1.0.0",
-  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/interior-finder-1.0.0.zip"
+  "version": "1.1.0",
+  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/interior-finder-1.1.0.zip"
 }
