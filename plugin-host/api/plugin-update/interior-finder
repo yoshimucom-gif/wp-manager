@@ -1,0 +1,15 @@
+{
+  "name": "インテリアグッズLab 条件で探す",
+  "slug": "interior-finder",
+  "plugin": "interior-finder/interior-finder.php",
+  "tested": "6.7",
+  "requires": "6.0",
+  "requires_php": "7.4",
+  "author": "Keys",
+  "sections": {
+    "description": "インテリアグッズLab 条件で探す 本体。GitHub から自動更新します。",
+    "changelog": "公開。チェスト121点を条件で絞り込めます"
+  },
+  "version": "1.0.0",
+  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/interior-finder-1.0.0.zip"
+}

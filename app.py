@@ -6422,6 +6422,7 @@ PLUGIN_DOWNLOADS = {
     'thesale-brand-items': {'file': 'thesale-brand-items-1.0.7.zip', 'name': 'THE SALE ブランド商品カード', 'version': '1.0.7'},
     'mikata-seminar-feed': {'file': 'mikata-seminar-feed-1.0.0.zip', 'name': 'ミカタセミナー新着', 'version': '1.0.0'},
     'kurabe-db': {'file': 'kurabe-db-1.7.4.zip', 'name': '100均くらべ 比較データ表示', 'version': '1.7.4'},
+    'interior-finder': {'file': 'interior-finder-1.0.0.zip', 'name': 'インテリアグッズLab 条件で探す', 'version': '1.0.0'},
     'suit-kurabe-db': {'file': 'suit-kurabe-db-1.5.8.zip', 'name': 'スーツくらべ 比較データ表示', 'version': '1.5.8'},
     'catalog-kurabe-db': {'file': 'catalog-kurabe-db-1.2.27.zip', 'name': 'カタログギフトくらべ 比較データ表示', 'version': '1.2.27'},
     'kyutoki-shindan': {
@@ -6529,6 +6530,8 @@ PLUGIN_UPDATE_META = {
     'thesale-brand-items': {'plugin_basename': 'thesale-brand-items/thesale-brand-items.php',
               'tested': '6.7', 'requires': '6.0', 'requires_php': '7.4', 'author': 'Keys'},
     'kurabe-db': {'plugin_basename': 'kurabe-db/kurabe-db.php',
+              'tested': '6.7', 'requires': '6.0', 'requires_php': '7.4', 'author': 'Keys'},
+    'interior-finder': {'plugin_basename': 'interior-finder/interior-finder.php',
               'tested': '6.7', 'requires': '6.0', 'requires_php': '7.4', 'author': 'Keys'},
     'suit-kurabe-db': {'plugin_basename': 'suit-kurabe-db/suit-kurabe-db.php',
               'tested': '6.7', 'requires': '6.0', 'requires_php': '7.4', 'author': 'Keys'},

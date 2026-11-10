@@ -1,0 +1,488 @@
+/* インテリアグッズLab 条件で探す
+   色はテーマの配色とぶつからないよう無彩色で組み、Amazonのボタンだけ公式の橙を使う。
+   サイトの色を使いたくなっても、ここに色を増やさずテーマ設定側で当てる。 */
+
+.ifd {
+	--ifd-line: #e2e2df;
+	--ifd-bg: #fafaf8;
+	--ifd-ink: #1f1f1d;
+	--ifd-sub: #6b6b66;
+	--ifd-on: #1f1f1d;
+	margin: 0 0 2.4em;
+	font-size: 16px;
+	line-height: 1.7;
+	color: var(--ifd-ink);
+}
+
+.ifd * {
+	box-sizing: border-box;
+}
+
+.ifd-h {
+	margin: 0 0 .8em;
+	font-size: 19px;
+	font-weight: 700;
+}
+
+/* ── 絞り込みパネル ── */
+.ifd-panel {
+	border: 1px solid var(--ifd-line);
+	border-radius: 10px;
+	background: #fff;
+	padding: 18px 18px 6px;
+}
+
+.ifd-fit {
+	margin: -4px 0 16px;
+	padding: 14px 16px 16px;
+	background: var(--ifd-bg);
+	border: 1px solid var(--ifd-line);
+	border-radius: 8px;
+}
+
+.ifd-fit-h {
+	margin: 0 0 .3em;
+	font-size: 16px;
+	font-weight: 700;
+}
+
+.ifd-fit-d {
+	margin: 0 0 .9em;
+	font-size: 13.5px;
+	line-height: 1.6;
+	color: var(--ifd-sub);
+}
+
+.ifd-fit-r {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px 18px;
+	align-items: center;
+}
+
+.ifd-fit-i {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 14.5px;
+	font-weight: 700;
+}
+
+.ifd-fit-i input {
+	width: 84px;
+	padding: 7px 9px;
+	font-size: 16px;
+	font-weight: 400;
+	text-align: right;
+	border: 1px solid #c9c9c4;
+	border-radius: 6px;
+	background: #fff;
+	color: var(--ifd-ink);
+	-moz-appearance: textfield;
+}
+
+.ifd-fit-i input::-webkit-outer-spin-button,
+.ifd-fit-i input::-webkit-inner-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+
+.ifd-fit-i input:focus {
+	outline: 2px solid var(--ifd-on);
+	outline-offset: 1px;
+}
+
+.ifd-u {
+	font-size: 13px;
+	font-weight: 400;
+	color: var(--ifd-sub);
+}
+
+.ifd-g {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 4px 12px;
+	padding: 11px 0;
+	border-top: 1px dashed var(--ifd-line);
+}
+
+.ifd-g:first-of-type {
+	border-top: 0;
+}
+
+.ifd-g-h {
+	flex: 0 0 5.5em;
+	margin: 0;
+	padding-top: 4px;
+	font-size: 14px;
+	font-weight: 700;
+	color: var(--ifd-sub);
+}
+
+.ifd-g-b {
+	flex: 1 1 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 7px;
+	min-width: 0;
+}
+
+.ifd-b,
+.ifd-p {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 6px 12px;
+	font-family: inherit;
+	font-size: 14.5px;
+	line-height: 1.5;
+	color: var(--ifd-ink);
+	background: #fff;
+	border: 1px solid #cfcfca;
+	border-radius: 999px;
+	cursor: pointer;
+	transition: background .12s, border-color .12s, color .12s;
+}
+
+.ifd-b:hover,
+.ifd-p:hover {
+	border-color: var(--ifd-on);
+	background: var(--ifd-bg);
+}
+
+.ifd-b[aria-pressed="true"] {
+	background: var(--ifd-on);
+	border-color: var(--ifd-on);
+	color: #fff;
+	font-weight: 700;
+}
+
+.ifd-b[disabled] {
+	opacity: .35;
+	cursor: default;
+	border-color: var(--ifd-line);
+}
+
+.ifd-b[disabled]:hover {
+	background: #fff;
+	border-color: var(--ifd-line);
+}
+
+.ifd-n {
+	font-size: 11.5px;
+	font-weight: 400;
+	color: var(--ifd-sub);
+}
+
+.ifd-b[aria-pressed="true"] .ifd-n {
+	color: rgba(255, 255, 255, .72);
+}
+
+/* ── よく使われる条件 ── */
+.ifd-pre {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 6px 12px;
+	margin: 14px 0 0;
+}
+
+.ifd-pre-h {
+	flex: 0 0 auto;
+	margin: 0;
+	padding-top: 4px;
+	font-size: 14px;
+	font-weight: 700;
+	color: var(--ifd-sub);
+}
+
+.ifd-pre-b {
+	flex: 1 1 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 7px;
+	min-width: 0;
+}
+
+.ifd-p {
+	border-style: dashed;
+}
+
+/* ── 件数バー ── */
+.ifd-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 14px;
+	margin: 20px 0 14px;
+	padding-bottom: 12px;
+	border-bottom: 2px solid var(--ifd-ink);
+}
+
+.ifd-res {
+	margin: 0;
+	font-size: 15px;
+	font-weight: 700;
+}
+
+.ifd-count {
+	font-size: 26px;
+	letter-spacing: -.01em;
+	vertical-align: -1px;
+}
+
+.ifd-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	flex: 1 1 auto;
+}
+
+.ifd-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 3px 7px 3px 10px;
+	font-family: inherit;
+	font-size: 13px;
+	color: var(--ifd-ink);
+	background: var(--ifd-bg);
+	border: 1px solid var(--ifd-line);
+	border-radius: 5px;
+	cursor: pointer;
+}
+
+.ifd-chip::after {
+	content: "×";
+	font-size: 14px;
+	color: var(--ifd-sub);
+}
+
+.ifd-chip:hover {
+	border-color: var(--ifd-on);
+}
+
+.ifd-reset {
+	flex: 0 0 auto;
+	padding: 5px 12px;
+	font-family: inherit;
+	font-size: 13.5px;
+	color: var(--ifd-sub);
+	background: none;
+	border: 1px solid #cfcfca;
+	border-radius: 6px;
+	cursor: pointer;
+}
+
+.ifd-reset:hover {
+	color: var(--ifd-ink);
+	border-color: var(--ifd-on);
+}
+
+/* ── 商品一覧 ── */
+.ifd-list {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 18px;
+}
+
+.ifd-list[data-cols="2"] {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ifd-list[data-cols="4"] {
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ifd-c {
+	display: flex;
+	flex-direction: column;
+	border: 1px solid var(--ifd-line);
+	border-radius: 9px;
+	background: #fff;
+	overflow: hidden;
+}
+
+.ifd-c[hidden] {
+	display: none;
+}
+
+.ifd-c-i {
+	display: block;
+	padding: 14px 14px 6px;
+	text-align: center;
+	background: #fff;
+}
+
+.ifd-c-i img {
+	width: auto;
+	height: 150px;
+	max-width: 100%;
+	object-fit: contain;
+	margin: 0 auto;
+	display: block;
+}
+
+.ifd-c-t {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	padding: 10px 14px 14px;
+}
+
+.ifd-c-b {
+	margin: 0 0 .25em;
+	font-size: 12.5px;
+	color: var(--ifd-sub);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.ifd-c-n {
+	margin: 0 0 .5em;
+	font-size: 14.5px;
+	line-height: 1.55;
+	font-weight: 700;
+	display: -webkit-box;
+	-webkit-line-clamp: 3;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+.ifd-c-n a {
+	color: var(--ifd-ink);
+	text-decoration: none;
+}
+
+.ifd-c-n a:hover {
+	text-decoration: underline;
+}
+
+.ifd-c-d {
+	margin: 0 0 .5em;
+	padding: 5px 8px;
+	font-size: 13.5px;
+	font-weight: 700;
+	background: var(--ifd-bg);
+	border-radius: 5px;
+}
+
+.ifd-c-d0 {
+	font-weight: 400;
+	color: var(--ifd-sub);
+}
+
+.ifd-c-tag {
+	margin: 0 0 .8em;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+
+.ifd-c-tag span {
+	padding: 1px 7px;
+	font-size: 12px;
+	color: var(--ifd-sub);
+	border: 1px solid var(--ifd-line);
+	border-radius: 4px;
+}
+
+.ifd-c-a {
+	margin: auto 0 0;
+}
+
+.ifd-c-a a {
+	display: block;
+	padding: 9px;
+	font-size: 14.5px;
+	font-weight: 700;
+	text-align: center;
+	text-decoration: none;
+	color: #1f1f1d;
+	background: #ff9900;
+	border-radius: 6px;
+}
+
+.ifd-c-a a:hover {
+	background: #f08804;
+	color: #1f1f1d;
+}
+
+.ifd-none {
+	margin: 24px 0;
+	padding: 22px;
+	text-align: center;
+	font-size: 15px;
+	background: var(--ifd-bg);
+	border: 1px solid var(--ifd-line);
+	border-radius: 9px;
+}
+
+.ifd-note {
+	margin: 18px 0 0;
+	font-size: 12.5px;
+	line-height: 1.7;
+	color: var(--ifd-sub);
+}
+
+/* ── 画面が狭いとき ── */
+@media screen and (max-width: 767px) {
+	.ifd-panel {
+		padding: 14px 13px 4px;
+	}
+
+	.ifd-g {
+		display: block;
+	}
+
+	.ifd-g-h {
+		padding: 0 0 6px;
+	}
+
+	.ifd-pre {
+		display: block;
+	}
+
+	.ifd-pre-h {
+		padding: 0 0 6px;
+	}
+
+	.ifd-b,
+	.ifd-p {
+		font-size: 14px;
+		padding: 7px 12px;
+	}
+
+	.ifd-list,
+	.ifd-list[data-cols="4"] {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 12px;
+	}
+
+	.ifd-c-i {
+		padding: 10px 10px 4px;
+	}
+
+	.ifd-c-i img {
+		height: 118px;
+	}
+
+	.ifd-c-t {
+		padding: 8px 10px 12px;
+	}
+
+	.ifd-c-n {
+		font-size: 13.5px;
+		-webkit-line-clamp: 2;
+	}
+
+	.ifd-count {
+		font-size: 23px;
+	}
+
+	.ifd-fit-i input {
+		width: 76px;
+	}
+}
