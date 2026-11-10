@@ -186,6 +186,10 @@ class Affiros_AI_Inserter {
         $before_first_h2 = ($settings['insert_before_first_h2'] ?? 'yes') === 'yes';
         $after_matome    = ($settings['insert_after_matome']    ?? 'yes') === 'yes';
 
+        if (!$before_first_h2 && !$after_matome) {
+            return self::fail($post_id, '挿入先の設定が両方オフです (設定画面の挿入位置「最初のH2の前」「まとめの直後」がどちらも無効。本文の問題ではありません)');
+        }
+
         $new_content = $content;
         $insertions = 0;
 
