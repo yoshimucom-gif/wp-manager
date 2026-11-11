@@ -602,10 +602,10 @@ class Affiros_Rewrite_Engine {
     private static function calc_max_tokens($target_chars) {
         $target = intval($target_chars);
         if ($target <= 0) {
-            return 8000; // 「元記事に合わせる」指定 → 従来どおりの既定値
+            return 16000; // 「元記事に合わせる」指定。Opus 5.5 は思考込みの上限なので余裕を持たせる
         }
-        $est = (int)ceil($target * 2.5) + 1000;
-        return max(2000, min(32000, $est));
+        $est = (int)ceil($target * 2.5) + 8000; // +8000 = 思考の分
+        return max(10000, min(32000, $est));
     }
 
     /**

@@ -26,7 +26,7 @@ SPECS = [
     (os.path.join(ROOT, 'affiros-decoration'),
      'affiros-decoration', 'affiros-decoration-1.2.4.zip'),
     (os.path.join(ROOT, 'affiros-rewrite'),
-     'affiros-rewrite', 'affiros-rewrite-0.5.18.zip'),
+     'affiros-rewrite', 'affiros-rewrite-0.5.19.zip'),
     (os.path.join(ROOT, 'affiros-categorizer'),
      'affiros-categorizer', 'affiros-categorizer-0.1.2.zip'),
     (os.path.join(ROOT, 'affiros-dup-cleaner'),

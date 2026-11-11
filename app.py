@@ -101,7 +101,8 @@ def handle_unexpected_error(error):
     return '<h1><p>Internal Server Error</p></h1>', 500
 
 DATA_DIR_WARNING = ''
-CLAUDE_ARTICLE_MODEL = 'claude-sonnet-4-6'
+# 記事の執筆は Opus 5.5 固定（2026-11-11 吉村さん指示）。Sonnet・旧Opusには落とさない。
+CLAUDE_ARTICLE_MODEL = 'claude-opus-5-5'
 CLAUDE_TITLE_IDEA_DEFAULT_MODEL = 'claude-haiku-4-5-20251001'
 CLAUDE_TITLE_IDEA_MODEL = os.environ.get('CLAUDE_TITLE_IDEA_MODEL', CLAUDE_TITLE_IDEA_DEFAULT_MODEL)
 CLAUDE_TITLE_IDEA_FALLBACK_MODELS = [
@@ -235,7 +236,7 @@ DEFAULT_ARTICLE_TARGET_CHARS = 3000
 # Affiros9 本体のバージョン。改修履歴ページの先頭表示、 /api/version、
 # ナビ下のバージョン表示で参照される。改修時はこの値を上げて
 # templates/index.html の改修履歴セクションにも履歴行を追加すること。
-APP_VERSION = '1.9.61'
+APP_VERSION = '1.9.62'
 
 # 記事品質バージョン（本体バージョンとは独立して管理）。
 #
@@ -301,13 +302,12 @@ SONNET_OUTPUT_USD_PER_MTOK = 15.0
 USAGE_ESTIMATE_USD_JPY = 155
 
 CLAUDE_ARTICLE_MODEL_PRICING = {
-    'claude-sonnet-4-6': {'input_usd_per_mtok': 3.0, 'output_usd_per_mtok': 15.0},
-    'claude-opus-4-7':   {'input_usd_per_mtok': 15.0, 'output_usd_per_mtok': 75.0},
+    'claude-opus-5-5': {'input_usd_per_mtok': 4.0, 'output_usd_per_mtok': 20.0},
 }
 
 
 def get_article_model(settings=None):
-    """設定から記事生成モデル名を読み取る。未設定なら Sonnet 4.6（デフォルト）。
+    """設定から記事生成モデル名を読み取る。執筆は Opus 5.5 固定（保存値が旧モデルでも Opus 5.5）。
     ホワイトリスト外の値は無視してデフォルトを返す。"""
     if settings is None:
         try:
@@ -3208,7 +3208,7 @@ def extract_usage_value(usage, name):
 
 def build_article_usage(prompt, content, message=None):
     model_id = get_article_model()
-    pricing = CLAUDE_ARTICLE_MODEL_PRICING.get(model_id, CLAUDE_ARTICLE_MODEL_PRICING['claude-sonnet-4-6'])
+    pricing = CLAUDE_ARTICLE_MODEL_PRICING.get(model_id, CLAUDE_ARTICLE_MODEL_PRICING[CLAUDE_ARTICLE_MODEL])
     in_rate = pricing['input_usd_per_mtok']
     out_rate = pricing['output_usd_per_mtok']
     usage = getattr(message, 'usage', None) if message else None
@@ -3242,7 +3242,7 @@ def combine_article_usages(usages):
     if not valid:
         return build_article_usage('', '')
     model_id = get_article_model()
-    pricing = CLAUDE_ARTICLE_MODEL_PRICING.get(model_id, CLAUDE_ARTICLE_MODEL_PRICING['claude-sonnet-4-6'])
+    pricing = CLAUDE_ARTICLE_MODEL_PRICING.get(model_id, CLAUDE_ARTICLE_MODEL_PRICING[CLAUDE_ARTICLE_MODEL])
     in_rate = pricing['input_usd_per_mtok']
     out_rate = pricing['output_usd_per_mtok']
     input_tokens = sum(int(u.get('input_tokens') or 0) for u in valid)
@@ -3337,6 +3337,9 @@ def create_claude_message(client, prompt, max_tokens=None, timeout=None, model=N
         'max_tokens': max_tokens or CLAUDE_ARTICLE_MAX_TOKENS,
         'messages': [{'role': 'user', 'content': final_prompt}],
     }
+    if str(kwargs['model']).startswith('claude-opus-5'):
+        # Opus 5.5 は thinking disabled を400で拒否する。max_tokens は思考込みなので余裕を足す
+        kwargs['max_tokens'] = int(kwargs['max_tokens']) + 8000
     if system_blocks is not None:
         kwargs['system'] = system_blocks
     if timeout is not None:
@@ -6114,7 +6117,7 @@ def stream_claude_sse(client, prompt, wait_message='Claudeの応答を待って�
             with client.messages.stream(
                 model=get_article_model(),
                 max_tokens=max_tokens or CLAUDE_ARTICLE_MAX_TOKENS,
-                messages=[{"role": "user", "content": prompt}]
+                messages=[{"role": "user", "content": prompt}],
             ) as stream:
                 for text in stream.text_stream:
                     events.put(('text', text))
@@ -6441,9 +6444,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.2.4',
     },
     'rewrite': {
-        'file': 'affiros-rewrite-0.5.18.zip',
+        'file': 'affiros-rewrite-0.5.19.zip',
         'name': 'Affiros ポストプロセッサー',
-        'version': '0.5.18',
+        'version': '0.5.19',
     },
     'categorizer': {
         'file': 'affiros-categorizer-0.1.2.zip',
@@ -9988,7 +9991,7 @@ def get_settings():
     # 全体を見たい場合は /api/settings/reveal-secret/<field> を使う。
     safe = {
         'claude_api_key': mask_secret(settings.get('claude_api_key', ''), 10),
-        'claude_article_model': settings.get('claude_article_model', 'claude-sonnet-4-6'),
+        'claude_article_model': get_article_model(settings),
         'enable_prompt_cache': bool(settings.get('enable_prompt_cache', False)),
         'default_quality_id': settings.get('default_quality_id', 'default'),
         # v1.7.90: Amazon Creators API 認証
@@ -10048,7 +10051,7 @@ def update_settings():
     if 'claude_article_model' in data:
         # ホワイトリスト検証
         model_val = str(data.get('claude_article_model') or '').strip()
-        if model_val in ('claude-sonnet-4-6', 'claude-opus-4-7'):
+        if model_val in CLAUDE_ARTICLE_MODEL_PRICING:
             settings['claude_article_model'] = model_val
     if 'enable_prompt_cache' in data:
         # プロンプトキャッシュ有効/無効（v1.7.68 で管理画面から切替可能に）

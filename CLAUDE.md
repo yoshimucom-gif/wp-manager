@@ -109,7 +109,7 @@ wp_manager/
 ```
 
 - バックエンド：Python / Flask
-- AI生成：Anthropic API（Claude Sonnet 4.6、SSEストリーミング）
+- AI生成：Anthropic API（記事執筆は Claude Opus 5.5 固定・2026-11-11〜、SSEストリーミング）
 - 外部連携：WordPress REST API、Amazon PA-API v5、楽天市場商品検索API
 - ホスティング：Render.com（Singaporeリージョン）
 - データ永続化：JSONファイル（Renderのディスク /data にマウント）

@@ -21,7 +21,7 @@ class Affiros_Rewrite_Claude_API {
     public function __construct() {
         $settings = affiros_rewrite_get_settings();
         $this->api_key = $settings['claude_api_key'] ?? '';
-        $this->model = $settings['claude_model'] ?? 'claude-sonnet-4-6';
+        $this->model = 'claude-opus-5-5'; // 執筆は Opus 5.5 固定（v0.5.19）
     }
 
     public function is_configured() {
@@ -46,12 +46,16 @@ class Affiros_Rewrite_Claude_API {
         $body = [
             'model' => $this->model,
             'max_tokens' => $max_tokens,
+            // Opus 5.5 は思考が既定でオン（disabled は400で拒否される）。
+            // effort=medium で思考の深さを抑え、同期実行の時間に収める。
+            'thinking' => ['type' => 'adaptive'],
+            'output_config' => ['effort' => 'medium'],
             'messages' => [
                 ['role' => 'user', 'content' => $prompt],
             ],
         ];
         $request_args = [
-            'timeout' => 180,
+            'timeout' => 300,
             'headers' => [
                 'x-api-key' => $this->api_key,
                 'anthropic-version' => $this->version,

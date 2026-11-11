@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros ポストプロセッサー
  * Description: Affiros9 で生成した記事の後工程を全部やる統合ツール。Claude API リライト / 商品カード・マーカーの削除&挿入 / H2 章の並び替え / 段落整形。WP_Query 内部処理でホスティング WAF の影響を受けない（403 回避）。
- * Version: 0.5.18
+ * Version: 0.5.19
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-rewrite
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('AFFIROS_REWRITE_VERSION', '0.5.18');
+define('AFFIROS_REWRITE_VERSION', '0.5.19');
 define('AFFIROS_REWRITE_PATH', plugin_dir_path(__FILE__));
 define('AFFIROS_REWRITE_URL', plugin_dir_url(__FILE__));
 
@@ -63,7 +63,7 @@ add_action('init', function () {
 function affiros_rewrite_default_settings() {
     return [
         'claude_api_key' => '',
-        'claude_model' => 'claude-sonnet-4-6',
+        'claude_model' => 'claude-opus-5-5',
         'rewrite_mode' => 'seo',          // seo / readability / freshness
         'emphasis_level' => 'standard',   // light / standard / strong
         'tone' => 'natural',              // natural / professional / casual
@@ -81,16 +81,9 @@ function affiros_rewrite_default_settings() {
  * 現行IDへ寄せる。
  */
 function affiros_rewrite_migrate_model_id($model) {
-    $map = [
-        'claude-sonnet-4-5-20250929' => 'claude-sonnet-4-6',
-        'claude-sonnet-4-5'          => 'claude-sonnet-4-6',
-        'claude-opus-4-1-20250805'   => 'claude-opus-4-7',
-        'claude-opus-4-1'            => 'claude-opus-4-7',
-        'claude-3-5-haiku-20241022'  => 'claude-haiku-4-5-20251001',
-        'claude-3-5-haiku'           => 'claude-haiku-4-5-20251001',
-        'claude-haiku-4-5'           => 'claude-haiku-4-5-20251001',
-    ];
-    return $map[$model] ?? $model;
+    // v0.5.19: 記事の執筆・リライトは Opus 5.5 固定（2026-11-11 指示）。
+    // 保存済みの Sonnet 4.6 / Opus 4.7 / Haiku などは、すべて Opus 5.5 に寄せる。
+    return 'claude-opus-5-5';
 }
 
 /**

@@ -56,6 +56,7 @@ CHANGELOGS = {
     ("product-inserter",   "1.10.1"): GH_HANDOVER,
     ("reschedule",         "1.1.1"): GH_HANDOVER,
     ("rewrite",            "0.5.18"): GH_HANDOVER,
+    ("rewrite",            "0.5.19"): "0.5.19 — リライトの執筆モデルを Claude Opus 5.5 に固定。保存済みの Sonnet 4.6 / Opus 4.7 / Haiku 4.5 の設定は自動で Opus 5.5 に切り替わる（設定の保存し直しは不要）。Opus 5.5 は考えてから書くため、出力上限と待ち時間（300秒）を広げた。",
     ("rediver-helper",     "1.1.2"): REDIVER_112,
 }
 

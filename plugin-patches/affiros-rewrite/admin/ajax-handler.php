@@ -66,7 +66,7 @@ add_action('wp_ajax_affiros_rewrite_run_single', function () {
     $opts['insert_markers'] = !empty($_POST['insert_markers']) && $_POST['insert_markers'] !== '0';
 
     // PHP の実行時間を伸ばす（Claude API が長くかかるケースに備える）
-    @set_time_limit(180);
+    @set_time_limit(330); // Claude 呼び出しの timeout 300秒＋保存処理
 
     $result = Affiros_Rewrite_Engine::run($post_id, $opts);
     if (is_wp_error($result)) {

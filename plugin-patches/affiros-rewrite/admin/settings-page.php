@@ -29,7 +29,7 @@ add_action('admin_post_affiros_rewrite_save_settings', function () {
 
     $new = [
         'claude_api_key' => $new_api_key,
-        'claude_model' => sanitize_text_field($input['claude_model'] ?? $current['claude_model']),
+        'claude_model' => 'claude-opus-5-5', // 執筆は Opus 5.5 固定
         'rewrite_mode' => sanitize_text_field($input['rewrite_mode'] ?? 'seo'),
         'emphasis_level' => sanitize_text_field($input['emphasis_level'] ?? 'standard'),
         'tone' => sanitize_text_field($input['tone'] ?? 'natural'),
@@ -144,11 +144,9 @@ function affiros_rewrite_render_settings_page() {
                     <th><label for="claude_model">Claude モデル</label></th>
                     <td>
                         <select id="claude_model" name="affiros_rewrite[claude_model]">
-                            <option value="claude-sonnet-4-6" <?php selected($settings['claude_model'], 'claude-sonnet-4-6'); ?>>Claude Sonnet 4.6（推奨・コスパ良）</option>
-                            <option value="claude-opus-4-7" <?php selected($settings['claude_model'], 'claude-opus-4-7'); ?>>Claude Opus 4.7（最高品質・高コスト）</option>
-                            <option value="claude-haiku-4-5-20251001" <?php selected($settings['claude_model'], 'claude-haiku-4-5-20251001'); ?>>Claude Haiku 4.5（低コスト・速度優先）</option>
+                            <option value="claude-opus-5-5" selected>Claude Opus 5.5（記事執筆の既定・固定）</option>
                         </select>
-                        <p class="description">wp_manager 本体の記事生成モデルと揃えています。</p>
+                        <p class="description">記事の執筆・リライトは Opus 5.5 に固定しています（wp_manager 本体と同じ）。</p>
                     </td>
                 </tr>
             </table>

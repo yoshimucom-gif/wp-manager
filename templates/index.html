@@ -1580,11 +1580,10 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
             <div class="form-group">
               <label class="form-label">記事生成モデル</label>
               <select id="s-article-model" class="form-control" onchange="syncUsageEstimateConfigModel()">
-                <option value="claude-sonnet-4-6">Sonnet 4.6（推奨・コスパ良）</option>
-                <option value="claude-opus-4-7">Opus 4.7（最高品質・コスト高）</option>
+                <option value="claude-opus-5-5">Opus 5.5（記事執筆の既定・固定）</option>
               </select>
               <div style="font-size:11px;color:var(--muted);margin-top:4px">
-                Sonnet 4.6: 1記事 約 ¥72 実測 / Opus 4.7: 1記事 約 ¥360（Sonnetの5倍単価）。最高品質運用したい時だけ Opus に切替。
+                記事の執筆は Opus 5.5 に固定しています（2026-11-11）。
               </div>
             </div>
             <div class="form-group">
@@ -1976,6 +1975,16 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
           <div class="page-subtitle">Affiros9 本体の更新ログ（現在: <strong>v{{ app_version }}</strong>）</div>
         </div>
         <div style="max-width:780px">
+
+          <div class="settings-section">
+            <div class="section-header">// v1.9.62 / rewrite v0.5.19 (2026-11-11) — 記事の執筆モデルを Opus 5.5 に固定</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>指示</strong>: 記事執筆はすべて Claude Opus 5.5（<code>claude-opus-5-5</code>）で行う。</li>
+              <li><strong>変更</strong>: 記事生成モデルの既定・選択肢を Opus 5.5 だけにした。保存済みの Sonnet 4.6 / Opus 4.7 も Opus 5.5 として扱う。コスト目安は $4 / $20（1Mトークン）。</li>
+              <li><strong>思考</strong>: Opus 5.5 は思考が既定でオン（無効化は API が400で拒否）。出力上限が思考込みになるため、記事生成の max_tokens に +8000 の余裕を足した。</li>
+              <li><strong>バージョン同期</strong>: rewrite 0.5.18 → 0.5.19 / <code>APP_VERSION</code> 1.9.61 → 1.9.62。</li>
+            </ul>
+          </div>
 
           <div class="settings-section">
             <div class="section-header">// v1.9.61 / auto-inserter v0.20.1 (2026-10-25) — マイクロコピーの折り返し崩れを修正</div>
@@ -5015,13 +5024,12 @@ let siteList = [];
 let seoNewsList = [];
 let titleIdeaList = [];
 const MODEL_PRICING = {
-  'claude-sonnet-4-6': { inputUsdPerMTok: 3.0,  outputUsdPerMTok: 15.0 },
-  'claude-opus-4-7':   { inputUsdPerMTok: 15.0, outputUsdPerMTok: 75.0 },
+  'claude-opus-5-5': { inputUsdPerMTok: 4.0, outputUsdPerMTok: 20.0 },
 };
 const usageEstimateConfig = {
-  model: 'claude-sonnet-4-6',
-  inputUsdPerMTok: 3,
-  outputUsdPerMTok: 15,
+  model: 'claude-opus-5-5',
+  inputUsdPerMTok: 4,
+  outputUsdPerMTok: 20,
   usdJpy: 155,
   fallbackInputTokensPerArticle: 3500,
   outputCharsPerToken: 2,
@@ -5029,8 +5037,8 @@ const usageEstimateConfig = {
 /** 設定ページで選択されたモデルに合わせて usageEstimateConfig を更新する */
 function syncUsageEstimateConfigModel() {
   const sel = document.getElementById('s-article-model');
-  const modelId = sel ? sel.value : 'claude-sonnet-4-6';
-  const p = MODEL_PRICING[modelId] || MODEL_PRICING['claude-sonnet-4-6'];
+  const modelId = sel ? sel.value : 'claude-opus-5-5';
+  const p = MODEL_PRICING[modelId] || MODEL_PRICING['claude-opus-5-5'];
   usageEstimateConfig.model = modelId;
   usageEstimateConfig.inputUsdPerMTok  = p.inputUsdPerMTok;
   usageEstimateConfig.outputUsdPerMTok = p.outputUsdPerMTok;
@@ -9039,7 +9047,7 @@ async function loadSettings() {
   let s = await res.json();
   s = await restoreSettingsFromBrowserBackup(s);
   document.getElementById('s-claude-key').value = s.claude_api_key || '';
-  document.getElementById('s-article-model').value = s.claude_article_model || 'claude-sonnet-4-6';
+  document.getElementById('s-article-model').value = 'claude-opus-5-5';
   document.getElementById('s-enable-prompt-cache').checked = !!s.enable_prompt_cache;
   syncUsageEstimateConfigModel();   // 選択モデルに合わせてコスト単価を同期
   // v1.7.90: Amazon Creators API 認証
