@@ -91,8 +91,29 @@ function affiros_ai_sale_active($mall) {
  * カードHTML内の Amazon/楽天ボタン直上にマイクロコピーを注入する。
  * 記事内カード・サイドバー・ポップアップ (AJAX) すべてこの1本を通す。
  */
+/**
+ * リンク先URLからモールを判定する (v0.21.0)。ホスト名で見るので、
+ * 楽天アフィリエイトの hb.afl.rakuten.co.jp や amzn.to の短縮URLも拾える。
+ * @return string|null 'amazon' | 'rakuten' | null
+ */
+function affiros_ai_sale_mall_of_url($url) {
+    $host = strtolower((string)parse_url(html_entity_decode((string)$url, ENT_QUOTES), PHP_URL_HOST));
+    if ($host === '') return null;
+    if (preg_match('/(^|\.)amazon\.co\.jp$|(^|\.)amzn\.(to|asia)$/', $host)) return 'amazon';
+    if (preg_match('/(^|\.)rakuten\.co\.jp$/', $host)) return 'rakuten';
+    return null;
+}
+
+/** セール表示の差し込み先 (カードのボタン or 標準ボタンブロック) を含むか */
+function affiros_ai_sale_has_target($html) {
+    return is_string($html)
+        && (strpos($html, 'affiros-ai-btn') !== false || strpos($html, 'wp-block-button__link') !== false);
+}
+
 function affiros_ai_sale_decorate($html) {
-    if (!is_string($html) || $html === '' || strpos($html, 'affiros-ai-btn') === false) return $html;
+    if (!is_string($html) || $html === '' || !affiros_ai_sale_has_target($html)) return $html;
+    // 二重適用の防止: the_content が同じリクエストで2回通っても重ねない
+    if (strpos($html, 'class="affiros-ai-sale affiros-ai-sale-') !== false) return $html;
 
     $settings = affiros_ai_get_settings();
     if (($settings['sale_display'] ?? 'yes') !== 'yes') return $html;
@@ -107,6 +128,7 @@ function affiros_ai_sale_decorate($html) {
         ];
     }
 
+    $copies = [];
     foreach (['amazon', 'rakuten'] as $mall) {
         if (!$active[$mall]) continue;
         // ハブ指定の色をインラインで上書き (CSS既定はポチップ準拠の薄め)
@@ -115,22 +137,34 @@ function affiros_ai_sale_decorate($html) {
             : '';
         // ＼／はCSSの::before/::afterで付ける (v0.20.1)。本文に混ぜると
         // 狭い3カラムカードで折り返されて崩れるため、flexの1行固定にする
-        $copy = '<div class="affiros-ai-sale affiros-ai-sale-' . $mall
+        $copies[$mall] = '<div class="affiros-ai-sale affiros-ai-sale-' . $mall
               . ' affiros-sh-anim-' . esc_attr($active[$mall]['anim']) . '"' . $style . '>'
               . '<span class="affiros-ai-sale-p">P</span>'
               . '<span class="affiros-ai-sale-t">' . esc_html($active[$mall]['label']) . '</span></div>';
         $html = preg_replace(
             '/(<a[^>]*affiros-ai-btn-' . $mall . '[^>]*>)/u',
-            $copy . '$1',
+            $copies[$mall] . '$1',
             $html
         );
+    }
+    if (!$copies) return $html;
+
+    // 標準ボタンブロック (v0.21.0)。おすすめ記事の「Amazonで見る／楽天市場で見る」は
+    // wp:button で焼き込まれていてカードのクラスを持たないので、リンク先でモールを判定する。
+    // 対象はボタンだけ (比較表・本文中のテキストリンクには出さない)。
+    if (strpos($html, 'wp-block-button__link') !== false) {
+        $html = preg_replace_callback('/<a\b[^>]*\bwp-block-button__link\b[^>]*>/u', function ($m) use ($copies) {
+            if (!preg_match('/\bhref\s*=\s*(["\'])(.*?)\1/i', $m[0], $h)) return $m[0];
+            $mall = affiros_ai_sale_mall_of_url($h[2]);
+            return ($mall && isset($copies[$mall])) ? $copies[$mall] . $m[0] : $m[0];
+        }, $html);
     }
     return $html;
 }
 
-// 記事本文 (焼き込み済みカード含む)。見出し差し替え (priority 20) の後に走らせる
+// 記事本文 (焼き込み済みカード・標準ボタンブロック含む)。見出し差し替え (priority 20) の後に走らせる
 add_filter('the_content', function ($content) {
-    if (strpos($content, 'affiros-ai-btn') === false) return $content;
+    if (!affiros_ai_sale_has_target($content)) return $content;
     return affiros_ai_sale_decorate($content);
 }, 21);
 

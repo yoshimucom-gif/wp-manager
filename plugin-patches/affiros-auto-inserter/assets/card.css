@@ -286,6 +286,11 @@
 .affiros-ai-sale-amazon .affiros-ai-sale-p { background: #e65100; }
 /* .affiros-ai-btns は gap:8px の縦flex。コピーとボタンの間だけ詰める */
 .affiros-ai-btns .affiros-ai-sale { margin: 0 0 -5px !important; }
+/* 標準ボタンブロック (v0.21.0・おすすめ記事のAmazon/楽天ボタン)。
+ * コピーはボタンの内側の列に入るので、片方のモールだけセール中でも
+ * 横並びのボタンの下端がそろうよう、行を下寄せにする */
+.wp-block-button > .affiros-ai-sale { margin: 0 0 3px !important; }
+.wp-block-buttons:has(> .wp-block-button > .affiros-ai-sale) { align-items: flex-end !important; }
 
 @keyframes affiros-sh-blink  { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
 @keyframes affiros-sh-bounce { 0%, 20%, 50%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-4px); } 60% { transform: translateY(-2px); } }
