@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.8.1
+ * Version:     1.8.2
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.8.1';
+    const VERSION  = '1.8.2';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -348,21 +348,30 @@ class Kurabe_Db
         'shop'   => array('pc' => array(597338, 1953234), 'sp' => array(598550, 1953235)),
     );
 
-    /* オートインサーターの商品カード [affiros_ai_card] をこのサイトでは出さない（2026-11-17 吉村さん「amazonなくして、ここにもいれて」）。
-       本文は全788本とも「数字欄の後」と「100均にない◯◯を探すなら欄の後」の2か所。
-       1つ目は直前に記事上の広告があるので空に、2つ目は広告枠に置き換える。本文のショートコードは残す（戻すときはここを外すだけ） */
+    /* オートインサーターの商品カード [affiros_ai_card]。本文は全788本とも「数字欄の後」と「100均にない◯◯を探すなら欄の後」の2か所。
+       1つ目（数字欄の後）は出さない（2026-11-17「amazonなくして」・直前に記事上の広告がある）。
+       2つ目は「探すなら」のボタンの下にカード、その下に i-mobile 枠（2026-11-17「カード出して、そのしたにimobile」） */
     private static $card_n = 0;
+    private static $card_cb = null;
 
     public static function replace_affiros_card()
     {
+        global $shortcode_tags;
+        if (isset($shortcode_tags['affiros_ai_card'])) {
+            self::$card_cb = $shortcode_tags['affiros_ai_card'];   // オートインサーター本来の描画
+        }
         // the_content が1ページで何度呼ばれても（OGP用の抜粋など）、呼び出しごとに1つ目から数え直す
         add_filter('the_content', function ($c) {
             self::$card_n = 0;
             return $c;
         }, 1);
-        add_shortcode('affiros_ai_card', function () {
+        add_shortcode('affiros_ai_card', function ($atts, $content = '', $tag = '') {
             self::$card_n++;
-            return self::$card_n === 2 ? self::ad_slot('shop') : '';
+            if (self::$card_n !== 2) {
+                return '';
+            }
+            $card = is_callable(self::$card_cb) ? (string) call_user_func(self::$card_cb, $atts, $content, $tag) : '';
+            return $card . self::ad_slot('shop');
         });
     }
 
@@ -1128,8 +1137,8 @@ class Kurabe_Db
                 $h .= '<span>' . esc_html($s['note']) . '</span>';
             }
             $h .= '</div><div class="kurabe-shop-links">';
-            $h .= '<a href="' . esc_url(self::amazon_url($q)) . '" target="_blank" rel="nofollow sponsored noopener">Amazonで探す</a>';
-            $h .= '<a href="' . esc_url(self::rakuten_url($q)) . '" target="_blank" rel="nofollow sponsored noopener">楽天市場で探す</a>';
+            $h .= '<a href="' . esc_url(self::amazon_url($q)) . '" target="_blank" rel="nofollow sponsored noopener" class="kurabe-btn kurabe-btn-amazon">Amazonで探す</a>';
+            $h .= '<a href="' . esc_url(self::rakuten_url($q)) . '" target="_blank" rel="nofollow sponsored noopener" class="kurabe-btn kurabe-btn-rakuten">楽天市場で探す</a>';
             $h .= '</div></div>';
         }
         $h .= '</div><p class="kurabe-adnote">上のリンクは広告（アフィリエイト）を含みます。価格と在庫はリンク先でご確認ください。</p>';

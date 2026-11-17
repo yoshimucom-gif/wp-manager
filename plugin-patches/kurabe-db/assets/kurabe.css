@@ -256,8 +256,12 @@ aside .kurabe-top-store-go{font-size:14px;padding-top:8px}
 .kurabe-shop-cond b{font-size:16px;color:var(--k-ink)}
 .kurabe-shop-cond span{font-size:13.5px;color:var(--k-ink2)}
 .kurabe-shop-links{display:flex;flex-wrap:wrap;gap:8px 18px}
-.kurabe-shop-links a{color:var(--k-accent);font-weight:700;font-size:15px;white-space:nowrap}
-.kurabe-shop-links a::after{content:" ›"}
+/* 1.8.2 ボタン化（吉村さん「それぞれの色で」）。色は商品カードのボタンと同じ */
+.kurabe-shop-links a.kurabe-btn{display:inline-flex;align-items:center;justify-content:center;min-width:150px;padding:9px 16px;border-radius:6px;color:#fff;font-weight:700;font-size:14.5px;line-height:1.3;white-space:nowrap;text-decoration:none;box-shadow:0 2px 0 rgba(0,0,0,.12)}
+.kurabe-shop-links a.kurabe-btn:hover{opacity:.88;color:#fff}
+.kurabe-btn-amazon{background:linear-gradient(180deg,#ffa726,#fb8c00)}
+.kurabe-btn-rakuten{background:linear-gradient(180deg,#d63a3a,#b71c1c)}
+@media (max-width:767px){.kurabe-shop-links{width:100%;gap:8px}.kurabe-shop-links a.kurabe-btn{flex:1 1 0;min-width:0}}
 .kurabe-adnote{font-size:13.5px;color:#56636E;margin:.5em 0 1.5em}
 
 /* 関連する品目：箱にせず、文字のリンクを折り返して並べる */
