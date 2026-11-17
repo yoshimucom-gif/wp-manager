@@ -321,3 +321,14 @@ aside .kurabe-top-store-go{font-size:14px;padding-top:8px}
   .kurabe-table tbody td.kurabe-td-store,.kurabe-table tbody tr:first-child td.kurabe-td-store{padding:0 0 6px!important}
   .kurabe-table tbody td.kurabe-td-name,.kurabe-table tbody tr:first-child td.kurabe-td-name{padding:0 0 10px!important;margin:0 0 6px;border-bottom:1px solid var(--k-line2)!important}
 }
+
+/* i-mobile の広告枠（1.8.0）。読み込み前から高さを取ってガタつきを防ぐ */
+.kurabe-ad{margin:2em auto;text-align:center}
+.kurabe-ad-label{display:block;font-size:12px;color:#888;margin-bottom:4px}
+.kurabe-ad-box{display:flex;justify-content:center;margin:0 auto}
+.kurabe-ad-top .kurabe-ad-box{min-height:90px}
+.kurabe-ad-mid .kurabe-ad-box,.kurabe-ad-bottom .kurabe-ad-box{min-height:280px}
+@media (max-width:767px){
+.kurabe-ad-top .kurabe-ad-box{min-height:100px}
+.kurabe-ad-mid .kurabe-ad-box,.kurabe-ad-bottom .kurabe-ad-box{min-height:250px}
+}

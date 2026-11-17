@@ -145,3 +145,23 @@
     });
   });
 })();
+
+/* i-mobile の広告枠（1.8.0）。画面幅767px以下はスマホ用スポット、それ以外はPC用 */
+(function () {
+  var ads = document.querySelectorAll('.kurabe-ad[data-pc]');
+  if (!ads.length) return;
+  var sp = window.matchMedia('(max-width: 767px)').matches;
+  var q = (window.adsbyimobile = window.adsbyimobile || []);
+  Array.prototype.forEach.call(ads, function (el, i) {
+    var ids = (el.getAttribute(sp ? 'data-sp' : 'data-pc') || '').split(',');
+    var box = el.querySelector('.kurabe-ad-box');
+    if (ids.length !== 2 || !box) return;
+    el.classList.add(sp ? 'is-sp' : 'is-pc');
+    box.id = 'im-kurabe-' + i;
+    q.push({ pid: +el.getAttribute('data-pid'), mid: +ids[0], asid: +ids[1], type: 'banner', display: 'inline', elementid: box.id });
+  });
+  var s = document.createElement('script');
+  s.async = true;
+  s.src = 'https://imp-adedge.i-mobile.co.jp/script/v1/spot.js?20220104';
+  document.head.appendChild(s);
+})();

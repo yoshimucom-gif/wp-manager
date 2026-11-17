@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.7.4
+ * Version:     1.8.0
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.7.4';
+    const VERSION  = '1.8.0';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -319,11 +319,42 @@ class Kurabe_Db
         }
         wp_enqueue_style('kurabe-db');
         wp_enqueue_script('kurabe-db');
-        $fn = 'part_' . preg_replace('/[^a-z]/', '', $a['part']);
+        $part = preg_replace('/[^a-z]/', '', $a['part']);
+        $fn   = 'part_' . $part;
         if (!method_exists(__CLASS__, $fn)) {
             return '';
         }
-        return self::$fn($d);
+        $out = self::$fn($d);
+        // i-mobile の広告枠（2026-11-17）。記事上＝数字欄の前、記事中＝一覧表の後、記事下＝まとめの後
+        if ($part === 'stats' && $out !== '') {
+            $out = self::ad_slot('top') . $out;
+        } elseif ($part === 'table' && $out !== '') {
+            $out .= self::ad_slot('mid');
+        } elseif ($part === 'related') {
+            $out = self::ad_slot('bottom') . $out;
+        }
+        return $out;
+    }
+
+    /* i-mobile のスポット。PCとスマホは i-mobile 側で別サイト扱いなので両方のIDを持たせ、
+       画面幅で kurabe.js が片方だけ読み込む（ページキャッシュがあっても端末で取り違えない）。
+       タグ本体（<script>）は本文に書かない＝ConoHa WAF に触れない */
+    const IMOBILE_PID = 85597;
+    const IMOBILE = array(
+        'top'    => array('pc' => array(597338, 1953230), 'sp' => array(598550, 1953233)),
+        'mid'    => array('pc' => array(597338, 1953228), 'sp' => array(598550, 1953231)),
+        'bottom' => array('pc' => array(597338, 1953229), 'sp' => array(598550, 1953232)),
+    );
+
+    private static function ad_slot($pos)
+    {
+        if (!is_singular('post') || !in_the_loop() || !apply_filters('kurabe_db_show_ads', true, $pos)) {
+            return '';
+        }
+        $s = self::IMOBILE[$pos];
+        return '<div class="kurabe-ad kurabe-ad-' . esc_attr($pos) . '" data-pid="' . self::IMOBILE_PID . '"'
+            . ' data-pc="' . esc_attr(implode(',', $s['pc'])) . '" data-sp="' . esc_attr(implode(',', $s['sp'])) . '">'
+            . '<span class="kurabe-ad-label">スポンサーリンク</span><div class="kurabe-ad-box"></div></div>';
     }
 
     /* 絞り込みと縮尺図が使うデータ。本文中の <script> はサイトによって削られるため、
