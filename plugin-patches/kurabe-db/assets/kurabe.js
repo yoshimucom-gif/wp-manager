@@ -165,3 +165,25 @@
   s.src = 'https://imp-adedge.i-mobile.co.jp/script/v1/spot.js?20220104';
   document.head.appendChild(s);
 })();
+
+/* 1.8.3 配信されなかった枠は畳む。「スポンサーリンク」の札と空白だけが残るのを防ぐ
+   （i-mobile が no_ad を返した枠・配信開始前の新規スポット）。広告が入れば何もしない */
+(function () {
+  var ads = document.querySelectorAll('.kurabe-ad[data-pc]');
+  if (!ads.length) return;
+  function filled(el) {
+    var box = el.querySelector('.kurabe-ad-box');
+    return box && box.querySelector('iframe,img,a,ins,div') !== null;
+  }
+  setTimeout(function () {
+    Array.prototype.forEach.call(ads, function (el) {
+      if (filled(el)) return;
+      el.classList.add('is-empty');
+      if (window.MutationObserver) {
+        new MutationObserver(function (m, ob) {
+          if (filled(el)) { el.classList.remove('is-empty'); ob.disconnect(); }
+        }).observe(el.querySelector('.kurabe-ad-box'), { childList: true, subtree: true });
+      }
+    });
+  }, 6000);
+})();

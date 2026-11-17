@@ -338,3 +338,4 @@ aside .kurabe-top-store-go{font-size:14px;padding-top:8px}
 }
 .kurabe-ad-shop .kurabe-ad-box{min-height:280px}
 @media (max-width:767px){.kurabe-ad-shop .kurabe-ad-box{min-height:250px}}
+.kurabe-ad.is-empty{display:none}
