@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.8.0
+ * Version:     1.8.1
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.8.0';
+    const VERSION  = '1.8.1';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -36,6 +36,7 @@ class Kurabe_Db
     {
         add_action('init', array(__CLASS__, 'register_meta'));
         add_shortcode('kurabe', array(__CLASS__, 'shortcode'));
+        add_action('init', array(__CLASS__, 'replace_affiros_card'), 99);
         add_action('wp_enqueue_scripts', array(__CLASS__, 'assets'));
         add_action('admin_menu', array(__CLASS__, 'admin_menu'));
         add_action('admin_init', array(__CLASS__, 'admin_init'));
@@ -344,7 +345,26 @@ class Kurabe_Db
         'top'    => array('pc' => array(597338, 1953230), 'sp' => array(598550, 1953233)),
         'mid'    => array('pc' => array(597338, 1953228), 'sp' => array(598550, 1953231)),
         'bottom' => array('pc' => array(597338, 1953229), 'sp' => array(598550, 1953232)),
+        'shop'   => array('pc' => array(597338, 1953234), 'sp' => array(598550, 1953235)),
     );
+
+    /* オートインサーターの商品カード [affiros_ai_card] をこのサイトでは出さない（2026-11-17 吉村さん「amazonなくして、ここにもいれて」）。
+       本文は全788本とも「数字欄の後」と「100均にない◯◯を探すなら欄の後」の2か所。
+       1つ目は直前に記事上の広告があるので空に、2つ目は広告枠に置き換える。本文のショートコードは残す（戻すときはここを外すだけ） */
+    private static $card_n = 0;
+
+    public static function replace_affiros_card()
+    {
+        // the_content が1ページで何度呼ばれても（OGP用の抜粋など）、呼び出しごとに1つ目から数え直す
+        add_filter('the_content', function ($c) {
+            self::$card_n = 0;
+            return $c;
+        }, 1);
+        add_shortcode('affiros_ai_card', function () {
+            self::$card_n++;
+            return self::$card_n === 2 ? self::ad_slot('shop') : '';
+        });
+    }
 
     private static function ad_slot($pos)
     {
