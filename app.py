@@ -6483,6 +6483,11 @@ PLUGIN_DOWNLOADS = {
         'name': 'Affiros 黄色マーカー削除',
         'version': '1.0.1',
     },
+    'kawaerabi-taxonomy': {
+        'file': 'kawaerabi-taxonomy-1.0.0.zip',
+        'name': '革えらび 掛け算タクソノミー',
+        'version': '1.0.0',
+    },
     'cat-eyecatch': {
         'file': 'affiros-cat-eyecatch-1.0.1.zip',
         'name': 'Affiros カテゴリーアイキャッチ',
@@ -6618,6 +6623,13 @@ PLUGIN_UPDATE_META = {
         'requires': '5.8',
         'requires_php': '7.4',
         'author':   'Affiros',
+    },
+    'kawaerabi-taxonomy': {
+        'plugin_basename': 'kawaerabi-taxonomy/kawaerabi-taxonomy.php',
+        'tested':   '6.7',
+        'requires': '6.0',
+        'requires_php': '7.4',
+        'author':   'Keys',
     },
     'cat-eyecatch': {
         'plugin_basename': 'affiros-cat-eyecatch/affiros-cat-eyecatch.php',
