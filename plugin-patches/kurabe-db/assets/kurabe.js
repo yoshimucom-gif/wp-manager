@@ -15,6 +15,28 @@
     var tbody = box.querySelector('tbody');
     var trs = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
     var state = { s: {}, p: {}, fit: [], sort: null, dir: 'asc' };
+    /* 1.9.0 大きい表は最初の50件だけ描かれている。もっと見る・絞り込み・並べ替えを使ったら残りを取ってから動かす */
+    var moreUrl = box.getAttribute('data-more'), loading = null;
+    function ensureAll(cb) {
+      if (!moreUrl) { cb(); return; }
+      if (!loading) {
+        var mb = box.querySelector('.kurabe-more');
+        if (mb) { mb.disabled = true; mb.textContent = '読み込み中…'; }
+        loading = fetch(moreUrl, { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (j) {
+          tbody.insertAdjacentHTML('beforeend', j.html || '');
+          trs = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+          moreUrl = null;
+          var mbox = box.querySelector('.kurabe-morebox');
+          if (mbox) mbox.hidden = true;
+        }).catch(function () {
+          if (mb) { mb.disabled = false; mb.textContent = 'もう一度読み込む'; }
+          loading = null;
+        });
+      }
+      loading.then(cb);
+    }
+    var moreBtn = box.querySelector('.kurabe-more');
+    if (moreBtn) moreBtn.addEventListener('click', function () { ensureAll(render); });
     box.querySelectorAll('.kurabe-chips').forEach(function (g) {
       var key = g.getAttribute('data-filter');
       g.querySelectorAll('.kurabe-chip').forEach(function (b) {
@@ -23,7 +45,7 @@
           var v = b.getAttribute('data-v');
           state[key][v] = !state[key][v];
           b.setAttribute('aria-pressed', state[key][v] ? 'true' : 'false');
-          render();
+          ensureAll(render);
         });
       });
     });
@@ -32,7 +54,7 @@
       inp.addEventListener('input', function () {
         var v = parseFloat(inp.value);
         state.fit[+inp.getAttribute('data-i')] = isNaN(v) ? null : v;
-        render();
+        ensureAll(render);
       });
     });
     var btns = box.querySelectorAll('th button');
@@ -43,7 +65,7 @@
         state.sort = k;
         btns.forEach(function (x) { x.removeAttribute('data-dir'); });
         b.setAttribute('data-dir', state.dir);
-        render();
+        ensureAll(render);
       });
     });
 

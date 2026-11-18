@@ -440,3 +440,8 @@ aside .kurabe-top-store-go{font-size:14px;padding-top:8px}
 .kurabe-g2-main{grid-template-columns:1fr;gap:28px}
 .kurabe-g2-rest{columns:1}
 }
+
+/* 1.9.0 大きい表の「残りをすべて表示」 */
+.kurabe-morebox{text-align:center;margin:14px 0 4px}
+.kurabe-more{padding:10px 26px;border:1px solid #333;border-radius:24px;background:#fff;color:#333;font-weight:700;font-size:15px;cursor:pointer}
+.kurabe-more:disabled{opacity:.6;cursor:default}

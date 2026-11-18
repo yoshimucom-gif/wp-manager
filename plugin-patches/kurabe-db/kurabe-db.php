@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.8.15
+ * Version:     1.9.0
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,9 +23,10 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.8.15';
+    const VERSION  = '1.9.0';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
+    const FIRST    = 50;      // 1.9.0 一覧表の最初に描く行数（残りは「もっと見る」で取りに行く）
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
     /* 店名バッジと絞り込みに出す表記（各社のロゴ表記） */
     const LABELS   = array('ダイソー' => 'DAISO', 'キャンドゥ' => 'Can★Do', 'ワッツ' => 'Watts');
@@ -138,6 +139,11 @@ class Kurabe_Db
                 }
                 return $out;
             },
+        ));
+        register_rest_route('kdb/v1', '/rows', array(
+            'methods'             => 'GET',
+            'permission_callback' => '__return_true',
+            'callback'            => array(__CLASS__, 'rest_rows'),
         ));
         register_rest_route('kdb/v1', '/selfupdate', array(
             'methods'             => 'POST',
@@ -546,7 +552,13 @@ class Kurabe_Db
         }
         $h .= '</div>';
 
-        $h .= '<p class="kurabe-count" aria-live="polite"><b>' . count($d['rows']) . '</b> 件を表示中</p>';
+        // 1.9.0 大きい表は最初の FIRST 件だけ描き、残りは「もっと見る」か絞り込み・並べ替えを使った時点で取りに行く
+        // （545種で HTML 539KB・応答1.5秒。吉村さん「多すぎてページの読み込みも遅い」2026-11-18）
+        $total = count($d['rows']);
+        $first = $total > self::FIRST + 10 ? self::FIRST : $total;
+        $more  = $first < $total ? ' data-more="' . esc_url(add_query_arg(array('id' => get_the_ID(), 'from' => $first), rest_url('kdb/v1/rows'))) . '" data-total="' . $total . '"' : '';
+        $h = str_replace('<div class="kurabe-table" data-mode=', '<div class="kurabe-table"' . $more . ' data-mode=', $h);
+        $h .= '<p class="kurabe-count" aria-live="polite"><b>' . $first . '</b> 件を表示中' . ($first < $total ? '（全' . $total . '件）' : '') . '</p>';
         $h .= '<div class="kurabe-tablebox"><table><thead><tr>';
         $h .= '<th scope="col">店</th><th scope="col">商品名</th>';
         if ($mode !== 'none') {
@@ -559,7 +571,26 @@ class Kurabe_Db
         }
         $h .= '</tr></thead><tbody>';          // 公式ページへは商品名のリンクで飛ぶので「公式」列は置かない（吉村さん指定）
 
-        foreach ($d['rows'] as $i => $r) {
+        foreach (array_slice($d['rows'], 0, $first, true) as $i => $r) {
+            $h .= self::row_html($d, $i, $r);
+        }
+        $h .= '</tbody></table></div>';
+        if ($first < $total) {
+            $h .= '<p class="kurabe-morebox"><button type="button" class="kurabe-more">残り' . ($total - $first) . '件をすべて表示</button></p>';
+        }
+        $h .= '<p class="kurabe-empty" hidden>条件に合う商品がありません。条件をゆるめてみてください。</p>';
+        $h .= '</div>';
+        return $h;
+    }
+
+    /** 一覧表の1行。最初の描画と /kdb/v1/rows（残りの行）で同じものを使う */
+    private static function row_html($d, $i, $r)
+    {
+        $mode  = isset($d['mode']) ? $d['mode'] : 'none';
+        $cols  = isset($d['cols']) && is_array($d['cols']) ? $d['cols'] : array();
+        $label = isset($d['size_label']) ? $d['size_label'] : 'サイズ（cm）';
+        $h = '';
+        {
             $attrs = ' data-i="' . $i . '" data-s="' . esc_attr($r['s']) . '" data-p="' . esc_attr(isset($r['p']) ? $r['p'] : '') . '"';
             $attrs .= ' data-sz="' . esc_attr(isset($r['sz']) ? $r['sz'] : '') . '"';
             foreach ($cols as $key => $cl) {
@@ -590,10 +621,28 @@ class Kurabe_Db
             }
             $h .= '</tr>';
         }
-        $h .= '</tbody></table></div>';
-        $h .= '<p class="kurabe-empty" hidden>条件に合う商品がありません。条件をゆるめてみてください。</p>';
-        $h .= '</div>';
         return $h;
+    }
+
+    /** /kdb/v1/rows?id=&from= ：一覧表の残りの行（公開中の記事だけ。誰でも読める） */
+    public static function rest_rows($req)
+    {
+        $id = (int) $req->get_param('id');
+        $from = max(0, (int) $req->get_param('from'));
+        if (!$id || get_post_status($id) !== 'publish') {
+            return new WP_Error('not_found', '記事がありません', array('status' => 404));
+        }
+        $d = self::data($id);
+        if (!$d) {
+            return new WP_Error('not_found', '比較データがありません', array('status' => 404));
+        }
+        $h = '';
+        foreach (array_slice($d['rows'], $from, null, true) as $i => $r) {
+            $h .= self::row_html($d, $i, $r);
+        }
+        $res = new WP_REST_Response(array('html' => $h, 'total' => count($d['rows'])));
+        $res->header('Cache-Control', 'public, max-age=3600');
+        return $res;
     }
 
     private static function part_scale($d)
@@ -1161,15 +1210,11 @@ class Kurabe_Db
             });
             $link = get_term_link($g['term']);
             // カバー画像（吉村さん 2026-11-18「画像があると印象違う。カバーの機能とか」）
-            // カテゴリー画像（re:Diver の termmeta media_id）を優先。無ければそのジャンルで一番大きい比較表のアイキャッチの下側
-            // （アイキャッチは上半分にタイトル文字が入っているので、下寄せで写真の部分だけ見せる）
+            // 画像はカテゴリー画像（re:Diver の termmeta media_id・写真ACからジャンルごとに選ぶ）だけ。
+            // 記事のアイキャッチは流用しない（吉村さん 2026-11-18「記事の個別アイキャッチをカテゴリー画像みたいに魅せるのはちがくない？」）
             $mid = (int) get_term_meta($g['term']->term_id, 'media_id', true);
             $img = $mid ? wp_get_attachment_image_url($mid, 'large') : '';
             $pos = '50% 50%';
-            if (!$img && !empty($g['rows'][0]['id'])) {
-                $img = get_the_post_thumbnail_url($g['rows'][0]['id'], 'large');
-                $pos = '50% 100%';
-            }
             $h .= '<section class="kurabe-g2-genre">';
             $h .= '<a class="wp-block-cover kurabe-g2-cover" href="' . esc_url($link) . '">'
                 . ($img ? '<img class="wp-block-cover__image-background" src="' . esc_url($img) . '" alt="" loading="lazy" style="object-position:' . $pos . '">' : '')
