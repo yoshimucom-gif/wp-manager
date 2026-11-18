@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.8.12
+ * Version:     1.8.13
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.8.12';
+    const VERSION  = '1.8.13';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -309,6 +309,12 @@ class Kurabe_Db
         $url = plugin_dir_url(__FILE__) . 'assets/';
         wp_register_style('kurabe-db', $url . 'kurabe.css', array(), self::VERSION);
         wp_register_script('kurabe-db', $url . 'kurabe.js', array(), self::VERSION, true);
+        // 閲覧数順の一覧（サイドバーの「よく見られている比較」など・横長レイアウト）で、順位の帯が幅10px・余白0になり
+        // 数字が角で切れる（re:Diver の l-pb-inline が padding:0 にする・2026-11-18 実測）。全ページのサイドバーに出るので常に読み込む
+        wp_register_style('kurabe-rank-fix', false, array(), self::VERSION);
+        wp_enqueue_style('kurabe-rank-fix');
+        wp_add_inline_style('kurabe-rank-fix', ':where(.wrap-pb).is-sortby-views.l-pb-inline .p-count{padding:3px 0 9px;min-width:1.8em;text-align:center;line-height:1.2;left:8px}'
+            . ':where(.wrap-pb).is-sortby-views.l-pb-inline .pb-contents{padding-left:48px}');
     }
 
     public static function shortcode($atts)
