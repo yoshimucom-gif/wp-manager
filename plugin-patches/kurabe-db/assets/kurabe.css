@@ -375,7 +375,7 @@ aside .kurabe-top-store-go{font-size:14px;padding-top:8px}
 .kurabe-hero-by{margin:12px 0 0;font-size:14px;color:#666}
 .kurabe-hero-by a{color:#666}
 @media (max-width:767px){
-.kurabe-hero{grid-template-columns:1fr;gap:28px}
+.kurabe-hero{grid-template-columns:1fr;gap:28px;padding-inline:16px}
 .kurabe-hero-facts{padding-top:0}
 .kurabe-hero-search button{flex-basis:84px}
 .kurabe-hero-nums b{font-size:28px}
