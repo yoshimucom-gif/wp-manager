@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.8.10
+ * Version:     1.8.11
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.8.10';
+    const VERSION  = '1.8.11';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -778,6 +778,12 @@ class Kurabe_Db
         if ($a['part'] === 'hero') {
             return self::top_hero($posts);
         }
+        if ($a['part'] === 'reports') {
+            return self::top_reports();
+        }
+        if ($a['part'] === 'genres2') {
+            return self::top_genres2($posts);
+        }
         if ($a['part'] === 'season') {
             wp_enqueue_script('kurabe-db');
             return self::top_season($posts, (string) $a['tabs']);
@@ -1079,6 +1085,88 @@ class Kurabe_Db
                 $h .= '<a class="kurabe-genre-more" href="' . esc_url($link) . '">' . esc_html($g['term']->name) . 'をすべて見る</a>';
             }
             $h .= '</div></section>';
+        }
+        return $h . '</div>';
+    }
+
+    /* 独自調査レポート（吉村さん 2026-11-18「独自ツールはもっと目立たせる方法ある？」）
+       結論の数字を大きく・グラフを見せる・「独自調査」の札。1本目を大きく、残りを右に縦積み（等幅3列をやめる）。
+       数字は各レポートの投稿メタ kurabe_report {fig,label,sub}（本文の数字から人が入れる）。無いレポートは抜粋で出す */
+    private static function top_reports()
+    {
+        $ps = get_posts(array('post_type' => 'post', 'post_status' => 'publish', 'posts_per_page' => 3, 'meta_key' => 'kurabe_report', 'suppress_filters' => true));
+        if (!$ps) {
+            return '';
+        }
+        $h = '<div class="kurabe-reports">';
+        foreach ($ps as $i => $p) {
+            $m = json_decode((string) get_post_meta($p->ID, 'kurabe_report', true), true);
+            $img = '';
+            if (preg_match('#<img[^>]+src="([^"]+)"#', $p->post_content, $mm)) {
+                $img = $mm[1];
+            } elseif (has_post_thumbnail($p)) {
+                $img = get_the_post_thumbnail_url($p, 'large');
+            }
+            $h .= '<a class="kurabe-report' . ($i === 0 ? ' is-main' : '') . '" href="' . esc_url(get_permalink($p)) . '">';
+            if ($img) {
+                $h .= '<span class="kurabe-report-img"><img src="' . esc_url($img) . '" alt="" loading="lazy"></span>';
+            }
+            $h .= '<span class="kurabe-report-body"><span class="kurabe-report-badge">100均くらべ独自調査</span>';
+            if (is_array($m) && !empty($m['fig'])) {
+                $h .= '<span class="kurabe-report-fig">' . esc_html($m['fig']) . '</span>'
+                    . '<span class="kurabe-report-label">' . esc_html($m['label']) . '</span>'
+                    . (!empty($m['sub']) ? '<span class="kurabe-report-sub">' . esc_html($m['sub']) . '</span>' : '');
+            }
+            $h .= '<span class="kurabe-report-title">' . esc_html(get_the_title($p)) . '</span></span></a>';
+        }
+        return $h . '</div>';
+    }
+
+    /* ジャンル一覧の作り直し（吉村さん 2026-11-18「ここがAIっぽすぎるのかな？」）
+       同じ角丸の箱×23をやめる：上位6ジャンルは箱なしで線1本＋品目（2列）、残りは名前と本数の一覧。
+       数字は比較表の本数（「1438種」のような商品数は出さない）。公開済みだけを数える（ログイン中でも下書きを混ぜない） */
+    private static function top_genres2($posts)
+    {
+        $by = array();
+        foreach ($posts as $p) {
+            if ($p->post_status !== 'publish') {
+                continue;
+            }
+            $cats = get_the_category($p->ID);
+            if (!$cats) {
+                continue;
+            }
+            $c = $cats[0];
+            if (!isset($by[$c->term_id])) {
+                $by[$c->term_id] = array('term' => $c, 'rows' => array());
+            }
+            $by[$c->term_id]['rows'][] = array('url' => get_permalink($p), 'item' => get_post_meta($p->ID, 'kurabe_item', true), 'total' => (int) get_post_meta($p->ID, 'kurabe_count', true));
+        }
+        uasort($by, function ($x, $y) {
+            return count($y['rows']) - count($x['rows']);
+        });
+        $main = array_slice($by, 0, 6, true);
+        $rest = array_slice($by, 6, null, true);
+        $h = '<div class="kurabe-g2"><div class="kurabe-g2-main">';
+        foreach ($main as $g) {
+            usort($g['rows'], function ($x, $y) {
+                return $y['total'] - $x['total'];
+            });
+            $link = get_term_link($g['term']);
+            $h .= '<section class="kurabe-g2-genre"><h3 class="kurabe-g2-name">' . self::genre_icon($g['term']->name, $g['term']->term_id)
+                . '<a href="' . esc_url($link) . '">' . esc_html($g['term']->name) . '</a><span>比較表 ' . count($g['rows']) . '本</span></h3><p class="kurabe-g2-items">';
+            foreach (array_slice($g['rows'], 0, 8) as $r) {
+                $h .= '<a href="' . esc_url($r['url']) . '">' . esc_html($r['item']) . '</a>';
+            }
+            $h .= '<a class="kurabe-g2-more" href="' . esc_url($link) . '">すべて見る ›</a></p></section>';
+        }
+        $h .= '</div>';
+        if ($rest) {
+            $h .= '<p class="kurabe-g2-rest-head">そのほかのジャンル</p><ul class="kurabe-g2-rest">';
+            foreach ($rest as $g) {
+                $h .= '<li><a href="' . esc_url(get_term_link($g['term'])) . '">' . esc_html($g['term']->name) . '</a><span>' . count($g['rows']) . '本</span></li>';
+            }
+            $h .= '</ul>';
         }
         return $h . '</div>';
     }
