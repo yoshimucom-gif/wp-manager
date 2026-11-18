@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.9.3
+ * Version:     1.9.4
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.9.3';
+    const VERSION  = '1.9.4';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const FIRST    = 50;      // 1.9.0 一覧表の最初に描く行数（残りは「もっと見る」で取りに行く）
@@ -1036,7 +1036,6 @@ class Kurabe_Db
             . ($ym ? '<div><dt>最終確認</dt><dd><b class="kurabe-hero-s">' . esc_html($ym) . '</b></dd></div>' : '')
             . '</dl><p class="kurabe-hero-stores">';
         $h .= '<a href="' . esc_url(home_url('/data-policy/')) . '">データの取り方 ›</a></p>';
-        $h .= '<p class="kurabe-hero-by">運営：<a href="' . esc_url(home_url('/company/')) . '">Keys株式会社</a>（100均くらべ編集部）</p>';
         $h .= '</div></div>';
         return $h;
     }
