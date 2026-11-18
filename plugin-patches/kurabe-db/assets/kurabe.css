@@ -341,3 +341,40 @@ aside .kurabe-top-store-go{font-size:14px;padding-top:8px}
 .kurabe-ad.is-empty{display:none}
 /* 1.8.5 数字欄の箱の中では内幅(約288px)より広い320pxの広告が右にはみ出すので、中身を縮めず中央から両側へはみ出させる */
 .kurabe-ad-top .kurabe-ad-box>*{flex:0 0 auto;min-width:max-content}
+
+/* TOP冒頭 [kurabe_top part="hero"]（A案・2026-11-18） */
+.kurabe-hero{--k-daiso:#f5008c;--k-cando:#e94709;--k-watts:#6a5246;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:56px;align-items:start;color:#333;text-align:left}
+.kurabe-hero-kicker{margin:0 0 14px;font-size:14px;font-weight:700;color:#E60C6C;letter-spacing:.08em}
+.kurabe-hero .kurabe-hero-h1{margin:0 0 18px;padding:0;background:none;border:0;font-size:clamp(28px,3.2vw,42px);line-height:1.4;font-weight:900;color:#333;text-align:left}
+.kurabe-hero-lead{margin:0 0 22px;font-size:17px;line-height:1.9;color:#444}
+.kurabe-hero-search{display:flex;margin:0 0 16px}
+.kurabe-hero-search input{flex:1 1 auto;min-width:0;height:56px;box-sizing:border-box;border:2px solid #333;border-right:0;border-radius:0;padding:0 18px;font-size:16px;background:#fff}
+.kurabe-hero-search button{flex:0 0 120px;height:56px;border:0;border-radius:0;background:#333;color:#fff;font-size:16px;font-weight:700;cursor:pointer}
+.kurabe-hero-pop{display:flex;flex-wrap:wrap;gap:8px 18px;margin:0;font-size:15px;line-height:1.7}
+.kurabe-hero-pop span{color:#666}
+.kurabe-hero-pop a{color:#333;text-decoration:underline;text-underline-offset:3px}
+.kurabe-hero-facts{padding-top:30px}
+.kurabe-hero-band{display:flex;height:8px}
+.kurabe-hero-band i{display:block;min-width:6px}
+.kurabe-hero .kurabe-hero-nums{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));margin:0;border-bottom:1px solid #ddd}
+.kurabe-hero-nums>div{padding:20px 0;border-bottom:1px solid #ddd}
+.kurabe-hero-nums>div:nth-child(even){padding-left:24px;border-left:1px solid #ddd}
+.kurabe-hero-nums>div:nth-last-child(-n+2){border-bottom:0}
+.kurabe-hero-nums dt{margin:0;font-size:13.5px;color:#666;font-weight:400}
+.kurabe-hero-nums dd{margin:0;font-size:17px;font-weight:700}
+.kurabe-hero-nums b{font-size:34px;font-weight:900;margin-right:2px}
+.kurabe-hero-nums b.kurabe-hero-s{font-size:26px}
+.kurabe-hero-stores{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;margin:14px 0 0;font-size:15px;font-weight:700}
+.kurabe-hero-stores small{font-size:14px;font-weight:400;color:#666}
+.kurabe-hero-daiso{color:var(--k-daiso)}.kurabe-hero-cando{color:var(--k-cando)}.kurabe-hero-watts{color:var(--k-watts)}
+.kurabe-hero-stores a{margin-left:auto;color:#333}
+.kurabe-hero-by{margin:12px 0 0;font-size:14px;color:#666}
+.kurabe-hero-by a{color:#666}
+@media (max-width:767px){
+.kurabe-hero{grid-template-columns:1fr;gap:28px}
+.kurabe-hero-facts{padding-top:0}
+.kurabe-hero-search button{flex-basis:84px}
+.kurabe-hero-nums b{font-size:28px}
+.kurabe-hero-nums b.kurabe-hero-s{font-size:21px}
+.kurabe-hero-stores a{margin-left:0}
+}

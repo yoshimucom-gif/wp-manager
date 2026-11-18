@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.8.5
+ * Version:     1.8.6
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.8.5';
+    const VERSION  = '1.8.6';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -775,6 +775,9 @@ class Kurabe_Db
         if ($a['part'] === 'sidebox') {
             return self::top_sidebox($posts);
         }
+        if ($a['part'] === 'hero') {
+            return self::top_hero($posts);
+        }
         if ($a['part'] === 'season') {
             wp_enqueue_script('kurabe-db');
             return self::top_season($posts, (string) $a['tabs']);
@@ -877,6 +880,91 @@ class Kurabe_Db
             . '<form class="kurabe-sidebox-search" role="search" method="get" action="' . esc_url(home_url('/')) . '">'
             . '<input type="search" name="s" placeholder="例：突っ張り棒" aria-label="サイト内検索">'
             . '<button type="submit">検索</button></form></div>';
+        return $h;
+    }
+
+    /* TOP冒頭（A案・吉村さん選定 2026-11-18）：h1・何のサイトか・品目検索・よく見られている品目・数字4つ・運営とデータの取り方
+       AdSense「有用性の低いコンテンツ」対策で、TOPを開いて最初に「誰が何をどう比べているサイトか」が分かるようにする。
+       数字は公開済みの比較表から数える（JAN、無ければ商品URLで重複を除く）。重いので6時間キャッシュ */
+    private static function top_hero($posts)
+    {
+        $c = get_transient('kurabe_hero_v1');
+        if (!is_array($c)) {
+            $seen = array();
+            $items = 0;
+            $checked = '';
+            $pop = array();
+            foreach ($posts as $p) {
+                if ($p->post_status !== 'publish') {
+                    continue;
+                }
+                $items++;
+                $d = json_decode((string) get_post_meta($p->ID, self::META, true), true);
+                if (!is_array($d)) {
+                    continue;
+                }
+                if (!empty($d['checked']) && $d['checked'] > $checked) {
+                    $checked = $d['checked'];
+                }
+                foreach (!empty($d['rows']) ? $d['rows'] : array() as $r) {
+                    $k = !empty($r['jan']) ? $r['jan'] : (isset($r['u']) ? $r['u'] : '');
+                    if ($k === '') {
+                        continue;
+                    }
+                    if (!isset($seen[$k])) {
+                        $seen[$k] = array();
+                    }
+                    $seen[$k][$r['s']] = 1;
+                }
+                $pop[] = array((int) get_post_meta($p->ID, 'post_views_count', true), (string) get_post_meta($p->ID, 'kurabe_item', true), get_permalink($p));
+            }
+            $by = array();
+            foreach ($seen as $st) {
+                foreach ($st as $s => $one) {
+                    $by[$s] = (isset($by[$s]) ? $by[$s] : 0) + 1;
+                }
+            }
+            usort($pop, function ($x, $y) { return $y[0] - $x[0]; });
+            $c = array('goods' => count($seen), 'items' => $items, 'checked' => $checked, 'by' => $by, 'pop' => array_slice($pop, 0, 6));
+            set_transient('kurabe_hero_v1', $c, 6 * HOUR_IN_SECONDS);
+        }
+        $ym = $c['checked'] ? (int) substr($c['checked'], 0, 4) . '年' . (int) substr($c['checked'], 5, 2) . '月' : '';
+        $h  = '<div class="kurabe-hero"><div class="kurabe-hero-main">';
+        $h .= '<p class="kurabe-hero-kicker">ダイソー・キャンドゥ・ワッツ 公式データ比較</p>';
+        $h .= '<h1 class="kurabe-hero-h1">100均の商品を、<br>品目ごとに同じ物差しで比べる。</h1>';
+        $h .= '<p class="kurabe-hero-lead">3社の公式通販に載っている商品のサイズ・素材・耐荷重を、品目ごとに1枚の表にまとめています。同じ商品はJANコードで照合し、毎月1日に公式から取り直しています。</p>';
+        $h .= '<form class="kurabe-hero-search" role="search" method="get" action="' . esc_url(home_url('/')) . '">'
+            . '<input type="search" name="s" placeholder="品目名で探す（例：収納ボックス）" aria-label="品目名で探す">'
+            . '<button type="submit">探す</button></form>';
+        $links = array();
+        foreach ($c['pop'] as $x) {
+            if ($x[1] !== '') {
+                $links[] = '<a href="' . esc_url($x[2]) . '">' . esc_html($x[1]) . '</a>';
+            }
+        }
+        if ($links) {
+            $h .= '<p class="kurabe-hero-pop"><span>よく見られている：</span>' . implode('', $links) . '</p>';
+        }
+        $h .= '</div><div class="kurabe-hero-facts">';
+        $total = array_sum($c['by']);
+        $h .= '<div class="kurabe-hero-band" aria-hidden="true">';
+        foreach (self::STORES as $st => $cls) {
+            if (!empty($c['by'][$st]) && $total) {
+                $h .= '<i class="kurabe-bar-' . $cls . '" style="flex-grow:' . (int) $c['by'][$st] . '"></i>';
+            }
+        }
+        $h .= '</div><dl class="kurabe-hero-nums">'
+            . '<div><dt>比較している品目</dt><dd><b>' . number_format($c['items']) . '</b>品目</dd></div>'
+            . '<div><dt>もとにした商品</dt><dd><b>' . number_format($c['goods']) . '</b>件</dd></div>'
+            . '<div><dt>取り直し</dt><dd><b class="kurabe-hero-s">毎月1日</b></dd></div>'
+            . ($ym ? '<div><dt>最終確認</dt><dd><b class="kurabe-hero-s">' . esc_html($ym) . '</b></dd></div>' : '')
+            . '</dl><p class="kurabe-hero-stores">';
+        foreach (self::STORES as $st => $cls) {
+            $h .= '<span class="kurabe-hero-st kurabe-hero-' . $cls . '">' . esc_html(self::label($st)) . (isset($c['by'][$st]) ? ' <small>' . number_format($c['by'][$st]) . '</small>' : '') . '</span>';
+        }
+        $h .= '<a href="' . esc_url(home_url('/data-policy/')) . '">データの取り方 ›</a></p>';
+        $h .= '<p class="kurabe-hero-by">運営：<a href="' . esc_url(home_url('/company/')) . '">Keys株式会社</a>（100均くらべ編集部）</p>';
+        $h .= '</div></div>';
         return $h;
     }
 
