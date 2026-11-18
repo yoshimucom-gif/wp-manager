@@ -354,8 +354,12 @@ aside .kurabe-top-store-go{font-size:14px;padding-top:8px}
 .kurabe-hero-pop span{color:#666}
 .kurabe-hero-pop a{color:#333;text-decoration:underline;text-underline-offset:3px}
 .kurabe-hero-facts{padding-top:30px}
-.kurabe-hero-band{display:flex;height:8px}
-.kurabe-hero-band i{display:block;min-width:6px}
+.kurabe-hero-band-cap{margin:0 0 8px;font-size:13.5px;color:#666}
+.kurabe-hero-band{display:flex;gap:3px}
+.kurabe-hero-seg{display:flex;flex-direction:column;min-width:76px;flex-basis:0}
+.kurabe-hero-seg span{font-size:15px;font-weight:700;line-height:1.4;white-space:nowrap}
+.kurabe-hero-seg small{font-size:14px;color:#555;line-height:1.5;white-space:nowrap}
+.kurabe-hero-seg i{display:block;height:10px;margin-top:6px}
 .kurabe-hero .kurabe-hero-nums{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));margin:0;border-bottom:1px solid #ddd}
 .kurabe-hero-nums>div{padding:20px 0;border-bottom:1px solid #ddd}
 .kurabe-hero-nums>div:nth-child(even){padding-left:24px;border-left:1px solid #ddd}

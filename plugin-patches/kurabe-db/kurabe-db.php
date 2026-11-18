@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.8.6
+ * Version:     1.8.7
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.8.6';
+    const VERSION  = '1.8.7';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -888,7 +888,7 @@ class Kurabe_Db
        数字は公開済みの比較表から数える（JAN、無ければ商品URLで重複を除く）。重いので6時間キャッシュ */
     private static function top_hero($posts)
     {
-        $c = get_transient('kurabe_hero_v1');
+        $c = get_transient('kurabe_hero_v2');
         if (!is_array($c)) {
             $seen = array();
             $items = 0;
@@ -916,17 +916,28 @@ class Kurabe_Db
                     }
                     $seen[$k][$r['s']] = 1;
                 }
-                $pop[] = array((int) get_post_meta($p->ID, 'post_views_count', true), (string) get_post_meta($p->ID, 'kurabe_item', true), get_permalink($p));
             }
+            // よく見られている品目＝TOP・ランキングページと同じ re:Diver の月間閲覧数順（閲覧数は投稿メタに無いのでテーマのブロックの出力から拾う）
+            $pop = array();
+            $html = do_blocks('<!-- wp:dbp/article {"article":{"number":12,"layout":"list","design":"simple","orderby":"post_views_count","order":"DESC","items":"","postType":"post","period":"month"}} /-->');
+            if (preg_match_all('#href="([^"]+)"#', $html, $m)) {
+                foreach (array_unique($m[1]) as $u) {
+                    $pid = url_to_postid($u);
+                    $it = $pid ? (string) get_post_meta($pid, 'kurabe_item', true) : '';
+                    if ($it !== '' && get_post_status($pid) === 'publish' && !isset($pop[$it])) {
+                        $pop[$it] = array(0, $it, get_permalink($pid));
+                    }
+                }
+            }
+            $pop = array_values($pop);
             $by = array();
             foreach ($seen as $st) {
                 foreach ($st as $s => $one) {
                     $by[$s] = (isset($by[$s]) ? $by[$s] : 0) + 1;
                 }
             }
-            usort($pop, function ($x, $y) { return $y[0] - $x[0]; });
             $c = array('goods' => count($seen), 'items' => $items, 'checked' => $checked, 'by' => $by, 'pop' => array_slice($pop, 0, 6));
-            set_transient('kurabe_hero_v1', $c, 6 * HOUR_IN_SECONDS);
+            set_transient('kurabe_hero_v2', $c, 6 * HOUR_IN_SECONDS);
         }
         $ym = $c['checked'] ? (int) substr($c['checked'], 0, 4) . '年' . (int) substr($c['checked'], 5, 2) . '月' : '';
         $h  = '<div class="kurabe-hero"><div class="kurabe-hero-main">';
@@ -947,10 +958,14 @@ class Kurabe_Db
         }
         $h .= '</div><div class="kurabe-hero-facts">';
         $total = array_sum($c['by']);
-        $h .= '<div class="kurabe-hero-band" aria-hidden="true">';
+        // 色帯だけでは何の色か分からない（吉村さん 2026-11-18「グラフの上に社名出せば？」）→ 各社の帯の上に店名と件数
+        $h .= '<p class="kurabe-hero-band-cap">店ごとの商品数</p><div class="kurabe-hero-band">';
         foreach (self::STORES as $st => $cls) {
             if (!empty($c['by'][$st]) && $total) {
-                $h .= '<i class="kurabe-bar-' . $cls . '" style="flex-grow:' . (int) $c['by'][$st] . '"></i>';
+                $h .= '<div class="kurabe-hero-seg" style="flex-grow:' . (int) $c['by'][$st] . '">'
+                    . '<span class="kurabe-hero-' . $cls . '">' . esc_html(self::label($st)) . '</span>'
+                    . '<small>' . number_format($c['by'][$st]) . '件</small>'
+                    . '<i class="kurabe-bar-' . $cls . '"></i></div>';
             }
         }
         $h .= '</div><dl class="kurabe-hero-nums">'
@@ -959,9 +974,6 @@ class Kurabe_Db
             . '<div><dt>取り直し</dt><dd><b class="kurabe-hero-s">毎月1日</b></dd></div>'
             . ($ym ? '<div><dt>最終確認</dt><dd><b class="kurabe-hero-s">' . esc_html($ym) . '</b></dd></div>' : '')
             . '</dl><p class="kurabe-hero-stores">';
-        foreach (self::STORES as $st => $cls) {
-            $h .= '<span class="kurabe-hero-st kurabe-hero-' . $cls . '">' . esc_html(self::label($st)) . (isset($c['by'][$st]) ? ' <small>' . number_format($c['by'][$st]) . '</small>' : '') . '</span>';
-        }
         $h .= '<a href="' . esc_url(home_url('/data-policy/')) . '">データの取り方 ›</a></p>';
         $h .= '<p class="kurabe-hero-by">運営：<a href="' . esc_url(home_url('/company/')) . '">Keys株式会社</a>（100均くらべ編集部）</p>';
         $h .= '</div></div>';
