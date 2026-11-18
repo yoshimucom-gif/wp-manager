@@ -339,3 +339,5 @@ aside .kurabe-top-store-go{font-size:14px;padding-top:8px}
 .kurabe-ad-shop .kurabe-ad-box{min-height:280px}
 @media (max-width:767px){.kurabe-ad-shop .kurabe-ad-box{min-height:250px}}
 .kurabe-ad.is-empty{display:none}
+/* 1.8.5 数字欄の箱の中では内幅(約288px)より広い320pxの広告が右にはみ出すので、中身を縮めず中央から両側へはみ出させる */
+.kurabe-ad-top .kurabe-ad-box>*{flex:0 0 auto;min-width:max-content}
