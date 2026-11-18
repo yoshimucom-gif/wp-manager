@@ -385,7 +385,7 @@ aside .kurabe-top-store-go{font-size:14px;padding-top:8px}
 
 /* 独自調査レポート [kurabe_top part="reports"]（2026-11-18） */
 .kurabe-reports{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);grid-template-rows:auto auto;gap:20px;text-align:left}
-.kurabe-report{display:flex;gap:18px;background:#fff;border:1px solid #ddd;border-radius:4px;padding:18px;color:#333;text-decoration:none;transition:box-shadow .2s}
+.kurabe-report{display:flex;gap:18px;background:#fff;border:1px solid #ddd;border-radius:4px;padding:24px 26px;color:#333;text-decoration:none;transition:box-shadow .2s}
 .kurabe-report:hover{opacity:1;box-shadow:0 6px 18px rgba(0,0,0,.08)}
 .kurabe-report.is-main{grid-row:1 / span 2;flex-direction:column;padding:0;overflow:hidden}
 .kurabe-report-img{flex:0 0 150px;display:block;background:#f4f4f2}
@@ -403,9 +403,9 @@ aside .kurabe-top-store-go{font-size:14px;padding-top:8px}
 @media (max-width:767px){
 .kurabe-reports{grid-template-columns:1fr}
 .kurabe-report.is-main{grid-row:auto}
-.kurabe-report{flex-direction:column;padding:0;overflow:hidden}
-.kurabe-report-img{flex:none;aspect-ratio:16/9;border-bottom:1px solid #e3e3e3}
-.kurabe-report-body{padding:16px 18px 18px}
+.kurabe-report{flex-direction:column;padding:18px 20px}
+.kurabe-report.is-main{padding:0}
+.kurabe-report.is-main .kurabe-report-body{padding:16px 18px 18px}
 .kurabe-report.is-main .kurabe-report-fig{font-size:44px}
 }
 
