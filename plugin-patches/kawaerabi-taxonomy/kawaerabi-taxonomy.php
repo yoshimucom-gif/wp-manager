@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: 革えらび 掛け算タクソノミー
- * Description: 革えらびの掛け算の軸（革・性別・年代/相手・用途・仕様）をカスタムタクソノミーとして登録する。記事が少ない一覧ページは検索に出さない（noindex）。
- * Version:     1.0.0
+ * Description: 革えらびの掛け算の軸（革・形・色・性別・年代/相手・用途・仕様）をカスタムタクソノミーとして登録する。記事が少ない一覧ページは検索に出さない（noindex）。
+ * Version:     1.1.0
  * Author:      Keys
  * Requires at least: 6.0
  * Requires PHP: 7.4
@@ -12,7 +12,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'KAWAERABI_TAX_VERSION', '1.0.0' );
+define( 'KAWAERABI_TAX_VERSION', '1.1.0' );
 // 一覧ページを検索に出す最小の記事数（これ未満は noindex,follow）
 define( 'KAWAERABI_TAX_MIN_INDEX', 3 );
 
@@ -30,6 +30,8 @@ add_action( 'init', function () {
 function kawaerabi_tax_axes() {
 	return array(
 		'kawa_leather' => array( 'label' => '革の種類', 'slug' => 'leather', 'hierarchical' => true ),
+		'kawa_form'    => array( 'label' => '形', 'slug' => 'form', 'hierarchical' => true ),
+		'kawa_color'   => array( 'label' => '色', 'slug' => 'color', 'hierarchical' => false ),
 		'kawa_gender'  => array( 'label' => '性別', 'slug' => 'gender', 'hierarchical' => false ),
 		'kawa_scene'   => array( 'label' => '年代・贈る相手', 'slug' => 'scene', 'hierarchical' => false ),
 		'kawa_use'     => array( 'label' => '用途・シーン', 'slug' => 'use', 'hierarchical' => false ),

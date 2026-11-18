@@ -2,14 +2,14 @@
   "name": "革えらび 掛け算タクソノミー",
   "slug": "kawaerabi-taxonomy",
   "plugin": "kawaerabi-taxonomy/kawaerabi-taxonomy.php",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "tested": "6.7",
   "requires": "6.0",
   "requires_php": "7.4",
   "author": "Keys",
-  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/kawaerabi-taxonomy-1.0.0.zip",
+  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/kawaerabi-taxonomy-1.1.0.zip",
   "sections": {
     "description": "革えらび 掛け算タクソノミー 本体。GitHub から自動更新します。",
-    "changelog": "最新バージョン 1.0.0"
+    "changelog": "最新バージョン 1.1.0"
   }
 }

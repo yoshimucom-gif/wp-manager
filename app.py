@@ -6484,9 +6484,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.0.1',
     },
     'kawaerabi-taxonomy': {
-        'file': 'kawaerabi-taxonomy-1.0.0.zip',
+        'file': 'kawaerabi-taxonomy-1.1.0.zip',
         'name': '革えらび 掛け算タクソノミー',
-        'version': '1.0.0',
+        'version': '1.1.0',
     },
     'cat-eyecatch': {
         'file': 'affiros-cat-eyecatch-1.0.1.zip',
