@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: 革えらび 掛け算タクソノミー
- * Description: 革えらびの掛け算の軸（革・形・色・性別・年代/相手・用途・仕様）をカスタムタクソノミーとして登録する。記事が少ない一覧ページは検索に出さない（noindex）。一覧ページに見出し・説明文・meta description・OGP画像を出す。
- * Version:     1.2.0
+ * Description: 革えらびの掛け算の軸（革・形・色・性別・年代/相手・用途・仕様）をカスタムタクソノミーとして登録する。記事が少ない一覧ページは検索に出さない（noindex）。一覧ページに見出し・説明文・meta description・OGP画像を出す。トップ等に置ける掛け算の絞り込み（[kawaerabi_finder]）。
+ * Version:     1.3.0
  * Author:      Keys
  * Requires at least: 6.0
  * Requires PHP: 7.4
@@ -12,11 +12,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'KAWAERABI_TAX_VERSION', '1.2.0' );
+define( 'KAWAERABI_TAX_VERSION', '1.3.0' );
 // 一覧ページを検索に出す最小の記事数（これ未満は noindex,follow）
 define( 'KAWAERABI_TAX_MIN_INDEX', 3 );
 
 require_once __DIR__ . '/includes/plugin-updater.php';
+require_once __DIR__ . '/includes/finder.php';
 add_action( 'init', function () {
 	new Kawaerabi_Plugin_Updater(
 		__FILE__,
@@ -128,6 +129,9 @@ function kawaerabi_tax_current_term() {
 }
 
 function kawaerabi_tax_heading( $term ) {
+	if ( function_exists( 'kawaerabi_finder_is_multi' ) && kawaerabi_finder_is_multi() ) {
+		return kawaerabi_finder_multi_heading();
+	}
 	$h = trim( (string) get_term_meta( $term->term_id, 'kawa_title', true ) );
 	return $h !== '' ? $h : $term->name;
 }
@@ -140,7 +144,7 @@ add_action( 'diver_archive_main', function () {
 	}
 	echo '<div class="archive-title-container has-gap-column:10">';
 	echo "<h1 class='archive-title-container-title is-margin:0'>" . esc_html( kawaerabi_tax_heading( $term ) ) . '</h1>';
-	if ( trim( $term->description ) !== '' ) {
+	if ( trim( $term->description ) !== '' && ! kawaerabi_finder_is_multi() ) {
 		echo "<div class='archive-title-container-description is-font-size:m'>" . wp_kses_post( nl2br( $term->description ) ) . '</div>';
 	}
 	echo '</div>';
@@ -158,7 +162,7 @@ add_filter( 'document_title_parts', function ( $parts ) {
 // meta description（テーマはカテゴリ以外の一覧に出さない）
 add_filter( 'custom_post_description', function ( $desc ) {
 	$term = kawaerabi_tax_current_term();
-	if ( $term && trim( $term->description ) !== '' ) {
+	if ( $term && trim( $term->description ) !== '' && ! kawaerabi_finder_is_multi() ) {
 		return $term->description;
 	}
 	return $desc;
@@ -169,6 +173,9 @@ add_filter( 'custom_meta_canonical', function ( $url ) {
 	$term = kawaerabi_tax_current_term();
 	if ( ! $term ) {
 		return $url;
+	}
+	if ( kawaerabi_finder_is_multi() ) {
+		return '';   // 掛け算の結果ページは noindex。1軸の一覧へ寄せない
 	}
 	$link  = get_term_link( $term );
 	$paged = (int) get_query_var( 'paged' );
@@ -189,7 +196,7 @@ add_filter( 'diver_ogp_data', function ( $args ) {
 	}
 	if ( is_tax() ) {
 		$args['title'] = kawaerabi_tax_heading( $term ) . ' - ' . get_bloginfo( 'name' );
-		if ( trim( $term->description ) !== '' ) {
+		if ( trim( $term->description ) !== '' && ! kawaerabi_finder_is_multi() ) {
 			$args['description'] = $term->description;
 		}
 		$link = get_term_link( $term );

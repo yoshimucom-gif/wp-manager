@@ -27,6 +27,7 @@ MATERIALS_SRC = os.path.join(HANDOFF, '服じまい', 'data', 'a8_materials.json
 FILES = [
     'kawaerabi-taxonomy.php',
     'includes/plugin-updater.php',
+    'includes/finder.php',
 ]
 
 
