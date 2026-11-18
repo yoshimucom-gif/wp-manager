@@ -413,7 +413,17 @@ aside .kurabe-top-store-go{font-size:14px;padding-top:8px}
 /* ジャンル一覧の作り直し [kurabe_top part="genres2"]（2026-11-18） */
 .kurabe-g2{text-align:left;color:#333}
 .kurabe-g2-main{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:36px 48px}
-.kurabe-g2-genre{border-top:2px solid #333;padding-top:16px}
+.kurabe-g2-genre{display:flex;flex-direction:column;gap:14px}
+/* カバー（core/cover と同じ部品。CSSが読まれないページでも崩れないよう最低限をここにも書く） */
+.kurabe-g2 .kurabe-g2-cover{position:relative;display:flex;align-items:flex-end;min-height:150px;margin:0;padding:18px 20px;overflow:hidden;border-radius:4px;color:#fff;text-decoration:none;background:#555}
+.kurabe-g2 .kurabe-g2-cover:hover{opacity:1}
+.kurabe-g2 .kurabe-g2-cover .wp-block-cover__image-background{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;margin:0;max-width:none;transition:transform .4s}
+.kurabe-g2 .kurabe-g2-cover:hover .wp-block-cover__image-background{transform:scale(1.04)}
+.kurabe-g2 .kurabe-g2-cover .wp-block-cover__background{position:absolute;inset:0;opacity:1;background:linear-gradient(to top,rgba(0,0,0,.72),rgba(0,0,0,.15) 70%)}
+.kurabe-g2 .kurabe-g2-cover .wp-block-cover__inner-container{position:relative;z-index:1;display:flex;align-items:baseline;justify-content:space-between;gap:12px;width:100%;color:#fff}
+.kurabe-g2 .kurabe-g2-cname{margin:0;padding:0;background:none;border:0;font-size:24px;font-weight:700;line-height:1.3;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.4)}
+.kurabe-g2 .kurabe-g2-cname::before,.kurabe-g2 .kurabe-g2-cname::after{display:none}
+.kurabe-g2-cnum{font-size:14px;white-space:nowrap;opacity:.95}
 .kurabe-g2 .kurabe-g2-name{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:0;background:none;border:0;font-size:21px;font-weight:700}
 .kurabe-g2 .kurabe-g2-name::before,.kurabe-g2 .kurabe-g2-name::after{display:none}
 .kurabe-g2-name a{color:#333;text-decoration:none}

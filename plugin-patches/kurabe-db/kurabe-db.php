@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.8.14
+ * Version:     1.8.15
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.8.14';
+    const VERSION  = '1.8.15';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -1147,7 +1147,7 @@ class Kurabe_Db
             if (!isset($by[$c->term_id])) {
                 $by[$c->term_id] = array('term' => $c, 'rows' => array());
             }
-            $by[$c->term_id]['rows'][] = array('url' => get_permalink($p), 'item' => get_post_meta($p->ID, 'kurabe_item', true), 'total' => (int) get_post_meta($p->ID, 'kurabe_count', true));
+            $by[$c->term_id]['rows'][] = array('id' => $p->ID, 'url' => get_permalink($p), 'item' => get_post_meta($p->ID, 'kurabe_item', true), 'total' => (int) get_post_meta($p->ID, 'kurabe_count', true));
         }
         uasort($by, function ($x, $y) {
             return count($y['rows']) - count($x['rows']);
@@ -1160,8 +1160,23 @@ class Kurabe_Db
                 return $y['total'] - $x['total'];
             });
             $link = get_term_link($g['term']);
-            $h .= '<section class="kurabe-g2-genre"><h3 class="kurabe-g2-name">' . self::genre_icon($g['term']->name, $g['term']->term_id)
-                . '<a href="' . esc_url($link) . '">' . esc_html($g['term']->name) . '</a><span>比較表 ' . count($g['rows']) . '本</span></h3><p class="kurabe-g2-items">';
+            // カバー画像（吉村さん 2026-11-18「画像があると印象違う。カバーの機能とか」）
+            // カテゴリー画像（re:Diver の termmeta media_id）を優先。無ければそのジャンルで一番大きい比較表のアイキャッチの下側
+            // （アイキャッチは上半分にタイトル文字が入っているので、下寄せで写真の部分だけ見せる）
+            $mid = (int) get_term_meta($g['term']->term_id, 'media_id', true);
+            $img = $mid ? wp_get_attachment_image_url($mid, 'large') : '';
+            $pos = '50% 50%';
+            if (!$img && !empty($g['rows'][0]['id'])) {
+                $img = get_the_post_thumbnail_url($g['rows'][0]['id'], 'large');
+                $pos = '50% 100%';
+            }
+            $h .= '<section class="kurabe-g2-genre">';
+            $h .= '<a class="wp-block-cover kurabe-g2-cover" href="' . esc_url($link) . '">'
+                . ($img ? '<img class="wp-block-cover__image-background" src="' . esc_url($img) . '" alt="" loading="lazy" style="object-position:' . $pos . '">' : '')
+                . '<span aria-hidden="true" class="wp-block-cover__background has-background-dim"></span>'
+                . '<div class="wp-block-cover__inner-container"><h3 class="kurabe-g2-cname">' . esc_html($g['term']->name) . '</h3>'
+                . '<span class="kurabe-g2-cnum">比較表 ' . count($g['rows']) . '本</span></div></a>';
+            $h .= '<p class="kurabe-g2-items">';
             foreach (array_slice($g['rows'], 0, 8) as $r) {
                 $h .= '<a href="' . esc_url($r['url']) . '">' . esc_html($r['item']) . '</a>';
             }
