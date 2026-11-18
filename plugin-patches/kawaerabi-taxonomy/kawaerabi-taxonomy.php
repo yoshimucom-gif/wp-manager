@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: 革えらび 掛け算タクソノミー
- * Description: 革えらびの掛け算の軸（革・形・色・性別・年代/相手・用途・仕様）をカスタムタクソノミーとして登録する。記事が少ない一覧ページは検索に出さない（noindex）。
- * Version:     1.1.0
+ * Description: 革えらびの掛け算の軸（革・形・色・性別・年代/相手・用途・仕様）をカスタムタクソノミーとして登録する。記事が少ない一覧ページは検索に出さない（noindex）。一覧ページに見出し・説明文・meta description・OGP画像を出す。
+ * Version:     1.2.0
  * Author:      Keys
  * Requires at least: 6.0
  * Requires PHP: 7.4
@@ -12,7 +12,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'KAWAERABI_TAX_VERSION', '1.1.0' );
+define( 'KAWAERABI_TAX_VERSION', '1.2.0' );
 // 一覧ページを検索に出す最小の記事数（これ未満は noindex,follow）
 define( 'KAWAERABI_TAX_MIN_INDEX', 3 );
 
@@ -109,3 +109,97 @@ add_filter( 'wp_sitemaps_taxonomies_query_args', function ( $args, $taxonomy ) {
 	}
 	return $args;
 }, 10, 2 );
+
+/* ------------------------------------------------------------------
+ * 1.2.0 一覧ページの見出し・説明文・SEO
+ * re:Diver はカテゴリにしか見出しと説明文を出さない（Archive.php は is_category() だけ）。
+ * 掛け算の一覧ページも、カテゴリと同じ見た目・同じSEOにそろえる。
+ *   見出し       … タームメタ kawa_title（無ければターム名）
+ *   説明文       … タームの description（meta description・OGP にも使う）
+ *   画像         … タームメタ media_id（カテゴリ画像と同じキー。OGP画像に使う）
+ * ------------------------------------------------------------------ */
+
+function kawaerabi_tax_current_term() {
+	if ( ! is_tax( array_keys( kawaerabi_tax_axes() ) ) ) {
+		return null;
+	}
+	$t = get_queried_object();
+	return ( $t instanceof WP_Term ) ? $t : null;
+}
+
+function kawaerabi_tax_heading( $term ) {
+	$h = trim( (string) get_term_meta( $term->term_id, 'kawa_title', true ) );
+	return $h !== '' ? $h : $term->name;
+}
+
+// カテゴリと同じ位置（diver_archive_main の優先度8）に、同じ class で見出しと説明文を出す
+add_action( 'diver_archive_main', function () {
+	$term = kawaerabi_tax_current_term();
+	if ( ! $term ) {
+		return;
+	}
+	echo '<div class="archive-title-container has-gap-column:10">';
+	echo "<h1 class='archive-title-container-title is-margin:0'>" . esc_html( kawaerabi_tax_heading( $term ) ) . '</h1>';
+	if ( trim( $term->description ) !== '' ) {
+		echo "<div class='archive-title-container-description is-font-size:m'>" . wp_kses_post( nl2br( $term->description ) ) . '</div>';
+	}
+	echo '</div>';
+}, 8 );
+
+// <title>
+add_filter( 'document_title_parts', function ( $parts ) {
+	$term = kawaerabi_tax_current_term();
+	if ( $term ) {
+		$parts['title'] = kawaerabi_tax_heading( $term );
+	}
+	return $parts;
+}, 20 );
+
+// meta description（テーマはカテゴリ以外の一覧に出さない）
+add_filter( 'custom_post_description', function ( $desc ) {
+	$term = kawaerabi_tax_current_term();
+	if ( $term && trim( $term->description ) !== '' ) {
+		return $term->description;
+	}
+	return $desc;
+} );
+
+// canonical（2ページ目以降はそのページ自身）
+add_filter( 'custom_meta_canonical', function ( $url ) {
+	$term = kawaerabi_tax_current_term();
+	if ( ! $term ) {
+		return $url;
+	}
+	$link  = get_term_link( $term );
+	$paged = (int) get_query_var( 'paged' );
+	if ( $paged > 1 ) {
+		$link = trailingslashit( $link ) . user_trailingslashit( 'page/' . $paged, 'paged' );
+	}
+	return is_wp_error( $link ) ? $url : $link;
+} );
+
+// OGP（説明・URL・画像）。カテゴリもテーマ既定の screenshot.png になるので、カテゴリ画像に差し替える
+add_filter( 'diver_ogp_data', function ( $args ) {
+	$term = kawaerabi_tax_current_term();
+	if ( ! $term && is_category() ) {
+		$term = get_queried_object();
+	}
+	if ( ! ( $term instanceof WP_Term ) ) {
+		return $args;
+	}
+	if ( is_tax() ) {
+		$args['title'] = kawaerabi_tax_heading( $term ) . ' - ' . get_bloginfo( 'name' );
+		if ( trim( $term->description ) !== '' ) {
+			$args['description'] = $term->description;
+		}
+		$link = get_term_link( $term );
+		if ( ! is_wp_error( $link ) ) {
+			$args['url'] = $link;
+		}
+	}
+	$mid = (int) get_term_meta( $term->term_id, 'media_id', true );
+	if ( $mid && ( $src = wp_get_attachment_image_src( $mid, 'full' ) ) ) {
+		$args['image'] = $src[0];
+	}
+	return $args;
+} );
