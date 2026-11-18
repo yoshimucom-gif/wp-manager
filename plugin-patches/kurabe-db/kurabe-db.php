@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.8.7
+ * Version:     1.8.8
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.8.7';
+    const VERSION  = '1.8.8';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const STORES   = array('ダイソー' => 'daiso', 'キャンドゥ' => 'cando', 'ワッツ' => 'watts');
@@ -942,7 +942,7 @@ class Kurabe_Db
         $ym = $c['checked'] ? (int) substr($c['checked'], 0, 4) . '年' . (int) substr($c['checked'], 5, 2) . '月' : '';
         $h  = '<div class="kurabe-hero"><div class="kurabe-hero-main">';
         $h .= '<p class="kurabe-hero-kicker">ダイソー・キャンドゥ・ワッツ 公式データ比較</p>';
-        $h .= '<h1 class="kurabe-hero-h1">100均の商品を、<br>品目ごとに同じ物差しで比べる。</h1>';
+        $h .= '<h1 class="kurabe-hero-h1">100均の商品を、<br>品目ごとに<wbr>同じ物差しで<wbr>比べる。</h1>';
         $h .= '<p class="kurabe-hero-lead">3社の公式通販に載っている商品のサイズ・素材・耐荷重を、品目ごとに1枚の表にまとめています。同じ商品はJANコードで照合し、毎月1日に公式から取り直しています。</p>';
         $h .= '<form class="kurabe-hero-search" role="search" method="get" action="' . esc_url(home_url('/')) . '">'
             . '<input type="search" name="s" placeholder="品目名で探す（例：収納ボックス）" aria-label="品目名で探す">'

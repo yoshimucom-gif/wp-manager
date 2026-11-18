@@ -345,7 +345,7 @@ aside .kurabe-top-store-go{font-size:14px;padding-top:8px}
 /* TOP冒頭 [kurabe_top part="hero"]（A案・2026-11-18） */
 .kurabe-hero{--k-daiso:#f5008c;--k-cando:#e94709;--k-watts:#6a5246;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:56px;align-items:start;color:#333;text-align:left}
 .kurabe-hero-kicker{margin:0 0 14px;font-size:14px;font-weight:700;color:#E60C6C;letter-spacing:.08em}
-.kurabe-hero .kurabe-hero-h1{margin:0 0 18px;padding:0;background:none;border:0;font-size:clamp(28px,3.2vw,42px);line-height:1.4;font-weight:900;color:#333;text-align:left}
+.kurabe-hero .kurabe-hero-h1{margin:0 0 18px;padding:0;background:none;border:0;font-size:clamp(26px,2.5vw,34px);word-break:keep-all;overflow-wrap:anywhere;line-height:1.4;font-weight:900;color:#333;text-align:left}
 .kurabe-hero-lead{margin:0 0 22px;font-size:17px;line-height:1.9;color:#444}
 .kurabe-hero-search{display:flex;margin:0 0 16px}
 .kurabe-hero-search input{flex:1 1 auto;min-width:0;height:56px;box-sizing:border-box;border:2px solid #333;border-right:0;border-radius:0;padding:0 18px;font-size:16px;background:#fff}
@@ -367,7 +367,7 @@ aside .kurabe-top-store-go{font-size:14px;padding-top:8px}
 .kurabe-hero-nums dt{margin:0;font-size:13.5px;color:#666;font-weight:400}
 .kurabe-hero-nums dd{margin:0;font-size:17px;font-weight:700}
 .kurabe-hero-nums b{font-size:34px;font-weight:900;margin-right:2px}
-.kurabe-hero-nums b.kurabe-hero-s{font-size:26px}
+.kurabe-hero-nums b.kurabe-hero-s{font-size:23px;white-space:nowrap}
 .kurabe-hero-stores{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;margin:14px 0 0;font-size:15px;font-weight:700}
 .kurabe-hero-stores small{font-size:14px;font-weight:400;color:#666}
 .kurabe-hero-daiso{color:var(--k-daiso)}.kurabe-hero-cando{color:var(--k-cando)}.kurabe-hero-watts{color:var(--k-watts)}
