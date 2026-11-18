@@ -126,6 +126,35 @@ function rdh_flamingo_summary(WP_REST_Request $req) {
     return $out;
 }
 
+/**
+ * 同じ集計を REST 以外の URL でも返す（1.7.1）
+ *   GET /?rdh_flamingo_summary=1&from=...&to=...&field=price&exclude_domains=...
+ *
+ * Xserver の「国外IPアクセス制限」は /wp-json/ を海外IPから 403 にするため、
+ * Google Apps Script（米国のサーバーから接続する）から REST を呼べない。
+ * 認証は REST と同じアプリケーションパスワード（Basic認証）で、管理者でなければ 401 を返す。
+ */
+add_filter('application_password_is_api_request', function ($is) {
+    return $is || isset($_GET['rdh_flamingo_summary']);
+});
+add_action('init', function () {
+    if (!isset($_GET['rdh_flamingo_summary'])) return;
+    nocache_headers();
+    if (!current_user_can('manage_options')) {
+        wp_send_json(['code' => 'rdh_forbidden', 'message' => '管理者のアプリケーションパスワードが必要です。'], 401);
+    }
+    $req = new WP_REST_Request('GET');
+    foreach (['from', 'to', 'field', 'exclude_domains', 'exclude_emails', 'rows'] as $k) {
+        if (isset($_GET[$k])) $req->set_param($k, sanitize_text_field(wp_unslash($_GET[$k])));
+    }
+    $res = rdh_flamingo_summary($req);
+    if (is_wp_error($res)) {
+        $data = $res->get_error_data();
+        wp_send_json(['code' => $res->get_error_code(), 'message' => $res->get_error_message()], $data['status'] ?? 400);
+    }
+    wp_send_json($res);
+}, 100);
+
 add_action('rest_api_init', function () {
     register_rest_route(RDH_NS, '/flamingo-summary', [
         'methods'             => 'GET',
