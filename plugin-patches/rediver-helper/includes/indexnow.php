@@ -1,6 +1,6 @@
 <?php
 /**
- * IndexNow で Bing（と参加している検索エンジン）に更新を知らせる（1.8.0）
+ * IndexNow で Bing（と参加している検索エンジン）に更新を知らせる（1.8.0・1.8.1で導入直後の403も再送）
  *
  * ── 目的
  * 記事を公開・更新・非公開にしたとき、そのURLを IndexNow に送る。
@@ -169,6 +169,8 @@ add_action('rdh_indexnow_flush', function () {
     $retry = false;
     foreach ($results as $r) {
         if ($r['status'] === 0 || $r['status'] === 429 || $r['status'] >= 500) $retry = true;
+        // 導入直後は検索エンジン側のキー確認が終わるまで 403 SiteVerificationNotCompleted が返る（1.8.1）
+        if ($r['status'] === 403 && strpos((string) $r['error'], 'SiteVerificationNotCompleted') !== false) $retry = true;
     }
     if ($retry && !get_transient('rdh_indexnow_retried')) {
         set_transient('rdh_indexnow_retried', 1, 30 * MINUTE_IN_SECONDS);
