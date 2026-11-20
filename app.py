@@ -6464,9 +6464,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.1.6',
     },
     'auto-inserter': {
-        'file': 'affiros-auto-inserter-0.21.0.zip',
+        'file': 'affiros-auto-inserter-0.21.1.zip',
         'name': 'Affiros オートインサーター',
-        'version': '0.21.0',
+        'version': '0.21.1',
     },
     'decoration-formatter': {
         'file': 'decoration-formatter-1.0.31.zip',

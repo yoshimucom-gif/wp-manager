@@ -291,6 +291,32 @@
  * 横並びのボタンの下端がそろうよう、行を下寄せにする */
 .wp-block-button > .affiros-ai-sale { margin: 0 0 3px !important; }
 .wp-block-buttons:has(> .wp-block-button > .affiros-ai-sale) { align-items: flex-end !important; }
+/* Amazon/楽天ボタンの幅をそろえて広げる (v0.21.1)。
+ * 文字数で幅が変わる (Amazonで見る < 楽天市場で見る) のをやめ、同じ幅の2列にする。
+ * リンク先がAmazon/楽天のボタン行だけが対象 (他の標準ボタンは触らない)。
+ * スマホは縦積みの全幅 (押しやすさ優先)。 */
+.wp-block-buttons:has(> .wp-block-button > a.wp-block-button__link:is([href*="amazon.co.jp"], [href*="amzn."], [href*="rakuten.co.jp"])) {
+    gap: 12px 16px !important;
+}
+.wp-block-buttons:has(> .wp-block-button > a.wp-block-button__link:is([href*="amazon.co.jp"], [href*="amzn."], [href*="rakuten.co.jp"])) > .wp-block-button {
+    flex: 1 1 0 !important;
+    max-width: 320px !important;
+    min-width: 0 !important;
+    width: auto !important;
+}
+.wp-block-buttons:has(> .wp-block-button > a.wp-block-button__link:is([href*="amazon.co.jp"], [href*="amzn."], [href*="rakuten.co.jp"])) > .wp-block-button > .wp-block-button__link {
+    display: block !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    text-align: center !important;
+    white-space: nowrap;
+}
+@media (max-width: 599px) {
+    .wp-block-buttons:has(> .wp-block-button > a.wp-block-button__link:is([href*="amazon.co.jp"], [href*="amzn."], [href*="rakuten.co.jp"])) > .wp-block-button {
+        flex: 1 1 100% !important;
+        max-width: 100% !important;
+    }
+}
 
 @keyframes affiros-sh-blink  { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
 @keyframes affiros-sh-bounce { 0%, 20%, 50%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-4px); } 60% { transform: translateY(-2px); } }
