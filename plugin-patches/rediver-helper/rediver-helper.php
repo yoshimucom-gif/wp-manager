@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Re:Diver ヘルパー
  * Description: 通常のREST APIでは触れないWordPress/テーマの設定を、スクリプトから読み書きできるようにする構築補助プラグイン。テーマ側の不具合の回避（外部リンクアイコンの豆腐）も含む。カテゴリー画像などのタームメタ、記事幅などの投稿メタ、カスタマイザー（theme_mod / オプション）に対応。キー名を発見する調査用エンドポイント付き。全て管理者権限必須。
- * Version: 1.8.1
+ * Version: 1.9.0
  * Author: Keys
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -12,7 +12,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('RDH_VERSION', '1.8.1');
+define('RDH_VERSION', '1.9.0');
 
 // 自動更新通知（GitHub 直配信のメタJSONを定期チェック）
 require_once __DIR__ . '/includes/plugin-updater.php';
@@ -77,6 +77,62 @@ add_action('rest_api_init', function () {
 });
 
 /**
+ * 自前配信プラグインの即時更新（1.9.0）: POST /wp-json/rdh/v1/plugin-update  {plugin}
+ * plugin はベース名（例: affiros-auto-inserter/affiros-auto-inserter.php）。
+ * 対象は配信元が自前（GitHub yoshimucom-gif / ke-ys.co.jp）のプラグインだけ。
+ * 更新キャッシュを捨てて配信元を確認し、そのプラグインだけをその場で更新する。
+ * 更新の途中でWPが無効にしたものは、更新前に有効だったものに限って有効に戻す。
+ */
+add_action('rest_api_init', function () {
+    register_rest_route(RDH_NS, '/plugin-update', [
+        'methods'             => 'POST',
+        'permission_callback' => function () { return current_user_can('update_plugins'); },
+        'callback'            => function (WP_REST_Request $req) {
+            $base = (string) $req->get_param('plugin');
+            require_once ABSPATH . 'wp-admin/includes/plugin.php';
+            $all = get_plugins();
+            if ($base === '' || !isset($all[$base])) {
+                return new WP_Error('rdh_no_plugin', 'そのプラグインは入っていない: ' . $base, ['status' => 404]);
+            }
+            $before_ver = $all[$base]['Version'] ?? '';
+            foreach (['affiros_updater_', 'rdh_updater_', 'rdh_updater_fail_'] as $p) {
+                delete_transient($p . md5($base));
+            }
+            delete_site_transient('update_plugins');
+            wp_update_plugins();
+            $upd   = get_site_transient('update_plugins');
+            $entry = $upd->response[$base] ?? null;
+            if (!$entry) {
+                return ['ok' => true, 'updated' => false, 'version' => $before_ver, 'note' => '配信版との差がない'];
+            }
+            $host = strtolower((string) parse_url((string) ($entry->package ?? ''), PHP_URL_HOST));
+            $path = (string) parse_url((string) ($entry->package ?? ''), PHP_URL_PATH);
+            $own  = ($host === 'raw.githubusercontent.com' && strpos($path, '/yoshimucom-gif/') === 0)
+                 || $host === 'ke-ys.co.jp';
+            if (!$own) {
+                return new WP_Error('rdh_not_own', '自前配信のプラグインではないので更新しない（配信元: ' . $host . '）', ['status' => 403]);
+            }
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+            require_once ABSPATH . 'wp-admin/includes/misc.php';
+            require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+            $active_before = (array) get_option('active_plugins', []);
+            $up  = new Plugin_Upgrader(new Automatic_Upgrader_Skin());
+            $res = $up->upgrade($base);
+            $active_now = (array) get_option('active_plugins', []);
+            $restored   = array_values(array_diff($active_before, $active_now));
+            if ($restored) {
+                update_option('active_plugins', array_values(array_unique(array_merge($active_now, $restored))));
+            }
+            wp_clean_plugins_cache(false);
+            $after = get_plugins();
+            return ['ok' => $res === true, 'updated' => $res === true, 'version_before' => $before_ver,
+                    'version_after' => $after[$base]['Version'] ?? '', 'restored' => $restored,
+                    'error' => is_wp_error($res) ? $res->get_error_message() : null];
+        },
+    ]);
+});
+
+/**
  * 使えるエンドポイントの一覧を返す（迷子防止）
  */
 add_action('rest_api_init', function () {
@@ -107,6 +163,7 @@ add_action('rest_api_init', function () {
                     '退避1件の中身（戻る値の確認）'     => "GET  {$base}/backups?id=<backup_id>",
                     '退避から復元'                     => "POST {$base}/backups  {id}",
                     '新版の即時適用'                   => "POST {$base}/selfupdate",
+                    '自前配信プラグインの即時更新'     => "POST {$base}/plugin-update  {plugin}（例: affiros-auto-inserter/affiros-auto-inserter.php）",
                     'Flamingoの期間集計（売上報告用）'  => "GET  {$base}/flamingo-summary?from=YYYY-MM-DD&to=YYYY-MM-DD&field=price&exclude_domains=a.jp,b.com&rows=1",
                     'CF7フォームの見た目を有効化'      => "POST {$base}/option/rdh_cf7_style  {\"value\":\"1\"}",
                     'ads.txt の配信'                   => "POST {$base}/option/rdh_ads_txt  {\"value\":\"google.com, pub-..., DIRECT, f08c47fec0942fa0\"}",
