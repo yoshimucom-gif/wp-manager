@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 100均くらべ 比較データ表示
  * Description: 品目ごとの比較データ（ダイソー・キャンドゥ・ワッツの公式通販から取得した仕様）を投稿メタ kurabe_data に保存し、ショートコード [kurabe part="..."] で出典・数字・一覧表・縮尺図・通販リンクを表示します。見出しと本文の見た目はテーマに任せ、このプラグインは部品だけを描きます。
- * Version:     1.9.4
+ * Version:     1.9.5
  * Author:      Keys
  * License:     GPLv2 or later
  * Text Domain: kurabe-db
@@ -23,7 +23,7 @@ add_action('init', function () {
 
 class Kurabe_Db
 {
-    const VERSION  = '1.9.4';
+    const VERSION  = '1.9.5';
     const META     = 'kurabe_data';
     const OPT      = 'kurabe_db_settings';
     const FIRST    = 50;      // 1.9.0 一覧表の最初に描く行数（残りは「もっと見る」で取りに行く）
@@ -51,6 +51,24 @@ class Kurabe_Db
         add_filter('wp_robots', array(__CLASS__, 'robots_while_private'), 999);
         add_action('wp_head', array(__CLASS__, 'tag_meta_description'), 2);
         add_action('wp_head', array(__CLASS__, 'category_colors'), 99);
+        add_filter('wpcf7_validate_textarea*', array(__CLASS__, 'cf7_japanese_only'), 20, 2);
+        add_filter('wpcf7_validate_textarea', array(__CLASS__, 'cf7_japanese_only'), 20, 2);
+    }
+
+    /* 1.9.5 お問い合わせ内容に日本語（ひらがな・カタカナ・漢字）が1文字も無い送信は受け付けない
+       （吉村さん 2026-11-20「英語だけの問い合わせ来たぞ。ブロックしてないの？」）。
+       英語だけの営業・スパムを止める。日本語の文に英単語やURLが混ざるのは通す */
+    public static function cf7_japanese_only($result, $tag)
+    {
+        $name = is_object($tag) ? $tag->name : (isset($tag['name']) ? $tag['name'] : '');
+        if ($name !== 'your-message') {
+            return $result;
+        }
+        $v = isset($_POST[$name]) ? trim(wp_unslash((string) $_POST[$name])) : '';
+        if ($v !== '' && !preg_match('/[\p{Hiragana}\p{Katakana}\p{Han}]/u', $v)) {
+            $result->invalidate($tag, 'お問い合わせ内容は日本語でご記入ください。');
+        }
+        return $result;
     }
 
     /* カテゴリの色を3社の色（差し色）で順に割り振る。カードのカテゴリラベル（.p-cat-ID）と、TOPのジャンルのアイコンで同じ色
