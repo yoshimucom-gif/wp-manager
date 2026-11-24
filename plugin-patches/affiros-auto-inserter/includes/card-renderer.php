@@ -99,8 +99,15 @@ class Affiros_AI_Card_Renderer {
         }
         $title = esc_html(mb_substr($product['title'] ?? '', 0, 60));
         $image = esc_url($product['image'] ?? '');
-        $product_url = esc_url($product['url'] ?? '');
         $is_amazon = ($product['source'] ?? '') === 'amazon';
+        $raw_url = (string)($product['url'] ?? '');
+        // 商品データ（投稿メタ）には保存した時点のトラッキングIDが入っている。
+        // サイドバーは表示のたびに作るので、いまの設定のIDで付け直す（IDを切り替えても古いIDが残らないように）。
+        $tag = trim((string)($meta['amazon_partner_tag'] ?? ''));
+        if ($is_amazon && $tag !== '' && $raw_url !== '') {
+            $raw_url = add_query_arg('tag', $tag, str_replace(['&#038;', '&amp;'], '&', $raw_url));
+        }
+        $product_url = esc_url($raw_url);
 
         if ($is_amazon) {
             $amazon_url  = $product_url;
