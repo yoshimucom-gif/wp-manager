@@ -6499,9 +6499,9 @@ PLUGIN_DOWNLOADS = {
         'version': '1.5.1',
     },
     'rediver-helper': {
-        'file': 'rediver-helper-1.9.0.zip',
+        'file': 'rediver-helper-1.10.0.zip',
         'name': 'Re:Diver ヘルパー',
-        'version': '1.9.0',
+        'version': '1.10.0',
     },
     'fukujimai-cta': {
         'file': 'fukujimai-cta-1.0.3.zip',
