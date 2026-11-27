@@ -38,14 +38,23 @@ class Affiros_AI_Card_Renderer {
         $ctx = self::build_search_urls($keyword_raw, $meta);
 
         // 見出し = 「{キーワード}」+ 接尾辞 (キーワード先頭・疑問形・根拠不要の主張ゼロ)
-        $suffix = trim((string)($meta['card_heading_suffix'] ?? ''));
-        if ($suffix === '') $suffix = 'はどれを選ぶ？';
-        $heading = $keyword_raw !== '' ? '「' . $keyword_raw . '」' . $suffix : $suffix;
+        // title="" を渡したら見出しを出さない (v0.21.3)。
+        // 既定値へのフォールバックは「キー自体が無いとき」だけにする。
+        $suffix = array_key_exists('card_heading_suffix', $meta)
+            ? trim((string)$meta['card_heading_suffix'])
+            : 'はどれを選ぶ？';
+        $heading = $suffix === ''
+            ? ''
+            : ($keyword_raw !== '' ? '「' . $keyword_raw . '」' . $suffix : $suffix);
 
         $html  = '<!-- affiros-ai-card-start -->' . "\n";
         $html .= '<div class="affiros-ai-compare-card" data-affiros-ai="1">' . "\n";
-        $html .= '  <div class="affiros-ai-card-head">' . esc_html($heading) . '</div>' . "\n";
-        $html .= '  <div class="affiros-ai-card-grid">' . "\n";
+        if ($heading !== '') {
+            $html .= '  <div class="affiros-ai-card-head">' . esc_html($heading) . '</div>' . "\n";
+        }
+        // 件数のクラス (v0.21.4)。1件のとき3列グリッドのまま左に寄るのを防ぐ
+        $html .= '  <div class="affiros-ai-card-grid is-count-' . count($primary) . '">' . "
+";
 
         foreach ($primary as $idx => $p) {
             $html .= self::render_one_card($p, $idx + 1, $ctx);
@@ -54,6 +63,46 @@ class Affiros_AI_Card_Renderer {
         $html .= '  </div>' . "\n";
         $html .= '</div>' . "\n";
         $html .= '<!-- affiros-ai-card-end -->' . "\n";
+        return $html;
+    }
+
+    /**
+     * ボタンだけを2カラムで出す (v0.21.3)
+     *
+     * 商標記事のように商品が1つに決まっている記事で、カードを何度も出さずに
+     * CTAだけを置きたいときに使う。セールのマイクロコピーは sale-feed が
+     * affiros-ai-btn-{mall} クラスを見て表示時に差し込むので、ここでは書かない。
+     */
+    public static function render_buttons($amazon_products, $rakuten_products = [], $meta = []) {
+        if (empty($amazon_products) && empty($rakuten_products)) return '';
+
+        $rank = max(1, intval($meta['rank'] ?? 1));
+        $list = !empty($amazon_products) ? $amazon_products : $rakuten_products;
+        $primary = isset($list[$rank - 1]) ? $list[$rank - 1] : (isset($list[0]) ? $list[0] : null);
+        if (!$primary) return '';
+
+        $ctx = self::build_search_urls(trim((string)($meta['keyword'] ?? '')), $meta);
+        $product_url = esc_url($primary['url'] ?? '');
+        if (($primary['source'] ?? '') === 'amazon') {
+            $amazon_url  = $product_url;
+            $rakuten_url = esc_url($ctx['rakuten_search_url'] ?? '');
+        } else {
+            $rakuten_url = $product_url;
+            $amazon_url  = esc_url($ctx['amazon_search_url'] ?? '');
+        }
+
+        $html  = '<div class="affiros-ai-btnrow" data-affiros-ai="1">' . "
+";
+        if ($amazon_url) {
+            $html .= '  <div class="affiros-ai-btncol"><a href="' . $amazon_url . '" target="_blank" rel="nofollow noopener sponsored" class="affiros-ai-btn affiros-ai-btn-amazon">Amazonで見る</a></div>' . "
+";
+        }
+        if ($rakuten_url) {
+            $html .= '  <div class="affiros-ai-btncol"><a href="' . $rakuten_url . '" target="_blank" rel="nofollow noopener sponsored" class="affiros-ai-btn affiros-ai-btn-rakuten">楽天市場で見る</a></div>' . "
+";
+        }
+        $html .= '</div>' . "
+";
         return $html;
     }
 

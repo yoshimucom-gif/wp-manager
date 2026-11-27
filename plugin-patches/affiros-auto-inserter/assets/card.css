@@ -261,6 +261,30 @@
 .affiros-ai-sale::after  { content: "／"; }
 .affiros-ai-sale::before,
 .affiros-ai-sale::after  { font-size: 10px; font-weight: 600; opacity: .75; flex-shrink: 0; }
+/* 自動フィット (sale-fit.js) の最終段: 縮小しても収まらない長文言は＼／を外す */
+.affiros-ai-sale--noslash::before,
+.affiros-ai-sale--noslash::after { content: none; }
+
+/* ボタンだけの2カラム (v0.21.3 / 0.21.4で!important) --------------------- */
+.affiros-ai-btnrow { display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 10px 14px !important; margin: 22px auto !important; align-items: end !important; }
+/* 0.21.5: 左右を auto に（0 で固定するとテーマが本文の要素を中央に置く余白を打ち消し、ボタン列だけ左に寄っていた） */
+.affiros-ai-btncol { display: flex !important; flex-direction: column !important; min-width: 0; }
+.affiros-ai-btnrow .affiros-ai-sale { margin: 0 0 -3px !important; }
+.affiros-ai-btnrow .affiros-ai-btn { font-size: 15px !important; padding: 14px 12px !important; }
+@media (max-width: 599px) {
+  .affiros-ai-btnrow { grid-template-columns: 1fr; gap: 8px; }
+}
+
+/* 商品が1〜2件のときは列数を合わせる (v0.21.4) ------------------------- */
+.affiros-ai-card-grid.is-count-1 { grid-template-columns: minmax(0, 420px) !important;
+  justify-content: center; }
+.affiros-ai-card-grid.is-count-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+@media (max-width: 700px) {
+  .affiros-ai-card-grid.is-count-1,
+  .affiros-ai-card-grid.is-count-2 { grid-template-columns: 1fr !important; }
+}
 /* 既定色はポチップ準拠の薄め。ハブで色指定があればインラインstyleが優先 */
 .affiros-ai-sale-amazon  { color: #f7a306 !important; }
 .affiros-ai-sale-rakuten { color: #e64c4c !important; }

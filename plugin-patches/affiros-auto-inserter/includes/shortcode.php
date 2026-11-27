@@ -92,6 +92,39 @@ add_shortcode('affiros_ai_card', function ($atts) {
     );
 });
 
+/**
+ * ボタンだけを2カラムで置くショートコード (v0.21.3)
+ *
+ * [affiros_ai_buttons]           — 1位商品の Amazon / 楽天ボタンを2カラムで
+ * [affiros_ai_buttons rank="2"]  — 2位の商品で出す
+ *
+ * 商標記事のように商品が1つに決まっている記事向け。カードを何度も出さずに
+ * CTAだけを置ける。セールのマイクロコピーは sale-feed が表示時に差し込む。
+ */
+add_shortcode('affiros_ai_buttons', function ($atts) {
+    if (!is_singular('post')) return '';
+    $post_id = get_queried_object_id();
+    if (!$post_id) return '';
+
+    $data = get_post_meta($post_id, AFFIROS_AI_META_PRODUCTS, true);
+    if (!is_array($data)) $data = json_decode((string)$data, true);
+    if (empty($data) || (empty($data['amazon']) && empty($data['rakuten']))) return '';
+
+    $atts = shortcode_atts(['rank' => 1], $atts, 'affiros_ai_buttons');
+    $settings = affiros_ai_get_settings();
+
+    return Affiros_AI_Card_Renderer::render_buttons(
+        $data['amazon'] ?? [],
+        $data['rakuten'] ?? [],
+        [
+            'keyword'              => $data['keyword'] ?? get_post_meta($post_id, AFFIROS_AI_META_KEYWORD, true),
+            'rank'                 => intval($atts['rank']),
+            'amazon_partner_tag'   => $settings['amazon_partner_tag']   ?? '',
+            'rakuten_affiliate_id' => $settings['rakuten_affiliate_id'] ?? '',
+        ]
+    );
+});
+
 add_shortcode('affiros_ai_top', function ($atts) {
     $atts = shortcode_atts([
         'rank'  => 1,

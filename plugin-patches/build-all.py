@@ -38,7 +38,7 @@ SPECS = [
     (os.path.join(ROOT, 'affiros-mark-stripper'),
      'affiros-mark-stripper', 'affiros-mark-stripper-1.0.1.zip'),
     (os.path.join(ROOT, 'affiros-auto-inserter'),
-     'affiros-auto-inserter', 'affiros-auto-inserter-0.21.2.zip'),
+     'affiros-auto-inserter', 'affiros-auto-inserter-0.21.6.zip'),
     (os.path.join(ROOT, 'affiros-cat-eyecatch'),
      'affiros-cat-eyecatch', 'affiros-cat-eyecatch-1.0.1.zip'),
     (os.path.join(ROOT, 'rediver-helper'),

@@ -1977,6 +1977,17 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.63 / auto-inserter v0.21.6 (2026-11-27) — マイクロコピーの自動フィット (長文言対応)</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>指摘</strong>: 「Amazon ブラックフライデー先行セール開催中」級の長文言が狭いカードではみ出す。</li>
+              <li><strong>自動フィット (assets/sale-fit.js)</strong>: はみ出す要素だけ段階的に収める——①フォントとPアイコンを比率で縮小 (下限9px) ②それでも溢れる長文言は＼／を自動で外す。リサイズ・フォント読込後にも再計算。最長文言でもカード余白内に収まるのをブラウザ実測。</li>
+              <li><strong>文言ルール</strong>: 巡回エージェントに「モール名を文言に入れない」(ボタンで自明) を追加し短文言化。</li>
+              <li><strong>ソース収束</strong>: 0.21.3〜0.21.5 (ボタン2カラム・1〜2件時の列数・左寄せ修正) は zip直改修でソース未反映だったため、zipの変更を <code>plugin-patches/</code> へ逆移植してから 0.21.6 をビルド (巻き戻し防止)。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.21.5 → 0.21.6 / <code>APP_VERSION</code> 1.9.62 → 1.9.63。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.62 / rewrite v0.5.19 (2026-11-11) — 記事の執筆モデルを Opus 5.5 に固定</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>指示</strong>: 記事執筆はすべて Claude Opus 5.5（<code>claude-opus-5-5</code>）で行う。</li>

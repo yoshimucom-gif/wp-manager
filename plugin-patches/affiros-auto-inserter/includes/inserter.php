@@ -134,7 +134,8 @@ class Affiros_AI_Inserter {
         // 位置ルールでの焼き込みはせず、置いた場所で表示時にショートコードが描画する。
         // 商品データの更新 (上のキャッシュ処理) はこのモードでも同じように行われるので、
         // 月次リフレッシュ・再挿入・公開時自動もそのまま効く。
-        if (strpos($post->post_content, '[affiros_ai_card') !== false) {
+        if (strpos($post->post_content, '[affiros_ai_card') !== false
+            || strpos($post->post_content, '[affiros_ai_buttons') !== false) {
             // 旧い焼き込みカードが残っていれば剥がす (ショートコードと二重表示になるため)
             $stripped = self::strip_existing_cards($post->post_content);
             if ($stripped !== $post->post_content) {
@@ -146,7 +147,8 @@ class Affiros_AI_Inserter {
             update_post_meta($post_id, AFFIROS_AI_META_LAST_INSERT_AT, current_time('mysql'));
             self::clear_last_error($post_id);
 
-            $sc_count = substr_count($post->post_content, '[affiros_ai_card');
+            $sc_count = substr_count($post->post_content, '[affiros_ai_card')
+                      + substr_count($post->post_content, '[affiros_ai_buttons');
             $msg = "挿入されました (ショートコード{$sc_count}箇所に表示)";
             if ($partial_error !== '') $msg .= " ⚠️ {$partial_error}";
             if ($keyword_note !== '')  $msg .= " 🔁 {$keyword_note}";
