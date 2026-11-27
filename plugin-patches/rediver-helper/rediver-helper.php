@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Re:Diver ヘルパー
  * Description: 通常のREST APIでは触れないWordPress/テーマの設定を、スクリプトから読み書きできるようにする構築補助プラグイン。テーマ側の不具合の回避（外部リンクアイコンの豆腐）も含む。カテゴリー画像などのタームメタ、記事幅などの投稿メタ、カスタマイザー（theme_mod / オプション）に対応。キー名を発見する調査用エンドポイント付き。全て管理者権限必須。
- * Version: 1.10.0
+ * Version: 1.11.0
  * Author: Keys
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -12,7 +12,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('RDH_VERSION', '1.10.0');
+define('RDH_VERSION', '1.11.0');
 
 // 自動更新通知（GitHub 直配信のメタJSONを定期チェック）
 require_once __DIR__ . '/includes/plugin-updater.php';
@@ -37,6 +37,7 @@ require_once __DIR__ . '/includes/head-meta.php';
 require_once __DIR__ . '/includes/rest-flamingo.php';
 require_once __DIR__ . '/includes/indexnow.php';
 require_once __DIR__ . '/includes/amazon-tag.php';
+require_once __DIR__ . '/includes/fix-toc-icon.php';
 
 /**
  * 新版の即時適用（1.4.0）: POST /wp-json/rdh/v1/selfupdate
