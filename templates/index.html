@@ -1977,6 +1977,16 @@ tr.row-completed:hover > td { background: rgba(26,127,55,0.08); }
         <div style="max-width:780px">
 
           <div class="settings-section">
+            <div class="section-header">// v1.9.65 / auto-inserter v0.21.8 (2026-11-28) — REST から挿入を動かす口を追加</div>
+            <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
+              <li><strong>指示</strong>: 物販の記事にオートインサーターを使う（給湯器ドック）。</li>
+              <li><strong>原因</strong>: 挿入は管理画面の「適用」（AJAX・クッキーとnonceが要る）と公開時の自動実行にしか入口がなく、外から動かせなかった。</li>
+              <li><strong>追加</strong>: <code>POST /wp-json/affiros-ai/v1/apply {post_id}</code>（「適用」と同じ処理）と <code>GET /wp-json/affiros-ai/v1/state?post_id=</code>（状態だけ）。管理者のみ・アプリケーションパスワードで呼べる。除外の判定は process() の中でそのまま効く。</li>
+              <li><strong>バージョン同期</strong>: auto-inserter 0.21.7 → 0.21.8 / <code>APP_VERSION</code> 1.9.64 → 1.9.65。</li>
+            </ul>
+          </div>
+
+          <div class="settings-section">
             <div class="section-header">// v1.9.64 / auto-inserter v0.21.7 (2026-11-28) — 「このタグの記事だけに出す」設定を追加</div>
             <ul style="margin:8px 0 0 18px;font-size:13px;line-height:2;color:var(--text)">
               <li><strong>指摘</strong>: 物販の記事とアフィ（A8）の記事でオートインサーターが分かれていない。アフィの記事には入らないように。</li>

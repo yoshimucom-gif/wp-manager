@@ -2,14 +2,14 @@
   "name": "Affiros オートインサーター",
   "slug": "affiros-auto-inserter",
   "plugin": "affiros-auto-inserter/affiros-auto-inserter.php",
-  "version": "0.21.7",
+  "version": "0.21.8",
   "tested": "6.6",
   "requires": "5.8",
   "requires_php": "7.4",
   "author": "Affiros",
-  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/affiros-auto-inserter-0.21.7.zip",
+  "download_url": "https://raw.githubusercontent.com/yoshimucom-gif/wp-manager/main/plugin-downloads/affiros-auto-inserter-0.21.8.zip",
   "sections": {
     "description": "Affiros オートインサーター 本体。GitHub から自動更新します。",
-    "changelog": "0.21.7 — 「このタグの記事だけに出す」設定（only_tags）を追加。入れると、そのタグが付いた記事にだけ商品を出す（挿入も、サイドバーの [affiros_ai_top]・記事内カード・ボタン・ポップアップ・セール表示・フロントのCSS/JSも）。空なら従来どおり全記事。物販の記事とASP（A8など）の記事が同じカテゴリーに混ざるサイトで、ASPの記事にAmazon・楽天の商品を出さないためのもの。これまでサイドバーの商品カードは保存済みの商品データから描かれ、除外設定を見ていなかった。"
+    "changelog": "0.21.8 — REST から挿入を動かす POST /wp-json/affiros-ai/v1/apply {post_id} と、状態だけを返す GET /wp-json/affiros-ai/v1/state?post_id= を追加（管理者のみ・アプリケーションパスワードで呼べる）。中身は一括挿入ページの「適用」と同じで、除外（カテゴリー・タグ・このタグの記事だけに出す・ランキング）はそのまま効く。管理画面のAJAXはクッキーとnonceが要り、外から動かせなかった。"
   }
 }
