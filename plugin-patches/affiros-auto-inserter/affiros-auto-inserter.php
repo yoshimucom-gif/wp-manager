@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Affiros オートインサーター
  * Description: マーカー不要。Claude Haiku が本文から検索キーワードを自動抽出し、Amazon + 楽天から関連商品3件を引っ張って「最初のH2直前」「まとめ直後」の2箇所に比較カードを自動挿入する。ランキング記事は自動判定して除外。既存の affiros-product-inserter とは独立して動作。
- * Version: 0.21.6
+ * Version: 0.21.7
  * Author: Affiros
  * License: GPL v2 or later
  * Text Domain: affiros-auto-inserter
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('AFFIROS_AI_VERSION',      '0.21.6');
+define('AFFIROS_AI_VERSION',      '0.21.7');
 define('AFFIROS_AI_PATH',         plugin_dir_path(__FILE__));
 define('AFFIROS_AI_URL',          plugin_dir_url(__FILE__));
 define('AFFIROS_AI_OPTION_KEY',   'affiros_ai_settings');
@@ -83,6 +83,10 @@ function affiros_ai_default_settings() {
         // 挿入しないカテゴリー・タグ
         'exclude_category_ids'   => [],  // カテゴリーID配列
         'exclude_tags'           => '',  // カンマ区切り (タグ名 or スラッグ)
+        // 出す記事をタグで絞る (v0.21.7)。空なら全記事。
+        // 物販記事とASP（A8など）の記事が同じカテゴリーに混ざるサイトで、
+        // 物販のタグが付いた記事だけに商品を出すためのもの。挿入にも表示にも効く
+        'only_tags'              => '',  // カンマ区切り (タグ名 or スラッグ)
         // セール表示 (v0.17.0): セールハブ (ke-ys.co.jp) から日次取得して
         // 開催中セールをボタン直上のマイクロコピーで表示
         'sale_display'           => 'yes',
@@ -107,11 +111,39 @@ function affiros_ai_get_settings() {
 }
 
 /**
+ * 「出す記事のタグ」(only_tags) の条件を満たすか (v0.21.7)
+ *
+ * only_tags が空なら全記事 true（従来どおり）。指定があれば、そのタグが付いた記事だけ true。
+ * 挿入 (affiros_ai_taxonomy_excluded) と表示 (サイドバー・記事内カード・ボタン・
+ * ポップアップ・セール表示・フロントのCSS/JS) の両方で使う。
+ *
+ * ★なぜ表示にも効かせるか（2026-11-27 給湯器ドック）
+ *   サイドバーの [affiros_ai_top] は記事に保存済みの商品データから描かれ、除外設定を見ていなかった。
+ *   物販とA8の記事が同じカテゴリーに混ざっているので、カテゴリー除外では分けられず、
+ *   A8の記事にもAmazon・楽天の商品が出ていた（ウィジェットのCSSで隠していただけ）。
+ */
+function affiros_ai_tag_allowed($post_id, $settings = null) {
+    if (!$settings) $settings = affiros_ai_get_settings();
+    $tags = array_filter(array_map('trim', explode(',', (string)($settings['only_tags'] ?? ''))));
+    if (!$tags) return true;
+    return $post_id ? has_tag($tags, $post_id) : false;
+}
+
+/**
+ * 表示中の個別記事が only_tags の対象外か（フロントの表示を止めるための判定）
+ */
+function affiros_ai_current_post_hidden() {
+    if (!is_singular('post')) return false;
+    return !affiros_ai_tag_allowed(get_queried_object_id());
+}
+
+/**
  * 記事が除外カテゴリー/タグに属しているか
  * process() (一括・個別・公開時自動挿入すべての入口) から呼ばれる根本ガード
  */
 function affiros_ai_taxonomy_excluded($post_id, $settings = null) {
     if (!$settings) $settings = affiros_ai_get_settings();
+    if (!affiros_ai_tag_allowed($post_id, $settings)) return true;
     $cat_ids = array_filter(array_map('intval', (array)($settings['exclude_category_ids'] ?? [])));
     if ($cat_ids && has_category($cat_ids, $post_id)) return true;
     $tags = array_filter(array_map('trim', explode(',', (string)($settings['exclude_tags'] ?? ''))));
@@ -178,6 +210,8 @@ add_action('admin_enqueue_scripts', function ($hook) {
  * フロントエンド用カードCSS
  */
 add_action('wp_enqueue_scripts', function () {
+    // only_tags の対象外の記事では、商品を出さないのでCSSもJSも読まない (v0.21.7)
+    if (affiros_ai_current_post_hidden()) return;
     wp_enqueue_style('affiros-ai-card', AFFIROS_AI_URL . 'assets/card.css', [], AFFIROS_AI_VERSION);
     // セールマイクロコピーの自動フィット (長文言でもはみ出さない。v0.21.0)
     wp_enqueue_script('affiros-ai-sale-fit', AFFIROS_AI_URL . 'assets/sale-fit.js', [], AFFIROS_AI_VERSION, true);

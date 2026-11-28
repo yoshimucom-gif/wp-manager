@@ -31,6 +31,8 @@ if (!defined('ABSPATH')) exit;
  * @param string|null $title 見出しの接尾辞。null なら設定の side_heading_suffix。'' なら見出しなし
  */
 function affiros_ai_top_html($post_id, $rank = 1, $title = null) {
+    // only_tags の対象外の記事には出さない（サイドバー・ポップアップ共通の入口。v0.21.7）
+    if (!affiros_ai_tag_allowed($post_id)) return '';
     $data = get_post_meta($post_id, AFFIROS_AI_META_PRODUCTS, true);
     if (!is_array($data)) $data = json_decode((string)$data, true);
     if (empty($data)) return '';
@@ -67,6 +69,7 @@ add_shortcode('affiros_ai_card', function ($atts) {
     if (!is_singular('post')) return '';
     $post_id = get_queried_object_id();
     if (!$post_id) return '';
+    if (!affiros_ai_tag_allowed($post_id)) return ''; // only_tags の対象外 (v0.21.7)
 
     $data = get_post_meta($post_id, AFFIROS_AI_META_PRODUCTS, true);
     if (!is_array($data)) $data = json_decode((string)$data, true);
@@ -105,6 +108,7 @@ add_shortcode('affiros_ai_buttons', function ($atts) {
     if (!is_singular('post')) return '';
     $post_id = get_queried_object_id();
     if (!$post_id) return '';
+    if (!affiros_ai_tag_allowed($post_id)) return ''; // only_tags の対象外 (v0.21.7)
 
     $data = get_post_meta($post_id, AFFIROS_AI_META_PRODUCTS, true);
     if (!is_array($data)) $data = json_decode((string)$data, true);
@@ -137,6 +141,7 @@ add_shortcode('affiros_ai_top', function ($atts) {
     if (!is_singular('post')) return '';
     $post_id = get_queried_object_id();
     if (!$post_id) return '';
+    if (!affiros_ai_tag_allowed($post_id)) return ''; // only_tags の対象外 (v0.21.7)
 
     return affiros_ai_top_html($post_id, intval($atts['rank']), $atts['title']);
 });
@@ -164,6 +169,7 @@ add_action('wp_ajax_nopriv_affiros_ai_render_top', 'affiros_ai_ajax_render_top')
 
 add_action('wp_enqueue_scripts', function () {
     if (!is_singular('post')) return;
+    if (affiros_ai_current_post_hidden()) return; // only_tags の対象外 (v0.21.7)
     wp_enqueue_script(
         'affiros-ai-top-fallback',
         AFFIROS_AI_URL . 'assets/shortcode-fallback.js',

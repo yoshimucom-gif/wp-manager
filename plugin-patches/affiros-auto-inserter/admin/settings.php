@@ -50,6 +50,7 @@ function affiros_ai_sanitize_settings($input) {
     // 除外カテゴリー/タグ (チェック0個 = 除外なし、なので毎回上書き)
     $output['exclude_category_ids'] = array_values(array_filter(array_map('intval', (array)($input['exclude_category_ids'] ?? []))));
     $output['exclude_tags']         = sanitize_text_field($input['exclude_tags'] ?? '');
+    $output['only_tags']            = sanitize_text_field($input['only_tags'] ?? '');
 
     $output['auto_on_publish']        = ($input['auto_on_publish'] ?? 'no') === 'yes' ? 'yes' : 'no';
     $output['monthly_refresh']        = ($input['monthly_refresh'] ?? 'no') === 'yes' ? 'yes' : 'no';
@@ -231,6 +232,13 @@ function affiros_ai_render_settings_page() {
                     <td>
                         <input type="text" name="<?php echo AFFIROS_AI_OPTION_KEY; ?>[exclude_tags]" value="<?php echo esc_attr($settings['exclude_tags']); ?>" class="regular-text" placeholder="例: 広告なし, no-ads">
                         <p class="description">カンマ区切りでタグ名またはスラッグ。付いている記事には挿入しない。</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th>このタグの記事だけに出す</th>
+                    <td>
+                        <input type="text" name="<?php echo AFFIROS_AI_OPTION_KEY; ?>[only_tags]" value="<?php echo esc_attr($settings['only_tags'] ?? ''); ?>" class="regular-text" placeholder="例: おすすめ">
+                        <p class="description">カンマ区切りでタグ名またはスラッグ。入れると、そのタグが付いた記事にだけ商品を出す（挿入も、サイドバー・記事内カード・ボタン・ポップアップ・セール表示も）。空なら全記事。<br>物販の記事とASP（A8など）の記事が同じカテゴリーに混ざるサイトで、ASPの記事にAmazon・楽天の商品を出さないために使う。</p>
                     </td>
                 </tr>
             </table>

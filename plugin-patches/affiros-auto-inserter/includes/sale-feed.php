@@ -164,6 +164,7 @@ function affiros_ai_sale_decorate($html) {
 
 // 記事本文 (焼き込み済みカード・標準ボタンブロック含む)。見出し差し替え (priority 20) の後に走らせる
 add_filter('the_content', function ($content) {
+    if (affiros_ai_current_post_hidden()) return $content; // only_tags の対象外 (v0.21.7)
     if (!affiros_ai_sale_has_target($content)) return $content;
     return affiros_ai_sale_decorate($content);
 }, 21);
